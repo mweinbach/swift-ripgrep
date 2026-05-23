@@ -400,11 +400,15 @@ struct RipgrepSearcherTests {
         #expect(try runAllowingNoMatch(["-c", "needle", root.path("none.txt")]) == [])
 
         #expect(countBasenames(try run(["-c", "--include-zero", "needle", root.url.path])) == [
-            "many.txt:2",
             "none.txt:0",
+            "many.txt:2",
         ])
         #expect(countBasenames(try run(["--count-matches", "--include-zero", "needle", root.url.path])) == [
+            "none.txt:0",
             "many.txt:3",
+        ])
+        #expect(countBasenames(try run(["--sort", "path", "-c", "--include-zero", "needle", root.url.path])) == [
+            "many.txt:2",
             "none.txt:0",
         ])
 
