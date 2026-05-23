@@ -189,6 +189,7 @@ public enum CLIParseResult: Equatable {
     case run(RipgrepOptions)
     case help
     case version
+    case pcre2Version
     case error(String)
 }
 
@@ -221,6 +222,8 @@ public enum RipgrepArgumentParser {
                 return .help
             case "--version":
                 return .version
+            case "--pcre2-version":
+                return .pcre2Version
             case "--no-config":
                 break
             case "--debug":
@@ -1010,6 +1013,7 @@ public enum RipgrepArgumentParser {
               --no-config            Do not read RIPGREP_CONFIG_PATH
           -h, --help                 Print help
               --version              Print version
+              --pcre2-version        Print the detected PCRE2 version
         """
     }
 

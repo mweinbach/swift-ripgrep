@@ -1196,6 +1196,26 @@ struct RipgrepSearcherTests {
         #expect(output.first?.contains("--files") == true)
     }
 
+    @Test("prints detected PCRE2 version")
+    func printsDetectedPCRE2Version() throws {
+        let root = try TemporaryDirectory()
+        try root.write("#!/bin/sh\nprintf '10.99\\n'\n", to: "pcre2-config")
+        try root.makeExecutable("pcre2-config")
+
+        var output: [String] = []
+        var errors: [String] = []
+        let exitCode = RipgrepCLI.run(
+            arguments: ["--pcre2-version"],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) },
+            environment: ["PATH": root.url.path]
+        )
+
+        #expect(exitCode == 0)
+        #expect(errors.isEmpty)
+        #expect(output == ["PCRE2 10.99 is available (JIT availability unknown)"])
+    }
+
     private func run(
         _ arguments: [String],
         environment: [String: String] = ProcessInfo.processInfo.environment
