@@ -214,7 +214,11 @@ public struct StandardPrinter {
     }
 
     private func formatOnlyMatching(_ match: SearchMatch, showPath: Bool) -> [String] {
-        match.spans.flatMap { span in
+        if options.invertMatch {
+            return [formatOnlyMatchingInverted(match, showPath: showPath)]
+        }
+
+        return match.spans.flatMap { span in
             if options.multiline, span.text.contains("\n") || span.text.contains("\0") {
                 return formatOnlyMatchingMultiline(span, in: match, showPath: showPath)
             }
@@ -232,6 +236,19 @@ public struct StandardPrinter {
             let text = "\(onlyMatchingText(span, in: match))\(outputTerminator(match.lineTerminator, line: match.line))"
             return ["\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(text)"]
         }
+    }
+
+    private func formatOnlyMatchingInverted(_ match: SearchMatch, showPath: Bool) -> String {
+        var fields: [OutputField] = []
+        let path = showPath ? renderPath(for: match.fileURL, line: match.lineNumber) : nil
+        if options.wantsLineNumber {
+            fields.append(OutputField("\(match.lineNumber)", colorTarget: .line))
+        }
+        if options.byteOffset {
+            fields.append(OutputField("\(match.absoluteOffset)", colorTarget: nil))
+        }
+        let text = "\(renderedLine(match.line))\(outputTerminator(match.lineTerminator, line: match.line))"
+        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(text)"
     }
 
     private func formatOnlyMatchingMultiline(_ span: MatchSpan, in match: SearchMatch, showPath: Bool) -> [String] {

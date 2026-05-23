@@ -1516,6 +1516,20 @@ struct RipgrepSearcherTests {
             "${}_${bad-name}_abc ${}_${bad-name}_def",
         ])
 
+        try root.write("abc123\nfoo\nπ\n", to: "invert-only.txt")
+        #expect(try run(["-v", "-o", "foo", root.path("invert-only.txt")]) == [
+            "abc123",
+            "π",
+        ])
+        #expect(try run(["-v", "-o", "-n", "--column", "foo", root.path("invert-only.txt")]) == [
+            "1:abc123",
+            "3:π",
+        ])
+        #expect(try run(["-v", "-o", "-b", "foo", root.path("invert-only.txt")]) == [
+            "0:abc123",
+            "11:π",
+        ])
+
         try root.write("foo bar -baz\n", to: "hyphen.txt")
         #expect(try run(["-e-baz", "-e", "-baz", root.path("hyphen.txt")]) == [
             "foo bar -baz",
