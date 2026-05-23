@@ -256,7 +256,9 @@ public struct StandardPrinter {
             guard let line = result.lines.first(where: { $0.lineNumber == lineNumber }) else {
                 continue
             }
-            if matchedLineNumbers.contains(lineNumber) {
+            if let match = startMatchesByLine[lineNumber], shouldUseWholeMatchFormatter(match) {
+                output.append(format(match, showPath: showPath))
+            } else if matchedLineNumbers.contains(lineNumber) {
                 output.append(formatMatchedLine(
                     line,
                     fileURL: result.fileURL,
@@ -269,6 +271,10 @@ public struct StandardPrinter {
             previous = lineNumber
         }
         return output
+    }
+
+    private func shouldUseWholeMatchFormatter(_ match: SearchMatch) -> Bool {
+        !options.multiline || (options.replacement != nil && multilineLineNumbers(for: match).count == 1)
     }
 
     private func multilineMatchLines(for result: SearchFileResult, showPath: Bool) -> [String] {

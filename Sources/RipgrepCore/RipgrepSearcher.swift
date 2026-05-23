@@ -460,8 +460,10 @@ public struct RipgrepSearcher {
                 return nil
             }
 
-            let blockLines = searchLines[startLineIndex...endLineIndex]
-            let blockText = blockLines.map(\.lineWithTerminator).joined()
+            let isSingleLineMatch = startLineIndex == endLineIndex
+            let blockText = isSingleLineMatch
+                ? searchLines[startLineIndex].line
+                : searchLines[startLineIndex...endLineIndex].map(\.lineWithTerminator).joined()
             let blockOffset = searchLines[startLineIndex].absoluteOffset
             let startByte = span.startByte - blockOffset
             let endByte = span.endByte - blockOffset
@@ -479,7 +481,7 @@ public struct RipgrepSearcher {
                 lineNumber: startLineIndex + 1,
                 column: options.column ? span.startColumn : nil,
                 line: blockText,
-                lineTerminator: "",
+                lineTerminator: isSingleLineMatch ? searchLines[startLineIndex].lineTerminator : "",
                 absoluteOffset: blockOffset,
                 matchCount: 1,
                 spans: [adjustedSpan]

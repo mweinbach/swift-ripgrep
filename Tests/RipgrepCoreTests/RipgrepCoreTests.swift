@@ -447,6 +447,7 @@ struct RipgrepSearcherTests {
     func searchesMultilineRegexMatches() throws {
         let root = try TemporaryDirectory()
         try root.write("foo\nbar\nbaz\n", to: "multi.txt")
+        try root.write("a\nb\nc\na\nb\nc", to: "passthru.txt")
         try root.write("xxx\nabc\ndefxxxabc\ndefxxx\nxxx", to: "overlap1.txt")
         try root.write("xxx\nabc\ndefabc\ndefxxx\nxxx", to: "overlap2.txt")
         try root.write("a\nbaz\nabc\n", to: "anchors.txt")
@@ -463,6 +464,23 @@ struct RipgrepSearcherTests {
         #expect(try run(["-n", "-U", "-o", #"foo[\s\S]+?bar"#, root.path("multi.txt")]) == [
             "1:foo",
             "2:bar",
+        ])
+        #expect(try run([
+            "--no-line-number",
+            "--no-filename",
+            "-U",
+            "--max-count=1",
+            "--passthru",
+            "--replace=B",
+            "b",
+            root.path("passthru.txt"),
+        ]) == [
+            "a",
+            "B",
+            "c",
+            "a",
+            "b",
+            "c",
         ])
         #expect(try runAllowingNoMatch(["-n", "-U", "foo.bar", root.path("multi.txt")]) == [])
         #expect(try run(["-n", "-U", "--multiline-dotall", "foo.bar", root.path("multi.txt")]) == [
