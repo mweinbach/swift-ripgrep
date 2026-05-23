@@ -67,19 +67,8 @@ public struct FileWalker {
         var warnings: [String] = []
         var diagnostics: [String] = []
         var filtered = false
-        var baseIgnoreStack = IgnoreStack()
-        if !options.noIgnoreFiles {
-            for ignoreFile in options.ignoreFiles {
-                appendLoadedMatcher(
-                    from: ignoreFile,
-                    to: &baseIgnoreStack,
-                    warnings: &warnings,
-                    rootBase: nil,
-                    reportLoadErrors: true,
-                    options: options
-                )
-            }
-        }
+        let baseIgnoreStack = IgnoreStack()
+        var reportedExplicitIgnoreFileWarnings = false
         let overrideEntries = options.globPatterns.map { pattern in
             (pattern: pattern, caseInsensitive: options.globCaseInsensitive)
         } + options.caseInsensitiveGlobPatterns.map { pattern in
@@ -108,6 +97,23 @@ public struct FileWalker {
             }
             let rootBase = rootBase(for: root.standardizedFileURL)
             var rootIgnoreStack = baseIgnoreStack
+            if reportedExplicitIgnoreFileWarnings {
+                var ignoredWarnings: [String] = []
+                appendExplicitIgnoreFiles(
+                    to: &rootIgnoreStack,
+                    rootBase: rootBase,
+                    warnings: &ignoredWarnings,
+                    options: options
+                )
+            } else {
+                appendExplicitIgnoreFiles(
+                    to: &rootIgnoreStack,
+                    rootBase: rootBase,
+                    warnings: &warnings,
+                    options: options
+                )
+            }
+            reportedExplicitIgnoreFileWarnings = true
             appendGlobalIgnoreFile(to: &rootIgnoreStack, rootBase: rootBase, warnings: &warnings, options: options)
             appendParentIgnoreFiles(to: &rootIgnoreStack, rootBase: rootBase, warnings: &warnings, options: options)
             appendLogicalParentIgnoreFiles(
@@ -615,6 +621,45 @@ public struct FileWalker {
         )
     }
 
+    private func appendExplicitIgnoreFiles(
+        to ignoreStack: inout IgnoreStack,
+        rootBase: URL,
+        warnings: inout [String],
+        options: RipgrepOptions
+    ) {
+        guard !options.noIgnoreFiles else {
+            return
+        }
+        let pathPrefix = cwdRelativePathPrefix(for: rootBase)
+        for ignoreFile in options.ignoreFiles {
+            appendLoadedMatcher(
+                from: ignoreFile,
+                to: &ignoreStack,
+                warnings: &warnings,
+                rootBase: rootBase,
+                pathPrefix: pathPrefix,
+                slashPatternsMatchAnywhere: false,
+                reportLoadErrors: true,
+                options: options
+            )
+        }
+    }
+
+    private func cwdRelativePathPrefix(for rootBase: URL) -> String {
+        let rootPath = rootBase.standardizedFileURL.path
+        let cwdPath = URL(fileURLWithPath: fileManager.currentDirectoryPath, isDirectory: true)
+            .standardizedFileURL
+            .path
+        if rootPath == cwdPath {
+            return ""
+        }
+        let prefix = cwdPath.hasSuffix("/") ? cwdPath : "\(cwdPath)/"
+        if rootPath.hasPrefix(prefix) {
+            return String(rootPath.dropFirst(prefix.count))
+        }
+        return rootPath.hasPrefix("/") ? String(rootPath.dropFirst()) : rootPath
+    }
+
     private func ancestorPaths(of path: String) -> [String] {
         var paths: [String] = []
         var current = (path as NSString).deletingLastPathComponent
@@ -688,6 +733,8 @@ public struct FileWalker {
         warnings: inout [String],
         rootBase: URL?,
         scopeDirectory: URL? = nil,
+        pathPrefix: String? = nil,
+        slashPatternsMatchAnywhere: Bool? = nil,
         reportLoadErrors: Bool = false,
         options: RipgrepOptions
     ) {
@@ -695,6 +742,8 @@ public struct FileWalker {
             from: fileURL,
             rootBase: rootBase,
             scopeDirectory: scopeDirectory,
+            pathPrefix: pathPrefix,
+            slashPatternsMatchAnywhere: slashPatternsMatchAnywhere,
             reportLoadErrors: reportLoadErrors,
             caseInsensitive: options.ignoreFileCaseInsensitive
         )
@@ -708,6 +757,8 @@ public struct FileWalker {
         from fileURL: URL,
         rootBase: URL?,
         scopeDirectory: URL? = nil,
+        pathPrefix: String? = nil,
+        slashPatternsMatchAnywhere: Bool? = nil,
         reportLoadErrors: Bool = false,
         caseInsensitive: Bool = false
     ) -> LoadedIgnoreMatcher {
@@ -719,12 +770,14 @@ public struct FileWalker {
             return LoadedIgnoreMatcher(matcher: GlobMatcher(patterns: []), messages: messages)
         }
         let parsed = parseIgnorePatterns(contents, fileURL: fileURL)
-        let scope = ignoreScope(for: scopeDirectory ?? fileURL.deletingLastPathComponent(), rootBase: rootBase)
+        let scope = pathPrefix.map { (stripBasePath: String?.none, pathPrefix: $0) }
+            ?? ignoreScope(for: scopeDirectory ?? fileURL.deletingLastPathComponent(), rootBase: rootBase)
         return LoadedIgnoreMatcher(matcher: GlobMatcher(
             patterns: parsed.patterns,
             caseInsensitive: caseInsensitive,
             stripBasePath: scope.stripBasePath,
-            pathPrefix: scope.pathPrefix
+            pathPrefix: scope.pathPrefix,
+            slashPatternsMatchAnywhere: slashPatternsMatchAnywhere
         ), messages: parsed.messages)
     }
 

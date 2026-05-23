@@ -2675,6 +2675,29 @@ struct RipgrepSearcherTests {
             root.url.path,
         ])) == ["skip.txt", "nested.txt"])
 
+        let explicitScope = try TemporaryDirectory()
+        try explicitScope.createDirectory("vendor/src")
+        try explicitScope.createDirectory("keep")
+        try explicitScope.write("needle\n", to: "root.txt")
+        try explicitScope.write("needle\n", to: "vendor/src/lib.rs")
+        try explicitScope.write("needle\n", to: "keep/file.log")
+        try explicitScope.write("needle\n", to: "temp.tmp")
+        try explicitScope.write("needle\n", to: "important.tmp")
+        try explicitScope.write("*.tmp\n!important.tmp\n/vendor/\nkeep/*.log\n", to: "ignore.txt")
+        #expect(pathBasenames(try run([
+            "--sort",
+            "path",
+            "--ignore-file",
+            explicitScope.path("ignore.txt"),
+            "needle",
+            explicitScope.url.path,
+        ])) == [
+            "important.tmp",
+            "file.log",
+            "root.txt",
+            "lib.rs",
+        ])
+
         try root.createDirectory("ignore-dir")
         var output: [String] = []
         var errors: [String] = []

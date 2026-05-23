@@ -45,13 +45,15 @@ public struct GlobMatcher: Equatable {
         overrideSemantics: Bool = false,
         caseInsensitive: Bool = false,
         stripBasePath: String? = nil,
-        pathPrefix: String = ""
+        pathPrefix: String = "",
+        slashPatternsMatchAnywhere: Bool? = nil
     ) {
         self.init(
             patternEntries: patterns.map { ($0, caseInsensitive) },
             overrideSemantics: overrideSemantics,
             stripBasePath: stripBasePath,
-            pathPrefix: pathPrefix
+            pathPrefix: pathPrefix,
+            slashPatternsMatchAnywhere: slashPatternsMatchAnywhere
         )
     }
 
@@ -59,7 +61,8 @@ public struct GlobMatcher: Equatable {
         patternEntries: [(pattern: String, caseInsensitive: Bool)],
         overrideSemantics: Bool = false,
         stripBasePath: String? = nil,
-        pathPrefix: String = ""
+        pathPrefix: String = "",
+        slashPatternsMatchAnywhere: Bool? = nil
     ) {
         var rules: [Rule] = []
         for entry in patternEntries {
@@ -86,7 +89,7 @@ public struct GlobMatcher: Equatable {
 
         self.rules = rules
         self.requirePositiveMatch = overrideSemantics && rules.contains { $0.decision == .include }
-        self.slashPatternsMatchAnywhere = !overrideSemantics
+        self.slashPatternsMatchAnywhere = slashPatternsMatchAnywhere ?? !overrideSemantics
         self.stripBasePath = stripBasePath?.isEmpty == true ? nil : stripBasePath
         self.pathPrefix = pathPrefix
     }
