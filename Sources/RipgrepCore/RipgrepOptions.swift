@@ -246,9 +246,16 @@ public struct RipgrepOptions: Equatable {
     }
 
     public static func patterns(fromPatternFileContents contents: String) -> [String] {
-        contents.components(separatedBy: "\n").map {
+        guard !contents.isEmpty else {
+            return []
+        }
+        var patterns = contents.components(separatedBy: "\n")
+        if contents.hasSuffix("\n") {
+            patterns.removeLast()
+        }
+        return patterns.map {
             $0.hasSuffix("\r") ? String($0.dropLast()) : $0
-        }.filter { !$0.isEmpty }
+        }
     }
 }
 
@@ -279,6 +286,7 @@ public enum RipgrepArgumentParser {
         var options = RipgrepOptions()
         var positionals: [String] = []
         var explicitPatterns: [String] = []
+        var hasExplicitPatternSource = false
         var beforeContextWasSet = false
         var afterContextWasSet = false
         var index = 0
@@ -447,16 +455,20 @@ public enum RipgrepArgumentParser {
                 guard index < arguments.count else {
                     return .error("error: The argument '--regexp <PATTERN>' requires a value")
                 }
+                hasExplicitPatternSource = true
                 explicitPatterns.append(arguments[index])
                 index += 1
             case let value where value.hasPrefix("--regexp="):
+                hasExplicitPatternSource = true
                 explicitPatterns.append(String(value.dropFirst("--regexp=".count)))
             case let value where value.hasPrefix("-e") && value.count > 2:
+                hasExplicitPatternSource = true
                 explicitPatterns.append(String(value.dropFirst(2)))
             case "-f", "--file":
                 guard index < arguments.count else {
                     return .error("error: The argument '--file <PATTERNFILE>' requires a value")
                 }
+                hasExplicitPatternSource = true
                 let path = arguments[index]
                 if path == "-" {
                     options.patternFileStdin = true
@@ -471,6 +483,7 @@ public enum RipgrepArgumentParser {
                 }
                 index += 1
             case let value where value.hasPrefix("--file="):
+                hasExplicitPatternSource = true
                 let path = String(value.dropFirst("--file=".count))
                 if path == "-" {
                     options.patternFileStdin = true
@@ -483,6 +496,7 @@ public enum RipgrepArgumentParser {
                     return .error(message)
                 }
             case let value where value.hasPrefix("-f") && value.count > 2:
+                hasExplicitPatternSource = true
                 let path = String(value.dropFirst(2))
                 if path == "-" {
                     options.patternFileStdin = true
@@ -542,6 +556,7 @@ public enum RipgrepArgumentParser {
                     value,
                     options: &options,
                     explicitPatterns: &explicitPatterns,
+                    hasExplicitPatternSource: &hasExplicitPatternSource,
                     arguments: arguments,
                     index: &index
                 ) {
@@ -1187,7 +1202,7 @@ public enum RipgrepArgumentParser {
         }
 
         if options.mode == .search {
-            if explicitPatterns.isEmpty && !options.patternFileStdin {
+            if explicitPatterns.isEmpty && !options.patternFileStdin && !hasExplicitPatternSource {
                 guard let pattern = positionals.first, !pattern.isEmpty else {
                     return .error(usage())
                 }
@@ -1367,6 +1382,7 @@ public enum RipgrepArgumentParser {
         _ argument: String,
         options: inout RipgrepOptions,
         explicitPatterns: inout [String],
+        hasExplicitPatternSource: inout Bool,
         arguments: [String],
         index: inout Int
     ) -> String? {
@@ -1432,6 +1448,7 @@ public enum RipgrepArgumentParser {
                 guard index < arguments.count else {
                     return "error: The argument '--file <PATTERNFILE>' requires a value"
                 }
+                hasExplicitPatternSource = true
                 let path = arguments[index]
                 if path == "-" {
                     options.patternFileStdin = true

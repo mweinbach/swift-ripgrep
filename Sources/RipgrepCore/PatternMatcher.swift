@@ -6,9 +6,6 @@ public struct PatternMatcher {
 
     public init(options: RipgrepOptions) throws {
         let patternSources = options.effectivePatterns
-        guard !patternSources.isEmpty, patternSources.allSatisfy({ !$0.isEmpty }) else {
-            throw RipgrepError.emptyPattern
-        }
 
         self.options = options
         var compiledRegexSourceBytes = 0
@@ -127,6 +124,9 @@ public struct PatternMatcher {
 
     private static func regexPattern(for pattern: String, options: RipgrepOptions) -> String {
         var source = foundationNamedCapturePattern(for: pattern)
+        if source.isEmpty {
+            source = "(?:)"
+        }
         if options.noUnicode {
             source = asciiRegexPattern(for: source)
         }

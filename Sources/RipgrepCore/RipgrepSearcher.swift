@@ -52,10 +52,6 @@ public struct RipgrepSearcher {
     }
 
     public func search(options: RipgrepOptions, stdin: String?) throws -> SearchResults {
-        guard !options.effectivePatterns.isEmpty else {
-            throw RipgrepError.emptyPattern
-        }
-
         let matcher = try PatternMatcher(options: options)
         let walkResults = options.useStdin && options.roots.isEmpty
             ? FileWalkResults(haystacks: [], messages: [])

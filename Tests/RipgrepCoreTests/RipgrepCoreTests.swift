@@ -166,11 +166,25 @@ struct RipgrepSearcherTests {
         let root = try TemporaryDirectory()
         try root.write("alpha\nbeta\ngamma\n", to: "words.txt")
         try root.write("alpha\ngamma\n", to: "patterns")
+        try root.write("", to: "zero-patterns")
+        try root.write("\n", to: "empty-pattern")
 
         #expect(try run(["-e", "alpha", "-e", "gamma", root.path("words.txt")]) == ["alpha", "gamma"])
         #expect(try run(["-f", root.path("patterns"), root.path("words.txt")]) == ["alpha", "gamma"])
         #expect(try run(["-f\(root.path("patterns"))", root.path("words.txt")]) == ["alpha", "gamma"])
         #expect(try run(["-vf", root.path("patterns"), root.path("words.txt")]) == ["beta"])
+        #expect(try runAllowingNoMatch(["-f", root.path("zero-patterns"), root.path("words.txt")]) == [])
+        #expect(try run(["-f", root.path("empty-pattern"), root.path("words.txt")]) == [
+            "alpha",
+            "beta",
+            "gamma",
+        ])
+        #expect(try run(["-vf", root.path("zero-patterns"), root.path("words.txt")]) == [
+            "alpha",
+            "beta",
+            "gamma",
+        ])
+        #expect(try runAllowingNoMatch(["-vf", root.path("empty-pattern"), root.path("words.txt")]) == [])
 
         try root.write("alpha.*\n", to: "literal-patterns")
         try root.write("alpha.*\nalphaX\n", to: "literal.txt")
