@@ -1010,10 +1010,10 @@ public enum RipgrepArgumentParser {
                 guard index < arguments.count else {
                     return .error("error: The argument '--context-separator <SEPARATOR>' requires a value")
                 }
-                options.contextSeparator = arguments[index]
+                options.contextSeparator = parseEscapedSeparator(arguments[index])
                 index += 1
             case let value where value.hasPrefix("--context-separator="):
-                options.contextSeparator = String(value.dropFirst("--context-separator=".count))
+                options.contextSeparator = parseEscapedSeparator(String(value.dropFirst("--context-separator=".count)))
             case "--no-context-separator":
                 options.contextSeparator = nil
             case "--field-match-separator":
