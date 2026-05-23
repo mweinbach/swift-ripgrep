@@ -2044,6 +2044,10 @@ struct RipgrepSearcherTests {
         #expect(errors.isEmpty)
         #expect(output.first?.contains("complete -F _rg rg") == true)
         #expect(output.first?.contains("--generate") == true)
+        #expect(output.first?.contains("--line-regexp") == true)
+        #expect(output.first?.contains("--context-separator") == true)
+        #expect(output.first?.contains("--no-json") == true)
+        #expect(output.first?.contains("--maxdepth") == true)
 
         output = []
         errors = []
