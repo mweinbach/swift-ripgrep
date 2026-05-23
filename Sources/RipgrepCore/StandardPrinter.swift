@@ -19,6 +19,14 @@ public struct StandardPrinter {
             return []
         }
 
+        let body = bodyLines(for: results)
+        if options.stats, options.printMode == .matchingLines {
+            return body + statsLines(for: results, bytesPrinted: bytesPrinted(body))
+        }
+        return body
+    }
+
+    private func bodyLines(for results: SearchResults) -> [String] {
         switch options.printMode {
         case .matchingLines:
             if options.onlyMatching {
@@ -214,5 +222,25 @@ public struct StandardPrinter {
         }
 
         return path
+    }
+
+    private func statsLines(for results: SearchResults, bytesPrinted: Int) -> [String] {
+        [
+            "",
+            "\(results.summary.totalMatches) matches",
+            "\(results.summary.matchedLines) matched lines",
+            "\(results.summary.filesWithMatches) files contained matches",
+            "\(results.summary.filesSearched) files searched",
+            "\(bytesPrinted) bytes printed",
+            "\(results.files.reduce(0) { $0 + $1.bytesSearched }) bytes searched",
+            "0.000000 seconds spent searching",
+            "0.000000 seconds total",
+        ]
+    }
+
+    private func bytesPrinted(_ lines: [String]) -> Int {
+        lines.reduce(0) { total, line in
+            total + line.utf8.count + 1
+        }
     }
 }

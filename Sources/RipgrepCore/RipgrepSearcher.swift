@@ -114,6 +114,7 @@ public struct RipgrepSearcher {
         let lines = splitLines(contents)
         var searchLines: [SearchLine] = []
         var absoluteOffset = 0
+        let maxCount = options.maxCount ?? Int.max
 
         for (offset, splitLine) in lines.enumerated() {
             let line = splitLine.text
@@ -124,6 +125,11 @@ public struct RipgrepSearcher {
                 lineTerminator: splitLine.terminator,
                 absoluteOffset: absoluteOffset
             ))
+
+            guard matches.count < maxCount else {
+                absoluteOffset += splitLine.text.utf8.count + splitLine.terminator.utf8.count
+                continue
+            }
 
             let spans = matcher.spans(in: line)
             guard !spans.isEmpty else {

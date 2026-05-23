@@ -34,6 +34,8 @@ public struct RipgrepOptions: Equatable {
     public var onlyMatching = false
     public var replacement: String?
     public var json = false
+    public var stats = false
+    public var maxCount: Int?
     public var lineNumber = false
     public var noLineNumber = false
     public var column = false
@@ -156,6 +158,10 @@ public enum RipgrepArgumentParser {
                 options.json = true
             case "--no-json":
                 options.json = false
+            case "--stats":
+                options.stats = true
+            case "--no-stats":
+                options.stats = false
             case "-N", "--no-line-number":
                 options.noLineNumber = true
             case "--column":
@@ -236,6 +242,27 @@ public enum RipgrepArgumentParser {
                 options.passthru = true
                 options.beforeContext = 0
                 options.afterContext = 0
+            case "-m", "--max-count":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--max-count <NUM>' requires a value")
+                }
+                guard let count = parseNonNegativeInt(arguments[index]) else {
+                    return .error("error: invalid max count '\(arguments[index])'")
+                }
+                options.maxCount = count
+                index += 1
+            case let value where value.hasPrefix("--max-count="):
+                let raw = String(value.dropFirst("--max-count=".count))
+                guard let count = parseNonNegativeInt(raw) else {
+                    return .error("error: invalid max count '\(raw)'")
+                }
+                options.maxCount = count
+            case let value where value.hasPrefix("-m") && value.count > 2:
+                let raw = String(value.dropFirst(2))
+                guard let count = parseNonNegativeInt(raw) else {
+                    return .error("error: invalid max count '\(raw)'")
+                }
+                options.maxCount = count
             case "-A", "--after-context":
                 guard index < arguments.count else {
                     return .error("error: The argument '--after-context <NUM>' requires a value")
@@ -381,6 +408,8 @@ public enum RipgrepArgumentParser {
           -o, --only-matching        Print only the matched text
           -r, --replace TEXT         Replace matches with the given text
               --json                 Show search results in JSON Lines format
+              --stats                Print statistics about the search
+          -m, --max-count NUM        Limit matching lines per file
           -n, --line-number          Show line numbers
           -N, --no-line-number       Suppress line numbers
               --column               Show the first match column
@@ -424,9 +453,11 @@ public enum RipgrepArgumentParser {
     }
 
     private static func parseContextCount(_ raw: String, flag: String) -> Int? {
-        guard let count = Int(raw), count >= 0 else {
-            return nil
-        }
+        parseNonNegativeInt(raw)
+    }
+
+    private static func parseNonNegativeInt(_ raw: String) -> Int? {
+        guard let count = Int(raw), count >= 0 else { return nil }
         return count
     }
 }

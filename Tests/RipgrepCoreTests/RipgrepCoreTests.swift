@@ -68,6 +68,31 @@ struct RipgrepSearcherTests {
         #expect(try run(["--files-without-match", "needle", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == ["two.txt"])
     }
 
+    @Test("limits matching lines per file")
+    func limitsMatchingLinesPerFile() throws {
+        let root = try TemporaryDirectory()
+        try root.write("needle one\nneedle two\nneedle three\n", to: "many.txt")
+
+        #expect(try run(["-m1", "needle", root.path("many.txt")]) == ["needle one"])
+        #expect(try run(["--max-count", "2", "needle", root.path("many.txt")]) == ["needle one", "needle two"])
+        #expect(try runAllowingNoMatch(["-m0", "needle", root.path("many.txt")]) == [])
+        #expect(try run(["-m1", "-c", "needle", root.path("many.txt")]) == ["1"])
+    }
+
+    @Test("prints aggregate stats")
+    func printsAggregateStats() throws {
+        let root = try TemporaryDirectory()
+        try root.write("needle\nneedle two\nnope\n", to: "stats.txt")
+
+        let output = try run(["--stats", "needle", root.path("stats.txt")])
+        #expect(output.contains("2 matches"))
+        #expect(output.contains("2 matched lines"))
+        #expect(output.contains("1 files contained matches"))
+        #expect(output.contains("1 files searched"))
+        #expect(output.contains("23 bytes searched"))
+        #expect(output.contains("18 bytes printed"))
+    }
+
     @Test("prints before after context and passthru")
     func printsContextAndPassthru() throws {
         let root = try TemporaryDirectory()
