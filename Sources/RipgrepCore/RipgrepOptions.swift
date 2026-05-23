@@ -199,8 +199,13 @@ public enum RipgrepArgumentParser {
                 options.mode = .types
             case "-i", "--ignore-case":
                 options.ignoreCase = true
+                options.smartCase = false
             case "-S", "--smart-case":
+                options.ignoreCase = false
                 options.smartCase = true
+            case "-s", "--case-sensitive":
+                options.ignoreCase = false
+                options.smartCase = false
             case "-F", "--fixed-strings":
                 options.fixedStrings = true
             case "-E", "--encoding":
@@ -848,6 +853,7 @@ public enum RipgrepArgumentParser {
         OPTIONS:
           -i, --ignore-case          Search case insensitively
           -S, --smart-case           Search case insensitively if the pattern is lowercase
+          -s, --case-sensitive       Search case sensitively
           -F, --fixed-strings        Treat the pattern as a literal string
           -E, --encoding ENCODING    Specify text encoding: auto, none, utf-8, utf-16/le/be
           -e, --regexp PATTERN       Add a pattern to search for

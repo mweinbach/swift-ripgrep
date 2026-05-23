@@ -38,6 +38,10 @@ struct RipgrepSearcherTests {
 
         #expect(try run(["-S", "needle", root.path("case.txt")]) == ["Needle", "needle"])
         #expect(try run(["-S", "Needle", root.path("case.txt")]) == ["Needle"])
+        #expect(try run(["-i", "-S", "Needle", root.path("case.txt")]) == ["Needle"])
+        #expect(try run(["-S", "-i", "Needle", root.path("case.txt")]) == ["Needle", "needle"])
+        #expect(try run(["-i", "--case-sensitive", "needle", root.path("case.txt")]) == ["needle"])
+        #expect(try run(["-s", "-i", "needle", root.path("case.txt")]) == ["Needle", "needle"])
         #expect(try run(["-v", "needle", root.path("case.txt")]) == ["Needle", "hay"])
     }
 
