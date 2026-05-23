@@ -127,7 +127,8 @@ public struct StandardPrinter {
             return [format(match, showPath: showPath)]
         }
 
-        return splitRenderedLines(match.lineWithTerminator).enumerated().map { offset, line in
+        let text = options.replacement == nil ? match.lineWithTerminator : renderedText(for: match)
+        return splitRenderedLines(text).enumerated().map { offset, line in
             var fields: [OutputField] = []
             let path = showPath ? renderPath(for: match.fileURL, line: match.lineNumber + offset) : nil
             if options.wantsLineNumber {
@@ -390,18 +391,23 @@ public struct StandardPrinter {
             return "\(renderedLine(match.line, spans: match.spans))\(outputTerminator(match.lineTerminator))"
         }
         let originalLine = match.line
-        var line = originalLine
-        for span in match.spans.sorted(by: { $0.startColumn > $1.startColumn }) {
-            guard let replacement = span.replacement,
-                  let range = indexRange(startColumn: span.startColumn, endColumn: span.endColumn, in: line) else {
-                continue
-            }
-            line.replaceSubrange(range, with: replacement)
-        }
+        let line = renderedText(for: match)
         if let rendered = limitedReplacementLine(line, originalLine: originalLine, match: match) {
             return "\(rendered)\(outputTerminator(match.lineTerminator))"
         }
         return "\(renderedLine(line))\(outputTerminator(match.lineTerminator))"
+    }
+
+    private func renderedText(for match: SearchMatch) -> String {
+        var line = match.line
+        for span in match.spans.sorted(by: { $0.startByte > $1.startByte }) {
+            guard let replacement = span.replacement,
+                  let range = indexRange(startByte: span.startByte, endByte: span.endByte, in: line) else {
+                continue
+            }
+            line.replaceSubrange(range, with: replacement)
+        }
+        return line
     }
 
     private func renderedLine(_ line: String, omittedKind: OmittedLineKind = .matching) -> String {
@@ -534,6 +540,32 @@ public struct StandardPrinter {
             return nil
         }
         return line.index(line.startIndex, offsetBy: lowerOffset)..<line.index(line.startIndex, offsetBy: upperOffset)
+    }
+
+    private func indexRange(startByte: Int, endByte: Int, in line: String) -> Range<String.Index>? {
+        guard startByte >= 0, endByte >= startByte,
+              let lower = stringIndex(in: line, atByteOffset: startByte),
+              let upper = stringIndex(in: line, atByteOffset: endByte) else {
+            return nil
+        }
+        return lower..<upper
+    }
+
+    private func stringIndex(in line: String, atByteOffset byteOffset: Int) -> String.Index? {
+        guard byteOffset >= 0 else {
+            return nil
+        }
+        if byteOffset == 0 {
+            return line.startIndex
+        }
+        var bytes = 0
+        for index in line.indices {
+            if bytes == byteOffset {
+                return index
+            }
+            bytes += String(line[index]).utf8.count
+        }
+        return bytes == byteOffset ? line.endIndex : nil
     }
 
     private func showPath(for results: SearchResults) -> Bool {

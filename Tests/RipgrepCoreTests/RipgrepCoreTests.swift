@@ -516,6 +516,23 @@ struct RipgrepSearcherTests {
         b=one
         });
         """, to: "named-replace.txt")
+        try root.write("""
+        # Compile requirements.txt files from all found or specified requirements.in files (compile).
+        # Use -h to include hashes, -u dep1,dep2... to upgrade specific dependencies, and -U to upgrade all.
+        pipc () {  # [-h] [-U|-u <pkgspec>[,<pkgspec>...]] [<reqs-in>...] [-- <pip-compile-arg>...]
+            emulate -L zsh
+            unset REPLY
+            if [[ $1 == --help ]] { zpy $0; return }
+            [[ $ZPY_PROCS ]] || return
+
+            local gen_hashes upgrade upgrade_csv
+            while [[ $1 == -[hUu] ]] {
+                if [[ $1 == -h ]] { gen_hashes=--generate-hashes; shift   }
+                if [[ $1 == -U ]] { upgrade=1;                    shift   }
+                if [[ $1 == -u ]] { upgrade=1; upgrade_csv=$2;    shift 2 }
+            }
+        }
+        """, to: "usage-replace.txt")
         try root.write("     0123456789abcdefghijklmnopqrstuvwxyz", to: "trim-columns.txt")
         try root.write("xxx\nabc\ndefxxxabc\ndefxxx\nxxx", to: "overlap1.txt")
         try root.write("xxx\nabc\ndefabc\ndefxxx\nxxx", to: "overlap2.txt")
@@ -596,6 +613,16 @@ struct RipgrepSearcherTests {
             "11:\t\tc",
             "12:\t)",
             "15:two",
+        ])
+        #expect(try run([
+            "-N",
+            "-U",
+            "-r",
+            "$usage",
+            #"^(?P<predoc>\n?(# .*\n)*)(alias (?P<aname>pipc)="[^"]+"|(?P<fname>pipc) \(\) \{)(  #(?P<usage> .+))?"#,
+            root.path("usage-replace.txt"),
+        ]) == [
+            " [-h] [-U|-u <pkgspec>[,<pkgspec>...]] [<reqs-in>...] [-- <pip-compile-arg>...]",
         ])
         #expect(try run([
             "-U",
