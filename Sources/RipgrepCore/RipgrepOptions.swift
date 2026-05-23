@@ -66,6 +66,7 @@ public struct RipgrepOptions: Equatable {
     public var maxColumns: Int?
     public var maxColumnsPreview = false
     public var maxDepth: Int?
+    public var maxFileSize: UInt64?
     public var sortMode: SortMode?
     public var lineNumber = false
     public var noLineNumber = false
@@ -82,6 +83,8 @@ public struct RipgrepOptions: Equatable {
     public var noIgnoreParent = false
     public var noIgnoreVCS = false
     public var noRequireGit = false
+    public var globCaseInsensitive = false
+    public var ignoreFileCaseInsensitive = false
     public var ignoreFiles: [URL] = []
     public var globPatterns: [String] = []
     public var typeChanges: [TypeChange] = []
@@ -264,6 +267,21 @@ public enum RipgrepArgumentParser {
                 options.maxColumnsPreview = true
             case "--no-max-columns-preview":
                 options.maxColumnsPreview = false
+            case "--max-filesize":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--max-filesize <NUM>' requires a value")
+                }
+                guard let size = parseHumanReadableSize(arguments[index]) else {
+                    return .error("error: invalid max filesize '\(arguments[index])'")
+                }
+                options.maxFileSize = size
+                index += 1
+            case let value where value.hasPrefix("--max-filesize="):
+                let raw = String(value.dropFirst("--max-filesize=".count))
+                guard let size = parseHumanReadableSize(raw) else {
+                    return .error("error: invalid max filesize '\(raw)'")
+                }
+                options.maxFileSize = size
             case "-N", "--no-line-number":
                 options.noLineNumber = true
             case "--column":
@@ -366,6 +384,14 @@ public enum RipgrepArgumentParser {
                 options.noRequireGit = true
             case "--require-git":
                 options.noRequireGit = false
+            case "--glob-case-insensitive":
+                options.globCaseInsensitive = true
+            case "--no-glob-case-insensitive":
+                options.globCaseInsensitive = false
+            case "--ignore-file-case-insensitive":
+                options.ignoreFileCaseInsensitive = true
+            case "--no-ignore-file-case-insensitive":
+                options.ignoreFileCaseInsensitive = false
             case "--ignore-file":
                 guard index < arguments.count else {
                     return .error("error: The argument '--ignore-file <PATH>' requires a value")
@@ -653,6 +679,7 @@ public enum RipgrepArgumentParser {
           -m, --max-count NUM        Limit matching lines per file
           -M, --max-columns NUM      Omit matching lines at least NUM bytes long
               --max-columns-preview  Show a preview for omitted long lines
+              --max-filesize NUM     Ignore non-explicit files larger than NUM
           -d, --max-depth NUM        Descend at most NUM directory levels
           -n, --line-number          Show line numbers
           -N, --no-line-number       Suppress line numbers
@@ -678,6 +705,8 @@ public enum RipgrepArgumentParser {
               --no-ignore-parent     Do not respect ignore files in parent directories
               --no-ignore-vcs        Do not respect VCS ignore files
               --no-require-git       Use VCS ignore files outside repositories
+              --glob-case-insensitive Process -g/--glob patterns case insensitively
+              --ignore-file-case-insensitive Process ignore files case insensitively
               --ignore-file PATH     Add a custom ignore file
           -g, --glob GLOB            Include or exclude paths with an override glob
           -t, --type TYPE            Only search files matching TYPE
@@ -765,6 +794,34 @@ public enum RipgrepArgumentParser {
     private static func parseNonNegativeInt(_ raw: String) -> Int? {
         guard let count = Int(raw), count >= 0 else { return nil }
         return count
+    }
+
+    private static func parseHumanReadableSize(_ raw: String) -> UInt64? {
+        guard !raw.isEmpty else {
+            return nil
+        }
+        let suffix = raw.last!
+        let multiplier: UInt64
+        let digits: Substring
+        switch suffix {
+        case "K", "k":
+            multiplier = 1024
+            digits = raw.dropLast()
+        case "M", "m":
+            multiplier = 1024 * 1024
+            digits = raw.dropLast()
+        case "G", "g":
+            multiplier = 1024 * 1024 * 1024
+            digits = raw.dropLast()
+        default:
+            multiplier = 1
+            digits = Substring(raw)
+        }
+        guard let value = UInt64(digits) else {
+            return nil
+        }
+        let product = value.multipliedReportingOverflow(by: multiplier)
+        return product.overflow ? nil : product.partialValue
     }
 }
 

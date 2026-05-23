@@ -34,8 +34,13 @@ public struct GlobMatcher: Equatable {
 
     private let rules: [Rule]
     private let requirePositiveMatch: Bool
+    private let caseInsensitive: Bool
 
-    public init(patterns: [String], overrideSemantics: Bool = false) {
+    public init(
+        patterns: [String],
+        overrideSemantics: Bool = false,
+        caseInsensitive: Bool = false
+    ) {
         var rules: [Rule] = []
         for raw in patterns {
             let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -56,6 +61,7 @@ public struct GlobMatcher: Equatable {
 
         self.rules = rules
         self.requirePositiveMatch = overrideSemantics && rules.contains { $0.decision == .include }
+        self.caseInsensitive = caseInsensitive
     }
 
     public var isEmpty: Bool {
@@ -101,7 +107,10 @@ public struct GlobMatcher: Equatable {
 
     private func matchesGlob(_ pattern: String, _ value: String) -> Bool {
         let regex = "^\(regexSource(for: pattern))$"
-        return value.range(of: regex, options: .regularExpression) != nil
+        let options: String.CompareOptions = caseInsensitive
+            ? [.regularExpression, .caseInsensitive]
+            : .regularExpression
+        return value.range(of: regex, options: options) != nil
     }
 
     private func regexSource(for pattern: String) -> String {

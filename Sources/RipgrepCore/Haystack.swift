@@ -22,10 +22,17 @@ public struct FileWalker {
         var baseIgnoreStack = IgnoreStack()
         if !options.noIgnoreFiles {
             for ignoreFile in options.ignoreFiles {
-                baseIgnoreStack.append(loadMatcher(from: ignoreFile))
+                baseIgnoreStack.append(loadMatcher(
+                    from: ignoreFile,
+                    caseInsensitive: options.ignoreFileCaseInsensitive
+                ))
             }
         }
-        let overrides = GlobMatcher(patterns: options.globPatterns, overrideSemantics: true)
+        let overrides = GlobMatcher(
+            patterns: options.globPatterns,
+            overrideSemantics: true,
+            caseInsensitive: options.globCaseInsensitive
+        )
         var typeRegistry = FileTypeRegistry()
         typeRegistry.apply(options.typeChanges)
 
@@ -66,6 +73,7 @@ public struct FileWalker {
             .isRegularFileKey,
             .isSymbolicLinkKey,
             .nameKey,
+            .fileSizeKey,
         ])
         let isDirectory = values.isDirectory == true
         let relativePath = relativePath(for: url, rootBase: rootBase)
@@ -99,6 +107,12 @@ public struct FileWalker {
         ])
 
         if resolvedValues.isRegularFile == true {
+            if !isExplicit,
+               let maxFileSize = options.maxFileSize,
+               let fileSize = values.fileSize,
+               UInt64(fileSize) > maxFileSize {
+                return []
+            }
             return [Haystack(url: url, isExplicit: isExplicit)]
         }
 
@@ -269,11 +283,14 @@ public struct FileWalker {
         return url.lastPathComponent
     }
 
-    private func loadMatcher(from fileURL: URL) -> GlobMatcher {
+    private func loadMatcher(from fileURL: URL, caseInsensitive: Bool = false) -> GlobMatcher {
         guard let contents = try? String(contentsOf: fileURL, encoding: .utf8) else {
             return GlobMatcher(patterns: [])
         }
-        return GlobMatcher(patterns: contents.components(separatedBy: .newlines))
+        return GlobMatcher(
+            patterns: contents.components(separatedBy: .newlines),
+            caseInsensitive: caseInsensitive
+        )
     }
 
     private func appendIgnoreFiles(
@@ -282,11 +299,20 @@ public struct FileWalker {
         options: RipgrepOptions
     ) {
         if !options.noIgnoreVCS && (options.noRequireGit || isInGitRepository(directoryURL)) {
-            ignoreStack.append(loadMatcher(from: directoryURL.appendingPathComponent(".gitignore")))
+            ignoreStack.append(loadMatcher(
+                from: directoryURL.appendingPathComponent(".gitignore"),
+                caseInsensitive: options.ignoreFileCaseInsensitive
+            ))
         }
         if !options.noIgnoreDot {
-            ignoreStack.append(loadMatcher(from: directoryURL.appendingPathComponent(".ignore")))
-            ignoreStack.append(loadMatcher(from: directoryURL.appendingPathComponent(".rgignore")))
+            ignoreStack.append(loadMatcher(
+                from: directoryURL.appendingPathComponent(".ignore"),
+                caseInsensitive: options.ignoreFileCaseInsensitive
+            ))
+            ignoreStack.append(loadMatcher(
+                from: directoryURL.appendingPathComponent(".rgignore"),
+                caseInsensitive: options.ignoreFileCaseInsensitive
+            ))
         }
     }
 }

@@ -509,6 +509,49 @@ struct RipgrepSearcherTests {
         ]))
     }
 
+    @Test("honors filesize and case insensitive glob filters")
+    func honorsFilesizeAndCaseInsensitiveGlobFilters() throws {
+        let root = try TemporaryDirectory()
+        try root.write("needle\n", to: "keep.txt")
+        try root.write("needle \(String(repeating: "x", count: 100))\n", to: "big.txt")
+        try root.write("needle\n", to: "UPPER.TXT")
+        try root.write("upper.txt\n", to: ".ignore")
+
+        #expect(pathBasenames(try run(["--max-filesize", "10", "needle", root.url.path])) == [
+            "UPPER.TXT",
+            "keep.txt",
+        ])
+        #expect(pathBasenames(try run(["--max-filesize", "1K", "needle", root.url.path])) == [
+            "UPPER.TXT",
+            "big.txt",
+            "keep.txt",
+        ])
+        #expect(try run(["--max-filesize", "10", "needle", root.path("big.txt")]) == [
+            "needle \(String(repeating: "x", count: 100))",
+        ])
+
+        #expect(pathBasenames(try run([
+            "--no-ignore",
+            "-g",
+            "*.txt",
+            "needle",
+            root.url.path,
+        ])) == ["big.txt", "keep.txt"])
+        #expect(pathBasenames(try run([
+            "--no-ignore",
+            "--glob-case-insensitive",
+            "-g",
+            "*.txt",
+            "needle",
+            root.url.path,
+        ])) == ["UPPER.TXT", "big.txt", "keep.txt"])
+        #expect(pathBasenames(try run([
+            "--ignore-file-case-insensitive",
+            "needle",
+            root.url.path,
+        ])) == ["big.txt", "keep.txt"])
+    }
+
     @Test("honors custom ignore file and override globs")
     func honorsCustomIgnoreFileAndOverrideGlobs() throws {
         let root = try TemporaryDirectory()
