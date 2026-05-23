@@ -39,6 +39,11 @@ public enum EngineMode: Equatable {
     case automatic
 }
 
+public enum LoggingMode: Equatable {
+    case debug
+    case trace
+}
+
 public enum ColorTarget: Equatable {
     case path
     case line
@@ -146,6 +151,7 @@ public struct RipgrepOptions: Equatable {
     public var binaryMode: BinaryMode = .automatic
     public var quiet = false
     public var noMessages = false
+    public var loggingMode: LoggingMode?
     public var useStdin = false
     public var beforeContext = 0
     public var afterContext = 0
@@ -217,6 +223,10 @@ public enum RipgrepArgumentParser {
                 return .version
             case "--no-config":
                 break
+            case "--debug":
+                options.loggingMode = .debug
+            case "--trace":
+                options.loggingMode = .trace
             case "--files":
                 options.mode = .files
             case "--type-list":
@@ -994,6 +1004,8 @@ public enum RipgrepArgumentParser {
           -a, --text                 Search binary files as text
               --null-data            Use NUL as a line terminator
           -q, --quiet                Do not print matches
+              --debug                Show debug messages
+              --trace                Show trace messages
               --no-messages          Suppress file open/read error messages
               --no-config            Do not read RIPGREP_CONFIG_PATH
           -h, --help                 Print help

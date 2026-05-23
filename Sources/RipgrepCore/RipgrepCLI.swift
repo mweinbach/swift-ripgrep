@@ -67,6 +67,9 @@ public enum RipgrepCLI {
                 for line in outputLines {
                     stdout(line)
                 }
+                for diagnostic in results.diagnostics {
+                    stderr("rg: \(diagnostic)")
+                }
                 if !options.noMessages {
                     for message in results.messages {
                         stderr("rg: \(message)")

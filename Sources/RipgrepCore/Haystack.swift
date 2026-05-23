@@ -13,6 +13,13 @@ public struct Haystack: Equatable {
 public struct FileWalkResults: Equatable {
     public let haystacks: [Haystack]
     public let messages: [String]
+    public let diagnostics: [String]
+
+    public init(haystacks: [Haystack], messages: [String], diagnostics: [String] = []) {
+        self.haystacks = haystacks
+        self.messages = messages
+        self.diagnostics = diagnostics
+    }
 }
 
 public struct FileWalker {
@@ -42,6 +49,7 @@ public struct FileWalker {
     public func haystacksWithMessages(for options: RipgrepOptions) throws -> FileWalkResults {
         var haystacks: [Haystack] = []
         var messages: [String] = []
+        var diagnostics: [String] = []
         var baseIgnoreStack = IgnoreStack()
         if !options.noIgnoreFiles {
             for ignoreFile in options.ignoreFiles {
@@ -79,6 +87,7 @@ public struct FileWalker {
                 depth: 0,
                 rootBase: rootBase,
                 rootVolume: rootVolume,
+                diagnostics: &diagnostics,
                 ignoreStack: rootIgnoreStack,
                 overrides: overrides,
                 typeRegistry: typeRegistry,
@@ -88,7 +97,8 @@ public struct FileWalker {
 
         return FileWalkResults(
             haystacks: sorted(haystacks, options: options),
-            messages: messages
+            messages: messages,
+            diagnostics: diagnostics
         )
     }
 
@@ -98,6 +108,7 @@ public struct FileWalker {
         depth: Int,
         rootBase: URL,
         rootVolume: String?,
+        diagnostics: inout [String],
         ignoreStack: IgnoreStack,
         overrides: GlobMatcher,
         typeRegistry: FileTypeRegistry,
@@ -116,20 +127,25 @@ public struct FileWalker {
 
         if !isExplicit {
             if !options.hidden && isHidden(url) {
+                debug("ignoring \(url.path): hidden", options: options, diagnostics: &diagnostics)
                 return []
             }
             if !overrides.allows(relativePath: relativePath, isDirectory: isDirectory) {
+                debug("ignoring \(url.path): override glob", options: options, diagnostics: &diagnostics)
                 return []
             }
             if !ignoreStack.allows(relativePath: relativePath, isDirectory: isDirectory) {
+                debug("ignoring \(url.path): ignore file", options: options, diagnostics: &diagnostics)
                 return []
             }
             if !isDirectory && !typeRegistry.allows(path: relativePath) {
+                debug("ignoring \(url.path): file type filter", options: options, diagnostics: &diagnostics)
                 return []
             }
         }
 
         if values.isSymbolicLink == true && !options.followSymlinks && !isExplicit {
+            debug("ignoring \(url.path): symbolic link", options: options, diagnostics: &diagnostics)
             return []
         }
 
@@ -147,6 +163,7 @@ public struct FileWalker {
                let maxFileSize = options.maxFileSize,
                let fileSize = values.fileSize,
                UInt64(fileSize) > maxFileSize {
+                debug("ignoring \(url.path): \(fileSize) bytes exceeds max filesize \(maxFileSize)", options: options, diagnostics: &diagnostics)
                 return []
             }
             return [Haystack(url: url, isExplicit: isExplicit)]
@@ -160,9 +177,11 @@ public struct FileWalker {
            let rootVolume,
            let currentVolume = volumeIdentifier(for: resolvedURL),
            currentVolume != rootVolume {
+            debug("ignoring \(url.path): different file system", options: options, diagnostics: &diagnostics)
             return []
         }
         if let maxDepth = options.maxDepth, depth >= maxDepth {
+            debug("ignoring \(url.path): max depth \(maxDepth)", options: options, diagnostics: &diagnostics)
             return []
         }
 
@@ -171,7 +190,6 @@ public struct FileWalker {
             appendIgnoreFiles(in: resolvedURL, to: &directoryIgnoreStack, options: options)
         }
 
-        let optionsMask: FileManager.DirectoryEnumerationOptions = options.hidden ? [] : [.skipsHiddenFiles]
         let children = try fileManager.contentsOfDirectory(
             at: resolvedURL,
             includingPropertiesForKeys: [
@@ -180,7 +198,7 @@ public struct FileWalker {
                 .isSymbolicLinkKey,
                 .nameKey,
             ],
-            options: optionsMask
+            options: []
         )
         .sorted { $0.path < $1.path }
 
@@ -192,6 +210,7 @@ public struct FileWalker {
                 depth: depth + 1,
                 rootBase: rootBase,
                 rootVolume: rootVolume,
+                diagnostics: &diagnostics,
                 ignoreStack: directoryIgnoreStack,
                 overrides: overrides,
                 typeRegistry: typeRegistry,
@@ -199,6 +218,13 @@ public struct FileWalker {
             ))
         }
         return haystacks
+    }
+
+    private func debug(_ message: String, options: RipgrepOptions, diagnostics: inout [String]) {
+        guard options.loggingMode != nil else {
+            return
+        }
+        diagnostics.append("DEBUG|swift-ripgrep::walk| \(message)")
     }
 
     private func volumeIdentifier(for url: URL) -> String? {

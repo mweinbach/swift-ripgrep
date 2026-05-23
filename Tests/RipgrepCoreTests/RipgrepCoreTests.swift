@@ -775,6 +775,38 @@ struct RipgrepSearcherTests {
         #expect(try run(["--files", "--hidden", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == [".hidden.txt", "visible.txt"])
     }
 
+    @Test("prints debug diagnostics for skipped files")
+    func printsDebugDiagnosticsForSkippedFiles() throws {
+        let root = try TemporaryDirectory()
+        try root.write("needle\n", to: "keep.txt")
+        try root.write("needle\n", to: ".hidden.txt")
+        try root.write("needle\n", to: "skip.log")
+        try root.write("*.log\n", to: ".ignore")
+
+        var output: [String] = []
+        var errors: [String] = []
+        let exitCode = RipgrepCLI.run(
+            arguments: ["--debug", "needle", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+
+        #expect(exitCode == 0)
+        #expect(output == ["\(root.path("keep.txt")):needle"])
+        #expect(errors.contains { $0.contains("DEBUG|swift-ripgrep::walk|") && $0.contains(".hidden.txt: hidden") })
+        #expect(errors.contains { $0.contains("DEBUG|swift-ripgrep::walk|") && $0.contains("skip.log: ignore file") })
+
+        output = []
+        errors = []
+        let traceExitCode = RipgrepCLI.run(
+            arguments: ["--debug", "--trace", "needle", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(traceExitCode == 0)
+        #expect(errors.contains { $0.contains("DEBUG|swift-ripgrep::walk|") })
+    }
+
     @Test("honors symlink and one file system traversal toggles")
     func honorsSymlinkAndOneFileSystemTraversalToggles() throws {
         let root = try TemporaryDirectory()

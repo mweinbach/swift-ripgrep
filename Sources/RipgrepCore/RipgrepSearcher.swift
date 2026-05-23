@@ -63,6 +63,7 @@ public struct RipgrepSearcher {
                 .withEnvironment(environment)
                 .haystacksWithMessages(for: options)
         var messages = walkResults.messages
+        let diagnostics = walkResults.diagnostics
         var files = walkResults.haystacks.map { haystack in
             let outcome = searchFile(haystack, matcher: matcher, options: options)
             if let message = outcome.message {
@@ -90,7 +91,7 @@ public struct RipgrepSearcher {
             }
         )
 
-        return SearchResults(files: files, summary: summary, messages: messages)
+        return SearchResults(files: files, summary: summary, messages: messages, diagnostics: diagnostics)
     }
 
     private func matchedLineCount(_ match: SearchMatch) -> Int {

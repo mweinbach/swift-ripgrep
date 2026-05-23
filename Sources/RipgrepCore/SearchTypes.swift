@@ -128,15 +128,18 @@ public struct SearchResults: Equatable, Sendable {
     public let files: [SearchFileResult]
     public let summary: SearchSummary
     public let messages: [String]
+    public let diagnostics: [String]
 
     public init(
         files: [SearchFileResult],
         summary: SearchSummary,
-        messages: [String] = []
+        messages: [String] = [],
+        diagnostics: [String] = []
     ) {
         self.files = files
         self.summary = summary
         self.messages = messages
+        self.diagnostics = diagnostics
     }
 
     public var hasMatch: Bool {
