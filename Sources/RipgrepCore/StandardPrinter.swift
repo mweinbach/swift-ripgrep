@@ -211,7 +211,7 @@ public struct StandardPrinter {
             if options.byteOffset {
                 fields.append(OutputField("\(match.absoluteOffset + span.startByte)", colorTarget: nil))
             }
-            let text = "\(onlyMatchingText(span, in: match))\(outputTerminator(match.lineTerminator))"
+            let text = "\(onlyMatchingText(span, in: match))\(outputTerminator(match.lineTerminator, line: match.line))"
             return ["\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(text)"]
         }
     }
@@ -237,7 +237,7 @@ public struct StandardPrinter {
                 fields.append(OutputField("\(runningByteOffset)", colorTarget: nil))
             }
             runningByteOffset += chunk.utf8.count + 1
-            return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(colors.apply(.match, to: chunk))\(outputTerminator(match.lineTerminator))"
+            return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(colors.apply(.match, to: chunk))\(outputTerminator(match.lineTerminator, line: chunk))"
         }
     }
 
@@ -367,7 +367,7 @@ public struct StandardPrinter {
             fields.append(OutputField("\(line.lineNumber)", colorTarget: .line))
         }
 
-        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldContextSeparator))\(renderedLine(line.line, omittedKind: .context))\(outputTerminator(line.lineTerminator))"
+        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldContextSeparator))\(renderedLine(line.line, omittedKind: .context))\(outputTerminator(line.lineTerminator, line: line.line))"
     }
 
     private func formatMatchedLine(_ line: SearchLine, fileURL: URL, showPath: Bool, match: SearchMatch?) -> String {
@@ -383,19 +383,19 @@ public struct StandardPrinter {
             fields.append(OutputField("\(match.absoluteOffset)", colorTarget: nil))
         }
 
-        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(renderedLine(line.line))\(outputTerminator(line.lineTerminator))"
+        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(renderedLine(line.line))\(outputTerminator(line.lineTerminator, line: line.line))"
     }
 
     private func renderedLine(for match: SearchMatch) -> String {
         guard options.replacement != nil, !match.spans.isEmpty else {
-            return "\(renderedLine(match.line, spans: match.spans))\(outputTerminator(match.lineTerminator))"
+            return "\(renderedLine(match.line, spans: match.spans))\(outputTerminator(match.lineTerminator, line: match.line))"
         }
         let originalLine = match.line
         let line = renderedText(for: match)
         if let rendered = limitedReplacementLine(line, originalLine: originalLine, match: match) {
-            return "\(rendered)\(outputTerminator(match.lineTerminator))"
+            return "\(rendered)\(outputTerminator(match.lineTerminator, line: match.line))"
         }
-        return "\(renderedLine(line))\(outputTerminator(match.lineTerminator))"
+        return "\(renderedLine(line))\(outputTerminator(match.lineTerminator, line: line))"
     }
 
     private func renderedText(for match: SearchMatch) -> String {
@@ -422,8 +422,14 @@ public struct StandardPrinter {
         return colors.colorMatches(in: line, spans: spans)
     }
 
-    private func outputTerminator(_ terminator: String) -> String {
-        options.nullData ? terminator : ""
+    private func outputTerminator(_ terminator: String, line: String? = nil) -> String {
+        if options.nullData {
+            return terminator
+        }
+        if options.crlf, colors.isEnabled, terminator == "\n", line?.hasSuffix("\r") != true {
+            return "\r"
+        }
+        return ""
     }
 
     private func pathTerminator() -> String {

@@ -681,6 +681,7 @@ struct RipgrepSearcherTests {
     func honorsCRLFAnchorMode() throws {
         let root = try TemporaryDirectory()
         try root.write("foo\r\nbar\rquux\nbaz\r\n", to: "crlf.txt")
+        try root.write("\n", to: "lf-empty.txt")
 
         #expect(try runAllowingNoMatch(["-n", "foo$", root.path("crlf.txt")]) == [])
         #expect(try run(["--crlf", "-n", "foo$", root.path("crlf.txt")]) == [
@@ -698,6 +699,9 @@ struct RipgrepSearcherTests {
         #expect(try runAllowingNoMatch(["--crlf", "--null-data", "-n", "foo$", root.path("crlf.txt")]) == [])
         #expect(try run(["--null-data", "--crlf", "-n", "foo$", root.path("crlf.txt")]) == [
             "1:foo\r",
+        ])
+        #expect(try run(["x?", "--crlf", "--color=always", root.path("lf-empty.txt")]) == [
+            "\r",
         ])
     }
 
