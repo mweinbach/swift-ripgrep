@@ -205,9 +205,7 @@ public struct FileWalker {
             }
             if !isIncludedByOverride && !ignoreStack.allows(relativePath: relativePath, isDirectory: isDirectory) {
                 debug("ignoring \(url.path): ignore file", options: options, diagnostics: &diagnostics)
-                if !isDirectory {
-                    filtered = true
-                }
+                filtered = true
                 return []
             }
             if !isDirectory && !typeRegistry.allows(path: relativePath) {
