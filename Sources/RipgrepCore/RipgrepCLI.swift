@@ -78,6 +78,9 @@ public enum RipgrepCLI {
                             emitStdout(line, stdout: stdout, suppressNewlineForTrailingNul: options.nullPathTerminator)
                         }
                     }
+                    for diagnostic in walkResults.diagnostics {
+                        stderr("rg: \(diagnostic)")
+                    }
                     if !options.noMessages {
                         for message in walkResults.messages {
                             stderr("rg: \(message)")

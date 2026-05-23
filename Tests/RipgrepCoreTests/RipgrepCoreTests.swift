@@ -2207,6 +2207,18 @@ struct RipgrepSearcherTests {
 
         output = []
         errors = []
+        let filesExitCode = RipgrepCLI.run(
+            arguments: ["--debug", "--files", "--sort", "path", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(filesExitCode == 0)
+        #expect(output == [root.path("keep.txt")])
+        #expect(errors.contains { $0.contains("DEBUG|swift-ripgrep::walk|") && $0.contains(".hidden.txt: hidden") })
+        #expect(errors.contains { $0.contains("DEBUG|swift-ripgrep::walk|") && $0.contains("skip.log: ignore file") })
+
+        output = []
+        errors = []
         let traceExitCode = RipgrepCLI.run(
             arguments: ["--debug", "--trace", "needle", root.url.path],
             stdout: { output.append($0) },
@@ -2231,6 +2243,16 @@ struct RipgrepSearcherTests {
             at: root.url.appendingPathComponent("file-link"),
             withDestinationURL: root.url.appendingPathComponent("real/file.txt")
         )
+        var output: [String] = []
+        var errors: [String] = []
+        let debugExitCode = RipgrepCLI.run(
+            arguments: ["--debug", "--sort", "path", "needle", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(debugExitCode == 0)
+        #expect(pathBasenames(output) == ["file.txt", "deep.txt"])
+        #expect(!errors.contains { $0.contains("symbolic link") })
 
         #expect(pathBasenames(try run(["--sort", "path", "needle", root.url.path])) == ["file.txt", "deep.txt"])
         #expect(try run(["needle", root.path("file-link")]) == ["needle"])

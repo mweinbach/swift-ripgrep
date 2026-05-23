@@ -224,7 +224,6 @@ public struct FileWalker {
         }
 
         if values.isSymbolicLink == true && !options.followSymlinks && !isExplicit {
-            debug("ignoring \(url.path): symbolic link", options: options, diagnostics: &diagnostics)
             return []
         }
 
