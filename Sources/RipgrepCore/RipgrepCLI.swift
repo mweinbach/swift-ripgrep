@@ -87,6 +87,10 @@ public enum RipgrepCLI {
                     for message in results.messages {
                         stderr("rg: \(message)")
                     }
+                    if shouldPrintNothingSearchedWarning(results: results, options: options) {
+                        stderr("rg: No files were searched, which means ripgrep probably applied a filter you didn't expect.")
+                        stderr("Running with --debug will show why files are being skipped.")
+                    }
                 }
 
                 let hasSuccessfulOutput = hasSuccessfulOutput(results: results, options: options)
@@ -108,6 +112,17 @@ public enum RipgrepCLI {
         case .filesWithoutMatch:
             return results.files.contains { $0.searched && !$0.hasMatch }
         }
+    }
+
+    private static func shouldPrintNothingSearchedWarning(results: SearchResults, options: RipgrepOptions) -> Bool {
+        guard options.printMode == .matchingLines,
+              !options.quiet,
+              results.summary.filesSearched == 0,
+              results.messages.isEmpty,
+              results.filtered else {
+            return false
+        }
+        return true
     }
 
     public static func usage() -> String {

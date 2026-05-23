@@ -14,11 +14,13 @@ public struct FileWalkResults: Equatable {
     public let haystacks: [Haystack]
     public let messages: [String]
     public let diagnostics: [String]
+    public let filtered: Bool
 
-    public init(haystacks: [Haystack], messages: [String], diagnostics: [String] = []) {
+    public init(haystacks: [Haystack], messages: [String], diagnostics: [String] = [], filtered: Bool = false) {
         self.haystacks = haystacks
         self.messages = messages
         self.diagnostics = diagnostics
+        self.filtered = filtered
     }
 }
 
@@ -55,6 +57,7 @@ public struct FileWalker {
         var haystacks: [Haystack] = []
         var messages: [String] = []
         var diagnostics: [String] = []
+        var filtered = false
         var baseIgnoreStack = IgnoreStack()
         if !options.noIgnoreFiles {
             for ignoreFile in options.ignoreFiles {
@@ -96,6 +99,7 @@ public struct FileWalker {
                 rootVolume: rootVolume,
                 messages: &messages,
                 diagnostics: &diagnostics,
+                filtered: &filtered,
                 ignoreStack: rootIgnoreStack,
                 overrides: overrides,
                 typeRegistry: typeRegistry,
@@ -106,7 +110,8 @@ public struct FileWalker {
         return FileWalkResults(
             haystacks: sorted(haystacks, options: options),
             messages: messages,
-            diagnostics: diagnostics
+            diagnostics: diagnostics,
+            filtered: filtered
         )
     }
 
@@ -118,6 +123,7 @@ public struct FileWalker {
         rootVolume: String?,
         messages: inout [String],
         diagnostics: inout [String],
+        filtered: inout Bool,
         ignoreStack: IgnoreStack,
         overrides: GlobMatcher,
         typeRegistry: FileTypeRegistry,
@@ -137,18 +143,22 @@ public struct FileWalker {
         if !isExplicit {
             if !options.hidden && isHidden(url) {
                 debug("ignoring \(url.path): hidden", options: options, diagnostics: &diagnostics)
+                filtered = true
                 return []
             }
             if !overrides.allows(relativePath: relativePath, isDirectory: isDirectory) {
                 debug("ignoring \(url.path): override glob", options: options, diagnostics: &diagnostics)
+                filtered = true
                 return []
             }
             if !ignoreStack.allows(relativePath: relativePath, isDirectory: isDirectory) {
                 debug("ignoring \(url.path): ignore file", options: options, diagnostics: &diagnostics)
+                filtered = true
                 return []
             }
             if !isDirectory && !typeRegistry.allows(path: relativePath) {
                 debug("ignoring \(url.path): file type filter", options: options, diagnostics: &diagnostics)
+                filtered = true
                 return []
             }
         }
@@ -173,6 +183,7 @@ public struct FileWalker {
                let fileSize = values.fileSize,
                UInt64(fileSize) > maxFileSize {
                 debug("ignoring \(url.path): \(fileSize) bytes exceeds max filesize \(maxFileSize)", options: options, diagnostics: &diagnostics)
+                filtered = true
                 return []
             }
             return [Haystack(url: url, isExplicit: isExplicit)]
@@ -221,6 +232,7 @@ public struct FileWalker {
                 rootVolume: rootVolume,
                 messages: &messages,
                 diagnostics: &diagnostics,
+                filtered: &filtered,
                 ignoreStack: directoryIgnoreStack,
                 overrides: overrides,
                 typeRegistry: typeRegistry,

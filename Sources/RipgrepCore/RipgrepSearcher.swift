@@ -91,7 +91,13 @@ public struct RipgrepSearcher {
             }
         )
 
-        return SearchResults(files: files, summary: summary, messages: messages, diagnostics: diagnostics)
+        return SearchResults(
+            files: files,
+            summary: summary,
+            messages: messages,
+            diagnostics: diagnostics,
+            filtered: walkResults.filtered
+        )
     }
 
     private func matchedLineCount(_ match: SearchMatch) -> Int {

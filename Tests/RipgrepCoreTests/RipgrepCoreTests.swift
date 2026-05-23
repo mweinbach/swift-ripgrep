@@ -1450,6 +1450,54 @@ struct RipgrepSearcherTests {
         #expect(errors.count == 1)
     }
 
+    @Test("warns when filters leave nothing searched")
+    func warnsWhenFiltersLeaveNothingSearched() throws {
+        let root = try TemporaryDirectory()
+        try root.write("ignored-dir/**\n", to: ".ignore")
+        try root.createDirectory("ignored-dir")
+        try root.write("needle\n", to: "ignored-dir/foo.txt")
+
+        var output: [String] = []
+        var errors: [String] = []
+        var exitCode = RipgrepCLI.run(
+            arguments: ["needle", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 1)
+        #expect(output.isEmpty)
+        #expect(errors == [
+            "rg: No files were searched, which means ripgrep probably applied a filter you didn't expect.",
+            "Running with --debug will show why files are being skipped.",
+        ])
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--no-messages", "needle", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 1)
+        #expect(output.isEmpty)
+        #expect(errors.isEmpty)
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--debug", "needle", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 1)
+        #expect(output.isEmpty)
+        #expect(errors.contains { $0.contains("DEBUG|swift-ripgrep::walk|") && $0.contains("ignored-dir") && $0.contains("ignore file") })
+        #expect(errors.suffix(2) == [
+            "rg: No files were searched, which means ripgrep probably applied a filter you didn't expect.",
+            "Running with --debug will show why files are being skipped.",
+        ])
+    }
+
     @Test("honors parent ignore files and unrestricted levels")
     func honorsParentIgnoreFilesAndUnrestrictedLevels() throws {
         let parent = try TemporaryDirectory()
