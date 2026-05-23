@@ -169,25 +169,32 @@ public struct StandardPrinter {
     }
 
     private func formatVimgrep(_ match: SearchMatch, showPath: Bool) -> [String] {
-        match.spans.map { span in
+        let replacementLine = options.replacement == nil ? nil : firstRenderedLine(renderedText(for: match))
+        let replacementOffsets = replacementStartOffsetsByIndex(for: match)
+        return match.spans.enumerated().map { index, span in
+            let replacementStartByte = replacementOffsets[index]
+            let lineText = replacementLine.map { renderedLine($0) } ?? vimgrepLineText(for: match)
             let text = options.onlyMatching
                 ? (span.replacement ?? span.text)
-                : vimgrepLineText(for: match)
+                : lineText
+            let column = span.replacement == nil
+                ? span.startColumn
+                : column(in: replacementLine ?? match.line, byteOffset: replacementStartByte)
             let fields = vimgrepFields(
                 lineNumber: match.lineNumber,
-                column: span.startColumn,
-                byteOffset: options.byteOffset ? match.absoluteOffset + span.startByte : nil,
+                column: column,
+                byteOffset: options.byteOffset ? match.absoluteOffset + replacementStartByte : nil,
                 text: text
             )
             let terminator = outputTerminator(
                 match.lineTerminator,
-                line: options.onlyMatching ? span.text : match.line,
+                line: options.onlyMatching ? span.text : (replacementLine ?? match.line),
                 crlfMatchTerminator: options.onlyMatching
             )
             guard showPath else {
                 return "\(fields.joined(separator: options.fieldMatchSeparator))\(terminator)"
             }
-            let path = renderPath(for: match.fileURL, line: match.lineNumber, column: span.startColumn)
+            let path = renderPath(for: match.fileURL, line: match.lineNumber, column: column)
             return "\(path)\(matchPathFieldSeparator())\(fields.joined(separator: options.fieldMatchSeparator))\(terminator)"
         }
     }
@@ -236,20 +243,25 @@ public struct StandardPrinter {
             return [formatOnlyMatchingInverted(match, showPath: showPath)]
         }
 
-        return match.spans.flatMap { span in
+        let replacementOffsets = replacementStartOffsetsByIndex(for: match)
+        return match.spans.enumerated().flatMap { index, span in
             if options.multiline, span.text.contains("\n") || span.text.contains("\0") {
                 return formatOnlyMatchingMultiline(span, in: match, showPath: showPath)
             }
+            let replacementStartByte = replacementOffsets[index]
+            let column = span.replacement == nil
+                ? span.startColumn
+                : column(in: renderedText(for: match), byteOffset: replacementStartByte)
             var fields: [OutputField] = []
-            let path = showPath ? renderPath(for: match.fileURL, line: match.lineNumber, column: span.startColumn) : nil
+            let path = showPath ? renderPath(for: match.fileURL, line: match.lineNumber, column: column) : nil
             if options.wantsLineNumber {
                 fields.append(OutputField("\(match.lineNumber)", colorTarget: .line))
             }
             if options.column {
-                fields.append(OutputField("\(span.startColumn)", colorTarget: .column))
+                fields.append(OutputField("\(column)", colorTarget: .column))
             }
             if options.byteOffset {
-                fields.append(OutputField("\(match.absoluteOffset + span.startByte)", colorTarget: nil))
+                fields.append(OutputField("\(match.absoluteOffset + replacementStartByte)", colorTarget: nil))
             }
             let text = "\(onlyMatchingText(span, in: match))\(outputTerminator(match.lineTerminator, line: span.text, crlfMatchTerminator: true))"
             return ["\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(text)"]
@@ -699,14 +711,37 @@ public struct StandardPrinter {
     }
 
     private func replacementStartOffsets(for match: SearchMatch) -> [Int] {
+        replacementStartOffsetsByIndex(for: match).sorted()
+    }
+
+    private func replacementStartOffsetsByIndex(for match: SearchMatch) -> [Int] {
         var delta = 0
-        var offsets: [Int] = []
-        for span in match.spans.sorted(by: { $0.startByte < $1.startByte }) {
+        var offsets = Array(repeating: 0, count: match.spans.count)
+        let indexedSpans = match.spans.enumerated().sorted { lhs, rhs in
+            if lhs.element.startByte == rhs.element.startByte {
+                return lhs.offset < rhs.offset
+            }
+            return lhs.element.startByte < rhs.element.startByte
+        }
+        for (index, span) in indexedSpans {
             let replacementLength = (span.replacement ?? span.text).utf8.count
-            offsets.append(span.startByte + delta)
+            offsets[index] = span.startByte + delta
             delta += replacementLength - (span.endByte - span.startByte)
         }
         return offsets
+    }
+
+    private func column(in line: String, byteOffset: Int) -> Int {
+        var bytes = 0
+        var column = 1
+        for character in line {
+            guard bytes < byteOffset else {
+                break
+            }
+            bytes += String(character).utf8.count
+            column += 1
+        }
+        return column
     }
 
     private func splitRenderedLines(_ text: String) -> [String] {

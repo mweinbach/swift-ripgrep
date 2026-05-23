@@ -1552,6 +1552,14 @@ struct RipgrepSearcherTests {
             "[abc]",
             "[def]",
         ])
+        #expect(try run(["-o", "--column", "--replace", "X", #"[a-z]+\d+"#, root.path("replace.txt")]) == [
+            "1:1:X",
+            "1:3:X",
+        ])
+        #expect(try run(["-o", "--byte-offset", "--replace", "X", #"[a-z]+\d+"#, root.path("replace.txt")]) == [
+            "0:X",
+            "2:X",
+        ])
         #expect(try run(["--replace", "${0}_${1}_${2}${3}_$$", #"([a-z]+)(\d+)"#, root.path("replace.txt")]) == [
             "abc123_abc_123_$ def456_def_456_$",
         ])
@@ -1616,6 +1624,22 @@ struct RipgrepSearcherTests {
         #expect(try run(["--vimgrep", "-o", "needle", root.path("a.txt")]) == [
             "\(root.path("a.txt")):1:3:needle",
             "\(root.path("a.txt")):1:14:needle",
+        ])
+        try root.write("abc123 def456\n", to: "vimgrep-replace.txt")
+        #expect(try run(["--vimgrep", "--replace", "X", #"[a-z]+\d+"#, root.path("vimgrep-replace.txt")]) == [
+            "\(root.path("vimgrep-replace.txt")):1:1:X X",
+            "\(root.path("vimgrep-replace.txt")):1:3:X X",
+        ])
+        #expect(try run([
+            "--vimgrep",
+            "--byte-offset",
+            "--replace",
+            "<$1>",
+            #"([a-z]+)\d+"#,
+            root.path("vimgrep-replace.txt"),
+        ]) == [
+            "\(root.path("vimgrep-replace.txt")):1:1:0:<abc> <def>",
+            "\(root.path("vimgrep-replace.txt")):1:7:6:<abc> <def>",
         ])
         try root.write("Watson Sherlock\nnone\nSherlock Holmes\nDoctor Watson\n", to: "vimgrep.txt")
         #expect(try run(["--vimgrep", "-N", "Sherlock|Watson", root.path("vimgrep.txt")]) == [
