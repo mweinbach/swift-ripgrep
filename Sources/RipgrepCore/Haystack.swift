@@ -100,6 +100,13 @@ public struct FileWalker {
             var rootIgnoreStack = baseIgnoreStack
             appendGlobalIgnoreFile(to: &rootIgnoreStack, rootBase: rootBase, messages: &messages, options: options)
             appendParentIgnoreFiles(to: &rootIgnoreStack, rootBase: rootBase, messages: &messages, options: options)
+            appendLogicalParentIgnoreFiles(
+                for: root.standardizedFileURL,
+                rootBase: rootBase,
+                to: &rootIgnoreStack,
+                messages: &messages,
+                options: options
+            )
             let rootVolume = options.oneFileSystem ? volumeIdentifier(for: root.standardizedFileURL) : nil
             haystacks.append(contentsOf: try walk(
                 root.standardizedFileURL,
@@ -362,6 +369,27 @@ public struct FileWalker {
             return root
         }
         return root.deletingLastPathComponent()
+    }
+
+    private func appendLogicalParentIgnoreFiles(
+        for root: URL,
+        rootBase: URL,
+        to ignoreStack: inout IgnoreStack,
+        messages: inout [String],
+        options: RipgrepOptions
+    ) {
+        guard options.followSymlinks,
+              (try? root.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true,
+              (try? root.resolvingSymlinksInPath().resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else {
+            return
+        }
+        appendIgnoreFiles(
+            in: rootBase,
+            to: &ignoreStack,
+            messages: &messages,
+            rootBase: rootBase,
+            options: options
+        )
     }
 
     private func appendParentIgnoreFiles(

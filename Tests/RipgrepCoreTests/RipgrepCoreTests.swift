@@ -2114,6 +2114,16 @@ struct RipgrepSearcherTests {
         #expect(pathBasenames(try run(["--follow", "--no-follow", "--sort", "path", "needle", root.url.path])) == ["file.txt", "deep.txt"])
         #expect(pathBasenames(try run(["--one-file-system", "--sort", "path", "needle", root.url.path])) == ["file.txt", "deep.txt"])
         #expect(pathBasenames(try run(["--one-file-system", "--no-one-file-system", "--sort", "path", "needle", root.url.path])) == ["file.txt", "deep.txt"])
+
+        try root.write("*.log\n", to: ".ignore")
+        try root.createDirectory("logreal")
+        try root.write("needle\n", to: "logreal/skip.log")
+        try FileManager.default.createSymbolicLink(
+            at: root.url.appendingPathComponent("loglink"),
+            withDestinationURL: root.url.appendingPathComponent("logreal")
+        )
+        #expect(try runAllowingNoMatch(["--no-messages", "--follow", "needle", root.path("loglink")]) == [])
+        #expect(try run(["--no-ignore", "--follow", "needle", root.path("loglink")]) == ["needle"])
     }
 
     @Test("honors ignore files and no ignore")
