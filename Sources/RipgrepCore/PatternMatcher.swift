@@ -672,6 +672,18 @@ public struct PatternMatcher {
 
     private func literalRanges(_ literal: String, in line: String) -> [Range<String.Index>] {
         let haystack = options.effectiveIgnoreCase ? Self.foldedCase(line, options: options) : line
+        if literal.isEmpty {
+            var ranges: [Range<String.Index>] = []
+            var index = line.startIndex
+            while true {
+                ranges.append(index..<index)
+                guard index < line.endIndex else {
+                    break
+                }
+                index = line.index(after: index)
+            }
+            return ranges
+        }
         var cursor = haystack.startIndex
         var ranges: [Range<String.Index>] = []
 

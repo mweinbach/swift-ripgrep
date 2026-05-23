@@ -34,6 +34,13 @@ struct RipgrepSearcherTests {
         #expect(try run(["-w", "-x", "abc", root.path("patterns.txt")]) == ["abc"])
         #expect(try run(["-x", "-w", "abc", root.path("patterns.txt")]) == ["abc.123", "abc", "abc def"])
         #expect(try run(["-e", ")(", root.path("patterns.txt")]) == ["abc123", "abc.123", "abc", "abc def", "xabc"])
+        try root.write("abc\n\n", to: "empty-literal.txt")
+        #expect(try run(["-F", "", root.path("empty-literal.txt")]) == ["abc", ""])
+        #expect(try run(["-Fo", "", root.path("empty-literal.txt")]) == ["", "", "", "", ""])
+        #expect(try run(["-Fc", "", root.path("empty-literal.txt")]) == ["2"])
+        #expect(try run(["-Fw", "", root.path("empty-literal.txt")]) == [""])
+        #expect(try run(["-Fx", "", root.path("empty-literal.txt")]) == [""])
+        #expect(try runAllowingNoMatch(["-Fv", "", root.path("empty-literal.txt")]) == [])
 
         var output: [String] = []
         var errors: [String] = []
