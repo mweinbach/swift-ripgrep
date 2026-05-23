@@ -39,7 +39,7 @@ public struct StandardPrinter {
         case .matchingLines:
             if options.vimgrep {
                 return results.files.flatMap { result in
-                    formatVimgrep(result)
+                    formatVimgrep(result, showPath: options.withFilename != false)
                 }
             }
             if options.heading == true {
@@ -130,16 +130,31 @@ public struct StandardPrinter {
         }
     }
 
-    private func formatVimgrep(_ result: SearchFileResult) -> [String] {
+    private func formatVimgrep(_ result: SearchFileResult, showPath: Bool) -> [String] {
         result.matches.flatMap { match in
             match.spans.map { span in
                 let text = options.onlyMatching
                     ? (span.replacement ?? span.text)
-                    : renderedLine(firstRenderedLine(match.line))
+                    : vimgrepLineText(for: match)
+                let fields = "\(match.lineNumber)\(options.fieldMatchSeparator)\(span.startColumn)\(options.fieldMatchSeparator)\(text)"
+                guard showPath else {
+                    return "\(fields)\(outputTerminator(match.lineTerminator))"
+                }
                 let path = renderPath(for: match.fileURL, line: match.lineNumber, column: span.startColumn)
-                return "\(path)\(matchPathFieldSeparator())\(match.lineNumber)\(options.fieldMatchSeparator)\(span.startColumn)\(options.fieldMatchSeparator)\(text)\(outputTerminator(match.lineTerminator))"
+                return "\(path)\(matchPathFieldSeparator())\(fields)\(outputTerminator(match.lineTerminator))"
             }
         }
+    }
+
+    private func vimgrepLineText(for match: SearchMatch) -> String {
+        let line = firstRenderedLine(match.line)
+        if let maxColumns = options.maxColumns,
+           options.maxColumnsPreview,
+           line.utf8.count >= maxColumns {
+            let rendered = options.trim ? line.trimmingASCIIWhitespacePrefix() : line
+            return "\(rendered.prefixBytes(maxColumns)) [... 0 more matches]"
+        }
+        return renderedLine(line)
     }
 
     private func formatBinaryMatch(_ result: SearchFileResult, showPath: Bool) -> String? {
@@ -444,7 +459,8 @@ public struct StandardPrinter {
         guard options.maxColumnsPreview else {
             return OmittedLineKind.matching.message
         }
-        return "\(match.line.prefixBytes(maxColumns)) [... 0 more matches]"
+        let line = options.trim ? match.line.trimmingASCIIWhitespacePrefix() : match.line
+        return "\(line.prefixBytes(maxColumns)) [... 0 more matches]"
     }
 
     private func splitRenderedLines(_ text: String) -> [String] {

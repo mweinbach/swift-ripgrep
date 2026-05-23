@@ -448,6 +448,28 @@ struct RipgrepSearcherTests {
         let root = try TemporaryDirectory()
         try root.write("foo\nbar\nbaz\n", to: "multi.txt")
         try root.write("a\nb\nc\na\nb\nc", to: "passthru.txt")
+        try root.write("""
+        #!/usr/bin/env bash
+
+        zero=one
+
+        a=one
+
+        if true; then
+        \ta=(
+        \t\ta
+        \t\tb
+        \t\tc
+        \t)
+        \ttrue
+        fi
+
+        a=two
+
+        b=one
+        });
+        """, to: "named-replace.txt")
+        try root.write("     0123456789abcdefghijklmnopqrstuvwxyz", to: "trim-columns.txt")
         try root.write("xxx\nabc\ndefxxxabc\ndefxxx\nxxx", to: "overlap1.txt")
         try root.write("xxx\nabc\ndefabc\ndefxxx\nxxx", to: "overlap2.txt")
         try root.write("a\nbaz\nabc\n", to: "anchors.txt")
@@ -510,6 +532,47 @@ struct RipgrepSearcherTests {
         #expect(try run(["-U", "--vimgrep", #"foobar\nfoobar\nfoo|quux"#, root.path("vimgrep.txt")]) == [
             "\(root.path("vimgrep.txt")):1:1:foobar",
             "\(root.path("vimgrep.txt")):3:5:foo quux",
+        ])
+        #expect(try run([
+            "-n",
+            "-U",
+            "-o",
+            "--replace",
+            "${value}",
+            #"^(?P<indent>\s*)a=(?P<value>(?ms:[(].*?[)])|.*?)$"#,
+            root.path("named-replace.txt"),
+        ]) == [
+            "4:one",
+            "8:(",
+            "9:\t\ta",
+            "10:\t\tb",
+            "11:\t\tc",
+            "12:\t)",
+            "15:two",
+        ])
+        #expect(try run([
+            "-U",
+            "--trim",
+            "--max-columns-preview",
+            "-M8",
+            "-o",
+            "--no-filename",
+            #".*a\n?bc.*"#,
+            root.path("trim-columns.txt"),
+        ]) == [
+            "01234567 [... 0 more matches]",
+        ])
+        #expect(try run([
+            "-U",
+            "--trim",
+            "--max-columns-preview",
+            "-M8",
+            "--vimgrep",
+            "--no-filename",
+            #".*a\n?bc.*"#,
+            root.path("trim-columns.txt"),
+        ]) == [
+            "1:1:01234567 [... 0 more matches]",
         ])
 
         let output = try run(["--json", "-U", #"foo\nbar"#, root.path("multi.txt")])
