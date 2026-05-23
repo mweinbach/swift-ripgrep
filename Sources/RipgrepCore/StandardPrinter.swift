@@ -3,12 +3,14 @@ import Foundation
 public struct StandardPrinter {
     private let options: RipgrepOptions
     private let currentDirectory: String
+    private let colors: ANSIColorPalette
 
     public init(
         options: RipgrepOptions,
         currentDirectory: String = FileManager.default.currentDirectoryPath
     ) {
         self.options = options
+        self.colors = ANSIColorPalette(options: options)
         self.currentDirectory = URL(fileURLWithPath: currentDirectory)
             .standardizedFileURL
             .path
@@ -91,16 +93,16 @@ public struct StandardPrinter {
     }
 
     private func format(_ match: SearchMatch, showPath: Bool) -> String {
-        var fields: [String] = []
+        var fields: [OutputField] = []
         let path = showPath ? displayPath(for: match.fileURL) : nil
         if options.wantsLineNumber {
-            fields.append("\(match.lineNumber)")
+            fields.append(OutputField("\(match.lineNumber)", colorTarget: .line))
         }
         if options.column, let column = match.column {
-            fields.append("\(column)")
+            fields.append(OutputField("\(column)", colorTarget: .column))
         }
         if options.byteOffset {
-            fields.append("\(match.absoluteOffset)")
+            fields.append(OutputField("\(match.absoluteOffset)", colorTarget: nil))
         }
 
         return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(renderedLine(for: match))"
@@ -112,10 +114,10 @@ public struct StandardPrinter {
         }
 
         return splitRenderedLines(match.lineWithTerminator).enumerated().map { offset, line in
-            var fields: [String] = []
+            var fields: [OutputField] = []
             let path = showPath ? displayPath(for: match.fileURL) : nil
             if options.wantsLineNumber {
-                fields.append("\(match.lineNumber + offset)")
+                fields.append(OutputField("\(match.lineNumber + offset)", colorTarget: .line))
             }
             let rendered = renderedLine(line)
             return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(rendered)"
@@ -146,18 +148,18 @@ public struct StandardPrinter {
 
     private func formatOnlyMatching(_ match: SearchMatch, showPath: Bool) -> [String] {
         match.spans.map { span in
-            var fields: [String] = []
+            var fields: [OutputField] = []
             let path = showPath ? displayPath(for: match.fileURL) : nil
             if options.wantsLineNumber {
-                fields.append("\(match.lineNumber)")
+                fields.append(OutputField("\(match.lineNumber)", colorTarget: .line))
             }
             if options.column {
-                fields.append("\(span.startColumn)")
+                fields.append(OutputField("\(span.startColumn)", colorTarget: .column))
             }
             if options.byteOffset {
-                fields.append("\(match.absoluteOffset + span.startByte)")
+                fields.append(OutputField("\(match.absoluteOffset + span.startByte)", colorTarget: nil))
             }
-            let text = "\(span.replacement ?? span.text)\(outputTerminator(match.lineTerminator))"
+            let text = "\(colors.apply(.match, to: span.replacement ?? span.text))\(outputTerminator(match.lineTerminator))"
             return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(text)"
         }
     }
@@ -181,7 +183,7 @@ public struct StandardPrinter {
             if !output.isEmpty {
                 output.append("")
             }
-            output.append(displayPath(for: result.fileURL))
+            output.append(colors.apply(.path, to: displayPath(for: result.fileURL)))
             output.append(contentsOf: lines)
         }
         return output
@@ -226,10 +228,10 @@ public struct StandardPrinter {
     }
 
     private func formatContextLine(_ line: SearchLine, fileURL: URL, showPath: Bool) -> String {
-        var fields: [String] = []
+        var fields: [OutputField] = []
         let path = showPath ? displayPath(for: fileURL) : nil
         if options.wantsLineNumber {
-            fields.append("\(line.lineNumber)")
+            fields.append(OutputField("\(line.lineNumber)", colorTarget: .line))
         }
 
         return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldContextSeparator))\(renderedLine(line.line))\(outputTerminator(line.lineTerminator))"
@@ -237,7 +239,7 @@ public struct StandardPrinter {
 
     private func renderedLine(for match: SearchMatch) -> String {
         guard options.replacement != nil, !match.spans.isEmpty else {
-            return "\(renderedLine(match.line))\(outputTerminator(match.lineTerminator))"
+            return "\(renderedLine(match.line, spans: match.spans))\(outputTerminator(match.lineTerminator))"
         }
         var line = match.line
         for span in match.spans.sorted(by: { $0.startColumn > $1.startColumn }) {
@@ -253,6 +255,13 @@ public struct StandardPrinter {
     private func renderedLine(_ line: String) -> String {
         let trimmed = options.trim ? line.trimmingASCIIWhitespacePrefix() : line
         return limitedLine(trimmed)
+    }
+
+    private func renderedLine(_ line: String, spans: [MatchSpan]) -> String {
+        guard colors.isEnabled, !options.trim, options.maxColumns == nil, !spans.isEmpty else {
+            return renderedLine(line)
+        }
+        return colors.colorMatches(in: line, spans: spans)
     }
 
     private func outputTerminator(_ terminator: String) -> String {
@@ -271,14 +280,19 @@ public struct StandardPrinter {
         options.nullPathTerminator ? "\0" : options.fieldMatchSeparator
     }
 
-    private func prefix(path: String?, fields: [String], fieldSeparator: String) -> String {
+    private func prefix(path: String?, fields: [OutputField], fieldSeparator: String) -> String {
         var prefix = ""
         if let path {
-            prefix += path
+            prefix += colors.apply(.path, to: path)
             prefix += options.nullPathTerminator ? "\0" : fieldSeparator
         }
         if !fields.isEmpty {
-            prefix += fields.joined(separator: fieldSeparator)
+            prefix += fields.map { field in
+                guard let colorTarget = field.colorTarget else {
+                    return field.text
+                }
+                return colors.apply(colorTarget, to: field.text)
+            }.joined(separator: fieldSeparator)
             prefix += fieldSeparator
         }
         return prefix
@@ -404,5 +418,196 @@ private extension String {
             bytes += width
         }
         return output
+    }
+}
+
+private struct OutputField {
+    let text: String
+    let colorTarget: ColorTarget?
+
+    init(_ text: String, colorTarget: ColorTarget?) {
+        self.text = text
+        self.colorTarget = colorTarget
+    }
+}
+
+private struct ANSIColorPalette {
+    struct Style {
+        var foreground: String?
+        var background: String?
+        var bold = false
+        var underline = false
+        var italic = false
+
+        var isEmpty: Bool {
+            foreground == nil && background == nil && !bold && !underline && !italic
+        }
+
+        var escape: String? {
+            var escapes: [String] = []
+            if bold {
+                escapes.append("\u{1B}[1m")
+            }
+            if underline {
+                escapes.append("\u{1B}[4m")
+            }
+            if italic {
+                escapes.append("\u{1B}[3m")
+            }
+            if let foreground, let code = ANSIColorPalette.colorCode(foreground, foreground: true) {
+                escapes.append("\u{1B}[\(code)m")
+            }
+            if let background, let code = ANSIColorPalette.colorCode(background, foreground: false) {
+                escapes.append("\u{1B}[\(code)m")
+            }
+            guard !escapes.isEmpty else {
+                return nil
+            }
+            return escapes.joined()
+        }
+    }
+
+    static let reset = "\u{1B}[0m"
+    private static let foregroundCodes = [
+        "black": "30",
+        "red": "31",
+        "green": "32",
+        "yellow": "33",
+        "blue": "34",
+        "magenta": "35",
+        "cyan": "36",
+        "white": "37",
+    ]
+    private static let backgroundCodes = [
+        "black": "40",
+        "red": "41",
+        "green": "42",
+        "yellow": "43",
+        "blue": "44",
+        "magenta": "45",
+        "cyan": "46",
+        "white": "47",
+    ]
+
+    let isEnabled: Bool
+    private var styles: [ColorTarget: Style]
+
+    init(options: RipgrepOptions) {
+        self.isEnabled = options.colorMode == .always || options.colorMode == .ansi
+        var styles: [ColorTarget: Style] = [
+            .path: Style(foreground: "magenta"),
+            .line: Style(foreground: "green"),
+            .column: Style(),
+            .match: Style(foreground: "red", bold: true),
+            .highlight: Style(),
+        ]
+        for change in options.colorChanges {
+            var style = styles[change.target] ?? Style()
+            switch change.attribute {
+            case .none:
+                style = Style()
+            case .foreground(let color):
+                style.foreground = color
+            case .background(let color):
+                style.background = color
+            case .style(let name):
+                Self.applyStyle(name, to: &style)
+            }
+            styles[change.target] = style
+        }
+        self.styles = styles
+    }
+
+    func apply(_ target: ColorTarget, to text: String) -> String {
+        guard isEnabled, let style = styles[target], let escape = style.escape else {
+            return text
+        }
+        return "\(Self.reset)\(escape)\(text)\(Self.reset)"
+    }
+
+    func colorMatches(in line: String, spans: [MatchSpan]) -> String {
+        guard isEnabled else {
+            return line
+        }
+        let orderedSpans = spans.sorted {
+            if $0.startColumn == $1.startColumn {
+                return $0.endColumn < $1.endColumn
+            }
+            return $0.startColumn < $1.startColumn
+        }
+        var output = ""
+        var cursor = line.startIndex
+        for span in orderedSpans {
+            guard let range = indexRange(startColumn: span.startColumn, endColumn: span.endColumn, in: line),
+                  range.lowerBound >= cursor else {
+                continue
+            }
+            output.append(contentsOf: line[cursor..<range.lowerBound])
+            output.append(apply(.match, to: String(line[range])))
+            cursor = range.upperBound
+        }
+        output.append(contentsOf: line[cursor..<line.endIndex])
+        return output
+    }
+
+    private func indexRange(startColumn: Int, endColumn: Int, in line: String) -> Range<String.Index>? {
+        let lowerOffset = startColumn - 1
+        let upperOffset = endColumn - 1
+        guard lowerOffset >= 0, upperOffset >= lowerOffset, upperOffset <= line.count else {
+            return nil
+        }
+        return line.index(line.startIndex, offsetBy: lowerOffset)..<line.index(line.startIndex, offsetBy: upperOffset)
+    }
+
+    private static func applyStyle(_ name: String, to style: inout Style) {
+        switch name {
+        case "bold", "intense":
+            style.bold = true
+        case "nobold", "nointense":
+            style.bold = false
+        case "underline":
+            style.underline = true
+        case "nounderline":
+            style.underline = false
+        case "italic":
+            style.italic = true
+        case "noitalic":
+            style.italic = false
+        default:
+            break
+        }
+    }
+
+    private static func colorCode(_ color: String, foreground: Bool) -> String? {
+        if foreground, let code = foregroundCodes[color] {
+            return code
+        }
+        if !foreground, let code = backgroundCodes[color] {
+            return code
+        }
+        if let byte = parseColorByte(color) {
+            return "\(foreground ? 38 : 48);5;\(byte)"
+        }
+        let components = color.split(separator: ",", omittingEmptySubsequences: false).map(String.init)
+        guard components.count == 3,
+              let red = parseColorByte(components[0]),
+              let green = parseColorByte(components[1]),
+              let blue = parseColorByte(components[2]) else {
+            return nil
+        }
+        return "\(foreground ? 38 : 48);2;\(red);\(green);\(blue)"
+    }
+
+    private static func parseColorByte(_ raw: String) -> UInt8? {
+        let value: UInt64?
+        if raw.hasPrefix("0x") {
+            value = UInt64(raw.dropFirst(2), radix: 16)
+        } else {
+            value = UInt64(raw)
+        }
+        guard let value, value <= UInt8.max else {
+            return nil
+        }
+        return UInt8(value)
     }
 }

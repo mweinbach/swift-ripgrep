@@ -579,6 +579,63 @@ struct RipgrepSearcherTests {
         ])
     }
 
+    @Test("prints pretty and ANSI color modes")
+    func printsPrettyAndANSIColorModes() throws {
+        let root = try TemporaryDirectory()
+        try root.write("alpha needle beta\nno\n", to: "a.txt")
+        try root.write("needle again\n", to: "b.txt")
+
+        let reset = "\u{1B}[0m"
+        let green = "\u{1B}[32m"
+        let magenta = "\u{1B}[35m"
+        let redBold = "\u{1B}[1m\u{1B}[31m"
+
+        #expect(try run(["--color=always", "-n", "needle", root.path("a.txt")]) == [
+            "\(reset)\(green)1\(reset):alpha \(reset)\(redBold)needle\(reset) beta",
+        ])
+        #expect(try run(["--pretty", "--color=never", "needle", root.url.path]) == [
+            "\(root.path("a.txt"))",
+            "1:alpha needle beta",
+            "",
+            "\(root.path("b.txt"))",
+            "1:needle again",
+        ])
+        #expect(try run([
+            "--color=always",
+            "--colors=match:none",
+            "--colors=path:none",
+            "--colors=line:none",
+            "needle",
+            root.path("a.txt"),
+        ]) == [
+            "alpha needle beta",
+        ])
+        #expect(try run([
+            "--color=always",
+            "--colors=match:fg:magenta",
+            "needle",
+            root.path("a.txt"),
+        ]) == [
+            "alpha \(reset)\u{1B}[1m\(magenta)needle\(reset) beta",
+        ])
+        #expect(try run(["--pretty", "needle", root.url.path]) == [
+            "\(reset)\(magenta)\(root.path("a.txt"))\(reset)",
+            "\(reset)\(green)1\(reset):alpha \(reset)\(redBold)needle\(reset) beta",
+            "",
+            "\(reset)\(magenta)\(root.path("b.txt"))\(reset)",
+            "\(reset)\(green)1\(reset):\(reset)\(redBold)needle\(reset) again",
+        ])
+
+        var errors: [String] = []
+        let exitCode = RipgrepCLI.run(
+            arguments: ["--color=Always", "needle", root.path("a.txt")],
+            stdout: { _ in },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(errors == ["error: choice 'Always' is unrecognized"])
+    }
+
     @Test("prints JSON lines for matches context and summary")
     func printsJSONLines() throws {
         let root = try TemporaryDirectory()

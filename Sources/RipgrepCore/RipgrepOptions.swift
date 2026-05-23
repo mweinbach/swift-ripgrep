@@ -26,6 +26,38 @@ public enum EncodingMode: Equatable {
     case explicit(String.Encoding)
 }
 
+public enum ColorMode: Equatable {
+    case never
+    case automatic
+    case always
+    case ansi
+}
+
+public enum ColorTarget: Equatable {
+    case path
+    case line
+    case column
+    case match
+    case highlight
+}
+
+public enum ColorAttribute: Equatable {
+    case none
+    case foreground(String)
+    case background(String)
+    case style(String)
+}
+
+public struct ColorChange: Equatable {
+    public let target: ColorTarget
+    public let attribute: ColorAttribute
+
+    public init(target: ColorTarget, attribute: ColorAttribute) {
+        self.target = target
+        self.attribute = attribute
+    }
+}
+
 public enum SortKind: Equatable {
     case path
     case modified
@@ -78,6 +110,8 @@ public struct RipgrepOptions: Equatable {
     public var heading: Bool?
     public var trim = false
     public var vimgrep = false
+    public var colorMode: ColorMode = .automatic
+    public var colorChanges: [ColorChange] = []
     public var nullPathTerminator = false
     public var pathSeparator: Character?
     public var withFilename: Bool?
@@ -258,8 +292,45 @@ public enum RipgrepArgumentParser {
                 options.byteOffset = false
             case "--json":
                 options.json = true
+                options.colorMode = .never
             case "--no-json":
                 options.json = false
+            case "-p", "--pretty":
+                options.colorMode = .always
+                options.heading = true
+                options.lineNumber = true
+            case "--color":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--color <WHEN>' requires a value")
+                }
+                guard let mode = parseColorMode(arguments[index]) else {
+                    return .error("error: choice '\(arguments[index])' is unrecognized")
+                }
+                options.colorMode = mode
+                index += 1
+            case let value where value.hasPrefix("--color="):
+                let raw = String(value.dropFirst("--color=".count))
+                guard let mode = parseColorMode(raw) else {
+                    return .error("error: choice '\(raw)' is unrecognized")
+                }
+                options.colorMode = mode
+            case "--no-color":
+                options.colorMode = .never
+            case "--colors":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--colors <COLOR_SPEC>' requires a value")
+                }
+                guard let change = parseColorChange(arguments[index]) else {
+                    return .error("error: invalid color spec '\(arguments[index])'")
+                }
+                options.colorChanges.append(change)
+                index += 1
+            case let value where value.hasPrefix("--colors="):
+                let raw = String(value.dropFirst("--colors=".count))
+                guard let change = parseColorChange(raw) else {
+                    return .error("error: invalid color spec '\(raw)'")
+                }
+                options.colorChanges.append(change)
             case "--stats":
                 options.stats = true
             case "--no-stats":
@@ -322,6 +393,7 @@ public enum RipgrepArgumentParser {
                 options.trim = false
             case "--vimgrep":
                 options.vimgrep = true
+                options.colorMode = .never
             case "-0", "--null":
                 options.nullPathTerminator = true
             case "--path-separator":
@@ -794,6 +866,9 @@ public enum RipgrepArgumentParser {
           -N, --no-line-number       Suppress line numbers
               --column               Show the first match column
           -b, --byte-offset          Show the 0-based byte offset
+          -p, --pretty               Alias for colors, headings and line numbers
+              --color WHEN           Use color: never, auto, always or ansi
+              --colors COLOR_SPEC    Configure output color settings
               --heading              Group matches by file
               --trim                 Trim leading ASCII whitespace from printed lines
               --vimgrep              Print vim-compatible file:line:column matches
@@ -893,6 +968,95 @@ public enum RipgrepArgumentParser {
         default:
             return nil
         }
+    }
+
+    private static func parseColorMode(_ raw: String) -> ColorMode? {
+        switch raw {
+        case "never":
+            return .never
+        case "auto":
+            return .automatic
+        case "always":
+            return .always
+        case "ansi":
+            return .ansi
+        default:
+            return nil
+        }
+    }
+
+    private static func parseColorChange(_ raw: String) -> ColorChange? {
+        let pieces = raw.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+        guard pieces.count >= 2, pieces.count <= 3 else {
+            return nil
+        }
+        guard let target = parseColorTarget(pieces[0]) else {
+            return nil
+        }
+
+        switch pieces[1].lowercased() {
+        case "none":
+            guard pieces.count == 2 else { return nil }
+            return ColorChange(target: target, attribute: .none)
+        case "fg":
+            guard pieces.count == 3, isValidColor(pieces[2]) else { return nil }
+            return ColorChange(target: target, attribute: .foreground(pieces[2].lowercased()))
+        case "bg":
+            guard pieces.count == 3, isValidColor(pieces[2]) else { return nil }
+            return ColorChange(target: target, attribute: .background(pieces[2].lowercased()))
+        case "style":
+            guard pieces.count == 3, isValidStyle(pieces[2]) else { return nil }
+            return ColorChange(target: target, attribute: .style(pieces[2].lowercased()))
+        default:
+            return nil
+        }
+    }
+
+    private static func parseColorTarget(_ raw: String) -> ColorTarget? {
+        switch raw.lowercased() {
+        case "path":
+            return .path
+        case "line":
+            return .line
+        case "column":
+            return .column
+        case "match":
+            return .match
+        case "highlight":
+            return .highlight
+        default:
+            return nil
+        }
+    }
+
+    private static func isValidColor(_ raw: String) -> Bool {
+        let lower = raw.lowercased()
+        if ["black", "blue", "green", "red", "cyan", "magenta", "yellow", "white"].contains(lower) {
+            return true
+        }
+        if parseColorByte(lower) != nil {
+            return true
+        }
+        let components = lower.split(separator: ",", omittingEmptySubsequences: false)
+        return components.count == 3 && components.allSatisfy { parseColorByte(String($0)) != nil }
+    }
+
+    private static func isValidStyle(_ raw: String) -> Bool {
+        ["bold", "nobold", "intense", "nointense", "underline", "nounderline", "italic", "noitalic"]
+            .contains(raw.lowercased())
+    }
+
+    private static func parseColorByte(_ raw: String) -> UInt8? {
+        let value: UInt64?
+        if raw.hasPrefix("0x") {
+            value = UInt64(raw.dropFirst(2), radix: 16)
+        } else {
+            value = UInt64(raw)
+        }
+        guard let value, value <= UInt8.max else {
+            return nil
+        }
+        return UInt8(value)
     }
 
     private static func parsePathSeparator(_ raw: String) -> Character? {
