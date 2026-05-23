@@ -319,6 +319,8 @@ struct RipgrepSearcherTests {
             "\(root.path("one.txt")):2",
         ])
         #expect(try run(["-l", "needle", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == ["one.txt"])
+        #expect(try run(["--files", "-l", "needle", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == ["one.txt"])
+        #expect(try run(["--files", "--files-without-match", "needle", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == ["two.txt"])
         #expect(try run(["--files-without-match", "needle", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == ["two.txt"])
 
         var output: [String] = []

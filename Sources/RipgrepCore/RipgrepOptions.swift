@@ -1169,18 +1169,22 @@ public enum RipgrepArgumentParser {
             case let value where value.hasPrefix("--field-context-separator="):
                 options.fieldContextSeparator = parseEscapedSeparator(String(value.dropFirst("--field-context-separator=".count)))
             case "-c", "--count":
+                options.mode = .search
                 options.printMode = .count
                 options.json = false
                 options.generateMode = nil
             case "--count-matches":
+                options.mode = .search
                 options.printMode = .countMatches
                 options.json = false
                 options.generateMode = nil
             case "-l", "--files-with-matches":
+                options.mode = .search
                 options.printMode = .filesWithMatches
                 options.json = false
                 options.generateMode = nil
             case "--files-without-match":
+                options.mode = .search
                 options.printMode = .filesWithoutMatch
                 options.json = false
                 options.generateMode = nil
@@ -1457,9 +1461,11 @@ public enum RipgrepArgumentParser {
             case "q":
                 options.quiet = true
             case "c":
+                options.mode = .search
                 options.printMode = .count
                 options.generateMode = nil
             case "l":
+                options.mode = .search
                 options.printMode = .filesWithMatches
                 options.generateMode = nil
             case "f":
