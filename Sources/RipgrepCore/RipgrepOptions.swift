@@ -433,20 +433,20 @@ public enum RipgrepArgumentParser {
                     return .error("error: The argument '--encoding <ENCODING>' requires a value")
                 }
                 guard let mode = parseEncoding(arguments[index]) else {
-                    return .error("error: unknown encoding '\(arguments[index])'")
+                    return .error(unknownEncoding(arguments[index], flag: "--encoding"))
                 }
                 options.encodingMode = mode
                 index += 1
             case let value where value.hasPrefix("--encoding="):
                 let raw = String(value.dropFirst("--encoding=".count))
                 guard let mode = parseEncoding(raw) else {
-                    return .error("error: unknown encoding '\(raw)'")
+                    return .error(unknownEncoding(raw, flag: "--encoding"))
                 }
                 options.encodingMode = mode
             case let value where value.hasPrefix("-E") && value.count > 2:
                 let raw = String(value.dropFirst(2))
                 guard let mode = parseEncoding(raw) else {
-                    return .error("error: unknown encoding '\(raw)'")
+                    return .error(unknownEncoding(raw, flag: "-E"))
                 }
                 options.encodingMode = mode
             case "--no-encoding":
@@ -602,14 +602,14 @@ public enum RipgrepArgumentParser {
                     return .error("error: The argument '--colors <COLOR_SPEC>' requires a value")
                 }
                 guard let change = parseColorChange(arguments[index]) else {
-                    return .error("error: invalid color spec '\(arguments[index])'")
+                    return .error(invalidColorSpec(arguments[index]))
                 }
                 options.colorChanges.append(change)
                 index += 1
             case let value where value.hasPrefix("--colors="):
                 let raw = String(value.dropFirst("--colors=".count))
                 guard let change = parseColorChange(raw) else {
-                    return .error("error: invalid color spec '\(raw)'")
+                    return .error(invalidColorSpec(raw))
                 }
                 options.colorChanges.append(change)
             case "--hyperlink-format":
@@ -1969,6 +1969,16 @@ public enum RipgrepArgumentParser {
 
     private static func invalidNumber(flag: String) -> String {
         "error parsing flag \(flag): value is not a valid number: invalid digit found in string"
+    }
+
+    private static func unknownEncoding(_ raw: String, flag: String) -> String {
+        "error parsing flag \(flag): grep config error: unknown encoding: \(raw)"
+    }
+
+    private static func invalidColorSpec(_ raw: String) -> String {
+        """
+        error parsing flag --colors: invalid color spec format: '\(raw)'. Valid format is '(path|line|column|match|highlight):(fg|bg|style):(value)'.
+        """
     }
 
     private static func unrecognizedChoice(flag: String, value: String) -> String {

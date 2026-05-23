@@ -700,6 +700,28 @@ struct RipgrepSearcherTests {
         #expect(jsonSubmatches?.first?["end"] as? Int == 3)
         #expect(try run(["-n", "-Esjis", "Шерлок Холмс", root.path("sjis.txt")]) == ["1:Шерлок Холмс"])
         #expect(try run(["-n", "-Eeuc-jp", "Шерлок Холмс", root.path("eucjp.txt")]) == ["1:Шерлок Холмс"])
+
+        var output: [String] = []
+        var errors: [String] = []
+        var exitCode = RipgrepCLI.run(
+            arguments: ["--encoding", "nope", "needle", root.path("bom8.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["rg: error parsing flag --encoding: grep config error: unknown encoding: nope"])
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["-Enope", "needle", root.path("bom8.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["rg: error parsing flag -E: grep config error: unknown encoding: nope"])
     }
 
     @Test("searches multiline regex matches")
@@ -1518,6 +1540,20 @@ struct RipgrepSearcherTests {
         )
         #expect(exitCode == 2)
         #expect(errors == ["rg: error parsing flag --color: choice 'Always' is unrecognized"])
+
+        var output: [String] = []
+        output = []
+        errors = []
+        let invalidColorsExitCode = RipgrepCLI.run(
+            arguments: ["--colors", "bad", "needle", root.path("a.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(invalidColorsExitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == [
+            "rg: error parsing flag --colors: invalid color spec format: 'bad'. Valid format is '(path|line|column|match|highlight):(fg|bg|style):(value)'.",
+        ])
     }
 
     @Test("prints OSC8 hyperlinks for paths")
