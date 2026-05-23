@@ -54,13 +54,21 @@ public struct RipgrepSearcher {
         let summary = SearchSummary(
             filesSearched: files.filter(\.searched).count,
             filesWithMatches: matchedFiles.count,
-            matchedLines: matchedFiles.reduce(0) { $0 + $1.matches.count },
+            matchedLines: matchedFiles.reduce(0) { total, file in
+                total + file.matches.reduce(0) { $0 + matchedLineCount($1) }
+            },
             totalMatches: matchedFiles.reduce(0) { total, file in
                 total + file.matches.reduce(0) { $0 + $1.matchCount } + (file.hasBinaryMatch ? 1 : 0)
             }
         )
 
         return SearchResults(files: files, summary: summary)
+    }
+
+    private func matchedLineCount(_ match: SearchMatch) -> Int {
+        let terminator: Character = match.lineWithTerminator.contains("\0") ? "\0" : "\n"
+        let count = match.lineWithTerminator.filter { $0 == terminator }.count
+        return max(1, count)
     }
 
     private func sorted(_ files: [SearchFileResult], options: RipgrepOptions) -> [SearchFileResult] {
@@ -152,6 +160,10 @@ public struct RipgrepSearcher {
         matcher: PatternMatcher,
         options: RipgrepOptions
     ) -> SearchFileResult {
+        if options.multiline && !options.invertMatch {
+            return searchMultilineContents(contents, fileURL: fileURL, matcher: matcher, options: options)
+        }
+
         var matches: [SearchMatch] = []
         let lines = splitLines(contents, options: options)
         var searchLines: [SearchLine] = []
@@ -193,6 +205,77 @@ public struct RipgrepSearcher {
         }
 
         return SearchFileResult(fileURL: fileURL, matches: matches, lines: searchLines)
+    }
+
+    private func searchMultilineContents(
+        _ contents: String,
+        fileURL: URL,
+        matcher: PatternMatcher,
+        options: RipgrepOptions
+    ) -> SearchFileResult {
+        let split = splitLines(contents, options: options)
+        var searchLines: [SearchLine] = []
+        var lineStartOffsets: [Int] = []
+        var absoluteOffset = 0
+
+        for (offset, splitLine) in split.enumerated() {
+            lineStartOffsets.append(absoluteOffset)
+            searchLines.append(SearchLine(
+                lineNumber: offset + 1,
+                line: splitLine.text,
+                lineTerminator: splitLine.terminator,
+                absoluteOffset: absoluteOffset
+            ))
+            absoluteOffset += splitLine.text.utf8.count + splitLine.terminator.utf8.count
+        }
+
+        let spans = matcher.spans(in: contents)
+        let limitedSpans = Array(spans.prefix(options.maxCount ?? Int.max))
+        let matches = limitedSpans.compactMap { span -> SearchMatch? in
+            guard let startLineIndex = lineIndex(containingByteOffset: span.startByte, lineStartOffsets: lineStartOffsets),
+                  let endLineIndex = lineIndex(containingByteOffset: max(span.endByte - 1, span.startByte), lineStartOffsets: lineStartOffsets) else {
+                return nil
+            }
+
+            let blockLines = searchLines[startLineIndex...endLineIndex]
+            let blockText = blockLines.map(\.lineWithTerminator).joined()
+            let blockOffset = searchLines[startLineIndex].absoluteOffset
+            let adjustedSpan = MatchSpan(
+                startColumn: span.startColumn,
+                endColumn: span.endColumn,
+                startByte: span.startByte - blockOffset,
+                endByte: span.endByte - blockOffset,
+                text: span.text,
+                replacement: span.replacement
+            )
+
+            return SearchMatch(
+                fileURL: fileURL,
+                lineNumber: startLineIndex + 1,
+                column: options.column ? span.startColumn : nil,
+                line: blockText,
+                lineTerminator: "",
+                absoluteOffset: blockOffset,
+                matchCount: 1,
+                spans: [adjustedSpan]
+            )
+        }
+
+        return SearchFileResult(fileURL: fileURL, matches: matches, lines: searchLines)
+    }
+
+    private func lineIndex(containingByteOffset byteOffset: Int, lineStartOffsets: [Int]) -> Int? {
+        guard !lineStartOffsets.isEmpty else {
+            return nil
+        }
+        var result = 0
+        for (index, lineOffset) in lineStartOffsets.enumerated() {
+            if lineOffset > byteOffset {
+                break
+            }
+            result = index
+        }
+        return result
     }
 
     private func decode(_ data: Data, options: RipgrepOptions) -> String {

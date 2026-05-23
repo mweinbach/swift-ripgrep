@@ -137,7 +137,7 @@ public struct JSONPrinter {
             "searches_with_match": result.hasMatch ? 1 : 0,
             "bytes_searched": result.bytesSearched,
             "bytes_printed": 0,
-            "matched_lines": result.matches.count,
+            "matched_lines": result.matches.reduce(0) { $0 + matchedLineCount($1) },
             "matches": result.matches.reduce(0) { $0 + $1.matchCount } + (result.hasBinaryMatch ? 1 : 0),
         ]
     }
@@ -164,6 +164,11 @@ public struct JSONPrinter {
 
     private func dataObject(_ text: String) -> [String: String] {
         ["text": text]
+    }
+
+    private func matchedLineCount(_ match: SearchMatch) -> Int {
+        let terminator: Character = match.lineWithTerminator.contains("\0") ? "\0" : "\n"
+        return max(1, match.lineWithTerminator.filter { $0 == terminator }.count)
     }
 
     private func jsonLine(_ object: [String: Any]) -> String {

@@ -52,7 +52,7 @@ public struct StandardPrinter {
                 if let binaryLine = formatBinaryMatch(result, showPath: showPath(for: results)) {
                     return [binaryLine]
                 }
-                return result.matches.map { format($0, showPath: showPath(for: results)) }
+                return result.matches.flatMap { formatSearchMatch($0, showPath: showPath(for: results)) }
             }
         case .count:
             return results.files.filter(\.hasMatch).map { result in
@@ -106,6 +106,27 @@ public struct StandardPrinter {
             return renderedLine(for: match)
         }
         return "\(fields.joined(separator: ":")):\(renderedLine(for: match))"
+    }
+
+    private func formatSearchMatch(_ match: SearchMatch, showPath: Bool) -> [String] {
+        guard options.multiline, match.line.contains("\n") || match.line.contains("\0") else {
+            return [format(match, showPath: showPath)]
+        }
+
+        return splitRenderedLines(match.lineWithTerminator).enumerated().map { offset, line in
+            var fields: [String] = []
+            if showPath {
+                fields.append(displayPath(for: match.fileURL))
+            }
+            if options.wantsLineNumber {
+                fields.append("\(match.lineNumber + offset)")
+            }
+            let rendered = renderedLine(line)
+            if fields.isEmpty {
+                return rendered
+            }
+            return "\(fields.joined(separator: ":")):\(rendered)"
+        }
     }
 
     private func formatVimgrep(_ result: SearchFileResult) -> [String] {
@@ -164,7 +185,7 @@ public struct StandardPrinter {
             } else if options.passthru || options.beforeContext > 0 || options.afterContext > 0 {
                 lines = contextLines(for: result, showPath: false)
             } else {
-                lines = result.matches.map { format($0, showPath: false) }
+                lines = result.matches.flatMap { formatSearchMatch($0, showPath: false) }
             }
             guard !lines.isEmpty else {
                 continue
@@ -263,6 +284,24 @@ public struct StandardPrinter {
             return "[Omitted long matching line]"
         }
         return "\(line.prefixBytes(maxColumns)) [... omitted end of long line]"
+    }
+
+    private func splitRenderedLines(_ text: String) -> [String] {
+        let terminator: Character = text.contains("\0") ? "\0" : "\n"
+        var lines: [String] = []
+        var current = ""
+        for character in text {
+            if character == terminator {
+                lines.append(current)
+                current = ""
+            } else {
+                current.append(character)
+            }
+        }
+        if !current.isEmpty || text.last != terminator {
+            lines.append(current)
+        }
+        return lines
     }
 
     private func indexRange(startColumn: Int, endColumn: Int, in line: String) -> Range<String.Index>? {

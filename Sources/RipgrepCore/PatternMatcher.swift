@@ -17,9 +17,13 @@ public struct PatternMatcher {
             } else {
                 let source = Self.regexPattern(for: pattern, options: options)
                 do {
+                    var regexOptions: NSRegularExpression.Options = options.effectiveIgnoreCase ? [.caseInsensitive] : []
+                    if options.multiline && options.multilineDotall {
+                        regexOptions.insert(.dotMatchesLineSeparators)
+                    }
                     return .regex(try NSRegularExpression(
                         pattern: source,
-                        options: options.effectiveIgnoreCase ? [.caseInsensitive] : []
+                        options: regexOptions
                     ))
                 } catch {
                     throw RipgrepError.invalidRegex(error.localizedDescription)

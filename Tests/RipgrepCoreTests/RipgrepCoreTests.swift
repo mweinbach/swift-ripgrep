@@ -170,6 +170,35 @@ struct RipgrepSearcherTests {
         ])
     }
 
+    @Test("searches multiline regex matches")
+    func searchesMultilineRegexMatches() throws {
+        let root = try TemporaryDirectory()
+        try root.write("foo\nbar\nbaz\n", to: "multi.txt")
+
+        #expect(try run(["-n", "-U", #"foo\nbar"#, root.path("multi.txt")]) == [
+            "1:foo",
+            "2:bar",
+        ])
+        #expect(try run(["-U", "-o", #"foo\nbar"#, root.path("multi.txt")]) == [
+            "foo\nbar",
+        ])
+        #expect(try runAllowingNoMatch(["-n", "-U", "foo.bar", root.path("multi.txt")]) == [])
+        #expect(try run(["-n", "-U", "--multiline-dotall", "foo.bar", root.path("multi.txt")]) == [
+            "1:foo",
+            "2:bar",
+        ])
+
+        let output = try run(["--json", "-U", #"foo\nbar"#, root.path("multi.txt")])
+        let messages = try output.map(jsonObject)
+        let match = messages.first { $0["type"] as? String == "match" }?["data"] as? [String: Any]
+        let lines = match?["lines"] as? [String: String]
+        let submatch = (match?["submatches"] as? [[String: Any]])?.first
+        #expect(lines?["text"] == "foo\nbar\n")
+        #expect(match?["line_number"] as? Int == 1)
+        #expect(submatch?["start"] as? Int == 0)
+        #expect(submatch?["end"] as? Int == 7)
+    }
+
     @Test("limits traversal depth")
     func limitsTraversalDepth() throws {
         let root = try TemporaryDirectory()

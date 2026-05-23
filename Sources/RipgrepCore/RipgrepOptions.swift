@@ -55,6 +55,8 @@ public struct RipgrepOptions: Equatable {
     public var encodingMode: EncodingMode = .automatic
     public var wordRegexp = false
     public var lineRegexp = false
+    public var multiline = false
+    public var multilineDotall = false
     public var invertMatch = false
     public var onlyMatching = false
     public var replacement: String?
@@ -203,6 +205,14 @@ public enum RipgrepArgumentParser {
                 options.wordRegexp = true
             case "-x", "--line-regexp":
                 options.lineRegexp = true
+            case "-U", "--multiline":
+                options.multiline = true
+            case "--no-multiline":
+                options.multiline = false
+            case "--multiline-dotall":
+                options.multilineDotall = true
+            case "--no-multiline-dotall":
+                options.multilineDotall = false
             case "-v", "--invert-match":
                 options.invertMatch = true
             case "-o", "--only-matching":
@@ -633,6 +643,8 @@ public enum RipgrepArgumentParser {
           -f, --file PATTERNFILE     Read patterns from a file
           -w, --word-regexp          Only show matches surrounded by word boundaries
           -x, --line-regexp          Only show matches spanning an entire line
+          -U, --multiline            Enable matching across line terminators
+              --multiline-dotall     Make '.' match line terminators in multiline mode
           -v, --invert-match         Show non-matching lines
           -o, --only-matching        Print only the matched text
           -r, --replace TEXT         Replace matches with the given text
