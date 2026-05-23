@@ -65,6 +65,10 @@ public struct RipgrepOptions: Equatable {
     public var withFilename: Bool?
     public var hidden = false
     public var noIgnore = false
+    public var noIgnoreDot = false
+    public var noIgnoreFiles = false
+    public var noIgnoreVCS = false
+    public var noRequireGit = false
     public var ignoreFiles: [URL] = []
     public var globPatterns: [String] = []
     public var typeChanges: [TypeChange] = []
@@ -261,6 +265,28 @@ public enum RipgrepArgumentParser {
                 options.hidden = true
             case "--no-ignore":
                 options.noIgnore = true
+                options.noIgnoreDot = true
+                options.noIgnoreVCS = true
+            case "--ignore":
+                options.noIgnore = false
+                options.noIgnoreDot = false
+                options.noIgnoreVCS = false
+            case "--no-ignore-dot":
+                options.noIgnoreDot = true
+            case "--ignore-dot":
+                options.noIgnoreDot = false
+            case "--no-ignore-files":
+                options.noIgnoreFiles = true
+            case "--ignore-files":
+                options.noIgnoreFiles = false
+            case "--no-ignore-vcs":
+                options.noIgnoreVCS = true
+            case "--ignore-vcs":
+                options.noIgnoreVCS = false
+            case "--no-require-git":
+                options.noRequireGit = true
+            case "--require-git":
+                options.noRequireGit = false
             case "--ignore-file":
                 guard index < arguments.count else {
                     return .error("error: The argument '--ignore-file <PATH>' requires a value")
@@ -536,6 +562,10 @@ public enum RipgrepArgumentParser {
               --files                Print files that would be searched
               --hidden               Search hidden files and directories
               --no-ignore            Do not respect ignore files
+              --no-ignore-dot        Do not respect .ignore or .rgignore files
+              --no-ignore-files      Do not respect --ignore-file arguments
+              --no-ignore-vcs        Do not respect VCS ignore files
+              --no-require-git       Use VCS ignore files outside repositories
               --ignore-file PATH     Add a custom ignore file
           -g, --glob GLOB            Include or exclude paths with an override glob
           -t, --type TYPE            Only search files matching TYPE

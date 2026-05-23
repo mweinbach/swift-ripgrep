@@ -285,9 +285,58 @@ struct RipgrepSearcherTests {
         try root.write("needle\n", to: "keep.txt")
         try root.write("needle\n", to: "skip.log")
         try root.write("*.log\n", to: ".gitignore")
+        try root.createDirectory(".git")
 
         #expect(pathBasenames(try run(["needle", root.url.path])) == ["keep.txt"])
         #expect(pathBasenames(try run(["--no-ignore", "needle", root.url.path])) == ["keep.txt", "skip.log"])
+    }
+
+    @Test("honors rgignore and ignore family switches")
+    func honorsRgignoreAndIgnoreFamilySwitches() throws {
+        let root = try TemporaryDirectory()
+        try root.write("needle\n", to: "keep.txt")
+        try root.write("needle\n", to: "skip-dot.txt")
+        try root.write("needle\n", to: "skip-vcs.txt")
+        try root.write("needle\n", to: "skip-explicit.txt")
+        try root.write("skip-dot.txt\n", to: ".rgignore")
+        try root.write("skip-vcs.txt\n", to: ".gitignore")
+        try root.write("skip-explicit.txt\n", to: "ignore.txt")
+        try root.createDirectory(".git")
+
+        #expect(pathBasenames(try run([
+            "--ignore-file",
+            root.path("ignore.txt"),
+            "needle",
+            root.url.path,
+        ])) == ["keep.txt"])
+        #expect(pathBasenames(try run([
+            "--no-ignore-dot",
+            "--ignore-file",
+            root.path("ignore.txt"),
+            "needle",
+            root.url.path,
+        ])) == ["keep.txt", "skip-dot.txt"])
+        #expect(pathBasenames(try run([
+            "--no-ignore-vcs",
+            "--ignore-file",
+            root.path("ignore.txt"),
+            "needle",
+            root.url.path,
+        ])) == ["keep.txt", "skip-vcs.txt"])
+        #expect(pathBasenames(try run([
+            "--no-ignore-files",
+            "--ignore-file",
+            root.path("ignore.txt"),
+            "needle",
+            root.url.path,
+        ])) == ["keep.txt", "skip-explicit.txt"])
+
+        let outsideGit = try TemporaryDirectory()
+        try outsideGit.write("needle\n", to: "keep.txt")
+        try outsideGit.write("needle\n", to: "skip-vcs.txt")
+        try outsideGit.write("skip-vcs.txt\n", to: ".gitignore")
+        #expect(pathBasenames(try run(["needle", outsideGit.url.path])) == ["keep.txt", "skip-vcs.txt"])
+        #expect(pathBasenames(try run(["--no-require-git", "needle", outsideGit.url.path])) == ["keep.txt"])
     }
 
     @Test("honors custom ignore file and override globs")

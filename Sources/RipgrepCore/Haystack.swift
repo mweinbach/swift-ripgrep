@@ -20,8 +20,10 @@ public struct FileWalker {
     public func haystacks(for options: RipgrepOptions) throws -> [Haystack] {
         var haystacks: [Haystack] = []
         var baseIgnoreStack = IgnoreStack()
-        for ignoreFile in options.ignoreFiles {
-            baseIgnoreStack.append(loadMatcher(from: ignoreFile))
+        if !options.noIgnoreFiles {
+            for ignoreFile in options.ignoreFiles {
+                baseIgnoreStack.append(loadMatcher(from: ignoreFile))
+            }
         }
         let overrides = GlobMatcher(patterns: options.globPatterns, overrideSemantics: true)
         var typeRegistry = FileTypeRegistry()
@@ -106,9 +108,12 @@ public struct FileWalker {
         }
 
         var directoryIgnoreStack = ignoreStack
-        if !options.noIgnore {
-            directoryIgnoreStack.append(loadMatcher(from: resolvedURL.appendingPathComponent(".ignore")))
+        if !options.noIgnore && !options.noIgnoreVCS && (options.noRequireGit || isInGitRepository(resolvedURL)) {
             directoryIgnoreStack.append(loadMatcher(from: resolvedURL.appendingPathComponent(".gitignore")))
+        }
+        if !options.noIgnore && !options.noIgnoreDot {
+            directoryIgnoreStack.append(loadMatcher(from: resolvedURL.appendingPathComponent(".ignore")))
+            directoryIgnoreStack.append(loadMatcher(from: resolvedURL.appendingPathComponent(".rgignore")))
         }
 
         let optionsMask: FileManager.DirectoryEnumerationOptions = options.hidden ? [] : [.skipsHiddenFiles]
@@ -205,6 +210,24 @@ public struct FileWalker {
             return root
         }
         return root.deletingLastPathComponent()
+    }
+
+    private func isInGitRepository(_ url: URL) -> Bool {
+        let directory = ((try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true)
+            ? url
+            : url.deletingLastPathComponent()
+        var currentPath = directory.standardizedFileURL.path
+
+        while true {
+            if fileManager.fileExists(atPath: (currentPath as NSString).appendingPathComponent(".git")) {
+                return true
+            }
+            let parentPath = (currentPath as NSString).deletingLastPathComponent
+            if parentPath == currentPath || parentPath.isEmpty {
+                return false
+            }
+            currentPath = parentPath
+        }
     }
 
     private func relativePath(for url: URL, rootBase: URL) -> String {
