@@ -20,6 +20,12 @@ public enum BinaryMode: Equatable {
     case asText
 }
 
+public enum EncodingMode: Equatable {
+    case automatic
+    case disabled
+    case explicit(String.Encoding)
+}
+
 public enum SortKind: Equatable {
     case path
     case modified
@@ -46,6 +52,7 @@ public struct RipgrepOptions: Equatable {
     public var ignoreCase = false
     public var smartCase = false
     public var fixedStrings = false
+    public var encodingMode: EncodingMode = .automatic
     public var wordRegexp = false
     public var lineRegexp = false
     public var invertMatch = false
@@ -84,6 +91,7 @@ public struct RipgrepOptions: Equatable {
     public var afterContext = 0
     public var contextSeparator: String? = "--"
     public var passthru = false
+    public var nullData = false
 
     public init() {}
 
@@ -142,6 +150,29 @@ public enum RipgrepArgumentParser {
                 options.smartCase = true
             case "-F", "--fixed-strings":
                 options.fixedStrings = true
+            case "-E", "--encoding":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--encoding <ENCODING>' requires a value")
+                }
+                guard let mode = parseEncoding(arguments[index]) else {
+                    return .error("error: unknown encoding '\(arguments[index])'")
+                }
+                options.encodingMode = mode
+                index += 1
+            case let value where value.hasPrefix("--encoding="):
+                let raw = String(value.dropFirst("--encoding=".count))
+                guard let mode = parseEncoding(raw) else {
+                    return .error("error: unknown encoding '\(raw)'")
+                }
+                options.encodingMode = mode
+            case let value where value.hasPrefix("-E") && value.count > 2:
+                let raw = String(value.dropFirst(2))
+                guard let mode = parseEncoding(raw) else {
+                    return .error("error: unknown encoding '\(raw)'")
+                }
+                options.encodingMode = mode
+            case "--no-encoding":
+                options.encodingMode = .automatic
             case "-e", "--regexp":
                 guard index < arguments.count else {
                     return .error("error: The argument '--regexp <PATTERN>' requires a value")
@@ -389,6 +420,9 @@ public enum RipgrepArgumentParser {
                 options.binaryMode = .automatic
             case "-q", "--quiet":
                 options.quiet = true
+            case "--null-data":
+                options.nullData = true
+                options.binaryMode = .asText
             case "-u", "--unrestricted":
                 applyUnrestricted(to: &options)
             case "-uu":
@@ -594,6 +628,7 @@ public enum RipgrepArgumentParser {
           -i, --ignore-case          Search case insensitively
           -S, --smart-case           Search case insensitively if the pattern is lowercase
           -F, --fixed-strings        Treat the pattern as a literal string
+          -E, --encoding ENCODING    Specify text encoding: auto, none, utf-8, utf-16/le/be
           -e, --regexp PATTERN       Add a pattern to search for
           -f, --file PATTERNFILE     Read patterns from a file
           -w, --word-regexp          Only show matches surrounded by word boundaries
@@ -646,6 +681,7 @@ public enum RipgrepArgumentParser {
           -L, --follow               Follow symbolic links
               --binary               Search binary files but suppress binary output
           -a, --text                 Search binary files as text
+              --null-data            Use NUL as a line terminator
           -q, --quiet                Do not print matches
           -h, --help                 Print help
               --version              Print version
@@ -677,6 +713,25 @@ public enum RipgrepArgumentParser {
             options.hidden = true
         } else {
             options.binaryMode = .searchAndSuppress
+        }
+    }
+
+    private static func parseEncoding(_ raw: String) -> EncodingMode? {
+        switch raw.lowercased() {
+        case "auto":
+            return .automatic
+        case "none":
+            return .disabled
+        case "utf-8", "utf8":
+            return .explicit(.utf8)
+        case "utf-16", "utf16":
+            return .explicit(.utf16)
+        case "utf-16le", "utf16le":
+            return .explicit(.utf16LittleEndian)
+        case "utf-16be", "utf16be":
+            return .explicit(.utf16BigEndian)
+        default:
+            return nil
         }
     }
 

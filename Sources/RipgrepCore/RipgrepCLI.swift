@@ -15,7 +15,12 @@ public enum RipgrepCLI {
 
     public static func run(
         arguments: [String],
-        stdout: (String) -> Void = { print($0) },
+        stdout: (String) -> Void = { line in
+            let output = line.hasSuffix("\0") ? line : "\(line)\n"
+            if let data = output.data(using: .utf8) {
+                FileHandle.standardOutput.write(data)
+            }
+        },
         stderr: (String) -> Void = { message in
             if let data = "\(message)\n".data(using: .utf8) {
                 FileHandle.standardError.write(data)

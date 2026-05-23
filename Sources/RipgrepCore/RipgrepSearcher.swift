@@ -41,10 +41,10 @@ public struct RipgrepSearcher {
                 .haystacks(for: options)
                 .map { haystack in
                     searchFile(haystack, matcher: matcher, options: options)
-                }
+        }
 
         if options.useStdin {
-            let input = stdin ?? String(data: FileHandle.standardInput.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            let input = stdin ?? decode(FileHandle.standardInput.readDataToEndOfFile(), options: options)
             files.append(searchContents(input, fileURL: URL(fileURLWithPath: "-"), matcher: matcher, options: options))
         }
 
@@ -117,13 +117,13 @@ public struct RipgrepSearcher {
             return SearchFileResult(fileURL: fileURL, matches: [], searched: false)
         }
 
-        let binaryByteOffset = data.firstIndex(of: 0)
+        let binaryByteOffset = shouldCheckBinary(data, options: options) ? data.firstIndex(of: 0) : nil
         if let binaryByteOffset, options.binaryMode != .asText {
             if options.binaryMode == .automatic && !haystack.isExplicit {
                 return SearchFileResult(fileURL: fileURL, matches: [], searched: false)
             }
 
-            let contents = String(decoding: data, as: UTF8.self)
+            let contents = decode(data, options: options)
             let result = searchContents(contents, fileURL: fileURL, matcher: matcher, options: options)
             return SearchFileResult(
                 fileURL: fileURL,
@@ -135,7 +135,7 @@ public struct RipgrepSearcher {
             )
         }
 
-        let contents = String(decoding: data, as: UTF8.self)
+        let contents = decode(data, options: options)
         let result = searchContents(contents, fileURL: fileURL, matcher: matcher, options: options)
         return SearchFileResult(
             fileURL: result.fileURL,
@@ -153,7 +153,7 @@ public struct RipgrepSearcher {
         options: RipgrepOptions
     ) -> SearchFileResult {
         var matches: [SearchMatch] = []
-        let lines = splitLines(contents)
+        let lines = splitLines(contents, options: options)
         var searchLines: [SearchLine] = []
         var absoluteOffset = 0
         let maxCount = options.maxCount ?? Int.max
@@ -195,7 +195,53 @@ public struct RipgrepSearcher {
         return SearchFileResult(fileURL: fileURL, matches: matches, lines: searchLines)
     }
 
-    private func splitLines(_ contents: String) -> [(text: String, terminator: String)] {
+    private func decode(_ data: Data, options: RipgrepOptions) -> String {
+        switch options.encodingMode {
+        case .automatic:
+            if data.starts(with: [0xEF, 0xBB, 0xBF]) {
+                return decodeSlice(data.dropFirst(3), encoding: .utf8)
+            }
+            if data.starts(with: [0xFF, 0xFE]) {
+                return decodeSlice(data.dropFirst(2), encoding: .utf16LittleEndian)
+            }
+            if data.starts(with: [0xFE, 0xFF]) {
+                return decodeSlice(data.dropFirst(2), encoding: .utf16BigEndian)
+            }
+            return decode(data, encoding: .utf8)
+        case .disabled:
+            return String(decoding: data, as: UTF8.self)
+        case .explicit(let encoding):
+            return decode(data, encoding: encoding)
+        }
+    }
+
+    private func shouldCheckBinary(_ data: Data, options: RipgrepOptions) -> Bool {
+        if options.nullData {
+            return false
+        }
+        switch options.encodingMode {
+        case .explicit:
+            return false
+        case .disabled:
+            return true
+        case .automatic:
+            return !(data.starts(with: [0xFF, 0xFE]) || data.starts(with: [0xFE, 0xFF]))
+        }
+    }
+
+    private func decodeSlice(_ data: Data.SubSequence, encoding: String.Encoding) -> String {
+        decode(Data(data), encoding: encoding)
+    }
+
+    private func decode(_ data: Data, encoding: String.Encoding) -> String {
+        String(data: data, encoding: encoding) ?? String(decoding: data, as: UTF8.self)
+    }
+
+    private func splitLines(_ contents: String, options: RipgrepOptions) -> [(text: String, terminator: String)] {
+        if options.nullData {
+            return splitNulDelimited(contents)
+        }
+
         var lines: [(String, String)] = []
         var current = ""
         var index = contents.startIndex
@@ -217,6 +263,23 @@ public struct RipgrepSearcher {
         }
 
         if !current.isEmpty || !contents.hasSuffix("\n") {
+            lines.append((current, ""))
+        }
+        return lines
+    }
+
+    private func splitNulDelimited(_ contents: String) -> [(text: String, terminator: String)] {
+        var lines: [(String, String)] = []
+        var current = ""
+        for character in contents {
+            if character == "\0" {
+                lines.append((current, "\0"))
+                current = ""
+            } else {
+                current.append(character)
+            }
+        }
+        if !current.isEmpty || !contents.hasSuffix("\0") {
             lines.append((current, ""))
         }
         return lines

@@ -133,6 +133,43 @@ struct RipgrepSearcherTests {
         ])
     }
 
+    @Test("searches NUL delimited data")
+    func searchesNullDelimitedData() throws {
+        let root = try TemporaryDirectory()
+        try root.write(Data("alpha\0needle\0omega\0".utf8), to: "nul.txt")
+
+        #expect(try run(["--null-data", "-n", "needle", root.path("nul.txt")]) == [
+            "2:needle\0",
+        ])
+        #expect(try run(["--null-data", "-o", "needle", root.path("nul.txt")]) == [
+            "needle\0",
+        ])
+
+        let output = try run(["--json", "--null-data", "needle", root.path("nul.txt")])
+        let messages = try output.map(jsonObject)
+        let match = messages.first { $0["type"] as? String == "match" }?["data"] as? [String: Any]
+        let lines = match?["lines"] as? [String: String]
+        #expect(lines?["text"] == "needle\0")
+        #expect(match?["line_number"] as? Int == 2)
+        #expect(match?["absolute_offset"] as? Int == 6)
+    }
+
+    @Test("decodes BOM and explicit encodings")
+    func decodesBOMAndExplicitEncodings() throws {
+        let root = try TemporaryDirectory()
+        try root.write(Data([0xFF, 0xFE]) + Data("hay\nneedle\n".utf16LittleEndianBytes), to: "bom16le.txt")
+        try root.write(Data("hay\nneedle\n".utf16LittleEndianBytes), to: "utf16le.txt")
+        try root.write(Data([0xEF, 0xBB, 0xBF]) + Data("needle\n".utf8), to: "bom8.txt")
+
+        #expect(try run(["-n", "needle", root.path("bom16le.txt")]) == ["2:needle"])
+        #expect(try runAllowingNoMatch(["-n", "-E", "none", "needle", root.path("bom16le.txt")]) == [])
+        #expect(try run(["-n", "-E", "utf-16le", "needle", root.path("utf16le.txt")]) == ["2:needle"])
+        #expect(try run(["-n", "needle", root.path("bom8.txt")]) == ["1:needle"])
+        #expect(try run(["-n", "-E", "none", "\u{FEFF}needle", root.path("bom8.txt")]) == [
+            "1:\u{FEFF}needle",
+        ])
+    }
+
     @Test("limits traversal depth")
     func limitsTraversalDepth() throws {
         let root = try TemporaryDirectory()
@@ -639,5 +676,16 @@ private final class TemporaryDirectory {
             [.modificationDate: date],
             ofItemAtPath: path(relativePath)
         )
+    }
+}
+
+private extension String {
+    var utf16LittleEndianBytes: [UInt8] {
+        utf16.flatMap { codeUnit in
+            [
+                UInt8(codeUnit & 0x00FF),
+                UInt8((codeUnit & 0xFF00) >> 8),
+            ]
+        }
     }
 }

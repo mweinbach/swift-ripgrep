@@ -113,8 +113,8 @@ public struct StandardPrinter {
             match.spans.map { span in
                 let text = options.onlyMatching
                     ? (span.replacement ?? span.text)
-                    : renderedLine(for: match)
-                return "\(displayPath(for: match.fileURL)):\(match.lineNumber):\(span.startColumn):\(text)"
+                    : renderedLine(match.line)
+                return "\(displayPath(for: match.fileURL)):\(match.lineNumber):\(span.startColumn):\(text)\(outputTerminator(match.lineTerminator))"
             }
         }
     }
@@ -145,7 +145,7 @@ public struct StandardPrinter {
             if options.byteOffset {
                 fields.append("\(match.absoluteOffset + span.startByte)")
             }
-            let text = span.replacement ?? span.text
+            let text = "\(span.replacement ?? span.text)\(outputTerminator(match.lineTerminator))"
             if fields.isEmpty {
                 return text
             }
@@ -226,14 +226,14 @@ public struct StandardPrinter {
         }
 
         if fields.isEmpty {
-            return renderedLine(line.line)
+            return "\(renderedLine(line.line))\(outputTerminator(line.lineTerminator))"
         }
-        return "\(fields.joined(separator: "-"))-\(renderedLine(line.line))"
+        return "\(fields.joined(separator: "-"))-\(renderedLine(line.line))\(outputTerminator(line.lineTerminator))"
     }
 
     private func renderedLine(for match: SearchMatch) -> String {
         guard options.replacement != nil, !match.spans.isEmpty else {
-            return renderedLine(match.line)
+            return "\(renderedLine(match.line))\(outputTerminator(match.lineTerminator))"
         }
         var line = match.line
         for span in match.spans.sorted(by: { $0.startColumn > $1.startColumn }) {
@@ -243,12 +243,16 @@ public struct StandardPrinter {
             }
             line.replaceSubrange(range, with: replacement)
         }
-        return renderedLine(line)
+        return "\(renderedLine(line))\(outputTerminator(match.lineTerminator))"
     }
 
     private func renderedLine(_ line: String) -> String {
         let trimmed = options.trim ? line.trimmingASCIIWhitespacePrefix() : line
         return limitedLine(trimmed)
+    }
+
+    private func outputTerminator(_ terminator: String) -> String {
+        options.nullData ? terminator : ""
     }
 
     private func limitedLine(_ line: String) -> String {
