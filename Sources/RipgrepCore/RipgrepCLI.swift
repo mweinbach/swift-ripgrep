@@ -73,7 +73,7 @@ public enum RipgrepCLI {
                     }
                 }
 
-                if !results.messages.isEmpty {
+                if !results.messages.isEmpty && !(options.quiet && results.hasMatch) {
                     return 2
                 }
                 return results.hasMatch ? 0 : 1

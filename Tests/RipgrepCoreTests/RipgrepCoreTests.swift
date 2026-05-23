@@ -328,6 +328,32 @@ struct RipgrepSearcherTests {
         #expect(output.contains("18 bytes printed"))
     }
 
+    @Test("quiet mode still prints stats")
+    func quietModeStillPrintsStats() throws {
+        let root = try TemporaryDirectory()
+        try root.write("needle\n", to: "quiet-stats.txt")
+
+        var output: [String] = []
+        var exitCode = RipgrepCLI.run(
+            arguments: ["-q", "--stats", "needle", root.path("quiet-stats.txt")],
+            stdout: { output.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(output.contains("1 matches"))
+        #expect(output.contains("1 files searched"))
+        #expect(output.contains("0 bytes printed"))
+
+        output = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["-q", "--stats", "absent", root.path("quiet-stats.txt")],
+            stdout: { output.append($0) }
+        )
+        #expect(exitCode == 1)
+        #expect(output.contains("0 matches"))
+        #expect(output.contains("1 files searched"))
+        #expect(output.contains("0 bytes printed"))
+    }
+
     @Test("prints before after context and passthru")
     func printsContextAndPassthru() throws {
         let root = try TemporaryDirectory()
@@ -860,6 +886,18 @@ struct RipgrepSearcherTests {
         #expect(exitCode == 2)
         #expect(output == ["\(root.path("ok.txt")):needle"])
         #expect(errors.isEmpty)
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["-q", "needle", root.path("ok.txt"), missingPath],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+
+        #expect(exitCode == 0)
+        #expect(output.isEmpty)
+        #expect(errors == ["rg: \(missingPath): No such file or directory (os error 2)"])
     }
 
     @Test("prints help")

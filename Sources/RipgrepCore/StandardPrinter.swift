@@ -15,7 +15,10 @@ public struct StandardPrinter {
     }
 
     public func lines(for results: SearchResults) -> [String] {
-        guard !options.quiet else {
+        if options.quiet && options.stats {
+            return statsLines(for: results, bytesPrinted: 0)
+        }
+        if options.quiet {
             return []
         }
 
