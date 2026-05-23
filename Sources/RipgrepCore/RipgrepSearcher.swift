@@ -73,8 +73,8 @@ public struct RipgrepSearcher {
         }
 
         if options.useStdin {
-            let input = stdin ?? decode(FileHandle.standardInput.readDataToEndOfFile(), options: options)
-            files.append(searchContents(input, fileURL: URL(fileURLWithPath: "-"), matcher: matcher, options: options))
+            let stdinData = stdin.map { Data($0.utf8) } ?? FileHandle.standardInput.readDataToEndOfFile()
+            files.append(searchStdin(stdinData, matcher: matcher, options: options))
         }
 
         files = sorted(files, options: options)
@@ -206,6 +206,29 @@ public struct RipgrepSearcher {
             bytesSearched: data.count,
             searched: result.searched
         ))
+    }
+
+    private func searchStdin(
+        _ data: Data,
+        matcher: PatternMatcher,
+        options: RipgrepOptions
+    ) -> SearchFileResult {
+        let fileURL = URL(fileURLWithPath: "-")
+        let contents = decode(data, options: options)
+        let result = searchContents(contents, fileURL: fileURL, matcher: matcher, options: options)
+        guard options.binaryMode != .asText,
+              shouldCheckBinary(data, options: options),
+              let binaryByteOffset = data.firstIndex(of: 0) else {
+            return result
+        }
+        return SearchFileResult(
+            fileURL: fileURL,
+            matches: matchesBeforeBinary(result.matches, binaryByteOffset: binaryByteOffset),
+            lines: result.lines,
+            binaryByteOffset: binaryByteOffset,
+            hasBinaryMatch: result.hasMatch,
+            bytesSearched: data.count
+        )
     }
 
     private func matchesBeforeBinary(_ matches: [SearchMatch], binaryByteOffset: Int) -> [SearchMatch] {

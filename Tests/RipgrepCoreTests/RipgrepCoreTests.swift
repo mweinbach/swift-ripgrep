@@ -1739,6 +1739,28 @@ struct RipgrepSearcherTests {
         ])
         #expect(try run(["-c", "needle", root.path("before-nul.dat")]) == ["1"])
         #expect(pathBasenames(try run(["--binary", "needle", root.url.path])) == ["before-nul.dat", "before-nul.dat", "bin.dat"])
+        var stdinOutput: [String] = []
+        var stdinExitCode = RipgrepCLI.run(
+            arguments: ["-n", "needle", "-"],
+            stdout: { stdinOutput.append($0) },
+            stdin: "needle\n\0tail\n"
+        )
+        #expect(stdinExitCode == 0)
+        #expect(stdinOutput == [
+            "1:needle",
+            #"binary file matches (found "\0" byte around offset 7)"#,
+        ])
+
+        stdinOutput = []
+        stdinExitCode = RipgrepCLI.run(
+            arguments: ["-n", "tail", "-"],
+            stdout: { stdinOutput.append($0) },
+            stdin: "needle\n\0tail\n"
+        )
+        #expect(stdinExitCode == 0)
+        #expect(stdinOutput == [
+            #"binary file matches (found "\0" byte around offset 7)"#,
+        ])
         #expect(try run(["-a", "needle", root.path("bin.dat")]) == [
             "needle\0tail",
         ])
