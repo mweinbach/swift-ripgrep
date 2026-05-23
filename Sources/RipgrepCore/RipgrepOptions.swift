@@ -1256,49 +1256,73 @@ public enum RipgrepArgumentParser {
               --no-fixed-strings     Treat the pattern as a regular expression
               --engine ENGINE        Use regex engine: default, pcre2 or auto
           -P, --pcre2                Enable PCRE2-style regex matching
+              --no-pcre2             Disable PCRE2-style regex matching
+              --auto-hybrid-regex    Use PCRE2 automatically when needed
+              --no-auto-hybrid-regex Disable automatic PCRE2 fallback
               --dfa-size-limit NUM   Set the regex DFA size limit
               --regex-size-limit NUM Set the compiled regex size limit
           -j, --threads NUM          Set the approximate thread count
               --mmap                 Search with memory maps when possible
+              --no-mmap              Disable memory maps
+              --line-buffered        Force line buffering
+              --no-line-buffered     Disable forced line buffering
+              --block-buffered       Force block buffering
+              --no-block-buffered    Disable forced block buffering
           -E, --encoding ENCODING    Specify text encoding: auto, none, utf-8, utf-16/le/be
+              --no-encoding          Reset to automatic encoding detection
           -e, --regexp PATTERN       Add a pattern to search for
           -f, --file PATTERNFILE     Read patterns from a file
           -w, --word-regexp          Only show matches surrounded by word boundaries
           -x, --line-regexp          Only show matches spanning an entire line
               --no-unicode           Disable Unicode mode
+              --unicode              Enable Unicode mode
               --pcre2-unicode        Enable Unicode mode for PCRE2 compatibility
+              --no-pcre2-unicode     Disable Unicode mode for PCRE2 compatibility
           -U, --multiline            Enable matching across line terminators
+              --no-multiline         Disable matching across line terminators
               --multiline-dotall     Make '.' match line terminators in multiline mode
+              --no-multiline-dotall  Make '.' stop before line terminators
               --crlf                 Treat CRLF as a line terminator for anchors
+              --no-crlf              Disable CRLF anchor mode
           -v, --invert-match         Show non-matching lines
+              --no-invert-match      Show matching lines
               --stop-on-nonmatch     Stop after a non-match following a match
           -o, --only-matching        Print only the matched text
           -r, --replace TEXT         Replace matches with the given text
               --json                 Show search results in JSON Lines format
+              --no-json              Disable JSON Lines output
               --stats                Print statistics about the search
+              --no-stats             Disable statistics output
               --include-zero         Print count output for files with zero matches
+              --no-include-zero      Suppress count output for zero-match files
           -m, --max-count NUM        Limit matching lines per file
           -M, --max-columns NUM      Omit matching lines at least NUM bytes long
               --max-columns-preview  Show a preview for omitted long lines
+              --no-max-columns-preview Disable previews for omitted long lines
               --max-filesize NUM     Ignore non-explicit files larger than NUM
-          -d, --max-depth NUM        Descend at most NUM directory levels
+          -d, --max-depth, --maxdepth NUM Descend at most NUM directory levels
           -n, --line-number          Show line numbers
           -N, --no-line-number       Suppress line numbers
               --column               Show the first match column
               --no-column            Suppress column numbers
           -b, --byte-offset          Show the 0-based byte offset
+              --no-byte-offset       Suppress byte offsets
           -p, --pretty               Alias for colors, headings and line numbers
               --color WHEN           Use color: never, auto, always or ansi
               --colors COLOR_SPEC    Configure output color settings
               --hyperlink-format FMT Format file path hyperlinks
               --hostname-bin COMMAND Run a program to get the hostname for hyperlinks
               --heading              Group matches by file
+              --no-heading           Print each match with its path
               --trim                 Trim leading ASCII whitespace from printed lines
+              --no-trim              Preserve leading whitespace
               --vimgrep              Print vim-compatible file:line:column matches
           -0, --null                 Print NUL after file paths
               --path-separator SEP   Set the path separator for printed paths
               --sort SORTBY          Sort results by path, modified, accessed or created
               --sortr SORTBY         Sort results in reverse order
+              --sort-files           Sort results by path
+              --no-sort-files        Disable path sorting
           -H, --with-filename        Show file names
           -I, --no-filename          Suppress file names
           -c, --count                Show match counts per file
@@ -1307,20 +1331,33 @@ public enum RipgrepArgumentParser {
               --files-without-match  Show only paths without matches
               --files                Print files that would be searched
               --hidden               Search hidden files and directories
+              --no-hidden            Do not search hidden files and directories
           -u, --unrestricted         Reduce filtering; repeat to include hidden/binary files
+              --ignore               Respect ignore files
               --no-ignore            Do not respect ignore files
+              --ignore-dot           Respect .ignore and .rgignore files
               --no-ignore-dot        Do not respect .ignore or .rgignore files
+              --ignore-exclude       Respect .git/info/exclude
               --no-ignore-exclude    Do not respect .git/info/exclude
+              --ignore-files         Respect --ignore-file arguments
               --no-ignore-files      Do not respect --ignore-file arguments
+              --ignore-global        Respect global git ignore files
               --no-ignore-global     Do not respect global git ignore files
+              --ignore-messages      Show ignore file parse messages
               --no-ignore-messages   Suppress ignore file parse messages
+              --ignore-parent        Respect ignore files in parent directories
               --no-ignore-parent     Do not respect ignore files in parent directories
+              --ignore-vcs           Respect VCS ignore files
               --no-ignore-vcs        Do not respect VCS ignore files
+              --require-git          Require a git repository for VCS ignore files
               --no-require-git       Use VCS ignore files outside repositories
               --glob-case-insensitive Process -g/--glob patterns case insensitively
+              --no-glob-case-insensitive Process -g/--glob patterns case sensitively
               --ignore-file-case-insensitive Process ignore files case insensitively
+              --no-ignore-file-case-insensitive Process ignore files case sensitively
               --ignore-file PATH     Add a custom ignore file
               --pre COMMAND          Search stdout of COMMAND for each path
+              --no-pre               Disable preprocessing
               --pre-glob GLOB        Include or exclude files from preprocessing
           -g, --glob GLOB            Include or exclude paths with an override glob
               --iglob GLOB           Include/exclude paths case insensitively
@@ -1333,14 +1370,21 @@ public enum RipgrepArgumentParser {
           -B, --before-context NUM   Show NUM lines before each match
           -C, --context NUM          Show NUM lines before and after each match
               --context-separator S  Set the separator for context chunks
+              --no-context-separator Do not print context separators
               --field-match-separator S   Set field separator for matching lines
               --field-context-separator S Set field separator for context lines
               --passthru             Print both matching and non-matching lines
+              --passthrough          Alias for --passthru
           -L, --follow               Follow symbolic links
+              --no-follow            Do not follow symbolic links
               --one-file-system      Skip directories on other file systems
+              --no-one-file-system   Traverse directories on other file systems
           -z, --search-zip           Search compressed files
+              --no-search-zip        Do not search compressed files
               --binary               Search binary files but suppress binary output
+              --no-binary            Disable binary search mode
           -a, --text                 Search binary files as text
+              --no-text              Disable text mode
               --null-data            Use NUL as a line terminator
           -q, --quiet                Do not print matches
               --debug                Show debug messages

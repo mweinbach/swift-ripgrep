@@ -2662,6 +2662,11 @@ struct RipgrepSearcherTests {
         #expect(exitCode == 0)
         #expect(output.first?.contains("USAGE:") == true)
         #expect(output.first?.contains("--files") == true)
+        #expect(output.first?.contains("--maxdepth") == true)
+        #expect(output.first?.contains("--no-json") == true)
+        #expect(output.first?.contains("--no-ignore-vcs") == true)
+        #expect(output.first?.contains("--passthrough") == true)
+        #expect(output.first?.contains("--no-search-zip") == true)
     }
 
     @Test("prints version from short and long flags")
