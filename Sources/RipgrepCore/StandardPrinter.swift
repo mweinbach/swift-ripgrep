@@ -90,7 +90,7 @@ public struct StandardPrinter {
                 .map { "\(renderPath(for: $0.fileURL))\(pathTerminator())" }
         case .filesWithoutMatch:
             return results.files
-                .filter { !$0.hasMatch }
+                .filter { $0.searched && !$0.hasMatch }
                 .map { "\(renderPath(for: $0.fileURL))\(pathTerminator())" }
         }
     }

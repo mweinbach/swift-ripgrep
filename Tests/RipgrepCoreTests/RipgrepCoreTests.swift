@@ -1858,6 +1858,16 @@ struct RipgrepSearcherTests {
             "file1.txt:1",
             "file2.txt:1",
         ])
+
+        let withoutRoot = try TemporaryDirectory()
+        try withoutRoot.write(Data("hay\0cat\n".utf8), to: "binary.txt")
+        try withoutRoot.write("hay\n", to: "text.txt")
+        #expect(pathBasenames(try run([
+            "--sort=path",
+            "--files-without-match",
+            "cat",
+            withoutRoot.url.path,
+        ])) == ["text.txt"])
         var stdinOutput: [String] = []
         var stdinExitCode = RipgrepCLI.run(
             arguments: ["-n", "needle", "-"],
