@@ -1544,6 +1544,31 @@ struct RipgrepSearcherTests {
             "skip.txt",
         ])
 
+        let nested = try TemporaryDirectory()
+        try nested.createDirectory(".git")
+        try nested.write("skip.txt\n", to: ".gitignore")
+        try nested.write("rgskip.txt\n", to: ".rgignore")
+        try nested.createDirectory("repo/.git")
+        try nested.write("needle\n", to: "repo/bar/keep.txt")
+        try nested.write("needle\n", to: "repo/bar/skip.txt")
+        try nested.write("needle\n", to: "repo/bar/rgskip.txt")
+
+        #expect(pathBasenames(try run(["needle", nested.path("repo/bar")])) == [
+            "keep.txt",
+            "skip.txt",
+        ])
+
+        let nestedFileMarker = try TemporaryDirectory()
+        try nestedFileMarker.createDirectory(".git")
+        try nestedFileMarker.write("skip.txt\n", to: ".gitignore")
+        try nestedFileMarker.write("", to: "repo/.git")
+        try nestedFileMarker.write("needle\n", to: "repo/bar/keep.txt")
+        try nestedFileMarker.write("needle\n", to: "repo/bar/skip.txt")
+        #expect(pathBasenames(try run(["needle", nestedFileMarker.path("repo/bar")])) == [
+            "keep.txt",
+            "skip.txt",
+        ])
+
         let root = try TemporaryDirectory()
         try root.write("needle\n", to: "keep.txt")
         try root.write("needle\n", to: "skip.txt")

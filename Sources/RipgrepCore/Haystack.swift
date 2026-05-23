@@ -334,11 +334,101 @@ public struct FileWalker {
         }
 
         let rootPath = rootBase.standardizedFileURL.path
-        let parentPaths = ancestorPaths(of: rootPath)
-        for parentPath in parentPaths {
-            let parentURL = URL(fileURLWithPath: parentPath, isDirectory: true)
-            appendIgnoreFiles(in: parentURL, to: &ignoreStack, messages: &messages, options: options)
+        let parentURLs = ancestorPaths(of: rootPath).map { path in
+            URL(fileURLWithPath: path, isDirectory: true)
         }
+        let gitBoundary = parentURLs.last { hasGitMarker(in: $0) }
+        for parentURL in parentURLs {
+            appendParentDotIgnoreFiles(
+                in: parentURL,
+                to: &ignoreStack,
+                messages: &messages,
+                options: options
+            )
+            appendParentVCSIgnoreFiles(
+                in: parentURL,
+                gitBoundary: gitBoundary,
+                to: &ignoreStack,
+                messages: &messages,
+                options: options
+            )
+        }
+    }
+
+    private func appendParentDotIgnoreFiles(
+        in parentURL: URL,
+        to ignoreStack: inout IgnoreStack,
+        messages: inout [String],
+        options: RipgrepOptions
+    ) {
+        guard !options.noIgnoreDot else {
+            return
+        }
+        appendLoadedMatcher(
+            from: parentURL.appendingPathComponent(".ignore"),
+            to: &ignoreStack,
+            messages: &messages,
+            options: options
+        )
+        appendLoadedMatcher(
+            from: parentURL.appendingPathComponent(".rgignore"),
+            to: &ignoreStack,
+            messages: &messages,
+            options: options
+        )
+    }
+
+    private func appendParentVCSIgnoreFiles(
+        in parentURL: URL,
+        gitBoundary: URL?,
+        to ignoreStack: inout IgnoreStack,
+        messages: inout [String],
+        options: RipgrepOptions
+    ) {
+        guard !options.noIgnoreVCS,
+              shouldLoadParentVCSIgnore(in: parentURL, gitBoundary: gitBoundary, options: options) else {
+            return
+        }
+        appendLoadedMatcher(
+            from: parentURL.appendingPathComponent(".gitignore"),
+            to: &ignoreStack,
+            messages: &messages,
+            options: options
+        )
+        if !options.noIgnoreExclude,
+           fileManager.fileExists(atPath: parentURL.appendingPathComponent(".git").path) {
+            appendLoadedMatcher(
+                from: parentURL.appendingPathComponent(".git/info/exclude"),
+                to: &ignoreStack,
+                messages: &messages,
+                options: options
+            )
+        }
+    }
+
+    private func shouldLoadParentVCSIgnore(
+        in parentURL: URL,
+        gitBoundary: URL?,
+        options: RipgrepOptions
+    ) -> Bool {
+        if let gitBoundary {
+            return isAtOrBelow(parentURL, gitBoundary)
+        }
+        return options.noRequireGit || isInGitRepository(parentURL)
+    }
+
+    private func hasGitMarker(in directoryURL: URL) -> Bool {
+        fileManager.fileExists(atPath: directoryURL.appendingPathComponent(".git").path)
+    }
+
+    private func isAtOrBelow(_ url: URL, _ ancestor: URL) -> Bool {
+        let path = url.standardizedFileURL.path
+        let ancestorPath = ancestor.standardizedFileURL.path
+        if path == ancestorPath {
+            return true
+        }
+        let prefix = ancestorPath.hasSuffix("/") ? ancestorPath : "\(ancestorPath)/"
+        return path.hasPrefix(prefix)
     }
 
     private func appendGlobalIgnoreFile(
