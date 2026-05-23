@@ -68,6 +68,52 @@ struct RipgrepSearcherTests {
         #expect(try run(["--files-without-match", "needle", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == ["two.txt"])
     }
 
+    @Test("prints before after context and passthru")
+    func printsContextAndPassthru() throws {
+        let root = try TemporaryDirectory()
+        try root.write("one\ntwo\nmatch\nfour\nfive\nother\nseven\n", to: "context.txt")
+
+        #expect(try run(["-n", "-C1", "match", root.path("context.txt")]) == [
+            "2-two",
+            "3:match",
+            "4-four",
+        ])
+        #expect(try run(["-n", "-A1", "-e", "match", "-e", "other", root.path("context.txt")]) == [
+            "3:match",
+            "4-four",
+            "--",
+            "6:other",
+            "7-seven",
+        ])
+        #expect(try run(["-n", "--passthru", "match", root.path("context.txt")]) == [
+            "1-one",
+            "2-two",
+            "3:match",
+            "4-four",
+            "5-five",
+            "6-other",
+            "7-seven",
+        ])
+    }
+
+    @Test("prints only matching text and replacements")
+    func printsOnlyMatchingAndReplacements() throws {
+        let root = try TemporaryDirectory()
+        try root.write("abc123 def456\n", to: "replace.txt")
+
+        #expect(try run(["-o", "--column", #"\d+"#, root.path("replace.txt")]) == [
+            "1:4:123",
+            "1:11:456",
+        ])
+        #expect(try run(["--replace", "NUM", #"\d+"#, root.path("replace.txt")]) == [
+            "abcNUM defNUM",
+        ])
+        #expect(try run(["-o", "--replace", "[$1]", #"([a-z]+)\d+"#, root.path("replace.txt")]) == [
+            "[abc]",
+            "[def]",
+        ])
+    }
+
     @Test("lists files and honors hidden flag")
     func listsFilesAndHonorsHiddenFlag() throws {
         let root = try TemporaryDirectory()

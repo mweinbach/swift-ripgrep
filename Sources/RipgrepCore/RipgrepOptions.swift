@@ -24,6 +24,8 @@ public struct RipgrepOptions: Equatable {
     public var wordRegexp = false
     public var lineRegexp = false
     public var invertMatch = false
+    public var onlyMatching = false
+    public var replacement: String?
     public var lineNumber = false
     public var noLineNumber = false
     public var column = false
@@ -35,6 +37,9 @@ public struct RipgrepOptions: Equatable {
     public var followSymlinks = false
     public var quiet = false
     public var useStdin = false
+    public var beforeContext = 0
+    public var afterContext = 0
+    public var passthru = false
 
     public init() {}
 
@@ -49,7 +54,7 @@ public struct RipgrepOptions: Equatable {
     }
 
     public var wantsLineNumber: Bool {
-        lineNumber && !noLineNumber
+        (lineNumber || column) && !noLineNumber
     }
 
     public var effectivePatterns: [String] {
@@ -123,6 +128,16 @@ public enum RipgrepArgumentParser {
                 options.lineRegexp = true
             case "-v", "--invert-match":
                 options.invertMatch = true
+            case "-o", "--only-matching":
+                options.onlyMatching = true
+            case "-r", "--replace":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--replace <TEXT>' requires a value")
+                }
+                options.replacement = arguments[index]
+                index += 1
+            case let value where value.hasPrefix("--replace="):
+                options.replacement = String(value.dropFirst("--replace=".count))
             case "-n", "--line-number":
                 options.lineNumber = true
             case "-N", "--no-line-number":
@@ -157,6 +172,85 @@ public enum RipgrepArgumentParser {
                 options.followSymlinks = true
             case "-q", "--quiet":
                 options.quiet = true
+            case "--passthru":
+                options.passthru = true
+                options.beforeContext = 0
+                options.afterContext = 0
+            case "-A", "--after-context":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--after-context <NUM>' requires a value")
+                }
+                guard let count = parseContextCount(arguments[index], flag: argument) else {
+                    return .error("error: invalid context length '\(arguments[index])'")
+                }
+                options.afterContext = count
+                options.passthru = false
+                index += 1
+            case let value where value.hasPrefix("--after-context="):
+                let raw = String(value.dropFirst("--after-context=".count))
+                guard let count = parseContextCount(raw, flag: "--after-context") else {
+                    return .error("error: invalid context length '\(raw)'")
+                }
+                options.afterContext = count
+                options.passthru = false
+            case let value where value.hasPrefix("-A") && value.count > 2:
+                let raw = String(value.dropFirst(2))
+                guard let count = parseContextCount(raw, flag: "-A") else {
+                    return .error("error: invalid context length '\(raw)'")
+                }
+                options.afterContext = count
+                options.passthru = false
+            case "-B", "--before-context":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--before-context <NUM>' requires a value")
+                }
+                guard let count = parseContextCount(arguments[index], flag: argument) else {
+                    return .error("error: invalid context length '\(arguments[index])'")
+                }
+                options.beforeContext = count
+                options.passthru = false
+                index += 1
+            case let value where value.hasPrefix("--before-context="):
+                let raw = String(value.dropFirst("--before-context=".count))
+                guard let count = parseContextCount(raw, flag: "--before-context") else {
+                    return .error("error: invalid context length '\(raw)'")
+                }
+                options.beforeContext = count
+                options.passthru = false
+            case let value where value.hasPrefix("-B") && value.count > 2:
+                let raw = String(value.dropFirst(2))
+                guard let count = parseContextCount(raw, flag: "-B") else {
+                    return .error("error: invalid context length '\(raw)'")
+                }
+                options.beforeContext = count
+                options.passthru = false
+            case "-C", "--context":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--context <NUM>' requires a value")
+                }
+                guard let count = parseContextCount(arguments[index], flag: argument) else {
+                    return .error("error: invalid context length '\(arguments[index])'")
+                }
+                options.beforeContext = count
+                options.afterContext = count
+                options.passthru = false
+                index += 1
+            case let value where value.hasPrefix("--context="):
+                let raw = String(value.dropFirst("--context=".count))
+                guard let count = parseContextCount(raw, flag: "--context") else {
+                    return .error("error: invalid context length '\(raw)'")
+                }
+                options.beforeContext = count
+                options.afterContext = count
+                options.passthru = false
+            case let value where value.hasPrefix("-C") && value.count > 2:
+                let raw = String(value.dropFirst(2))
+                guard let count = parseContextCount(raw, flag: "-C") else {
+                    return .error("error: invalid context length '\(raw)'")
+                }
+                options.beforeContext = count
+                options.afterContext = count
+                options.passthru = false
             case "-c", "--count":
                 options.printMode = .count
             case "-l", "--files-with-matches":
@@ -219,6 +313,8 @@ public enum RipgrepArgumentParser {
           -w, --word-regexp          Only show matches surrounded by word boundaries
           -x, --line-regexp          Only show matches spanning an entire line
           -v, --invert-match         Show non-matching lines
+          -o, --only-matching        Print only the matched text
+          -r, --replace TEXT         Replace matches with the given text
           -n, --line-number          Show line numbers
           -N, --no-line-number       Suppress line numbers
               --column               Show the first match column
@@ -232,6 +328,10 @@ public enum RipgrepArgumentParser {
               --no-ignore            Do not respect ignore files
               --ignore-file PATH     Add a custom ignore file
           -g, --glob GLOB            Include or exclude paths with an override glob
+          -A, --after-context NUM    Show NUM lines after each match
+          -B, --before-context NUM   Show NUM lines before each match
+          -C, --context NUM          Show NUM lines before and after each match
+              --passthru             Print both matching and non-matching lines
           -L, --follow               Follow symbolic links
           -q, --quiet                Do not print matches
           -h, --help                 Print help
@@ -248,6 +348,13 @@ public enum RipgrepArgumentParser {
         } catch {
             return .error("error: failed to read pattern file '\(path)': \(error)")
         }
+    }
+
+    private static func parseContextCount(_ raw: String, flag: String) -> Int? {
+        guard let count = Int(raw), count >= 0 else {
+            return nil
+        }
+        return count
     }
 }
 

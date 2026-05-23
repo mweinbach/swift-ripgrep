@@ -88,31 +88,31 @@ public struct RipgrepSearcher {
         if contents.hasSuffix("\n") {
             lines.removeLast()
         }
+        var searchLines: [SearchLine] = []
 
         for (offset, lineFragment) in lines.enumerated() {
             var line = lineFragment
             if line.hasSuffix("\r") {
                 line.removeLast()
             }
+            let lineNumber = offset + 1
+            searchLines.append(SearchLine(lineNumber: lineNumber, line: line))
 
-            let ranges = matcher.matches(in: line)
-            guard !ranges.isEmpty else {
+            let spans = matcher.spans(in: line)
+            guard !spans.isEmpty else {
                 continue
             }
 
             matches.append(SearchMatch(
                 fileURL: fileURL,
-                lineNumber: offset + 1,
-                column: options.column ? column(for: ranges[0], in: line) : nil,
+                lineNumber: lineNumber,
+                column: options.column ? spans[0].startColumn : nil,
                 line: line,
-                matchCount: ranges.count
+                matchCount: spans.count,
+                spans: spans
             ))
         }
 
-        return SearchFileResult(fileURL: fileURL, matches: matches)
-    }
-
-    private func column(for range: Range<String.Index>, in line: String) -> Int {
-        line.distance(from: line.startIndex, to: range.lowerBound) + 1
+        return SearchFileResult(fileURL: fileURL, matches: matches, lines: searchLines)
     }
 }

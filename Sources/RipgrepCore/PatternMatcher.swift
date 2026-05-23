@@ -29,24 +29,62 @@ public struct PatternMatcher {
     }
 
     public func matches(in line: String) -> [Range<String.Index>] {
-        var ranges: [Range<String.Index>] = []
+        spans(in: line).compactMap { span in
+            indexRange(for: span, in: line)
+        }
+    }
+
+    public func spans(in line: String) -> [MatchSpan] {
+        var candidates: [(range: Range<String.Index>, replacement: String?)] = []
         for pattern in patterns {
             switch pattern {
             case .regex(let regex):
-                ranges.append(contentsOf: regex.matches(
+                let matches = regex.matches(
                     in: line,
                     range: NSRange(line.startIndex..., in: line)
-                ).compactMap { Range($0.range, in: line) })
+                )
+                candidates.append(contentsOf: matches.compactMap { match in
+                    guard let range = Range(match.range, in: line) else {
+                        return nil
+                    }
+                    let replacement = options.replacement.map {
+                        regex.replacementString(for: match, in: line, offset: 0, template: $0)
+                    }
+                    return (range, replacement)
+                })
             case .literal(let literal):
-                ranges.append(contentsOf: literalRanges(literal, in: line))
+                candidates.append(contentsOf: literalRanges(literal, in: line).map { range in
+                    (range, replacement(for: range, in: line))
+                })
             }
         }
 
-        let filtered = ranges.filter { range in
-            (!options.wordRegexp || isWordBounded(range, in: line))
-                && (!options.lineRegexp || (range.lowerBound == line.startIndex && range.upperBound == line.endIndex))
+        let filtered = candidates.filter { candidate in
+            (!options.wordRegexp || isWordBounded(candidate.range, in: line))
+                && (!options.lineRegexp || (candidate.range.lowerBound == line.startIndex && candidate.range.upperBound == line.endIndex))
         }
-        return options.invertMatch ? (filtered.isEmpty ? [line.startIndex..<line.startIndex] : []) : filtered
+
+        if options.invertMatch {
+            return filtered.isEmpty ? [
+                MatchSpan(startColumn: 1, endColumn: 1, text: "", replacement: nil),
+            ] : []
+        }
+
+        return filtered
+            .sorted { lhs, rhs in
+                if lhs.range.lowerBound == rhs.range.lowerBound {
+                    return lhs.range.upperBound < rhs.range.upperBound
+                }
+                return lhs.range.lowerBound < rhs.range.lowerBound
+            }
+            .map { candidate in
+                MatchSpan(
+                    startColumn: column(for: candidate.range.lowerBound, in: line),
+                    endColumn: column(for: candidate.range.upperBound, in: line),
+                    text: String(line[candidate.range]),
+                    replacement: candidate.replacement
+                )
+            }
     }
 
     private static func regexPattern(for pattern: String, options: RipgrepOptions) -> String {
@@ -76,6 +114,31 @@ public struct PatternMatcher {
         }
 
         return ranges
+    }
+
+    private func replacement(for range: Range<String.Index>, in line: String) -> String? {
+        guard let replacement = options.replacement else {
+            return nil
+        }
+        return replacement.replacingOccurrences(of: "$0", with: String(line[range]))
+    }
+
+    private func indexRange(for span: MatchSpan, in line: String) -> Range<String.Index>? {
+        guard span.startColumn >= 1, span.endColumn >= span.startColumn else {
+            return nil
+        }
+        let lowerOffset = span.startColumn - 1
+        let upperOffset = span.endColumn - 1
+        guard lowerOffset <= line.count, upperOffset <= line.count else {
+            return nil
+        }
+        let lower = line.index(line.startIndex, offsetBy: lowerOffset)
+        let upper = line.index(line.startIndex, offsetBy: upperOffset)
+        return lower..<upper
+    }
+
+    private func column(for index: String.Index, in line: String) -> Int {
+        line.distance(from: line.startIndex, to: index) + 1
     }
 
     private func isWordBounded(_ range: Range<String.Index>, in line: String) -> Bool {
