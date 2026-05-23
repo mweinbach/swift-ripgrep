@@ -452,8 +452,10 @@ public enum RipgrepArgumentParser {
                 }
             case "-w", "--word-regexp":
                 options.wordRegexp = true
+                options.lineRegexp = false
             case "-x", "--line-regexp":
                 options.lineRegexp = true
+                options.wordRegexp = false
             case "--no-unicode", "--no-pcre2-unicode":
                 options.noUnicode = true
             case "--unicode", "--pcre2-unicode":

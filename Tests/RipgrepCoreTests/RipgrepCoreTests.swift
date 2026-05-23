@@ -31,6 +31,8 @@ struct RipgrepSearcherTests {
         #expect(try run(["--no-fixed-strings", "-F", "abc.123", root.path("patterns.txt")]) == ["abc.123"])
         #expect(try run(["-w", "abc", root.path("patterns.txt")]) == ["abc.123", "abc", "abc def"])
         #expect(try run(["-x", "abc", root.path("patterns.txt")]) == ["abc"])
+        #expect(try run(["-w", "-x", "abc", root.path("patterns.txt")]) == ["abc"])
+        #expect(try run(["-x", "-w", "abc", root.path("patterns.txt")]) == ["abc.123", "abc", "abc def"])
     }
 
     @Test("honors regex engine flag ordering")
