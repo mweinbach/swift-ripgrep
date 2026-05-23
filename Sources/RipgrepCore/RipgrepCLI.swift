@@ -151,6 +151,7 @@ public enum RipgrepCLI {
             return results.hasMatch
         case .filesWithoutMatch:
             return results.files.contains { $0.searched && !$0.hasMatch }
+                || results.files.contains { $0.stoppedBinaryAfterMatch }
         }
     }
 

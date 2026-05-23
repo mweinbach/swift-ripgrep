@@ -185,7 +185,13 @@ public struct RipgrepSearcher {
                 ? []
                 : matchesBeforeBinary(result.matches, binaryByteOffset: binaryByteOffset)
             if options.binaryMode == .automatic && !haystack.isExplicit && binaryDetectedBeforeSearch {
-                return FileSearchOutcome(result: SearchFileResult(fileURL: fileURL, matches: [], searched: false))
+                return FileSearchOutcome(result: SearchFileResult(
+                    fileURL: fileURL,
+                    matches: [],
+                    binaryByteOffset: binaryByteOffset,
+                    stoppedBinaryAfterMatch: true,
+                    searched: true
+                ))
             }
             if options.binaryMode == .automatic && !haystack.isExplicit && printableMatches.isEmpty {
                 return FileSearchOutcome(result: SearchFileResult(fileURL: fileURL, matches: [], searched: false))

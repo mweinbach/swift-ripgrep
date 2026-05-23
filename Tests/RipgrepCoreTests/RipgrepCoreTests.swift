@@ -2465,6 +2465,25 @@ struct RipgrepSearcherTests {
         ])
         #expect(try run(["-c", "needle", root.path("bin.dat")]) == ["1"])
         #expect(pathBasenames(try run(["-l", "needle", root.path("bin.dat")])) == ["bin.dat"])
+
+        let implicitBinary = try TemporaryDirectory()
+        try implicitBinary.write(Data("needle\0tail\n".utf8), to: "bin.dat")
+        var binaryStatsOutput: [String] = []
+        var binaryStatsExitCode = RipgrepCLI.run(
+            arguments: ["--stats", "needle", implicitBinary.url.path],
+            stdout: { binaryStatsOutput.append($0) }
+        )
+        #expect(binaryStatsExitCode == 1)
+        #expect(binaryStatsOutput.contains("1 files searched"))
+        #expect(binaryStatsOutput.contains("0 bytes searched"))
+
+        binaryStatsOutput = []
+        binaryStatsExitCode = RipgrepCLI.run(
+            arguments: ["--files-without-match", "needle", implicitBinary.url.path],
+            stdout: { binaryStatsOutput.append($0) }
+        )
+        #expect(binaryStatsExitCode == 0)
+        #expect(binaryStatsOutput.isEmpty)
     }
 
     @Test("searches provided stdin")
