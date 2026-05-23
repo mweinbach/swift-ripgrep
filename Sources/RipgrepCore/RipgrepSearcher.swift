@@ -10,6 +10,12 @@ private struct FileSearchOutcome {
     }
 }
 
+private struct DecompressionCommand {
+    let executable: URL
+    let arguments: [String]
+    let displayCommand: String
+}
+
 public struct RipgrepSearcher {
     private let fileManager: FileManager
     private let environment: [String: String]
@@ -155,6 +161,15 @@ public struct RipgrepSearcher {
                 options: options
             )
         }
+        if let decompressionCommand = decompressionCommand(for: fileURL, options: options) {
+            return searchDecompressedFile(
+                fileURL,
+                originalData: data,
+                command: decompressionCommand,
+                matcher: matcher,
+                options: options
+            )
+        }
 
         let binaryByteOffset = shouldCheckBinary(data, options: options) ? data.firstIndex(of: 0) : nil
         if let binaryByteOffset, options.binaryMode != .asText {
@@ -243,6 +258,117 @@ public struct RipgrepSearcher {
                 message: "\(fileURL.path): preprocessor command could not start: '\(command)': \(error)"
             )
         }
+    }
+
+    private func searchDecompressedFile(
+        _ fileURL: URL,
+        originalData: Data,
+        command: DecompressionCommand,
+        matcher: PatternMatcher,
+        options: RipgrepOptions
+    ) -> FileSearchOutcome {
+        do {
+            let data = try runStreamingCommand(
+                executable: command.executable,
+                arguments: command.arguments,
+                inputFile: fileURL
+            )
+            let contents = decode(data, options: options)
+            let result = searchContents(contents, fileURL: fileURL, matcher: matcher, options: options)
+            return FileSearchOutcome(result: SearchFileResult(
+                fileURL: result.fileURL,
+                matches: result.matches,
+                lines: result.lines,
+                bytesSearched: originalData.count,
+                searched: result.searched
+            ))
+        } catch {
+            return FileSearchOutcome(
+                result: SearchFileResult(fileURL: fileURL, matches: [], searched: false),
+                message: "\(fileURL.path): decompression command failed: '\(command.displayCommand)': \(error)"
+            )
+        }
+    }
+
+    private func runStreamingCommand(
+        executable: URL,
+        arguments: [String],
+        inputFile: URL
+    ) throws -> Data {
+        let process = Process()
+        process.executableURL = executable
+        process.arguments = arguments
+
+        let input = try FileHandle(forReadingFrom: inputFile)
+        let output = Pipe()
+        let stderr = Pipe()
+        process.standardInput = input
+        process.standardOutput = output
+        process.standardError = stderr
+
+        try process.run()
+        input.closeFile()
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        let errorData = stderr.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+
+        guard process.terminationStatus == 0 else {
+            let stderrText = String(data: errorData, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            throw RipgrepError.message(stderrText?.isEmpty == false ? stderrText! : "<stderr is empty>")
+        }
+        return data
+    }
+
+    private func decompressionCommand(
+        for fileURL: URL,
+        options: RipgrepOptions
+    ) -> DecompressionCommand? {
+        guard options.searchZip else {
+            return nil
+        }
+        let path = fileURL.path
+        let specs: [(suffix: String, program: String, arguments: [String])] = [
+            (".gz", "gzip", ["-d", "-c"]),
+            (".tgz", "gzip", ["-d", "-c"]),
+            (".bz2", "bzip2", ["-d", "-c"]),
+            (".tbz2", "bzip2", ["-d", "-c"]),
+            (".xz", "xz", ["-d", "-c"]),
+            (".txz", "xz", ["-d", "-c"]),
+            (".lz4", "lz4", ["-d", "-c"]),
+            (".lzma", "xz", ["--format=lzma", "-d", "-c"]),
+            (".br", "brotli", ["-d", "-c"]),
+            (".zst", "zstd", ["-q", "-d", "-c"]),
+            (".zstd", "zstd", ["-q", "-d", "-c"]),
+            (".Z", "uncompress", ["-c"]),
+        ]
+        guard let spec = specs.last(where: { path.hasSuffix($0.suffix) }),
+              let executable = resolveExecutable(spec.program) else {
+            return nil
+        }
+        return DecompressionCommand(
+            executable: executable,
+            arguments: spec.arguments,
+            displayCommand: ([spec.program] + spec.arguments).joined(separator: " ")
+        )
+    }
+
+    private func resolveExecutable(_ program: String) -> URL? {
+        if program.contains("/") {
+            let url = URL(fileURLWithPath: program)
+            return FileManager.default.isExecutableFile(atPath: url.path) ? url : nil
+        }
+        let paths = (environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin")
+            .split(separator: ":")
+            .map(String.init)
+        for path in paths {
+            let candidate = URL(fileURLWithPath: path, isDirectory: true)
+                .appendingPathComponent(program)
+            if FileManager.default.isExecutableFile(atPath: candidate.path) {
+                return candidate
+            }
+        }
+        return nil
     }
 
     private func searchContents(

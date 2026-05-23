@@ -96,6 +96,7 @@ public struct RipgrepOptions: Equatable {
     public var globPatterns: [String] = []
     public var preprocessor: String?
     public var preGlobPatterns: [String] = []
+    public var searchZip = false
     public var typeChanges: [TypeChange] = []
     public var followSymlinks = false
     public var binaryMode: BinaryMode = .automatic
@@ -459,10 +460,16 @@ public enum RipgrepArgumentParser {
                     return .error("error: The argument '--pre <COMMAND>' requires a value")
                 }
                 options.preprocessor = arguments[index].isEmpty ? nil : arguments[index]
+                if options.preprocessor != nil {
+                    options.searchZip = false
+                }
                 index += 1
             case let value where value.hasPrefix("--pre="):
                 let command = String(value.dropFirst("--pre=".count))
                 options.preprocessor = command.isEmpty ? nil : command
+                if options.preprocessor != nil {
+                    options.searchZip = false
+                }
             case "--no-pre":
                 options.preprocessor = nil
             case "--pre-glob":
@@ -519,6 +526,11 @@ public enum RipgrepArgumentParser {
                 options.typeChanges.append(.clear(String(value.dropFirst("--type-clear=".count))))
             case "-L", "--follow":
                 options.followSymlinks = true
+            case "-z", "--search-zip":
+                options.searchZip = true
+                options.preprocessor = nil
+            case "--no-search-zip":
+                options.searchZip = false
             case "--binary":
                 options.binaryMode = .searchAndSuppress
             case "--no-binary":
@@ -825,6 +837,7 @@ public enum RipgrepArgumentParser {
               --field-context-separator S Set field separator for context lines
               --passthru             Print both matching and non-matching lines
           -L, --follow               Follow symbolic links
+          -z, --search-zip           Search compressed files
               --binary               Search binary files but suppress binary output
           -a, --text                 Search binary files as text
               --null-data            Use NUL as a line terminator

@@ -492,6 +492,49 @@ struct RipgrepSearcherTests {
         #expect(errors.first?.contains("preprocessor command failed") == true)
     }
 
+    @Test("searches gzip compressed files")
+    func searchesGzipCompressedFiles() throws {
+        let root = try TemporaryDirectory()
+        try root.writeGzip("needle in gzip\n", to: "compressed.txt.gz")
+        try root.write("needle in plain\n", to: "plain.txt")
+        let script = root.path("pre.sh")
+        try root.write("""
+        #!/bin/sh
+        printf 'preprocessed needle\\n'
+        """, to: "pre.sh")
+        try root.makeExecutable("pre.sh")
+
+        #expect(try runAllowingNoMatch(["needle", root.path("compressed.txt.gz")]) == [])
+        #expect(try run(["-z", "needle", root.path("compressed.txt.gz")]) == [
+            "needle in gzip",
+        ])
+        #expect(Set(pathBasenames(try run([
+            "--search-zip",
+            "needle",
+            root.url.path,
+        ]))) == Set(["compressed.txt.gz", "plain.txt", "pre.sh"]))
+        #expect(try runAllowingNoMatch([
+            "-z",
+            "--no-search-zip",
+            "needle",
+            root.path("compressed.txt.gz"),
+        ]) == [])
+        #expect(try run([
+            "--pre",
+            script,
+            "--search-zip",
+            "needle",
+            root.path("compressed.txt.gz"),
+        ]) == ["needle in gzip"])
+        #expect(try run([
+            "--search-zip",
+            "--pre",
+            script,
+            "needle",
+            root.path("compressed.txt.gz"),
+        ]) == ["preprocessed needle"])
+    }
+
     @Test("prints only matching text and replacements")
     func printsOnlyMatchingAndReplacements() throws {
         let root = try TemporaryDirectory()
@@ -1053,6 +1096,29 @@ private final class TemporaryDirectory {
             [.posixPermissions: 0o755],
             ofItemAtPath: path(relativePath)
         )
+    }
+
+    func writeGzip(_ contents: String, to relativePath: String) throws {
+        let fileURL = url.appendingPathComponent(relativePath, isDirectory: false)
+        try FileManager.default.createDirectory(
+            at: fileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["gzip", "-c"]
+        let input = Pipe()
+        let output = Pipe()
+        process.standardInput = input
+        process.standardOutput = output
+
+        try process.run()
+        try input.fileHandleForWriting.write(contentsOf: Data(contents.utf8))
+        try input.fileHandleForWriting.close()
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        try data.write(to: fileURL)
     }
 
     func path(_ relativePath: String) -> String {
