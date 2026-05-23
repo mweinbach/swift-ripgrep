@@ -1379,6 +1379,15 @@ struct RipgrepSearcherTests {
 
         options.rootPathArguments = ["./a"]
         #expect(StandardPrinter(options: options, currentDirectory: root.url.path).paths([fileURL]) == ["./a/.ignore"])
+
+        options.rootPathArguments = ["a/."]
+        #expect(StandardPrinter(options: options, currentDirectory: root.url.path).paths([fileURL]) == ["a/./.ignore"])
+
+        options.rootPathArguments = [root.path("a")]
+        #expect(StandardPrinter(options: options, currentDirectory: root.url.path).paths([fileURL]) == ["\(root.path("a"))/.ignore"])
+
+        options.rootPathArguments = [root.path("a/.")]
+        #expect(StandardPrinter(options: options, currentDirectory: root.url.path).paths([fileURL]) == ["\(root.path("a/."))/.ignore"])
     }
 
     @Test("prints debug diagnostics for skipped files")
