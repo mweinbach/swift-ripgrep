@@ -661,7 +661,7 @@ public struct StandardPrinter {
             return withFilename
         }
         if options.useStdin {
-            return !options.roots.isEmpty
+            return options.rootPathArguments.contains { $0 != "-" }
         }
         return results.files.count > 1 || options.effectiveRoots.count > 1 || options.effectiveRoots.contains { isDirectory($0) }
     }

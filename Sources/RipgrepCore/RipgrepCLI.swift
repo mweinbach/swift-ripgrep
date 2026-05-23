@@ -69,7 +69,10 @@ public enum RipgrepCLI {
 
                 if options.mode == .files {
                     let walkResults = try searcher.walkFilesWithMessages(options: options)
-                    let files = walkResults.haystacks.map(\.url)
+                    var files = walkResults.haystacks.map(\.url)
+                    if options.useStdin {
+                        files = filesModePathsWithStdin(files, options: options)
+                    }
                     if !options.quiet {
                         for line in printer.paths(files) {
                             emitStdout(line, stdout: stdout, suppressNewlineForTrailingNul: options.nullPathTerminator)
@@ -191,6 +194,53 @@ public enum RipgrepCLI {
 
     private static func shouldExitForImplicitNothingSearched(results: SearchResults, options: RipgrepOptions) -> Bool {
         options.rootPathArguments.isEmpty && shouldPrintNothingSearchedWarning(results: results, options: options)
+    }
+
+    private static func filesModePathsWithStdin(_ files: [URL], options: RipgrepOptions) -> [URL] {
+        let stdinURL = URL(fileURLWithPath: "<stdin>")
+        guard let dashIndex = options.rootPathArguments.firstIndex(of: "-") else {
+            return files + [stdinURL]
+        }
+        var output: [URL] = []
+        var emitted = Set<String>()
+        var insertedStdin = false
+        for (offset, root) in options.roots.enumerated() {
+            if offset == dashIndex {
+                output.append(stdinURL)
+                insertedStdin = true
+                continue
+            }
+            for file in files where isPath(file, under: root) {
+                let identifier = file.standardizedFileURL.path
+                guard !emitted.contains(identifier) else {
+                    continue
+                }
+                output.append(file)
+                emitted.insert(identifier)
+            }
+        }
+        for file in files {
+            let identifier = file.standardizedFileURL.path
+            guard !emitted.contains(identifier) else {
+                continue
+            }
+            output.append(file)
+            emitted.insert(identifier)
+        }
+        if !insertedStdin {
+            output.append(stdinURL)
+        }
+        return output
+    }
+
+    private static func isPath(_ file: URL, under root: URL) -> Bool {
+        let path = file.standardizedFileURL.path
+        let rootPath = root.standardizedFileURL.path
+        if path == rootPath {
+            return true
+        }
+        let rootPrefix = rootPath.hasSuffix("/") ? rootPath : "\(rootPath)/"
+        return path.hasPrefix(rootPrefix)
     }
 
     public static func usage() -> String {

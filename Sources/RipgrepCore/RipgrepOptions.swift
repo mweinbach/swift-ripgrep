@@ -1193,6 +1193,7 @@ public enum RipgrepArgumentParser {
                 index = arguments.count
             case "-":
                 options.useStdin = true
+                positionals.append(argument)
             default:
                 if argument.hasPrefix("-") {
                     return .error("error: unrecognized option '\(argument)'")

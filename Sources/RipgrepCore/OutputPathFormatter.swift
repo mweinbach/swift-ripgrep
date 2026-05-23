@@ -15,7 +15,7 @@ struct OutputPathFormatter {
     }
 
     func displayPath(for url: URL) -> String {
-        if url.path == "-" {
+        if url.path == "-" || url.path == "<stdin>" {
             return "<stdin>"
         }
 

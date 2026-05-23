@@ -1977,6 +1977,20 @@ struct RipgrepSearcherTests {
         #expect(exitCode == 0)
         #expect(output.isEmpty)
         #expect(errors == ["rg: missing: No such file or directory (os error 2)"])
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--files", "--sort", "path", "-", root.path("visible.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(output == [
+            "<stdin>",
+            root.path("visible.txt"),
+        ])
+        #expect(errors.isEmpty)
     }
 
     @Test("preserves explicit current directory path prefixes")
@@ -2730,7 +2744,7 @@ struct RipgrepSearcherTests {
     @Test("searches provided stdin")
     func searchesProvidedStdin() throws {
         var output: [String] = []
-        let exitCode = RipgrepCLI.run(
+        var exitCode = RipgrepCLI.run(
             arguments: ["-n", "needle", "-"],
             stdout: { output.append($0) },
             stdin: "hay\nneedle\n"
@@ -2738,6 +2752,21 @@ struct RipgrepSearcherTests {
 
         #expect(exitCode == 0)
         #expect(output == ["2:needle"])
+
+        let root = try TemporaryDirectory()
+        try root.write("needle\n", to: "file.txt")
+        output = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["-H", "-n", "needle", "-", root.path("file.txt")],
+            stdout: { output.append($0) },
+            stdin: "needle\n"
+        )
+
+        #expect(exitCode == 0)
+        #expect(output == [
+            "<stdin>:1:needle",
+            "\(root.path("file.txt")):1:needle",
+        ])
     }
 
     @Test("searches piped stdin for implicit default path")

@@ -86,6 +86,11 @@ public struct FileWalker {
         }
 
         for (offset, root) in options.effectiveRoots.enumerated() {
+            if options.useStdin,
+               offset < options.rootPathArguments.count,
+               options.rootPathArguments[offset] == "-" {
+                continue
+            }
             guard fileManager.fileExists(atPath: root.path) else {
                 let displayPath = rootDisplayPath(at: offset, root: root, options: options)
                 messages.append(missingRootMessage(displayPath, options: options))
