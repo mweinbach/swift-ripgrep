@@ -134,11 +134,13 @@ struct RipgrepSearcherTests {
         try root.write("café\nπ\n_\n", to: "classes.txt")
         try root.write("éx\nxé\nx\n", to: "words.txt")
         try root.write("Σ\nσ\n", to: "casefold.txt")
+        try root.write("\n##\n", to: "empty-word.txt")
 
         #expect(try run(["-o", #"\w+"#, root.path("classes.txt")]) == ["café", "π", "_"])
         #expect(try run(["--no-unicode", "-o", #"\w+"#, root.path("classes.txt")]) == ["caf", "_"])
         #expect(try run(["-w", "x", root.path("words.txt")]) == ["x"])
         #expect(try run(["-won", "x", root.path("words.txt")]) == ["3:x"])
+        #expect(try run(["-won", "", root.path("empty-word.txt")]) == ["1:", "2:", "2:", "2:"])
         #expect(try run(["--no-unicode", "-w", "x", root.path("words.txt")]) == ["éx", "xé", "x"])
         #expect(try run(["-F", "-i", "σ", root.path("casefold.txt")]) == ["Σ", "σ"])
         #expect(try run(["--no-unicode", "-F", "-i", "σ", root.path("casefold.txt")]) == ["σ"])

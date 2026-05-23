@@ -1203,7 +1203,7 @@ public enum RipgrepArgumentParser {
 
         if options.mode == .search {
             if explicitPatterns.isEmpty && !options.patternFileStdin && !hasExplicitPatternSource {
-                guard let pattern = positionals.first, !pattern.isEmpty else {
+                guard let pattern = positionals.first else {
                     return .error(usage())
                 }
                 options.pattern = pattern

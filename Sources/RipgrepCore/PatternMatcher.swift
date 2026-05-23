@@ -10,6 +10,9 @@ public struct PatternMatcher {
         self.options = options
         var compiledRegexSourceBytes = 0
         self.patterns = try patternSources.map { pattern in
+            if options.wordRegexp && pattern.isEmpty {
+                return .emptyWordBoundary
+            }
             if options.fixedStrings {
                 return .literal(options.effectiveIgnoreCase ? Self.foldedCase(pattern, options: options) : pattern)
             } else {
@@ -51,6 +54,10 @@ public struct PatternMatcher {
         var candidates: [(range: Range<String.Index>, replacement: String?)] = []
         for pattern in patterns {
             switch pattern {
+            case .emptyWordBoundary:
+                candidates.append(contentsOf: emptyWordBoundaryRanges(in: line).map { range in
+                    (range, replacement(for: range, in: line))
+                })
             case .regex(let regex):
                 let matches = regex.matches(
                     in: line,
@@ -113,6 +120,12 @@ public struct PatternMatcher {
         for candidate in sorted {
             if candidate.range.isEmpty,
                let previous = output.last,
+               previous.range.isEmpty,
+               previous.range.lowerBound == candidate.range.lowerBound {
+                continue
+            }
+            if candidate.range.isEmpty,
+               let previous = output.last,
                !previous.range.isEmpty,
                previous.range.upperBound == candidate.range.lowerBound {
                 continue
@@ -124,13 +137,14 @@ public struct PatternMatcher {
 
     private static func regexPattern(for pattern: String, options: RipgrepOptions) -> String {
         var source = foundationNamedCapturePattern(for: pattern)
+        let isEmptyPattern = source.isEmpty
         if source.isEmpty {
             source = "(?:)"
         }
         if options.noUnicode {
             source = asciiRegexPattern(for: source)
         }
-        if options.wordRegexp {
+        if options.wordRegexp && !isEmptyPattern {
             source = options.noUnicode
                 ? "(?<![0-9A-Za-z_])(?:\(source))(?![0-9A-Za-z_])"
                 : "\\b(?:\(source))\\b"
@@ -356,6 +370,23 @@ public struct PatternMatcher {
         return ranges
     }
 
+    private func emptyWordBoundaryRanges(in line: String) -> [Range<String.Index>] {
+        var ranges: [Range<String.Index>] = []
+        var index = line.startIndex
+        while true {
+            let before = index == line.startIndex ? nil : line[line.index(before: index)]
+            let after = index == line.endIndex ? nil : line[index]
+            if !isWordCharacter(before) && !isWordCharacter(after) {
+                ranges.append(index..<index)
+            }
+            guard index < line.endIndex else {
+                break
+            }
+            index = line.index(after: index)
+        }
+        return ranges
+    }
+
     private static func foldedCase(_ text: String, options: RipgrepOptions) -> String {
         options.noUnicode ? text.asciiLowercased() : text.lowercased()
     }
@@ -552,6 +583,7 @@ private extension Character {
 }
 
 private enum CompiledPattern {
+    case emptyWordBoundary
     case regex(NSRegularExpression)
     case literal(String)
 }
