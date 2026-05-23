@@ -70,6 +70,7 @@ public struct RipgrepOptions: Equatable {
     public var noIgnore = false
     public var noIgnoreDot = false
     public var noIgnoreFiles = false
+    public var noIgnoreParent = false
     public var noIgnoreVCS = false
     public var noRequireGit = false
     public var ignoreFiles: [URL] = []
@@ -290,20 +291,28 @@ public enum RipgrepArgumentParser {
                 options.withFilename = true
             case "-I", "--no-filename":
                 options.withFilename = false
-            case "--hidden":
+            case "-.", "--hidden":
                 options.hidden = true
+            case "--no-hidden":
+                options.hidden = false
             case "--no-ignore":
                 options.noIgnore = true
                 options.noIgnoreDot = true
+                options.noIgnoreParent = true
                 options.noIgnoreVCS = true
             case "--ignore":
                 options.noIgnore = false
                 options.noIgnoreDot = false
+                options.noIgnoreParent = false
                 options.noIgnoreVCS = false
             case "--no-ignore-dot":
                 options.noIgnoreDot = true
             case "--ignore-dot":
                 options.noIgnoreDot = false
+            case "--no-ignore-parent":
+                options.noIgnoreParent = true
+            case "--ignore-parent":
+                options.noIgnoreParent = false
             case "--no-ignore-files":
                 options.noIgnoreFiles = true
             case "--ignore-files":
@@ -380,6 +389,15 @@ public enum RipgrepArgumentParser {
                 options.binaryMode = .automatic
             case "-q", "--quiet":
                 options.quiet = true
+            case "-u", "--unrestricted":
+                applyUnrestricted(to: &options)
+            case "-uu":
+                applyUnrestricted(to: &options)
+                applyUnrestricted(to: &options)
+            case "-uuu":
+                applyUnrestricted(to: &options)
+                applyUnrestricted(to: &options)
+                applyUnrestricted(to: &options)
             case "--passthru":
                 options.passthru = true
                 options.beforeContext = 0
@@ -606,9 +624,11 @@ public enum RipgrepArgumentParser {
               --files-without-match  Show only paths without matches
               --files                Print files that would be searched
               --hidden               Search hidden files and directories
+          -u, --unrestricted         Reduce filtering; repeat to include hidden/binary files
               --no-ignore            Do not respect ignore files
               --no-ignore-dot        Do not respect .ignore or .rgignore files
               --no-ignore-files      Do not respect --ignore-file arguments
+              --no-ignore-parent     Do not respect ignore files in parent directories
               --no-ignore-vcs        Do not respect VCS ignore files
               --no-require-git       Use VCS ignore files outside repositories
               --ignore-file PATH     Add a custom ignore file
@@ -645,6 +665,19 @@ public enum RipgrepArgumentParser {
 
     private static func parseContextCount(_ raw: String, flag: String) -> Int? {
         parseNonNegativeInt(raw)
+    }
+
+    private static func applyUnrestricted(to options: inout RipgrepOptions) {
+        if !options.noIgnore {
+            options.noIgnore = true
+            options.noIgnoreDot = true
+            options.noIgnoreParent = true
+            options.noIgnoreVCS = true
+        } else if !options.hidden {
+            options.hidden = true
+        } else {
+            options.binaryMode = .searchAndSuppress
+        }
     }
 
     private static func parseSort(_ raw: String, reverse: Bool) -> SortMode? {

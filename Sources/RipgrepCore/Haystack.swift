@@ -34,12 +34,14 @@ public struct FileWalker {
                 throw RipgrepError.missingPath(root.path)
             }
             let rootBase = rootBase(for: root.standardizedFileURL)
+            var rootIgnoreStack = baseIgnoreStack
+            appendParentIgnoreFiles(to: &rootIgnoreStack, rootBase: rootBase, options: options)
             haystacks.append(contentsOf: try walk(
                 root.standardizedFileURL,
                 isExplicit: true,
                 depth: 0,
                 rootBase: rootBase,
-                ignoreStack: baseIgnoreStack,
+                ignoreStack: rootIgnoreStack,
                 overrides: overrides,
                 typeRegistry: typeRegistry,
                 options: options
@@ -108,12 +110,8 @@ public struct FileWalker {
         }
 
         var directoryIgnoreStack = ignoreStack
-        if !options.noIgnore && !options.noIgnoreVCS && (options.noRequireGit || isInGitRepository(resolvedURL)) {
-            directoryIgnoreStack.append(loadMatcher(from: resolvedURL.appendingPathComponent(".gitignore")))
-        }
-        if !options.noIgnore && !options.noIgnoreDot {
-            directoryIgnoreStack.append(loadMatcher(from: resolvedURL.appendingPathComponent(".ignore")))
-            directoryIgnoreStack.append(loadMatcher(from: resolvedURL.appendingPathComponent(".rgignore")))
+        if !options.noIgnore {
+            appendIgnoreFiles(in: resolvedURL, to: &directoryIgnoreStack, options: options)
         }
 
         let optionsMask: FileManager.DirectoryEnumerationOptions = options.hidden ? [] : [.skipsHiddenFiles]
@@ -212,6 +210,37 @@ public struct FileWalker {
         return root.deletingLastPathComponent()
     }
 
+    private func appendParentIgnoreFiles(
+        to ignoreStack: inout IgnoreStack,
+        rootBase: URL,
+        options: RipgrepOptions
+    ) {
+        guard !options.noIgnore, !options.noIgnoreParent else {
+            return
+        }
+
+        let rootPath = rootBase.standardizedFileURL.path
+        let parentPaths = ancestorPaths(of: rootPath)
+        for parentPath in parentPaths {
+            let parentURL = URL(fileURLWithPath: parentPath, isDirectory: true)
+            appendIgnoreFiles(in: parentURL, to: &ignoreStack, options: options)
+        }
+    }
+
+    private func ancestorPaths(of path: String) -> [String] {
+        var paths: [String] = []
+        var current = (path as NSString).deletingLastPathComponent
+        while !current.isEmpty && current != "/" {
+            paths.append(current)
+            let parent = (current as NSString).deletingLastPathComponent
+            if parent == current {
+                break
+            }
+            current = parent
+        }
+        return paths.reversed()
+    }
+
     private func isInGitRepository(_ url: URL) -> Bool {
         let directory = ((try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true)
             ? url
@@ -245,5 +274,19 @@ public struct FileWalker {
             return GlobMatcher(patterns: [])
         }
         return GlobMatcher(patterns: contents.components(separatedBy: .newlines))
+    }
+
+    private func appendIgnoreFiles(
+        in directoryURL: URL,
+        to ignoreStack: inout IgnoreStack,
+        options: RipgrepOptions
+    ) {
+        if !options.noIgnoreVCS && (options.noRequireGit || isInGitRepository(directoryURL)) {
+            ignoreStack.append(loadMatcher(from: directoryURL.appendingPathComponent(".gitignore")))
+        }
+        if !options.noIgnoreDot {
+            ignoreStack.append(loadMatcher(from: directoryURL.appendingPathComponent(".ignore")))
+            ignoreStack.append(loadMatcher(from: directoryURL.appendingPathComponent(".rgignore")))
+        }
     }
 }

@@ -406,6 +406,43 @@ struct RipgrepSearcherTests {
         #expect(pathBasenames(try run(["--no-require-git", "needle", outsideGit.url.path])) == ["keep.txt"])
     }
 
+    @Test("honors parent ignore files and unrestricted levels")
+    func honorsParentIgnoreFilesAndUnrestrictedLevels() throws {
+        let parent = try TemporaryDirectory()
+        try parent.write("skip.txt\n", to: ".rgignore")
+        try parent.write("needle\n", to: "sub/keep.txt")
+        try parent.write("needle\n", to: "sub/skip.txt")
+
+        #expect(pathBasenames(try run(["needle", parent.path("sub")])) == ["keep.txt"])
+        #expect(pathBasenames(try run(["--no-ignore-parent", "needle", parent.path("sub")])) == [
+            "keep.txt",
+            "skip.txt",
+        ])
+
+        let root = try TemporaryDirectory()
+        try root.write("needle\n", to: "keep.txt")
+        try root.write("needle\n", to: "skip.txt")
+        try root.write("needle\n", to: ".hidden.txt")
+        try root.write("skip.txt\n", to: ".rgignore")
+        try root.write(Data("needle\0tail\n".utf8), to: "bin.dat")
+
+        #expect(Set(pathBasenames(try run(["-u", "needle", root.url.path]))) == Set([
+            "keep.txt",
+            "skip.txt",
+        ]))
+        #expect(Set(pathBasenames(try run(["-uu", "needle", root.url.path]))) == Set([
+            ".hidden.txt",
+            "keep.txt",
+            "skip.txt",
+        ]))
+        #expect(Set(pathBasenames(try run(["-uuu", "needle", root.url.path]))) == Set([
+            ".hidden.txt",
+            "bin.dat",
+            "keep.txt",
+            "skip.txt",
+        ]))
+    }
+
     @Test("honors custom ignore file and override globs")
     func honorsCustomIgnoreFileAndOverrideGlobs() throws {
         let root = try TemporaryDirectory()
