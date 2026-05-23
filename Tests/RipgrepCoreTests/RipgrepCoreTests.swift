@@ -64,6 +64,36 @@ struct RipgrepSearcherTests {
         #expect(try run(["-o", "--engine=default", "--auto-hybrid-regex", #"(?<=a)b"#, root.path("engine.txt")]) == ["b"])
     }
 
+    @Test("accepts runtime resource flags")
+    func acceptsRuntimeResourceFlags() throws {
+        let root = try TemporaryDirectory()
+        try root.write("needle\n", to: "runtime.txt")
+
+        #expect(try run([
+            "--dfa-size-limit=0",
+            "--regex-size-limit",
+            "1K",
+            "-j0",
+            "--mmap",
+            "--no-mmap",
+            "--line-buffered",
+            "--block-buffered",
+            "needle",
+            root.path("runtime.txt"),
+        ]) == ["needle"])
+
+        var output: [String] = []
+        var errors: [String] = []
+        let exitCode = RipgrepCLI.run(
+            arguments: ["--threads", "many", "needle", root.path("runtime.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["error: invalid thread count 'many'"])
+    }
+
     @Test("honors no unicode regex and literal semantics")
     func honorsNoUnicodeSemantics() throws {
         let root = try TemporaryDirectory()

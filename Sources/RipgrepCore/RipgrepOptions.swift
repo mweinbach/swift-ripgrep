@@ -44,6 +44,18 @@ public enum LoggingMode: Equatable {
     case trace
 }
 
+public enum BufferMode: Equatable {
+    case automatic
+    case line
+    case block
+}
+
+public enum MmapMode: Equatable {
+    case automatic
+    case always
+    case never
+}
+
 public enum ColorTarget: Equatable {
     case path
     case line
@@ -96,6 +108,11 @@ public struct RipgrepOptions: Equatable {
     public var smartCase = false
     public var fixedStrings = false
     public var engineMode: EngineMode = .default
+    public var dfaSizeLimit: UInt64?
+    public var regexSizeLimit: UInt64?
+    public var threadCount: Int?
+    public var mmapMode: MmapMode = .automatic
+    public var bufferMode: BufferMode = .automatic
     public var encodingMode: EncodingMode = .automatic
     public var wordRegexp = false
     public var lineRegexp = false
@@ -268,6 +285,69 @@ public enum RipgrepArgumentParser {
                 options.engineMode = .automatic
             case "--no-auto-hybrid-regex":
                 options.engineMode = .default
+            case "--dfa-size-limit":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--dfa-size-limit <NUM>' requires a value")
+                }
+                guard let limit = parseHumanReadableSize(arguments[index]) else {
+                    return .error("error: invalid DFA size limit '\(arguments[index])'")
+                }
+                options.dfaSizeLimit = limit
+                index += 1
+            case let value where value.hasPrefix("--dfa-size-limit="):
+                let raw = String(value.dropFirst("--dfa-size-limit=".count))
+                guard let limit = parseHumanReadableSize(raw) else {
+                    return .error("error: invalid DFA size limit '\(raw)'")
+                }
+                options.dfaSizeLimit = limit
+            case "--regex-size-limit":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--regex-size-limit <NUM>' requires a value")
+                }
+                guard let limit = parseHumanReadableSize(arguments[index]) else {
+                    return .error("error: invalid regex size limit '\(arguments[index])'")
+                }
+                options.regexSizeLimit = limit
+                index += 1
+            case let value where value.hasPrefix("--regex-size-limit="):
+                let raw = String(value.dropFirst("--regex-size-limit=".count))
+                guard let limit = parseHumanReadableSize(raw) else {
+                    return .error("error: invalid regex size limit '\(raw)'")
+                }
+                options.regexSizeLimit = limit
+            case "-j", "--threads":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--threads <NUM>' requires a value")
+                }
+                guard let threads = parseNonNegativeInt(arguments[index]) else {
+                    return .error("error: invalid thread count '\(arguments[index])'")
+                }
+                options.threadCount = threads == 0 ? nil : threads
+                index += 1
+            case let value where value.hasPrefix("--threads="):
+                let raw = String(value.dropFirst("--threads=".count))
+                guard let threads = parseNonNegativeInt(raw) else {
+                    return .error("error: invalid thread count '\(raw)'")
+                }
+                options.threadCount = threads == 0 ? nil : threads
+            case let value where value.hasPrefix("-j") && value.count > 2:
+                let raw = String(value.dropFirst(2))
+                guard let threads = parseNonNegativeInt(raw) else {
+                    return .error("error: invalid thread count '\(raw)'")
+                }
+                options.threadCount = threads == 0 ? nil : threads
+            case "--mmap":
+                options.mmapMode = .always
+            case "--no-mmap":
+                options.mmapMode = .never
+            case "--line-buffered":
+                options.bufferMode = .line
+            case "--no-line-buffered":
+                options.bufferMode = .automatic
+            case "--block-buffered":
+                options.bufferMode = .block
+            case "--no-block-buffered":
+                options.bufferMode = .automatic
             case "-E", "--encoding":
                 guard index < arguments.count else {
                     return .error("error: The argument '--encoding <ENCODING>' requires a value")
@@ -929,6 +1009,10 @@ public enum RipgrepArgumentParser {
           -F, --fixed-strings        Treat the pattern as a literal string
               --engine ENGINE        Use regex engine: default, pcre2 or auto
           -P, --pcre2                Enable PCRE2-style regex matching
+              --dfa-size-limit NUM   Set the regex DFA size limit
+              --regex-size-limit NUM Set the compiled regex size limit
+          -j, --threads NUM          Set the approximate thread count
+              --mmap                 Search with memory maps when possible
           -E, --encoding ENCODING    Specify text encoding: auto, none, utf-8, utf-16/le/be
           -e, --regexp PATTERN       Add a pattern to search for
           -f, --file PATTERNFILE     Read patterns from a file
@@ -1009,6 +1093,8 @@ public enum RipgrepArgumentParser {
           -q, --quiet                Do not print matches
               --debug                Show debug messages
               --trace                Show trace messages
+              --line-buffered        Force line buffering
+              --block-buffered       Force block buffering
               --no-messages          Suppress file open/read error messages
               --no-config            Do not read RIPGREP_CONFIG_PATH
           -h, --help                 Print help
