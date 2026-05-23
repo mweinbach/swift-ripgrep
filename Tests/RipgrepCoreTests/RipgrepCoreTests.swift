@@ -372,6 +372,8 @@ struct RipgrepSearcherTests {
         #expect(try run(["-l", "--null", "needle", root.url.path]) == [
             "\(root.path("dir/one.txt"))\0",
         ])
+        let executableOutput = try runExecutableData(["-l", "--null", "needle", root.url.path]) {}
+        #expect(executableOutput == Data("\(root.path("dir/one.txt"))\0".utf8))
         #expect(Set(try run(["--files", "--null", root.url.path])) == Set([
             "\(root.path("dir/one.txt"))\0",
             "\(root.path("dir/two.txt"))\0",

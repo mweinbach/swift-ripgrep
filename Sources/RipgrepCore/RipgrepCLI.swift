@@ -97,7 +97,7 @@ public enum RipgrepCLI {
                         line,
                         stdout: stdout,
                         encodingMode: options.json ? nil : options.encodingMode,
-                        suppressNewlineForTrailingNul: options.nullData
+                        suppressNewlineForTrailingNul: options.nullData || options.nullPathTerminator
                     )
                 }
                 for diagnostic in results.diagnostics {
