@@ -1200,7 +1200,7 @@ public enum RipgrepArgumentParser {
                 positionals.append(argument)
             default:
                 if argument.hasPrefix("-") {
-                    return .error("error: unrecognized option '\(argument)'")
+                    return .error(unrecognizedFlag(argument))
                 }
                 positionals.append(argument)
             }
@@ -2057,6 +2057,13 @@ public enum RipgrepArgumentParser {
         }
         let product = value.multipliedReportingOverflow(by: multiplier)
         return product.overflow ? nil : product.partialValue
+    }
+
+    private static func unrecognizedFlag(_ argument: String) -> String {
+        let flag = argument.hasPrefix("--")
+            ? argument.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? argument
+            : argument
+        return "unrecognized flag \(flag)"
     }
 }
 

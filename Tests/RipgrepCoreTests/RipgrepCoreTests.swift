@@ -3141,6 +3141,27 @@ struct RipgrepSearcherTests {
         #expect(output.first?.contains("--no-search-zip") == true)
     }
 
+    @Test("reports unrecognized flags like ripgrep")
+    func reportsUnrecognizedFlagsLikeRipgrep() {
+        for (arguments, expected) in [
+            (["--unknown"], "rg: unrecognized flag --unknown"),
+            (["--foo=bar"], "rg: unrecognized flag --foo"),
+            (["-Z"], "rg: unrecognized flag -Z"),
+        ] {
+            var output: [String] = []
+            var errors: [String] = []
+            let exitCode = RipgrepCLI.run(
+                arguments: arguments,
+                stdout: { output.append($0) },
+                stderr: { errors.append($0) }
+            )
+
+            #expect(exitCode == 2)
+            #expect(output.isEmpty)
+            #expect(errors == [expected])
+        }
+    }
+
     @Test("prints version from short and long flags")
     func printsVersionFromShortAndLongFlags() {
         for flag in ["-V", "--version"] {
