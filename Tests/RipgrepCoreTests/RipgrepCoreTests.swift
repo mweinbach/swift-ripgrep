@@ -1148,9 +1148,18 @@ struct RipgrepSearcherTests {
         try traversalRoot.write("needle\n", to: "b/two.txt")
         try traversalRoot.write("needle\n", to: "a/one.txt")
         try traversalRoot.write("needle\n", to: "A.txt")
-        #expect(pathBasenames(try run(["needle", traversalRoot.url.path])) == ["two.txt", "A.txt", "one.txt"])
-        #expect(pathBasenames(try run(["--sort", "none", "needle", traversalRoot.url.path])) == ["two.txt", "A.txt", "one.txt"])
+        #expect(pathBasenames(try run(["--threads", "1", "needle", traversalRoot.url.path])) == ["one.txt", "A.txt", "two.txt"])
+        #expect(pathBasenames(try run(["--threads", "1", "--sort", "none", "needle", traversalRoot.url.path])) == ["one.txt", "A.txt", "two.txt"])
         #expect(pathBasenames(try run(["--sort", "path", "needle", traversalRoot.url.path])) == ["A.txt", "one.txt", "two.txt"])
+        #expect(pathBasenames(try run([
+            "--threads",
+            "1",
+            "--sort",
+            "path",
+            "needle",
+            traversalRoot.path("b/two.txt"),
+            traversalRoot.path("a/one.txt"),
+        ])) == ["two.txt", "one.txt"])
 
         var output: [String] = []
         var errors: [String] = []

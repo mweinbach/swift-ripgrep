@@ -124,7 +124,7 @@ public struct FileWalker {
                 options: options
             )
             let rootVolume = options.oneFileSystem ? volumeIdentifier(for: root.standardizedFileURL) : nil
-            haystacks.append(contentsOf: try walk(
+            let walked = try walk(
                 root.standardizedFileURL,
                 physicalURL: nil,
                 isExplicit: true,
@@ -139,11 +139,12 @@ public struct FileWalker {
                 overrides: overrides,
                 typeRegistry: typeRegistry,
                 options: options
-            ))
+            )
+            haystacks.append(contentsOf: sorted(walked, options: options))
         }
 
         return FileWalkResults(
-            haystacks: sorted(haystacks, options: options),
+            haystacks: haystacks,
             messages: messages,
             warnings: warnings,
             diagnostics: diagnostics,
@@ -286,8 +287,7 @@ public struct FileWalker {
         )
 
         var haystacks: [Haystack] = []
-        let walkChildren = options.sortMode == nil ? children.reversed() : children
-        for child in walkChildren {
+        for child in children {
             let childURL = url.appendingPathComponent(child.lastPathComponent)
             haystacks.append(contentsOf: try walk(
                 childURL,

@@ -125,8 +125,6 @@ public struct RipgrepSearcher {
             }
         }
 
-        files = sorted(files, options: options)
-
         let matchedFiles = files.filter(\.hasMatch)
         let summary = SearchSummary(
             filesSearched: files.filter(\.searched).count,
