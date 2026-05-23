@@ -26,8 +26,9 @@ public struct StandardPrinter {
         }
 
         let body = bodyLines(for: results)
-        if options.stats, options.printMode == .matchingLines {
-            return body + statsLines(for: results, bytesPrinted: bytesPrinted(body))
+        if options.stats {
+            let printedBytes = options.printMode == .matchingLines ? bytesPrinted(body) : 0
+            return body + statsLines(for: results, bytesPrinted: printedBytes)
         }
         return body
     }

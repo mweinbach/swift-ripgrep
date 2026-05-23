@@ -1005,6 +1005,7 @@ struct RipgrepSearcherTests {
     func printsAggregateStats() throws {
         let root = try TemporaryDirectory()
         try root.write("needle\nneedle two\nnope\n", to: "stats.txt")
+        try root.write("no match\n", to: "other.txt")
 
         let output = try run(["--stats", "needle", root.path("stats.txt")])
         #expect(output.contains("2 matches"))
@@ -1018,6 +1019,30 @@ struct RipgrepSearcherTests {
         let limitedOutput = try run(["--stats", "-m2", "foo", root.path("max-count-stats.txt")])
         #expect(limitedOutput.contains("2 matches"))
         #expect(limitedOutput.contains("10 bytes searched"))
+
+        let countOutput = try run(["--sort", "path", "--stats", "--count", "needle", root.url.path])
+        #expect(countOutput.contains("\(root.path("stats.txt")):2"))
+        #expect(countOutput.contains("2 matches"))
+        #expect(countOutput.contains("2 matched lines"))
+        #expect(countOutput.contains("1 files contained matches"))
+        #expect(countOutput.contains("3 files searched"))
+        #expect(countOutput.contains("0 bytes printed"))
+
+        let countMatchesOutput = try run(["--sort", "path", "--stats", "--count-matches", "needle", root.url.path])
+        #expect(countMatchesOutput.contains("\(root.path("stats.txt")):2"))
+        #expect(countMatchesOutput.contains("2 matches"))
+        #expect(countMatchesOutput.contains("0 bytes printed"))
+
+        let filesWithMatchesOutput = try run(["--sort", "path", "--stats", "--files-with-matches", "needle", root.url.path])
+        #expect(filesWithMatchesOutput.contains(root.path("stats.txt")))
+        #expect(filesWithMatchesOutput.contains("2 matches"))
+        #expect(filesWithMatchesOutput.contains("0 bytes printed"))
+
+        let filesWithoutMatchOutput = try run(["--sort", "path", "--stats", "--files-without-match", "needle", root.url.path])
+        #expect(filesWithoutMatchOutput.contains(root.path("max-count-stats.txt")))
+        #expect(filesWithoutMatchOutput.contains(root.path("other.txt")))
+        #expect(filesWithoutMatchOutput.contains("2 matches"))
+        #expect(filesWithoutMatchOutput.contains("0 bytes printed"))
     }
 
     @Test("loads arguments from RIPGREP_CONFIG_PATH")
