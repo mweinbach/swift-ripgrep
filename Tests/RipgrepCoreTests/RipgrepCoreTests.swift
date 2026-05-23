@@ -2598,6 +2598,18 @@ struct RipgrepSearcherTests {
         output = []
         errors = []
         exitCode = RipgrepCLI.run(
+            arguments: ["--sort", "path", "needle", root.path("ok.txt"), missingPath],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+
+        #expect(exitCode == 2)
+        #expect(output == ["\(root.path("ok.txt")):needle"])
+        #expect(errors == ["rg: \(missingPath): IO error for operation on \(missingPath): No such file or directory (os error 2)"])
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
             arguments: ["--no-messages", "needle", root.path("ok.txt"), missingPath],
             stdout: { output.append($0) },
             stderr: { errors.append($0) }
