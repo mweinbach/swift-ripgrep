@@ -305,7 +305,6 @@ struct RipgrepSearcherTests {
             "3:needle there",
         ])
         #expect(try run(["-N", "--pretty", "--color=never", "needle", root.path("one.txt")]) == [
-            "\(root.path("one.txt"))",
             "2:needle here",
             "3:needle there",
         ])
@@ -1364,6 +1363,11 @@ struct RipgrepSearcherTests {
             "",
             "\(root.path("b.txt"))",
             "1:xx needle",
+        ])
+        #expect(try run(["--heading", "--no-filename", "--sort=path", "needle", root.url.path]) == [
+            "  needle one needle",
+            "",
+            "xx needle",
         ])
     }
 

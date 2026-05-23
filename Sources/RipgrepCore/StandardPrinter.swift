@@ -257,9 +257,10 @@ public struct StandardPrinter {
 
     private func headingLines(for results: SearchResults) -> [String] {
         var output: [String] = []
+        let showPath = showPath(for: results)
         for result in results.files {
             if result.matches.isEmpty,
-               let binaryLine = formatBinaryMatch(result, showPath: showPath(for: results)) {
+               let binaryLine = formatBinaryMatch(result, showPath: showPath) {
                 output.append(binaryLine)
                 continue
             }
@@ -281,7 +282,9 @@ public struct StandardPrinter {
             if !output.isEmpty {
                 output.append("")
             }
-            output.append(renderPath(for: result.fileURL))
+            if showPath {
+                output.append(renderPath(for: result.fileURL))
+            }
             output.append(contentsOf: lines)
         }
         return output
