@@ -329,8 +329,20 @@ struct RipgrepSearcherTests {
             "verylong needle tail",
         ])
         #expect(try run(["-o", "--max-columns", "12", "needle", root.path("columns.txt")]) == [
+            "[Omitted long matching line]",
+            "[Omitted long matching line]",
+        ])
+        #expect(try run([
+            "-o",
+            "--column",
+            "--max-columns",
+            "12",
+            "--max-columns-preview",
             "needle",
-            "needle",
+            root.path("columns.txt"),
+        ]) == [
+            "1:7:short needle [... 0 more matches]",
+            "2:10:verylong nee [... 0 more matches]",
         ])
         #expect(try run(["-M", "12", "--replace", "PIN", "needle", root.path("columns.txt")]) == [
             "[Omitted long line with 1 match]",

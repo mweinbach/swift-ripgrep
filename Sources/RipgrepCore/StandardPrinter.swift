@@ -163,7 +163,7 @@ public struct StandardPrinter {
             if options.byteOffset {
                 fields.append(OutputField("\(match.absoluteOffset + span.startByte)", colorTarget: nil))
             }
-            let text = "\(colors.apply(.match, to: span.replacement ?? span.text))\(outputTerminator(match.lineTerminator))"
+            let text = "\(onlyMatchingText(span, in: match))\(outputTerminator(match.lineTerminator))"
             return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(text)"
         }
     }
@@ -330,6 +330,18 @@ public struct StandardPrinter {
         }
         let remainingMatches = match.spans.filter { $0.startByte >= maxColumns }.count
         return "\(line.prefixBytes(maxColumns)) [... \(remainingMatches) more \(remainingMatches == 1 ? "match" : "matches")]"
+    }
+
+    private func onlyMatchingText(_ span: MatchSpan, in match: SearchMatch) -> String {
+        guard let maxColumns = options.maxColumns,
+              match.line.utf8.count >= maxColumns,
+              span.startByte < maxColumns else {
+            return colors.apply(.match, to: span.replacement ?? span.text)
+        }
+        guard options.maxColumnsPreview else {
+            return OmittedLineKind.matching.message
+        }
+        return "\(match.line.prefixBytes(maxColumns)) [... 0 more matches]"
     }
 
     private func splitRenderedLines(_ text: String) -> [String] {
