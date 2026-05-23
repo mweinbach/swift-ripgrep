@@ -237,6 +237,10 @@ public struct RipgrepOptions: Equatable {
         return pattern.map { [$0] } ?? []
     }
 
+    public var emitsRawBytes: Bool {
+        encodingMode == .disabled || (binaryMode == .asText && encodingMode == .automatic)
+    }
+
     public mutating func appendPatternFileContents(_ contents: String) {
         let loadedPatterns = Self.patterns(fromPatternFileContents: contents)
         if patterns.isEmpty {

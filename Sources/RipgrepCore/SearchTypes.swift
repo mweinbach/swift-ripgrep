@@ -30,6 +30,7 @@ public struct SearchMatch: Equatable, Sendable {
     public let lineNumber: Int
     public let column: Int?
     public let line: String
+    public let rawLine: String?
     public let lineTerminator: String
     public let absoluteOffset: Int
     public let matchCount: Int
@@ -40,6 +41,7 @@ public struct SearchMatch: Equatable, Sendable {
         lineNumber: Int,
         column: Int?,
         line: String,
+        rawLine: String? = nil,
         lineTerminator: String = "",
         absoluteOffset: Int = 0,
         matchCount: Int,
@@ -49,6 +51,7 @@ public struct SearchMatch: Equatable, Sendable {
         self.lineNumber = lineNumber
         self.column = column
         self.line = line
+        self.rawLine = rawLine
         self.lineTerminator = lineTerminator
         self.absoluteOffset = absoluteOffset
         self.matchCount = matchCount
@@ -63,12 +66,14 @@ public struct SearchMatch: Equatable, Sendable {
 public struct SearchLine: Equatable, Sendable {
     public let lineNumber: Int
     public let line: String
+    public let rawLine: String?
     public let lineTerminator: String
     public let absoluteOffset: Int
 
-    public init(lineNumber: Int, line: String, lineTerminator: String = "", absoluteOffset: Int = 0) {
+    public init(lineNumber: Int, line: String, rawLine: String? = nil, lineTerminator: String = "", absoluteOffset: Int = 0) {
         self.lineNumber = lineNumber
         self.line = line
+        self.rawLine = rawLine
         self.lineTerminator = lineTerminator
         self.absoluteOffset = absoluteOffset
     }

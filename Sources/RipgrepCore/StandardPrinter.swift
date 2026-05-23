@@ -487,7 +487,8 @@ public struct StandardPrinter {
             fields.append(OutputField("\(line.lineNumber)", colorTarget: .line))
         }
 
-        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldContextSeparator))\(renderedLine(line.line, omittedKind: .context))\(outputTerminator(line.lineTerminator, line: line.line))"
+        let text = displayLine(for: line)
+        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldContextSeparator))\(renderedLine(text, omittedKind: .context))\(outputTerminator(line.lineTerminator, line: text))"
     }
 
     private func formatVimgrepContextLine(_ line: SearchLine, fileURL: URL, showPath: Bool) -> String {
@@ -500,7 +501,8 @@ public struct StandardPrinter {
             fields.append(OutputField("\(line.absoluteOffset)", colorTarget: nil))
         }
 
-        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldContextSeparator))\(renderedLine(line.line, omittedKind: .context))\(outputTerminator(line.lineTerminator, line: line.line))"
+        let text = displayLine(for: line)
+        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldContextSeparator))\(renderedLine(text, omittedKind: .context))\(outputTerminator(line.lineTerminator, line: text))"
     }
 
     private func formatMatchedLine(_ line: SearchLine, fileURL: URL, showPath: Bool, match: SearchMatch?) -> String {
@@ -516,15 +518,17 @@ public struct StandardPrinter {
             fields.append(OutputField("\(match.absoluteOffset)", colorTarget: nil))
         }
 
-        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(renderedLine(line.line))\(outputTerminator(line.lineTerminator, line: line.line))"
+        let text = displayLine(for: line)
+        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(renderedLine(text))\(outputTerminator(line.lineTerminator, line: text))"
     }
 
     private func renderedLine(for match: SearchMatch) -> String {
         guard options.replacement != nil, !match.spans.isEmpty else {
-            if let rendered = limitedMatchedLine(match.line, match: match) {
-                return "\(rendered)\(outputTerminator(match.lineTerminator, line: match.line))"
+            let line = displayLine(for: match)
+            if let rendered = limitedMatchedLine(line, match: match) {
+                return "\(rendered)\(outputTerminator(match.lineTerminator, line: line))"
             }
-            return "\(renderedLine(match.line, spans: match.spans))\(outputTerminator(match.lineTerminator, line: match.line))"
+            return "\(renderedLine(line, spans: match.rawLine == nil ? match.spans : []))\(outputTerminator(match.lineTerminator, line: line))"
         }
         let originalLine = match.line
         let line = renderedText(for: match)
@@ -557,6 +561,20 @@ public struct StandardPrinter {
             line.replaceSubrange(range, with: replacement)
         }
         return line
+    }
+
+    private func displayLine(for match: SearchMatch) -> String {
+        guard match.rawLine != nil, options.replacement == nil, !colors.isEnabled else {
+            return match.line
+        }
+        return match.rawLine ?? match.line
+    }
+
+    private func displayLine(for line: SearchLine) -> String {
+        guard line.rawLine != nil, !colors.isEnabled else {
+            return line.line
+        }
+        return line.rawLine ?? line.line
     }
 
     private func renderedLine(_ line: String, omittedKind: OmittedLineKind = .matching) -> String {

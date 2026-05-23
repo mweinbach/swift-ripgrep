@@ -780,6 +780,18 @@ struct RipgrepSearcherTests {
         #expect(try run(["--encoding", "none", "-a", "-o", "--byte-offset", #"\x00"#, root.path("raw-bytes.txt")]) == [
             "2:\0",
         ])
+        let textOutput = try runExecutableData([
+            "-a",
+            "-n",
+            "foo",
+            root.path("invalid-utf8.txt"),
+        ], fixture: {
+            try root.write(
+                Data([0xC3, 0xA9, 0x0A, 0xFF, 0x66, 0x6F, 0x6F, 0x0A]),
+                to: "invalid-utf8.txt"
+            )
+        })
+        #expect(textOutput == Data([0x32, 0x3A, 0xFF, 0x66, 0x6F, 0x6F, 0x0A]))
         let jsonOutput = try run(["--json", "--encoding", "none", "-a", #"\x00"#, root.path("raw-bytes.txt")])
         let jsonMatch = try jsonOutput.map(jsonObject).first { $0["type"] as? String == "match" }?["data"] as? [String: Any]
         let jsonLines = jsonMatch?["lines"] as? [String: String]

@@ -108,7 +108,7 @@ public enum RipgrepCLI {
                     emitStdout(
                         line,
                         stdout: stdout,
-                        encodingMode: options.json ? nil : options.encodingMode,
+                        encodingMode: options.json ? nil : outputEncodingMode(for: options),
                         suppressNewlineForTrailingNul: options.nullData || options.nullPathTerminator
                     )
                 }
@@ -158,6 +158,10 @@ public enum RipgrepCLI {
             ? output.rawByteData()
             : Data(output.utf8)
         FileHandle.standardOutput.write(data)
+    }
+
+    private static func outputEncodingMode(for options: RipgrepOptions) -> EncodingMode? {
+        options.emitsRawBytes ? .disabled : options.encodingMode
     }
 
     private static func hasSuccessfulOutput(results: SearchResults, options: RipgrepOptions) -> Bool {

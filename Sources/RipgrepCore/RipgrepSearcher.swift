@@ -234,7 +234,13 @@ public struct RipgrepSearcher {
         let binaryByteOffset = shouldCheckBinary(data, options: options) ? data.firstIndex(of: 0) : nil
         if let binaryByteOffset, options.binaryMode != .asText {
             let contents = decode(data, options: options)
-            let result = searchContents(contents, fileURL: fileURL, matcher: matcher, options: options)
+            let result = searchContents(
+                contents,
+                rawData: rawDataForOutput(data, options: options),
+                fileURL: fileURL,
+                matcher: matcher,
+                options: options
+            )
             let binaryDetectedBeforeSearch = binaryByteOffset < Self.binaryDetectionBufferSize
             let printableMatches = binaryDetectedBeforeSearch && !haystack.isExplicit
                 ? []
@@ -263,7 +269,13 @@ public struct RipgrepSearcher {
         }
 
         let contents = decode(data, options: options)
-        let result = searchContents(contents, fileURL: fileURL, matcher: matcher, options: options)
+        let result = searchContents(
+            contents,
+            rawData: rawDataForOutput(data, options: options),
+            fileURL: fileURL,
+            matcher: matcher,
+            options: options
+        )
         return FileSearchOutcome(result: SearchFileResult(
             fileURL: result.fileURL,
             matches: result.matches,
@@ -280,7 +292,13 @@ public struct RipgrepSearcher {
     ) -> SearchFileResult {
         let fileURL = URL(fileURLWithPath: "<stdin>")
         let contents = decode(data, options: options)
-        let result = searchContents(contents, fileURL: fileURL, matcher: matcher, options: options)
+        let result = searchContents(
+            contents,
+            rawData: rawDataForOutput(data, options: options),
+            fileURL: fileURL,
+            matcher: matcher,
+            options: options
+        )
         guard options.binaryMode != .asText,
               shouldCheckBinary(data, options: options),
               let binaryByteOffset = data.firstIndex(of: 0) else {
@@ -352,7 +370,13 @@ public struct RipgrepSearcher {
             }
 
             let contents = decode(data, options: options)
-            let result = searchContents(contents, fileURL: fileURL, matcher: matcher, options: options)
+            let result = searchContents(
+                contents,
+                rawData: rawDataForOutput(data, options: options),
+                fileURL: fileURL,
+                matcher: matcher,
+                options: options
+            )
             return FileSearchOutcome(result: SearchFileResult(
                 fileURL: result.fileURL,
                 matches: result.matches,
@@ -396,7 +420,13 @@ public struct RipgrepSearcher {
                 inputFile: fileURL
             )
             let contents = decode(data, options: options)
-            let result = searchContents(contents, fileURL: fileURL, matcher: matcher, options: options)
+            let result = searchContents(
+                contents,
+                rawData: rawDataForOutput(data, options: options),
+                fileURL: fileURL,
+                matcher: matcher,
+                options: options
+            )
             return FileSearchOutcome(result: SearchFileResult(
                 fileURL: result.fileURL,
                 matches: result.matches,
@@ -495,6 +525,7 @@ public struct RipgrepSearcher {
 
     private func searchContents(
         _ contents: String,
+        rawData: Data? = nil,
         fileURL: URL,
         matcher: PatternMatcher,
         options: RipgrepOptions
@@ -505,6 +536,7 @@ public struct RipgrepSearcher {
 
         var matches: [SearchMatch] = []
         let lines = splitLines(contents, options: options)
+        let rawLines = rawData.map { splitRawLines($0, options: options) }
         var searchLines: [SearchLine] = []
         var absoluteOffset = 0
         let maxCount = options.maxCount ?? Int.max
@@ -513,11 +545,15 @@ public struct RipgrepSearcher {
 
         for (offset, splitLine) in lines.enumerated() {
             let line = splitLine.text
+            let rawLine = rawLines?[safe: offset]?.text
             let lineNumber = offset + 1
-            let lineByteCount = byteCount(splitLine.text, options: options) + byteCount(splitLine.terminator, options: options)
+            let lineByteCount = rawLines?[safe: offset].map {
+                $0.text.unicodeScalars.count + $0.terminator.unicodeScalars.count
+            } ?? byteCount(splitLine.text, options: options) + byteCount(splitLine.terminator, options: options)
             searchLines.append(SearchLine(
                 lineNumber: lineNumber,
                 line: line,
+                rawLine: rawLine,
                 lineTerminator: splitLine.terminator,
                 absoluteOffset: absoluteOffset
             ))
@@ -542,6 +578,7 @@ public struct RipgrepSearcher {
                 lineNumber: lineNumber,
                 column: options.column ? spans[0].startColumn : nil,
                 line: line,
+                rawLine: rawLine,
                 lineTerminator: splitLine.terminator,
                 absoluteOffset: absoluteOffset,
                 matchCount: spans.count,
@@ -699,6 +736,10 @@ public struct RipgrepSearcher {
             lines: searchLines,
             bytesSearched: absoluteOffset
         )
+    }
+
+    private func rawDataForOutput(_ data: Data, options: RipgrepOptions) -> Data? {
+        options.emitsRawBytes ? data : nil
     }
 
     private func multilineReplacementBlockText(
@@ -893,10 +934,36 @@ public struct RipgrepSearcher {
         return lines
     }
 
+    private func splitRawLines(_ data: Data, options: RipgrepOptions) -> [(text: String, terminator: String)] {
+        let separator: UInt8 = options.nullData ? 0 : UInt8(ascii: "\n")
+        var lines: [(String, String)] = []
+        var current = String.UnicodeScalarView()
+
+        for byte in data {
+            if byte == separator {
+                lines.append((String(current), String(UnicodeScalar(separator))))
+                current.removeAll(keepingCapacity: true)
+            } else {
+                current.append(UnicodeScalar(byte))
+            }
+        }
+
+        if !current.isEmpty || data.last != separator {
+            lines.append((String(current), ""))
+        }
+        return lines
+    }
+
     private func lastScalar(in contents: String, equals expected: UnicodeScalar) -> Bool {
         guard let last = contents.unicodeScalars.last else {
             return false
         }
         return last == expected
+    }
+}
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }
