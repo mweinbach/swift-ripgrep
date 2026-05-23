@@ -2214,9 +2214,22 @@ struct RipgrepSearcherTests {
             "needle \(String(repeating: "x", count: 100))",
         ])
 
+        let oversized = try TemporaryDirectory()
+        try oversized.write("needle \(String(repeating: "x", count: 100))\n", to: "large.txt")
         var output: [String] = []
         var errors: [String] = []
         var exitCode = RipgrepCLI.run(
+            arguments: ["--max-filesize", "10", "needle", oversized.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 1)
+        #expect(output.isEmpty)
+        #expect(errors.isEmpty)
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
             arguments: ["--max-filesize", "45k", "needle", root.url.path],
             stdout: { output.append($0) },
             stderr: { errors.append($0) }

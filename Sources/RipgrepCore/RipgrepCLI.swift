@@ -173,6 +173,7 @@ public enum RipgrepCLI {
               results.summary.filesSearched == 0,
               results.messages.isEmpty,
               results.filtered,
+              options.maxFileSize == nil,
               options.typeChanges.isEmpty else {
             return false
         }
