@@ -34,12 +34,8 @@ public enum RipgrepCLI {
             emitStdout("ripgrep \(version)", stdout: stdout)
             return 0
         case .pcre2Version:
-            if let version = pcre2Version(environment: environment) {
-                emitStdout("PCRE2 \(version) is available (JIT availability unknown)", stdout: stdout)
-                return 0
-            }
-            stderr("PCRE2 is not available in this Swift build")
-            return 2
+            emitStdout("PCRE2 is not available in this build of ripgrep.", stdout: stdout)
+            return 1
         case .generate(let mode):
             emitStdoutVerbatim(generate(mode), stdout: stdout)
             return 0
@@ -265,31 +261,6 @@ public enum RipgrepCLI {
         RipgrepArgumentParser.usage(version: version)
     }
 
-    private static func pcre2Version(environment: [String: String]) -> String? {
-        guard let executable = resolveExecutable("pcre2-config", environment: environment) else {
-            return nil
-        }
-        let process = Process()
-        process.executableURL = executable
-        process.arguments = ["--version"]
-        let output = Pipe()
-        process.standardOutput = output
-        process.standardError = FileHandle.nullDevice
-        do {
-            try process.run()
-        } catch {
-            return nil
-        }
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0,
-              let raw = String(data: data, encoding: .utf8) else {
-            return nil
-        }
-        let version = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        return version.isEmpty ? nil : version
-    }
-
     private static func generate(_ mode: GenerateMode) -> String {
         if let generated = generatedAsset(for: mode) {
             return generated
@@ -508,17 +479,6 @@ public enum RipgrepCLI {
         "--with-filename",
         "--word-regexp",
     ].joined(separator: " ")
-
-    private static func resolveExecutable(_ name: String, environment: [String: String]) -> URL? {
-        let paths = (environment["PATH"] ?? "").split(separator: ":").map(String.init)
-        for path in paths {
-            let candidate = URL(fileURLWithPath: path).appendingPathComponent(name)
-            if FileManager.default.isExecutableFile(atPath: candidate.path) {
-                return candidate
-            }
-        }
-        return nil
-    }
 
     public static func format(
         _ match: SearchMatch,

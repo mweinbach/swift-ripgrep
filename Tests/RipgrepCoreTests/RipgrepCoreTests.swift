@@ -3315,8 +3315,8 @@ struct RipgrepSearcherTests {
         #expect(errors == ["rg: error parsing flag --generate: choice 'bogus' is unrecognized"])
     }
 
-    @Test("prints detected PCRE2 version")
-    func printsDetectedPCRE2Version() throws {
+    @Test("reports PCRE2 unavailable")
+    func reportsPCRE2Unavailable() throws {
         let root = try TemporaryDirectory()
         try root.write("#!/bin/sh\nprintf '10.99\\n'\n", to: "pcre2-config")
         try root.makeExecutable("pcre2-config")
@@ -3330,9 +3330,9 @@ struct RipgrepSearcherTests {
             environment: ["PATH": root.url.path]
         )
 
-        #expect(exitCode == 0)
+        #expect(exitCode == 1)
         #expect(errors.isEmpty)
-        #expect(output == ["PCRE2 10.99 is available (JIT availability unknown)"])
+        #expect(output == ["PCRE2 is not available in this build of ripgrep."])
     }
 
     private func run(
