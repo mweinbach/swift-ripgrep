@@ -60,9 +60,7 @@ public struct PatternMatcher {
                     guard let range = Range(match.range, in: line) else {
                         return nil
                     }
-                    let replacement = options.replacement.map {
-                        regex.replacementString(for: match, in: line, offset: 0, template: $0)
-                    }
+                    let replacement = replacement(for: match, in: line)
                     return (range, replacement)
                 })
             case .literal(let literal):
@@ -297,7 +295,84 @@ public struct PatternMatcher {
         guard let replacement = options.replacement else {
             return nil
         }
-        return replacement.replacingOccurrences(of: "$0", with: String(line[range]))
+        return renderReplacement(replacement, line: line, ranges: [NSRange(range, in: line)])
+    }
+
+    private func replacement(for match: NSTextCheckingResult, in line: String) -> String? {
+        guard let replacement = options.replacement else {
+            return nil
+        }
+        let ranges = (0..<match.numberOfRanges).map { match.range(at: $0) }
+        return renderReplacement(replacement, line: line, ranges: ranges)
+    }
+
+    private func renderReplacement(_ template: String, line: String, ranges: [NSRange]) -> String {
+        var output = ""
+        var index = template.startIndex
+
+        while index < template.endIndex {
+            let character = template[index]
+            guard character == "$" else {
+                output.append(character)
+                index = template.index(after: index)
+                continue
+            }
+
+            let nextIndex = template.index(after: index)
+            guard nextIndex < template.endIndex else {
+                output.append(character)
+                index = nextIndex
+                continue
+            }
+
+            let next = template[nextIndex]
+            if next == "$" {
+                output.append("$")
+                index = template.index(after: nextIndex)
+                continue
+            }
+            if next == "{" {
+                guard let close = template[nextIndex...].firstIndex(of: "}") else {
+                    output.append("$")
+                    index = nextIndex
+                    continue
+                }
+                output += captureText(String(template[template.index(after: nextIndex)..<close]), line: line, ranges: ranges)
+                index = template.index(after: close)
+                continue
+            }
+
+            let nameStart = nextIndex
+            var nameEnd = nameStart
+            while nameEnd < template.endIndex, isCaptureNameCharacter(template[nameEnd]) {
+                nameEnd = template.index(after: nameEnd)
+            }
+            guard nameEnd > nameStart else {
+                output.append("$")
+                index = nextIndex
+                continue
+            }
+            output += captureText(String(template[nameStart..<nameEnd]), line: line, ranges: ranges)
+            index = nameEnd
+        }
+
+        return output
+    }
+
+    private func captureText(_ name: String, line: String, ranges: [NSRange]) -> String {
+        guard let index = Int(name), index < ranges.count else {
+            return ""
+        }
+        let range = ranges[index]
+        guard range.location != NSNotFound,
+              let stringRange = Range(range, in: line) else {
+            return ""
+        }
+        return String(line[stringRange])
+    }
+
+    private func isCaptureNameCharacter(_ character: Character) -> Bool {
+        character.isASCII && (character.isLetter || character.isNumber || character == "_")
     }
 
     private func lineStartIndex(in line: String) -> String.Index {

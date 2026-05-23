@@ -859,6 +859,9 @@ struct RipgrepSearcherTests {
             "[abc]",
             "[def]",
         ])
+        #expect(try run(["--replace", "${0}_${1}_${2}${3}_$$", #"([a-z]+)(\d+)"#, root.path("replace.txt")]) == [
+            "abc123_abc_123_$ def456_def_456_$",
+        ])
     }
 
     @Test("prints trim vimgrep and heading modes")
