@@ -1,5 +1,15 @@
 import Foundation
 
+private struct FileSearchOutcome {
+    let result: SearchFileResult
+    let message: String?
+
+    init(result: SearchFileResult, message: String? = nil) {
+        self.result = result
+        self.message = message
+    }
+}
+
 public struct RipgrepSearcher {
     private let fileManager: FileManager
     private let environment: [String: String]
@@ -46,8 +56,13 @@ public struct RipgrepSearcher {
             : try FileWalker(fileManager: fileManager)
                 .withEnvironment(environment)
                 .haystacksWithMessages(for: options)
+        var messages = walkResults.messages
         var files = walkResults.haystacks.map { haystack in
-            searchFile(haystack, matcher: matcher, options: options)
+            let outcome = searchFile(haystack, matcher: matcher, options: options)
+            if let message = outcome.message {
+                messages.append(message)
+            }
+            return outcome.result
         }
 
         if options.useStdin {
@@ -69,7 +84,7 @@ public struct RipgrepSearcher {
             }
         )
 
-        return SearchResults(files: files, summary: summary, messages: walkResults.messages)
+        return SearchResults(files: files, summary: summary, messages: messages)
     }
 
     private func matchedLineCount(_ match: SearchMatch) -> Int {
@@ -126,39 +141,108 @@ public struct RipgrepSearcher {
         _ haystack: Haystack,
         matcher: PatternMatcher,
         options: RipgrepOptions
-    ) -> SearchFileResult {
+    ) -> FileSearchOutcome {
         let fileURL = haystack.url
         guard let data = try? Data(contentsOf: fileURL) else {
-            return SearchFileResult(fileURL: fileURL, matches: [], searched: false)
+            return FileSearchOutcome(result: SearchFileResult(fileURL: fileURL, matches: [], searched: false))
+        }
+
+        if shouldPreprocess(haystack, options: options) {
+            return searchPreprocessedFile(
+                fileURL,
+                originalData: data,
+                matcher: matcher,
+                options: options
+            )
         }
 
         let binaryByteOffset = shouldCheckBinary(data, options: options) ? data.firstIndex(of: 0) : nil
         if let binaryByteOffset, options.binaryMode != .asText {
             if options.binaryMode == .automatic && !haystack.isExplicit {
-                return SearchFileResult(fileURL: fileURL, matches: [], searched: false)
+                return FileSearchOutcome(result: SearchFileResult(fileURL: fileURL, matches: [], searched: false))
             }
 
             let contents = decode(data, options: options)
             let result = searchContents(contents, fileURL: fileURL, matcher: matcher, options: options)
-            return SearchFileResult(
+            return FileSearchOutcome(result: SearchFileResult(
                 fileURL: fileURL,
                 matches: [],
                 lines: result.lines,
                 binaryByteOffset: binaryByteOffset,
                 hasBinaryMatch: result.hasMatch,
                 bytesSearched: data.count
-            )
+            ))
         }
 
         let contents = decode(data, options: options)
         let result = searchContents(contents, fileURL: fileURL, matcher: matcher, options: options)
-        return SearchFileResult(
+        return FileSearchOutcome(result: SearchFileResult(
             fileURL: result.fileURL,
             matches: result.matches,
             lines: result.lines,
             bytesSearched: data.count,
             searched: result.searched
-        )
+        ))
+    }
+
+    private func shouldPreprocess(_ haystack: Haystack, options: RipgrepOptions) -> Bool {
+        guard options.preprocessor != nil, !haystack.url.path.isEmpty else {
+            return false
+        }
+        guard !options.preGlobPatterns.isEmpty else {
+            return true
+        }
+        let matcher = GlobMatcher(patterns: options.preGlobPatterns, overrideSemantics: true)
+        return matcher.allows(relativePath: haystack.url.path, isDirectory: false)
+    }
+
+    private func searchPreprocessedFile(
+        _ fileURL: URL,
+        originalData: Data,
+        matcher: PatternMatcher,
+        options: RipgrepOptions
+    ) -> FileSearchOutcome {
+        guard let command = options.preprocessor else {
+            return FileSearchOutcome(result: SearchFileResult(fileURL: fileURL, matches: [], searched: false))
+        }
+        do {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.arguments = [command, fileURL.path]
+
+            let input = try FileHandle(forReadingFrom: fileURL)
+            let output = Pipe()
+            process.standardInput = input
+            process.standardOutput = output
+            process.standardError = FileHandle.nullDevice
+
+            try process.run()
+            input.closeFile()
+            let data = output.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+
+            guard process.terminationStatus == 0 else {
+                return FileSearchOutcome(
+                    result: SearchFileResult(fileURL: fileURL, matches: [], searched: false),
+                    message: "\(fileURL.path): preprocessor command failed: '\"\(command)\" \"\(fileURL.path)\"': <stderr is empty>"
+                )
+            }
+
+            let contents = decode(data, options: options)
+            let result = searchContents(contents, fileURL: fileURL, matcher: matcher, options: options)
+            return FileSearchOutcome(result: SearchFileResult(
+                fileURL: result.fileURL,
+                matches: result.matches,
+                lines: result.lines,
+                bytesSearched: originalData.count,
+                searched: result.searched
+            ))
+        } catch {
+            return FileSearchOutcome(
+                result: SearchFileResult(fileURL: fileURL, matches: [], searched: false),
+                message: "\(fileURL.path): preprocessor command could not start: '\(command)': \(error)"
+            )
+        }
     }
 
     private func searchContents(

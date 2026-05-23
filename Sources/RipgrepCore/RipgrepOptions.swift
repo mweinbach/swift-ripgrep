@@ -94,6 +94,8 @@ public struct RipgrepOptions: Equatable {
     public var ignoreFileCaseInsensitive = false
     public var ignoreFiles: [URL] = []
     public var globPatterns: [String] = []
+    public var preprocessor: String?
+    public var preGlobPatterns: [String] = []
     public var typeChanges: [TypeChange] = []
     public var followSymlinks = false
     public var binaryMode: BinaryMode = .automatic
@@ -452,6 +454,25 @@ public enum RipgrepArgumentParser {
                 index += 1
             case let value where value.hasPrefix("--ignore-file="):
                 options.ignoreFiles.append(URL(fileURLWithPath: String(value.dropFirst("--ignore-file=".count))))
+            case "--pre":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--pre <COMMAND>' requires a value")
+                }
+                options.preprocessor = arguments[index].isEmpty ? nil : arguments[index]
+                index += 1
+            case let value where value.hasPrefix("--pre="):
+                let command = String(value.dropFirst("--pre=".count))
+                options.preprocessor = command.isEmpty ? nil : command
+            case "--no-pre":
+                options.preprocessor = nil
+            case "--pre-glob":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--pre-glob <GLOB>' requires a value")
+                }
+                options.preGlobPatterns.append(arguments[index])
+                index += 1
+            case let value where value.hasPrefix("--pre-glob="):
+                options.preGlobPatterns.append(String(value.dropFirst("--pre-glob=".count)))
             case "-g", "--glob":
                 guard index < arguments.count else {
                     return .error("error: The argument '--glob <GLOB>' requires a value")
@@ -788,6 +809,8 @@ public enum RipgrepArgumentParser {
               --glob-case-insensitive Process -g/--glob patterns case insensitively
               --ignore-file-case-insensitive Process ignore files case insensitively
               --ignore-file PATH     Add a custom ignore file
+              --pre COMMAND          Search stdout of COMMAND for each path
+              --pre-glob GLOB        Include or exclude files from preprocessing
           -g, --glob GLOB            Include or exclude paths with an override glob
           -t, --type TYPE            Only search files matching TYPE
           -T, --type-not TYPE        Do not search files matching TYPE

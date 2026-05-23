@@ -445,6 +445,53 @@ struct RipgrepSearcherTests {
         ])
     }
 
+    @Test("searches preprocessor output")
+    func searchesPreprocessorOutput() throws {
+        let root = try TemporaryDirectory()
+        try root.write("raw\n", to: "doc.md")
+        try root.write("needle\n", to: "plain.txt")
+        let script = root.path("pre.sh")
+        try root.write("""
+        #!/bin/sh
+        printf 'converted needle from %s\\n' "$(basename "$1")"
+        """, to: "pre.sh")
+        try root.makeExecutable("pre.sh")
+
+        #expect(try run(["--pre", script, "needle", root.path("doc.md")]) == [
+            "converted needle from doc.md",
+        ])
+        #expect(Set(pathBasenames(try run([
+            "--pre",
+            script,
+            "--pre-glob",
+            "*.md",
+            "needle",
+            root.url.path,
+        ]))) == Set(["doc.md", "plain.txt", "pre.sh"]))
+        #expect(try run(["--pre", script, "--pre", "", "needle", root.path("plain.txt")]) == [
+            "needle",
+        ])
+        #expect(try run(["--pre", script, "--no-pre", "needle", root.path("plain.txt")]) == [
+            "needle",
+        ])
+
+        try root.write("""
+        #!/bin/sh
+        exit 7
+        """, to: "fail.sh")
+        try root.makeExecutable("fail.sh")
+        var output: [String] = []
+        var errors: [String] = []
+        let exitCode = RipgrepCLI.run(
+            arguments: ["--pre", root.path("fail.sh"), "needle", root.path("doc.md")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors.first?.contains("preprocessor command failed") == true)
+    }
+
     @Test("prints only matching text and replacements")
     func printsOnlyMatchingAndReplacements() throws {
         let root = try TemporaryDirectory()
@@ -999,6 +1046,13 @@ private final class TemporaryDirectory {
             withIntermediateDirectories: true
         )
         try data.write(to: fileURL)
+    }
+
+    func makeExecutable(_ relativePath: String) throws {
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: path(relativePath)
+        )
     }
 
     func path(_ relativePath: String) -> String {
