@@ -2622,6 +2622,18 @@ struct RipgrepSearcherTests {
             "needle",
             root.url.path,
         ])) == ["keep.swift"])
+        try root.createDirectory("sub")
+        try root.write("needle\n", to: "sub/nested.txt")
+        #expect(pathBasenames(try run([
+            "--sort",
+            "path",
+            "-g",
+            "*.txt",
+            "-g",
+            "!sub/*",
+            "needle",
+            root.url.path,
+        ])) == ["skip.txt", "nested.txt"])
 
         try root.createDirectory("ignore-dir")
         var output: [String] = []

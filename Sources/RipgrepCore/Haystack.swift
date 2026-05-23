@@ -187,12 +187,13 @@ public struct FileWalker {
         ])
         let isDirectory = values.isDirectory == true
         let relativePath = relativePath(for: url, rootBase: rootBase)
+        let overridePath = overridePath(for: url)
 
         if !isExplicit {
-            let overrideDecision = overrides.decision(relativePath: relativePath, isDirectory: isDirectory)
+            let overrideDecision = overrides.decision(relativePath: overridePath, isDirectory: isDirectory)
             let isIncludedByOverride = overrideDecision == .include
             if overrideDecision == .exclude
-                || (overrideDecision == nil && !overrides.allows(relativePath: relativePath, isDirectory: isDirectory)) {
+                || (overrideDecision == nil && !overrides.allows(relativePath: overridePath, isDirectory: isDirectory)) {
                 debug("ignoring \(url.path): override glob", options: options, diagnostics: &diagnostics)
                 return []
             }
@@ -654,6 +655,18 @@ public struct FileWalker {
             return String(path.dropFirst(prefix.count))
         }
         return url.lastPathComponent
+    }
+
+    private func overridePath(for url: URL) -> String {
+        let path = url.standardizedFileURL.path
+        let cwd = URL(fileURLWithPath: fileManager.currentDirectoryPath, isDirectory: true)
+            .standardizedFileURL
+            .path
+        let prefix = cwd.hasSuffix("/") ? cwd : "\(cwd)/"
+        if path.hasPrefix(prefix) {
+            return String(path.dropFirst(prefix.count))
+        }
+        return path.hasPrefix("/") ? String(path.dropFirst()) : path
     }
 
     private func relativePathIfContained(_ url: URL, in baseURL: URL) -> String? {
