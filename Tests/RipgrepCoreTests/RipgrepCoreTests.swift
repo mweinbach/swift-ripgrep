@@ -1473,6 +1473,16 @@ struct RipgrepSearcherTests {
         #expect(errors.count == 1)
     }
 
+    @Test("honors escaped slash in ignore patterns")
+    func honorsEscapedSlashInIgnorePatterns() throws {
+        let root = try TemporaryDirectory()
+        try root.write(#"foo\/"#, to: ".ignore")
+        try root.createDirectory("foo")
+        try root.write("test\n", to: "foo/bar")
+
+        #expect(try runAllowingNoMatch(["--files", root.url.path]) == [])
+    }
+
     @Test("warns when filters leave nothing searched")
     func warnsWhenFiltersLeaveNothingSearched() throws {
         let root = try TemporaryDirectory()

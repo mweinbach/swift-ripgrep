@@ -15,7 +15,7 @@ public struct GlobMatcher: Equatable {
         let basenameOnly: Bool
 
         init(pattern: String, decision: Decision, caseInsensitive: Bool) {
-            var source = pattern
+            var source = pattern.replacingOccurrences(of: #"\/"#, with: "/")
             let directoryOnly = source.hasSuffix("/")
             if directoryOnly {
                 source.removeLast()
