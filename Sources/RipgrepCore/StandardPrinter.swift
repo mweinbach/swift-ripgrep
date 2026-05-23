@@ -41,6 +41,9 @@ public struct StandardPrinter {
                     if let binaryLine = formatBinaryMatch(result, showPath: options.withFilename != false) {
                         return [binaryLine]
                     }
+                    if options.passthru || options.beforeContext > 0 || options.afterContext > 0 {
+                        return vimgrepContextLines(for: result, showPath: options.withFilename != false)
+                    }
                     return formatVimgrep(result, showPath: options.withFilename != false)
                 }
             }
@@ -159,31 +162,39 @@ public struct StandardPrinter {
 
     private func formatVimgrep(_ result: SearchFileResult, showPath: Bool) -> [String] {
         result.matches.flatMap { match in
-            match.spans.map { span in
-                let text = options.onlyMatching
-                    ? (span.replacement ?? span.text)
-                    : vimgrepLineText(for: match)
-                let fields = vimgrepFields(
-                    lineNumber: match.lineNumber,
-                    column: span.startColumn,
-                    text: text
-                )
-                guard showPath else {
-                    return "\(fields.joined(separator: options.fieldMatchSeparator))\(outputTerminator(match.lineTerminator))"
-                }
-                let path = renderPath(for: match.fileURL, line: match.lineNumber, column: span.startColumn)
-                return "\(path)\(matchPathFieldSeparator())\(fields.joined(separator: options.fieldMatchSeparator))\(outputTerminator(match.lineTerminator))"
-            }
+            formatVimgrep(match, showPath: showPath)
         }
     }
 
-    private func vimgrepFields(lineNumber: Int, column: Int, text: String) -> [String] {
+    private func formatVimgrep(_ match: SearchMatch, showPath: Bool) -> [String] {
+        match.spans.map { span in
+            let text = options.onlyMatching
+                ? (span.replacement ?? span.text)
+                : vimgrepLineText(for: match)
+            let fields = vimgrepFields(
+                lineNumber: match.lineNumber,
+                column: span.startColumn,
+                byteOffset: options.byteOffset ? match.absoluteOffset + span.startByte : nil,
+                text: text
+            )
+            guard showPath else {
+                return "\(fields.joined(separator: options.fieldMatchSeparator))\(outputTerminator(match.lineTerminator))"
+            }
+            let path = renderPath(for: match.fileURL, line: match.lineNumber, column: span.startColumn)
+            return "\(path)\(matchPathFieldSeparator())\(fields.joined(separator: options.fieldMatchSeparator))\(outputTerminator(match.lineTerminator))"
+        }
+    }
+
+    private func vimgrepFields(lineNumber: Int, column: Int, byteOffset: Int?, text: String) -> [String] {
         var fields: [String] = []
         if !options.noLineNumber {
             fields.append("\(lineNumber)")
         }
         if !options.noColumn {
             fields.append("\(column)")
+        }
+        if let byteOffset {
+            fields.append("\(byteOffset)")
         }
         fields.append(text)
         return fields
@@ -358,6 +369,46 @@ public struct StandardPrinter {
         return output
     }
 
+    private func vimgrepContextLines(for result: SearchFileResult, showPath: Bool) -> [String] {
+        let matchesByLine = result.matches.reduce(into: [Int: [SearchMatch]]()) { grouped, match in
+            grouped[match.lineNumber, default: []].append(match)
+        }
+        let selectedLineNumbers: [Int]
+        if options.passthru {
+            selectedLineNumbers = result.lines.map(\.lineNumber)
+        } else {
+            let lineCount = result.lines.count
+            let selected = result.matches.reduce(into: Set<Int>()) { lineNumbers, match in
+                let lower = max(1, match.lineNumber - options.beforeContext)
+                let upper = min(lineCount, match.lineNumber + options.afterContext)
+                for lineNumber in lower...upper {
+                    lineNumbers.insert(lineNumber)
+                }
+            }
+            selectedLineNumbers = selected.sorted()
+        }
+
+        var output: [String] = []
+        var previous: Int?
+        for lineNumber in selectedLineNumbers {
+            if let previous, lineNumber > previous + 1, !options.passthru {
+                if let contextSeparator = options.contextSeparator {
+                    output.append(contextSeparator)
+                }
+            }
+            guard let line = result.lines.first(where: { $0.lineNumber == lineNumber }) else {
+                continue
+            }
+            if let matches = matchesByLine[lineNumber] {
+                output.append(contentsOf: matches.flatMap { formatVimgrep($0, showPath: showPath) })
+            } else {
+                output.append(formatVimgrepContextLine(line, fileURL: result.fileURL, showPath: showPath))
+            }
+            previous = lineNumber
+        }
+        return output
+    }
+
     private func contextLines(for results: SearchResults, showPath: Bool) -> [String] {
         let shouldSeparateFiles = !options.passthru
             && (options.beforeContext > 0 || options.afterContext > 0)
@@ -427,6 +478,19 @@ public struct StandardPrinter {
         let path = showPath ? renderPath(for: fileURL, line: line.lineNumber) : nil
         if options.wantsLineNumber {
             fields.append(OutputField("\(line.lineNumber)", colorTarget: .line))
+        }
+
+        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldContextSeparator))\(renderedLine(line.line, omittedKind: .context))\(outputTerminator(line.lineTerminator, line: line.line))"
+    }
+
+    private func formatVimgrepContextLine(_ line: SearchLine, fileURL: URL, showPath: Bool) -> String {
+        var fields: [OutputField] = []
+        let path = showPath ? renderPath(for: fileURL, line: line.lineNumber) : nil
+        if !options.noLineNumber {
+            fields.append(OutputField("\(line.lineNumber)", colorTarget: .line))
+        }
+        if options.byteOffset {
+            fields.append(OutputField("\(line.absoluteOffset)", colorTarget: nil))
         }
 
         return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldContextSeparator))\(renderedLine(line.line, omittedKind: .context))\(outputTerminator(line.lineTerminator, line: line.line))"

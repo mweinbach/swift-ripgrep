@@ -1591,6 +1591,27 @@ struct RipgrepSearcherTests {
             "",
             "xx needle",
         ])
+        try root.write("alpha\nneedle\ncontext\nneedle2\nomega\n", to: "vimgrep-context.txt")
+        #expect(try run(["--vimgrep", "-C1", "needle", root.path("vimgrep-context.txt")]) == [
+            "\(root.path("vimgrep-context.txt"))-1-alpha",
+            "\(root.path("vimgrep-context.txt")):2:1:needle",
+            "\(root.path("vimgrep-context.txt"))-3-context",
+            "\(root.path("vimgrep-context.txt")):4:1:needle2",
+            "\(root.path("vimgrep-context.txt"))-5-omega",
+        ])
+        #expect(try run(["--vimgrep", "-C1", "-b", "needle", root.path("vimgrep-context.txt")]) == [
+            "\(root.path("vimgrep-context.txt"))-1-0-alpha",
+            "\(root.path("vimgrep-context.txt")):2:1:6:needle",
+            "\(root.path("vimgrep-context.txt"))-3-13-context",
+            "\(root.path("vimgrep-context.txt")):4:1:21:needle2",
+            "\(root.path("vimgrep-context.txt"))-5-29-omega",
+        ])
+        #expect(try run(["--vimgrep", "--no-filename", "-A1", "needle", root.path("vimgrep-context.txt")]) == [
+            "2:1:needle",
+            "3-context",
+            "4:1:needle2",
+            "5-omega",
+        ])
     }
 
     @Test("prints pretty and ANSI color modes")
