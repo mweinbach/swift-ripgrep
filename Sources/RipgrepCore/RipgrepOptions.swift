@@ -62,6 +62,7 @@ public struct RipgrepOptions: Equatable {
     public var replacement: String?
     public var json = false
     public var stats = false
+    public var includeZero = false
     public var maxCount: Int?
     public var maxColumns: Int?
     public var maxColumnsPreview = false
@@ -97,6 +98,8 @@ public struct RipgrepOptions: Equatable {
     public var beforeContext = 0
     public var afterContext = 0
     public var contextSeparator: String? = "--"
+    public var fieldMatchSeparator = ":"
+    public var fieldContextSeparator = "-"
     public var passthru = false
     public var nullData = false
 
@@ -244,6 +247,10 @@ public enum RipgrepArgumentParser {
                 options.stats = true
             case "--no-stats":
                 options.stats = false
+            case "--include-zero":
+                options.includeZero = true
+            case "--no-include-zero":
+                options.includeZero = false
             case "-M", "--max-columns":
                 guard index < arguments.count else {
                     return .error("error: The argument '--max-columns <NUM>' requires a value")
@@ -618,6 +625,22 @@ public enum RipgrepArgumentParser {
                 options.contextSeparator = String(value.dropFirst("--context-separator=".count))
             case "--no-context-separator":
                 options.contextSeparator = nil
+            case "--field-match-separator":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--field-match-separator <SEPARATOR>' requires a value")
+                }
+                options.fieldMatchSeparator = parseEscapedSeparator(arguments[index])
+                index += 1
+            case let value where value.hasPrefix("--field-match-separator="):
+                options.fieldMatchSeparator = parseEscapedSeparator(String(value.dropFirst("--field-match-separator=".count)))
+            case "--field-context-separator":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--field-context-separator <SEPARATOR>' requires a value")
+                }
+                options.fieldContextSeparator = parseEscapedSeparator(arguments[index])
+                index += 1
+            case let value where value.hasPrefix("--field-context-separator="):
+                options.fieldContextSeparator = parseEscapedSeparator(String(value.dropFirst("--field-context-separator=".count)))
             case "-c", "--count":
                 options.printMode = .count
                 options.json = false
@@ -695,6 +718,7 @@ public enum RipgrepArgumentParser {
           -r, --replace TEXT         Replace matches with the given text
               --json                 Show search results in JSON Lines format
               --stats                Print statistics about the search
+              --include-zero         Print count output for files with zero matches
           -m, --max-count NUM        Limit matching lines per file
           -M, --max-columns NUM      Omit matching lines at least NUM bytes long
               --max-columns-preview  Show a preview for omitted long lines
@@ -739,6 +763,8 @@ public enum RipgrepArgumentParser {
           -B, --before-context NUM   Show NUM lines before each match
           -C, --context NUM          Show NUM lines before and after each match
               --context-separator S  Set the separator for context chunks
+              --field-match-separator S   Set field separator for matching lines
+              --field-context-separator S Set field separator for context lines
               --passthru             Print both matching and non-matching lines
           -L, --follow               Follow symbolic links
               --binary               Search binary files but suppress binary output
@@ -811,6 +837,73 @@ public enum RipgrepArgumentParser {
             return nil
         }
         return value.first
+    }
+
+    private static func parseEscapedSeparator(_ raw: String) -> String {
+        var output = ""
+        var index = raw.startIndex
+
+        while index < raw.endIndex {
+            let character = raw[index]
+            guard character == "\\" else {
+                output.append(character)
+                index = raw.index(after: index)
+                continue
+            }
+
+            let nextIndex = raw.index(after: index)
+            guard nextIndex < raw.endIndex else {
+                output.append(character)
+                index = nextIndex
+                continue
+            }
+
+            let next = raw[nextIndex]
+            switch next {
+            case "0":
+                output.append("\0")
+                index = raw.index(after: nextIndex)
+            case "n":
+                output.append("\n")
+                index = raw.index(after: nextIndex)
+            case "r":
+                output.append("\r")
+                index = raw.index(after: nextIndex)
+            case "t":
+                output.append("\t")
+                index = raw.index(after: nextIndex)
+            case "\\":
+                output.append("\\")
+                index = raw.index(after: nextIndex)
+            case "x":
+                let firstHex = raw.index(after: nextIndex)
+                guard firstHex < raw.endIndex else {
+                    output.append("\\x")
+                    index = firstHex
+                    continue
+                }
+                let secondHex = raw.index(after: firstHex)
+                guard secondHex < raw.endIndex else {
+                    output.append("\\x")
+                    output.append(raw[firstHex])
+                    index = secondHex
+                    continue
+                }
+                let hex = String(raw[firstHex...secondHex])
+                if let scalarValue = UInt32(hex, radix: 16),
+                   let scalar = UnicodeScalar(scalarValue) {
+                    output.append(Character(scalar))
+                } else {
+                    output.append("\\x\(hex)")
+                }
+                index = raw.index(after: secondHex)
+            default:
+                output.append(next)
+                index = raw.index(after: nextIndex)
+            }
+        }
+
+        return output
     }
 
     private static func parseSort(_ raw: String, reverse: Bool) -> SortMode? {

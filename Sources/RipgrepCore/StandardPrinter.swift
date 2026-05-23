@@ -55,7 +55,7 @@ public struct StandardPrinter {
                 return result.matches.flatMap { formatSearchMatch($0, showPath: showPath(for: results)) }
             }
         case .count:
-            return results.files.filter(\.hasMatch).map { result in
+            return results.files.filter { options.includeZero ? $0.searched : $0.hasMatch }.map { result in
                 let count = options.onlyMatching
                     ? result.matches.reduce(0) { $0 + $1.matchCount }
                     : result.matches.count + (result.hasBinaryMatch ? 1 : 0)
@@ -65,7 +65,7 @@ public struct StandardPrinter {
                 return "\(count)"
             }
         case .countMatches:
-            return results.files.filter(\.hasMatch).map { result in
+            return results.files.filter { options.includeZero ? $0.searched : $0.hasMatch }.map { result in
                 let count = result.matches.reduce(0) { $0 + $1.matchCount } + (result.hasBinaryMatch ? 1 : 0)
                 if showPath(for: results) {
                     return "\(displayPath(for: result.fileURL))\(pathFieldSeparator())\(count)"
@@ -100,7 +100,7 @@ public struct StandardPrinter {
             fields.append("\(match.absoluteOffset)")
         }
 
-        return "\(prefix(path: path, fields: fields, fieldSeparator: ":"))\(renderedLine(for: match))"
+        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(renderedLine(for: match))"
     }
 
     private func formatSearchMatch(_ match: SearchMatch, showPath: Bool) -> [String] {
@@ -115,7 +115,7 @@ public struct StandardPrinter {
                 fields.append("\(match.lineNumber + offset)")
             }
             let rendered = renderedLine(line)
-            return "\(prefix(path: path, fields: fields, fieldSeparator: ":"))\(rendered)"
+            return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(rendered)"
         }
     }
 
@@ -125,7 +125,7 @@ public struct StandardPrinter {
                 let text = options.onlyMatching
                     ? (span.replacement ?? span.text)
                     : renderedLine(match.line)
-                return "\(displayPath(for: match.fileURL))\(pathFieldSeparator())\(match.lineNumber):\(span.startColumn):\(text)\(outputTerminator(match.lineTerminator))"
+                return "\(displayPath(for: match.fileURL))\(matchPathFieldSeparator())\(match.lineNumber)\(options.fieldMatchSeparator)\(span.startColumn)\(options.fieldMatchSeparator)\(text)\(outputTerminator(match.lineTerminator))"
             }
         }
     }
@@ -136,7 +136,7 @@ public struct StandardPrinter {
         }
         let message = #"binary file matches (found "\0" byte around offset \#(offset))"#
         if showPath {
-            return "\(displayPath(for: result.fileURL))\(pathFieldSeparator()) \(message)"
+            return "\(displayPath(for: result.fileURL))\(matchPathFieldSeparator()) \(message)"
         }
         return message
     }
@@ -155,7 +155,7 @@ public struct StandardPrinter {
                 fields.append("\(match.absoluteOffset + span.startByte)")
             }
             let text = "\(span.replacement ?? span.text)\(outputTerminator(match.lineTerminator))"
-            return "\(prefix(path: path, fields: fields, fieldSeparator: ":"))\(text)"
+            return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(text)"
         }
     }
 
@@ -229,7 +229,7 @@ public struct StandardPrinter {
             fields.append("\(line.lineNumber)")
         }
 
-        return "\(prefix(path: path, fields: fields, fieldSeparator: "-"))\(renderedLine(line.line))\(outputTerminator(line.lineTerminator))"
+        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldContextSeparator))\(renderedLine(line.line))\(outputTerminator(line.lineTerminator))"
     }
 
     private func renderedLine(for match: SearchMatch) -> String {
@@ -262,6 +262,10 @@ public struct StandardPrinter {
 
     private func pathFieldSeparator() -> String {
         options.nullPathTerminator ? "\0" : ":"
+    }
+
+    private func matchPathFieldSeparator() -> String {
+        options.nullPathTerminator ? "\0" : options.fieldMatchSeparator
     }
 
     private func prefix(path: String?, fields: [String], fieldSeparator: String) -> String {

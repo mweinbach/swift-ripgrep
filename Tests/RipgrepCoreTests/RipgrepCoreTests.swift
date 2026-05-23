@@ -66,6 +66,30 @@ struct RipgrepSearcherTests {
         ])
         #expect(try run(["-l", "needle", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == ["one.txt"])
         #expect(try run(["--files-without-match", "needle", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == ["two.txt"])
+        try root.write("pin\nmiddle\nhay\n", to: "ctx.txt")
+        #expect(try run([
+            "-n",
+            "-C1",
+            "--field-match-separator",
+            "::",
+            "--field-context-separator",
+            "~~",
+            "pin",
+            root.path("ctx.txt"),
+        ]) == [
+            "1::pin",
+            "2~~middle",
+        ])
+        #expect(try run([
+            "--vimgrep",
+            "--field-match-separator",
+            "::",
+            "needle",
+            root.path("one.txt"),
+        ]) == [
+            "\(root.path("one.txt"))::2::1::needle here",
+            "\(root.path("one.txt"))::3::1::needle there",
+        ])
     }
 
     @Test("prints NUL terminated paths and custom path separators")
@@ -110,6 +134,23 @@ struct RipgrepSearcherTests {
         #expect(try run(["--count-matches", "needle", root.path("many.txt")]) == ["3"])
         #expect(pathBasenames(try run(["--count-matches", "needle", root.url.path])) == ["many.txt"])
         #expect(try runAllowingNoMatch(["-c", "needle", root.path("none.txt")]) == [])
+
+        #expect(countBasenames(try run(["-c", "--include-zero", "needle", root.url.path])) == [
+            "many.txt:2",
+            "none.txt:0",
+        ])
+        #expect(countBasenames(try run(["--count-matches", "--include-zero", "needle", root.url.path])) == [
+            "many.txt:3",
+            "none.txt:0",
+        ])
+
+        var output: [String] = []
+        let exitCode = RipgrepCLI.run(
+            arguments: ["-c", "--include-zero", "absent", root.path("none.txt")],
+            stdout: { output.append($0) }
+        )
+        #expect(exitCode == 1)
+        #expect(output == ["0"])
     }
 
     @Test("omits long matching lines after max columns")
@@ -717,6 +758,16 @@ struct RipgrepSearcherTests {
         lines.map { line in
             let path = line.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? line
             return URL(fileURLWithPath: path).lastPathComponent
+        }
+    }
+
+    private func countBasenames(_ lines: [String]) -> [String] {
+        lines.map { line in
+            let pieces = line.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+            guard pieces.count == 2 else {
+                return line
+            }
+            return "\(URL(fileURLWithPath: String(pieces[0])).lastPathComponent):\(pieces[1])"
         }
     }
 
