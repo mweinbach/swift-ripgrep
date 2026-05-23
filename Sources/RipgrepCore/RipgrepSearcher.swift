@@ -247,9 +247,12 @@ public struct RipgrepSearcher {
                 options: options
             )
             let binaryDetectedBeforeSearch = binaryByteOffset < Self.binaryDetectionBufferSize
-            let printableMatches = binaryDetectedBeforeSearch && !haystack.isExplicit
+            let visibleMatches = binaryDetectedBeforeSearch && !haystack.isExplicit
                 ? []
                 : matchesBeforeBinary(result.matches, binaryByteOffset: binaryByteOffset)
+            let emittedMatches = shouldCountSuppressedBinaryMatches(options)
+                ? result.matches
+                : visibleMatches
             if options.binaryMode == .automatic && !haystack.isExplicit && binaryDetectedBeforeSearch {
                 return FileSearchOutcome(result: SearchFileResult(
                     fileURL: fileURL,
@@ -259,12 +262,12 @@ public struct RipgrepSearcher {
                     searched: true
                 ))
             }
-            if options.binaryMode == .automatic && !haystack.isExplicit && printableMatches.isEmpty {
+            if options.binaryMode == .automatic && !haystack.isExplicit && visibleMatches.isEmpty {
                 return FileSearchOutcome(result: SearchFileResult(fileURL: fileURL, matches: [], searched: false))
             }
             return FileSearchOutcome(result: SearchFileResult(
                 fileURL: fileURL,
-                matches: printableMatches,
+                matches: emittedMatches,
                 lines: result.lines,
                 binaryByteOffset: binaryByteOffset,
                 hasBinaryMatch: result.hasMatch,
@@ -325,6 +328,18 @@ public struct RipgrepSearcher {
     private func matchesBeforeBinary(_ matches: [SearchMatch], binaryByteOffset: Int) -> [SearchMatch] {
         matches.filter { match in
             match.absoluteOffset + match.lineWithTerminator.utf8.count <= binaryByteOffset
+        }
+    }
+
+    private func shouldCountSuppressedBinaryMatches(_ options: RipgrepOptions) -> Bool {
+        guard options.binaryMode == .searchAndSuppress else {
+            return false
+        }
+        switch options.printMode {
+        case .count, .countMatches:
+            return true
+        case .matchingLines, .filesWithMatches, .filesWithoutMatch:
+            return false
         }
     }
 
