@@ -31,6 +31,39 @@ struct RipgrepSearcherTests {
         #expect(try run(["-x", "abc", root.path("patterns.txt")]) == ["abc"])
     }
 
+    @Test("honors regex engine flag ordering")
+    func honorsRegexEngineFlagOrdering() throws {
+        let root = try TemporaryDirectory()
+        try root.write("ab\nac\n", to: "engine.txt")
+
+        var output: [String] = []
+        var errors: [String] = []
+        var exitCode = RipgrepCLI.run(
+            arguments: ["-o", #"(?<=a)b"#, root.path("engine.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors.first?.contains("look-around") == true)
+
+        #expect(try run(["-o", "--engine=auto", #"(?<=a)b"#, root.path("engine.txt")]) == ["b"])
+        #expect(try run(["-o", "-P", #"(?<=a)b"#, root.path("engine.txt")]) == ["b"])
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["-o", "-P", "--no-pcre2", #"(?<=a)b"#, root.path("engine.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors.first?.contains("look-around") == true)
+
+        #expect(try run(["-o", "--engine=default", "--auto-hybrid-regex", #"(?<=a)b"#, root.path("engine.txt")]) == ["b"])
+    }
+
     @Test("honors no unicode regex and literal semantics")
     func honorsNoUnicodeSemantics() throws {
         let root = try TemporaryDirectory()

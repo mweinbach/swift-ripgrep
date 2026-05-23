@@ -33,6 +33,12 @@ public enum ColorMode: Equatable {
     case ansi
 }
 
+public enum EngineMode: Equatable {
+    case `default`
+    case pcre2
+    case automatic
+}
+
 public enum ColorTarget: Equatable {
     case path
     case line
@@ -84,6 +90,7 @@ public struct RipgrepOptions: Equatable {
     public var ignoreCase = false
     public var smartCase = false
     public var fixedStrings = false
+    public var engineMode: EngineMode = .default
     public var encodingMode: EncodingMode = .automatic
     public var wordRegexp = false
     public var lineRegexp = false
@@ -210,6 +217,29 @@ public enum RipgrepArgumentParser {
                 options.smartCase = false
             case "-F", "--fixed-strings":
                 options.fixedStrings = true
+            case "--engine":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--engine <ENGINE>' requires a value")
+                }
+                guard let mode = parseEngineMode(arguments[index]) else {
+                    return .error("error: unrecognized regex engine '\(arguments[index])'")
+                }
+                options.engineMode = mode
+                index += 1
+            case let value where value.hasPrefix("--engine="):
+                let raw = String(value.dropFirst("--engine=".count))
+                guard let mode = parseEngineMode(raw) else {
+                    return .error("error: unrecognized regex engine '\(raw)'")
+                }
+                options.engineMode = mode
+            case "-P", "--pcre2":
+                options.engineMode = .pcre2
+            case "--no-pcre2":
+                options.engineMode = .default
+            case "--auto-hybrid-regex":
+                options.engineMode = .automatic
+            case "--no-auto-hybrid-regex":
+                options.engineMode = .default
             case "-E", "--encoding":
                 guard index < arguments.count else {
                     return .error("error: The argument '--encoding <ENCODING>' requires a value")
@@ -869,6 +899,8 @@ public enum RipgrepArgumentParser {
           -S, --smart-case           Search case insensitively if the pattern is lowercase
           -s, --case-sensitive       Search case sensitively
           -F, --fixed-strings        Treat the pattern as a literal string
+              --engine ENGINE        Use regex engine: default, pcre2 or auto
+          -P, --pcre2                Enable PCRE2-style regex matching
           -E, --encoding ENCODING    Specify text encoding: auto, none, utf-8, utf-16/le/be
           -e, --regexp PATTERN       Add a pattern to search for
           -f, --file PATTERNFILE     Read patterns from a file
@@ -995,6 +1027,19 @@ public enum RipgrepArgumentParser {
             return .explicit(.utf16LittleEndian)
         case "utf-16be", "utf16be":
             return .explicit(.utf16BigEndian)
+        default:
+            return nil
+        }
+    }
+
+    private static func parseEngineMode(_ raw: String) -> EngineMode? {
+        switch raw {
+        case "default":
+            return .default
+        case "pcre2":
+            return .pcre2
+        case "auto":
+            return .automatic
         default:
             return nil
         }

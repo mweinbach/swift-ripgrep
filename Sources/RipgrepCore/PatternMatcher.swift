@@ -15,6 +15,9 @@ public struct PatternMatcher {
             if options.fixedStrings {
                 return .literal(options.effectiveIgnoreCase ? Self.foldedCase(pattern, options: options) : pattern)
             } else {
+                if options.engineMode == .default, let unsupported = Self.defaultEngineUnsupportedFeature(in: pattern) {
+                    throw RipgrepError.invalidRegex("\(unsupported) is not supported by the default regex engine; use --pcre2 or --engine=auto")
+                }
                 let source = Self.regexPattern(for: pattern, options: options)
                 do {
                     var regexOptions: NSRegularExpression.Options = options.effectiveIgnoreCase ? [.caseInsensitive] : []
@@ -112,6 +115,52 @@ public struct PatternMatcher {
             source = strictLineEndPattern(for: source)
         }
         return source
+    }
+
+    private static func defaultEngineUnsupportedFeature(in pattern: String) -> String? {
+        var escaped = false
+        var inClass = false
+        var index = pattern.startIndex
+
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                if character.isNumber {
+                    return "backreferences"
+                }
+                escaped = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "[" {
+                inClass = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "]" {
+                inClass = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if !inClass,
+               character == "(",
+               hasAnyPrefix(["(?=", "(?!", "(?<=", "(?<!", "(?>"], at: index, in: pattern) {
+                return "look-around"
+            }
+            index = pattern.index(after: index)
+        }
+        return nil
+    }
+
+    private static func hasAnyPrefix(_ prefixes: [String], at index: String.Index, in text: String) -> Bool {
+        prefixes.contains { prefix in
+            text[index...].hasPrefix(prefix)
+        }
     }
 
     private static func asciiRegexPattern(for pattern: String) -> String {
