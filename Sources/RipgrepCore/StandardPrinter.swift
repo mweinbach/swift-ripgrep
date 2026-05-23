@@ -178,7 +178,7 @@ public struct StandardPrinter {
            options.maxColumnsPreview,
            line.utf8.count >= maxColumns {
             let rendered = options.trim ? line.trimmingASCIIWhitespacePrefix() : line
-            return "\(rendered.prefixBytes(maxColumns)) [... 0 more matches]"
+            return previewLineSuffix(rendered, maxColumns: maxColumns, remainingMatches: 0)
         }
         return renderedLine(line)
     }
@@ -394,6 +394,9 @@ public struct StandardPrinter {
 
     private func renderedLine(for match: SearchMatch) -> String {
         guard options.replacement != nil, !match.spans.isEmpty else {
+            if let rendered = limitedMatchedLine(match.line, match: match) {
+                return "\(rendered)\(outputTerminator(match.lineTerminator, line: match.line))"
+            }
             return "\(renderedLine(match.line, spans: match.spans))\(outputTerminator(match.lineTerminator, line: match.line))"
         }
         let originalLine = match.line
@@ -402,6 +405,19 @@ public struct StandardPrinter {
             return "\(rendered)\(outputTerminator(match.lineTerminator, line: match.line))"
         }
         return "\(renderedLine(line))\(outputTerminator(match.lineTerminator, line: line))"
+    }
+
+    private func limitedMatchedLine(_ line: String, match: SearchMatch) -> String? {
+        guard colors.isEnabled,
+              let maxColumns = options.maxColumns,
+              line.utf8.count >= maxColumns,
+              options.maxColumnsPreview else {
+            return nil
+        }
+        let rendered = options.trim ? line.trimmingASCIIWhitespacePrefix() : line
+        let trimOffset = line.utf8.count - rendered.utf8.count
+        let remainingMatches = match.spans.filter { $0.startByte >= trimOffset + maxColumns }.count
+        return previewLineSuffix(rendered, maxColumns: maxColumns, remainingMatches: remainingMatches)
     }
 
     private func renderedText(for match: SearchMatch) -> String {
@@ -490,21 +506,42 @@ public struct StandardPrinter {
         guard options.maxColumnsPreview else {
             return "[Omitted long line with \(match.matchCount) \(match.matchCount == 1 ? "match" : "matches")]"
         }
-        let remainingMatches = match.spans.filter { $0.startByte >= maxColumns }.count
-        return "\(line.prefixBytes(maxColumns)) [... \(remainingMatches) more \(remainingMatches == 1 ? "match" : "matches")]"
+        guard line.utf8.count >= maxColumns else {
+            return nil
+        }
+        let remainingMatches = replacementStartOffsets(for: match).filter { $0 >= maxColumns }.count
+        return previewLineSuffix(line, maxColumns: maxColumns, remainingMatches: remainingMatches)
     }
 
     private func onlyMatchingText(_ span: MatchSpan, in match: SearchMatch) -> String {
+        let rawText = span.replacement ?? span.text
+        let text = options.trim ? rawText.trimmingASCIIWhitespacePrefix() : rawText
         guard let maxColumns = options.maxColumns,
-              match.line.utf8.count >= maxColumns,
-              span.startByte < maxColumns else {
-            return colors.apply(.match, to: span.replacement ?? span.text)
+              text.utf8.count > maxColumns else {
+            return colors.apply(.match, to: text)
         }
         guard options.maxColumnsPreview else {
             return OmittedLineKind.matching.message
         }
-        let line = options.trim ? match.line.trimmingASCIIWhitespacePrefix() : match.line
-        return "\(line.prefixBytes(maxColumns)) [... 0 more matches]"
+        return previewLineSuffix(text, maxColumns: maxColumns, remainingMatches: 0)
+    }
+
+    private func previewLineSuffix(_ line: String, maxColumns: Int, remainingMatches: Int?) -> String {
+        guard let remainingMatches else {
+            return "\(line.prefixBytes(maxColumns)) [... omitted end of long line]"
+        }
+        return "\(line.prefixBytes(maxColumns)) [... \(remainingMatches) more \(remainingMatches == 1 ? "match" : "matches")]"
+    }
+
+    private func replacementStartOffsets(for match: SearchMatch) -> [Int] {
+        var delta = 0
+        var offsets: [Int] = []
+        for span in match.spans.sorted(by: { $0.startByte < $1.startByte }) {
+            let replacementLength = (span.replacement ?? span.text).utf8.count
+            offsets.append(span.startByte + delta)
+            delta += replacementLength - (span.endByte - span.startByte)
+        }
+        return offsets
     }
 
     private func splitRenderedLines(_ text: String) -> [String] {

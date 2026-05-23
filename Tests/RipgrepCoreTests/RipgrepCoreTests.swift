@@ -435,8 +435,8 @@ struct RipgrepSearcherTests {
             "verylong needle tail",
         ])
         #expect(try run(["-o", "--max-columns", "12", "needle", root.path("columns.txt")]) == [
-            "[Omitted long matching line]",
-            "[Omitted long matching line]",
+            "needle",
+            "needle",
         ])
         #expect(try run([
             "-o",
@@ -447,8 +447,31 @@ struct RipgrepSearcherTests {
             "needle",
             root.path("columns.txt"),
         ]) == [
-            "1:7:short needle [... 0 more matches]",
-            "2:10:verylong nee [... 0 more matches]",
+            "1:7:needle",
+            "2:10:needle",
+        ])
+        #expect(try run([
+            "-o",
+            "--column",
+            "--max-columns",
+            "6",
+            "needle",
+            root.path("columns.txt"),
+        ]) == [
+            "1:7:needle",
+            "2:10:needle",
+        ])
+        #expect(try run([
+            "-o",
+            "--column",
+            "--max-columns",
+            "5",
+            "--max-columns-preview",
+            "needle",
+            root.path("columns.txt"),
+        ]) == [
+            "1:7:needl [... 0 more matches]",
+            "2:10:needl [... 0 more matches]",
         ])
         #expect(try run(["-M", "12", "--replace", "PIN", "needle", root.path("columns.txt")]) == [
             "[Omitted long line with 1 match]",
@@ -464,7 +487,36 @@ struct RipgrepSearcherTests {
             "needle",
             root.path("replacement-preview.txt"),
         ]) == [
-            "PIN middle PIN [... 1 more match]",
+            "PIN middle PIN [... 0 more matches]",
+        ])
+
+        try root.write("     0123456789abcdefghijklmnopqrstuvwxyz\n", to: "trim-columns.txt")
+        #expect(try run([
+            "--trim",
+            "--max-columns-preview",
+            "-M8",
+            "--color=always",
+            "--colors=path:none",
+            "--no-filename",
+            "abc",
+            root.path("trim-columns.txt"),
+        ]) == [
+            "01234567 [... 1 more match]",
+        ])
+
+        try root.write("""
+        but Doctor Watson has to have it taken out for him and dusted,
+        and exhibited clearly, with a label attached.
+        """, to: "replacement-multiline-preview.txt")
+        #expect(try run([
+            "-M43",
+            "--max-columns-preview",
+            "-rxxx",
+            "exhibited|dusted|has to have it",
+            root.path("replacement-multiline-preview.txt"),
+        ]) == [
+            "but Doctor Watson xxx taken out for him and [... 1 more match]",
+            "and xxx clearly, with a label attached.",
         ])
 
         try root.write("needle\nthis context line is very long\n", to: "context-columns.txt")
