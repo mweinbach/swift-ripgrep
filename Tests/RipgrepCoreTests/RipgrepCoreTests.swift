@@ -865,6 +865,9 @@ struct RipgrepSearcherTests {
         #expect(try run(["--replace", "$word:${digits}$missing", #"(?P<word>[a-z]+)(?P<digits>\d+)"#, root.path("replace.txt")]) == [
             "abc:123 def:456",
         ])
+        #expect(try run(["--replace", "${}_${bad-name}_${1}", #"([a-z]+)\d+"#, root.path("replace.txt")]) == [
+            "${}_${bad-name}_abc ${}_${bad-name}_def",
+        ])
     }
 
     @Test("prints trim vimgrep and heading modes")

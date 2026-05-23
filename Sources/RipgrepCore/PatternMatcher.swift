@@ -383,18 +383,25 @@ public struct PatternMatcher {
                 continue
             }
             if next == "{" {
-                guard let close = template[nextIndex...].firstIndex(of: "}") else {
+                let nameStart = template.index(after: nextIndex)
+                var nameEnd = nameStart
+                while nameEnd < template.endIndex, isCaptureNameCharacter(template[nameEnd]) {
+                    nameEnd = template.index(after: nameEnd)
+                }
+                guard nameEnd > nameStart,
+                      nameEnd < template.endIndex,
+                      template[nameEnd] == "}" else {
                     output.append("$")
                     index = nextIndex
                     continue
                 }
                 output += captureText(
-                    String(template[template.index(after: nextIndex)..<close]),
+                    String(template[nameStart..<nameEnd]),
                     line: line,
                     ranges: ranges,
                     namedRange: namedRange
                 )
-                index = template.index(after: close)
+                index = template.index(after: nameEnd)
                 continue
             }
 
