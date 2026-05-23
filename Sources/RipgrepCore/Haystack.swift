@@ -24,6 +24,8 @@ public struct FileWalker {
             baseIgnoreStack.append(loadMatcher(from: ignoreFile))
         }
         let overrides = GlobMatcher(patterns: options.globPatterns, overrideSemantics: true)
+        var typeRegistry = FileTypeRegistry()
+        typeRegistry.apply(options.typeChanges)
 
         for root in options.effectiveRoots {
             guard fileManager.fileExists(atPath: root.path) else {
@@ -36,6 +38,7 @@ public struct FileWalker {
                 rootBase: rootBase,
                 ignoreStack: baseIgnoreStack,
                 overrides: overrides,
+                typeRegistry: typeRegistry,
                 options: options
             ))
         }
@@ -49,6 +52,7 @@ public struct FileWalker {
         rootBase: URL,
         ignoreStack: IgnoreStack,
         overrides: GlobMatcher,
+        typeRegistry: FileTypeRegistry,
         options: RipgrepOptions
     ) throws -> [Haystack] {
         let values = try url.resourceValues(forKeys: [
@@ -68,6 +72,9 @@ public struct FileWalker {
                 return []
             }
             if !ignoreStack.allows(relativePath: relativePath, isDirectory: isDirectory) {
+                return []
+            }
+            if !isDirectory && !typeRegistry.allows(path: relativePath) {
                 return []
             }
         }
@@ -120,6 +127,7 @@ public struct FileWalker {
                 rootBase: rootBase,
                 ignoreStack: directoryIgnoreStack,
                 overrides: overrides,
+                typeRegistry: typeRegistry,
                 options: options
             ))
         }

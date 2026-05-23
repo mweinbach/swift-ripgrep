@@ -45,6 +45,14 @@ public enum RipgrepCLI {
                     }
                     return 0
                 }
+                if options.mode == .types {
+                    var registry = FileTypeRegistry()
+                    registry.apply(options.typeChanges)
+                    for line in registry.typeListLines() {
+                        stdout(line)
+                    }
+                    return registry.definitions.isEmpty ? 1 : 0
+                }
 
                 let results = try searcher.search(options: options, stdin: stdin)
                 for line in printer.lines(for: results) {

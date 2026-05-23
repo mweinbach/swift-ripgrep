@@ -147,6 +147,46 @@ struct RipgrepSearcherTests {
         #expect(pathBasenames(try run(["-g", "!skip.txt", "needle", root.url.path])) == ["keep.swift"])
     }
 
+    @Test("filters by built in file types")
+    func filtersByBuiltInFileTypes() throws {
+        let root = try TemporaryDirectory()
+        try root.write("needle\n", to: "Sources/main.swift")
+        try root.write("needle\n", to: "Sources/main.rs")
+        try root.write("needle\n", to: "README.md")
+
+        #expect(pathBasenames(try run(["-tswift", "needle", root.url.path])) == ["main.swift"])
+        #expect(pathBasenames(try run(["-trust", "needle", root.url.path])) == ["main.rs"])
+        #expect(pathBasenames(try run(["-tall", "-Tmd", "needle", root.url.path])) == ["main.rs", "main.swift"])
+    }
+
+    @Test("supports type add clear include and list")
+    func supportsTypeAddClearIncludeAndList() throws {
+        let root = try TemporaryDirectory()
+        try root.write("needle\n", to: "one.foo")
+        try root.write("needle\n", to: "two.swift")
+        try root.write("needle\n", to: "three.rs")
+
+        #expect(pathBasenames(try run(["--type-add", "foo:*.foo", "-tfoo", "needle", root.url.path])) == ["one.foo"])
+        #expect(pathBasenames(try run([
+            "--type-add", "src:include:swift,rust",
+            "-tsrc",
+            "needle",
+            root.url.path,
+        ])) == ["three.rs", "two.swift"])
+        #expect(pathBasenames(try run([
+            "--type-clear", "swift",
+            "--type-add", "swift:*.foo",
+            "-tswift",
+            "needle",
+            root.url.path,
+        ])) == ["one.foo"])
+
+        let typeList = try run(["--type-add", "foo:*.foo", "--type-list"])
+        #expect(typeList.contains("foo: *.foo"))
+        #expect(typeList.contains("rust: *.rs"))
+        #expect(typeList.contains("swift: *.swift"))
+    }
+
     @Test("searches provided stdin")
     func searchesProvidedStdin() throws {
         var output: [String] = []

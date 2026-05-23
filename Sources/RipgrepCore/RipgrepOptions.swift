@@ -3,6 +3,7 @@ import Foundation
 public enum SearchMode: Equatable {
     case search
     case files
+    case types
 }
 
 public enum PrintMode: Equatable {
@@ -34,6 +35,7 @@ public struct RipgrepOptions: Equatable {
     public var noIgnore = false
     public var ignoreFiles: [URL] = []
     public var globPatterns: [String] = []
+    public var typeChanges: [TypeChange] = []
     public var followSymlinks = false
     public var quiet = false
     public var useStdin = false
@@ -90,6 +92,8 @@ public enum RipgrepArgumentParser {
                 return .version
             case "--files":
                 options.mode = .files
+            case "--type-list":
+                options.mode = .types
             case "-i", "--ignore-case":
                 options.ignoreCase = true
             case "-S", "--smart-case":
@@ -168,6 +172,42 @@ public enum RipgrepArgumentParser {
                 index += 1
             case let value where value.hasPrefix("--glob="):
                 options.globPatterns.append(String(value.dropFirst("--glob=".count)))
+            case "-t", "--type":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--type <TYPE>' requires a value")
+                }
+                options.typeChanges.append(.select(arguments[index]))
+                index += 1
+            case let value where value.hasPrefix("--type="):
+                options.typeChanges.append(.select(String(value.dropFirst("--type=".count))))
+            case let value where value.hasPrefix("-t") && value.count > 2:
+                options.typeChanges.append(.select(String(value.dropFirst(2))))
+            case "-T", "--type-not":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--type-not <TYPE>' requires a value")
+                }
+                options.typeChanges.append(.negate(arguments[index]))
+                index += 1
+            case let value where value.hasPrefix("--type-not="):
+                options.typeChanges.append(.negate(String(value.dropFirst("--type-not=".count))))
+            case let value where value.hasPrefix("-T") && value.count > 2:
+                options.typeChanges.append(.negate(String(value.dropFirst(2))))
+            case "--type-add":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--type-add <TYPESPEC>' requires a value")
+                }
+                options.typeChanges.append(.add(arguments[index]))
+                index += 1
+            case let value where value.hasPrefix("--type-add="):
+                options.typeChanges.append(.add(String(value.dropFirst("--type-add=".count))))
+            case "--type-clear":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--type-clear <TYPE>' requires a value")
+                }
+                options.typeChanges.append(.clear(arguments[index]))
+                index += 1
+            case let value where value.hasPrefix("--type-clear="):
+                options.typeChanges.append(.clear(String(value.dropFirst("--type-clear=".count))))
             case "-L", "--follow":
                 options.followSymlinks = true
             case "-q", "--quiet":
@@ -286,11 +326,13 @@ public enum RipgrepArgumentParser {
             if options.roots.isEmpty && !options.useStdin {
                 options.roots = [URL(fileURLWithPath: ".")]
             }
-        } else {
+        } else if options.mode == .files {
             options.roots = positionals.map { URL(fileURLWithPath: $0) }
             if options.roots.isEmpty {
                 options.roots = [URL(fileURLWithPath: ".")]
             }
+        } else {
+            options.roots = []
         }
 
         return .run(options)
@@ -328,6 +370,11 @@ public enum RipgrepArgumentParser {
               --no-ignore            Do not respect ignore files
               --ignore-file PATH     Add a custom ignore file
           -g, --glob GLOB            Include or exclude paths with an override glob
+          -t, --type TYPE            Only search files matching TYPE
+          -T, --type-not TYPE        Do not search files matching TYPE
+              --type-add TYPESPEC    Add a new glob for a file type
+              --type-clear TYPE      Clear globs for a file type
+              --type-list            Show all supported file types
           -A, --after-context NUM    Show NUM lines after each match
           -B, --before-context NUM   Show NUM lines before each match
           -C, --context NUM          Show NUM lines before and after each match

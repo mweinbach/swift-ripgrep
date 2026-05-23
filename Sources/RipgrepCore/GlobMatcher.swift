@@ -100,12 +100,44 @@ public struct GlobMatcher: Equatable {
     }
 
     private func matchesGlob(_ pattern: String, _ value: String) -> Bool {
-        let regex = "^" + NSRegularExpression.escapedPattern(for: pattern)
-            .replacingOccurrences(of: "\\*\\*", with: ".*")
-            .replacingOccurrences(of: "\\*", with: "[^/]*")
-            .replacingOccurrences(of: "\\?", with: "[^/]")
-            + "$"
+        let regex = "^\(regexSource(for: pattern))$"
         return value.range(of: regex, options: .regularExpression) != nil
+    }
+
+    private func regexSource(for pattern: String) -> String {
+        var source = ""
+        var index = pattern.startIndex
+
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if character == "*" {
+                let next = pattern.index(after: index)
+                if next < pattern.endIndex, pattern[next] == "*" {
+                    source += ".*"
+                    index = pattern.index(after: next)
+                } else {
+                    source += "[^/]*"
+                    index = next
+                }
+            } else if character == "?" {
+                source += "[^/]"
+                index = pattern.index(after: index)
+            } else if character == "[", let close = pattern[index...].firstIndex(of: "]") {
+                let afterOpen = pattern.index(after: index)
+                if afterOpen < close {
+                    source += String(pattern[index...close])
+                    index = pattern.index(after: close)
+                } else {
+                    source += "\\["
+                    index = afterOpen
+                }
+            } else {
+                source += NSRegularExpression.escapedPattern(for: String(character))
+                index = pattern.index(after: index)
+            }
+        }
+
+        return source
     }
 }
 
