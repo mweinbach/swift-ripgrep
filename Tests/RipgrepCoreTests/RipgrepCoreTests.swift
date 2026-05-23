@@ -1138,6 +1138,7 @@ struct RipgrepSearcherTests {
     func printsJSONLines() throws {
         let root = try TemporaryDirectory()
         try root.write("hay\nneedle here\nthere\n", to: "json.txt")
+        try root.write(Data("needle\n\0tail\n".utf8), to: "binary.txt")
 
         let output = try run(["--json", "-n", "-C1", "needle", root.path("json.txt")])
         let messages = try output.map(jsonObject)
@@ -1168,6 +1169,18 @@ struct RipgrepSearcherTests {
         let summary = messages[5]["data"] as? [String: Any]
         let summaryStats = summary?["stats"] as? [String: Any]
         #expect(summaryStats?["bytes_printed"] as? Int == stats?["bytes_printed"] as? Int)
+
+        let binaryOutput = try run(["--json", "-n", "needle", root.path("binary.txt")])
+        let binaryMessages = try binaryOutput.map(jsonObject)
+        #expect(binaryMessages.map { $0["type"] as? String } == ["begin", "match", "end", "summary"])
+        let binaryEnd = binaryMessages[2]["data"] as? [String: Any]
+        #expect(binaryEnd?["binary_offset"] as? Int == 7)
+
+        let binaryOnlyOutput = try run(["--json", "-n", "tail", root.path("binary.txt")])
+        let binaryOnlyMessages = try binaryOnlyOutput.map(jsonObject)
+        #expect(binaryOnlyMessages.map { $0["type"] as? String } == ["begin", "end", "summary"])
+        let binaryOnlyEnd = binaryOnlyMessages[1]["data"] as? [String: Any]
+        #expect(binaryOnlyEnd?["binary_offset"] as? Int == 7)
     }
 
     @Test("prints JSON replacement fields")
