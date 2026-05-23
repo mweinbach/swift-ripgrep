@@ -468,6 +468,16 @@ struct RipgrepSearcherTests {
         try root.write(Data([0xFF, 0xFE]) + Data("hay\nneedle\n".utf16LittleEndianBytes), to: "bom16le.txt")
         try root.write(Data("hay\nneedle\n".utf16LittleEndianBytes), to: "utf16le.txt")
         try root.write(Data([0xEF, 0xBB, 0xBF]) + Data("needle\n".utf8), to: "bom8.txt")
+        try root.write(Data([
+            0x84, 0x59, 0x84, 0x75, 0x84, 0x82, 0x84, 0x7C, 0x84, 0x80, 0x84, 0x7B,
+            0x20,
+            0x84, 0x56, 0x84, 0x80, 0x84, 0x7C, 0x84, 0x7D, 0x84, 0x83,
+        ]), to: "sjis.txt")
+        try root.write(Data([
+            0xA7, 0xBA, 0xA7, 0xD6, 0xA7, 0xE2, 0xA7, 0xDD, 0xA7, 0xE0, 0xA7, 0xDC,
+            0x20,
+            0xA7, 0xB7, 0xA7, 0xE0, 0xA7, 0xDD, 0xA7, 0xDE, 0xA7, 0xE3,
+        ]), to: "eucjp.txt")
 
         #expect(try run(["-n", "needle", root.path("bom16le.txt")]) == ["2:needle"])
         #expect(try runAllowingNoMatch(["-n", "-E", "none", "needle", root.path("bom16le.txt")]) == [])
@@ -476,6 +486,8 @@ struct RipgrepSearcherTests {
         #expect(try run(["-n", "-E", "none", "\u{FEFF}needle", root.path("bom8.txt")]) == [
             "1:\u{FEFF}needle",
         ])
+        #expect(try run(["-n", "-Esjis", "Шерлок Холмс", root.path("sjis.txt")]) == ["1:Шерлок Холмс"])
+        #expect(try run(["-n", "-Eeuc-jp", "Шерлок Холмс", root.path("eucjp.txt")]) == ["1:Шерлок Холмс"])
     }
 
     @Test("searches multiline regex matches")

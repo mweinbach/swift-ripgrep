@@ -1474,9 +1474,18 @@ public enum RipgrepArgumentParser {
             return .explicit(.utf16LittleEndian)
         case "utf-16be", "utf16be":
             return .explicit(.utf16BigEndian)
+        case "shift_jis", "shift-jis", "sjis":
+            return .explicit(Self.stringEncoding(.shiftJIS))
+        case "euc-jp", "eucjp":
+            return .explicit(Self.stringEncoding(.EUC_JP))
         default:
             return nil
         }
+    }
+
+    private static func stringEncoding(_ encoding: CFStringEncodings) -> String.Encoding {
+        let raw = CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(encoding.rawValue))
+        return String.Encoding(rawValue: raw)
     }
 
     private static func parseEngineMode(_ raw: String) -> EngineMode? {
