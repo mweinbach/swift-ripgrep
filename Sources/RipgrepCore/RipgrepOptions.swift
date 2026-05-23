@@ -859,28 +859,53 @@ public enum RipgrepArgumentParser {
                 guard index < arguments.count else {
                     return .error("error: The argument '--pre-glob <GLOB>' requires a value")
                 }
-                options.preGlobPatterns.append(arguments[index])
+                guard let glob = parseStrictGlob(arguments[index]) else {
+                    return .error("error: invalid glob '\(arguments[index])': unclosed character class")
+                }
+                options.preGlobPatterns.append(glob)
                 index += 1
             case let value where value.hasPrefix("--pre-glob="):
-                options.preGlobPatterns.append(String(value.dropFirst("--pre-glob=".count)))
+                let glob = String(value.dropFirst("--pre-glob=".count))
+                guard let glob = parseStrictGlob(glob) else {
+                    return .error("error: invalid glob '\(glob)': unclosed character class")
+                }
+                options.preGlobPatterns.append(glob)
             case "-g", "--glob":
                 guard index < arguments.count else {
                     return .error("error: The argument '--glob <GLOB>' requires a value")
                 }
-                options.globPatterns.append(arguments[index])
+                guard let glob = parseStrictGlob(arguments[index]) else {
+                    return .error("error: invalid glob '\(arguments[index])': unclosed character class")
+                }
+                options.globPatterns.append(glob)
                 index += 1
             case let value where value.hasPrefix("--glob="):
-                options.globPatterns.append(String(value.dropFirst("--glob=".count)))
+                let glob = String(value.dropFirst("--glob=".count))
+                guard let glob = parseStrictGlob(glob) else {
+                    return .error("error: invalid glob '\(glob)': unclosed character class")
+                }
+                options.globPatterns.append(glob)
             case let value where value.hasPrefix("-g") && value.count > 2:
-                options.globPatterns.append(String(value.dropFirst(2)))
+                let glob = String(value.dropFirst(2))
+                guard let glob = parseStrictGlob(glob) else {
+                    return .error("error: invalid glob '\(glob)': unclosed character class")
+                }
+                options.globPatterns.append(glob)
             case "--iglob":
                 guard index < arguments.count else {
                     return .error("error: The argument '--iglob <GLOB>' requires a value")
                 }
-                options.caseInsensitiveGlobPatterns.append(arguments[index])
+                guard let glob = parseStrictGlob(arguments[index]) else {
+                    return .error("error: invalid glob '\(arguments[index])': unclosed character class")
+                }
+                options.caseInsensitiveGlobPatterns.append(glob)
                 index += 1
             case let value where value.hasPrefix("--iglob="):
-                options.caseInsensitiveGlobPatterns.append(String(value.dropFirst("--iglob=".count)))
+                let glob = String(value.dropFirst("--iglob=".count))
+                guard let glob = parseStrictGlob(glob) else {
+                    return .error("error: invalid glob '\(glob)': unclosed character class")
+                }
+                options.caseInsensitiveGlobPatterns.append(glob)
             case "-t", "--type":
                 guard index < arguments.count else {
                     return .error("error: The argument '--type <TYPE>' requires a value")
@@ -1447,6 +1472,39 @@ public enum RipgrepArgumentParser {
             }
             return trimmed
         }
+    }
+
+    private static func parseStrictGlob(_ raw: String) -> String? {
+        hasUnclosedCharacterClass(raw) ? nil : raw
+    }
+
+    private static func hasUnclosedCharacterClass(_ pattern: String) -> Bool {
+        var escaped = false
+        var index = pattern.startIndex
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                escaped = false
+            } else if character == "\\" {
+                escaped = true
+            } else if character == "[" {
+                var cursor = pattern.index(after: index)
+                var foundClose = false
+                while cursor < pattern.endIndex {
+                    if pattern[cursor] == "]" {
+                        foundClose = true
+                        break
+                    }
+                    cursor = pattern.index(after: cursor)
+                }
+                if !foundClose {
+                    return true
+                }
+                index = cursor
+            }
+            index = pattern.index(after: index)
+        }
+        return false
     }
 
     private static func parseContextCount(_ raw: String, flag: String) -> Int? {

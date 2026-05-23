@@ -1588,29 +1588,17 @@ struct RipgrepSearcherTests {
         #expect(pathBasenames(try run(["--no-require-git", "needle", outsideGit.url.path])) == ["keep.txt"])
     }
 
-    @Test("honors ignore parse message switches")
-    func honorsIgnoreParseMessageSwitches() throws {
+    @Test("treats ignore unclosed character classes as literal")
+    func treatsIgnoreUnclosedCharacterClassesAsLiteral() throws {
         let root = try TemporaryDirectory()
         try root.write("needle\n", to: "keep.txt")
+        try root.write("needle\n", to: "[broken")
         try root.write("[broken\n", to: ".ignore")
 
         var output: [String] = []
         var errors: [String] = []
         var exitCode = RipgrepCLI.run(
             arguments: ["needle", root.url.path],
-            stdout: { output.append($0) },
-            stderr: { errors.append($0) }
-        )
-        #expect(exitCode == 2)
-        #expect(output == [root.path("keep.txt") + ":needle"])
-        #expect(errors.count == 1)
-        #expect(errors.first?.contains(".ignore: line 1") == true)
-        #expect(errors.first?.contains("unclosed character class") == true)
-
-        output = []
-        errors = []
-        exitCode = RipgrepCLI.run(
-            arguments: ["--no-ignore-messages", "needle", root.url.path],
             stdout: { output.append($0) },
             stderr: { errors.append($0) }
         )
@@ -1621,13 +1609,31 @@ struct RipgrepSearcherTests {
         output = []
         errors = []
         exitCode = RipgrepCLI.run(
-            arguments: ["--no-ignore-messages", "--ignore-messages", "needle", root.url.path],
+            arguments: ["--files", "--sort", "path", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(output == [root.path("keep.txt")])
+        #expect(errors.isEmpty)
+    }
+
+    @Test("rejects unclosed character classes in CLI globs")
+    func rejectsUnclosedCharacterClassesInCLIGlobs() throws {
+        let root = try TemporaryDirectory()
+        try root.write("", to: "[broken")
+        try root.write("", to: "test")
+
+        var output: [String] = []
+        var errors: [String] = []
+        let exitCode = RipgrepCLI.run(
+            arguments: ["--files", "-g", "[broken", root.url.path],
             stdout: { output.append($0) },
             stderr: { errors.append($0) }
         )
         #expect(exitCode == 2)
-        #expect(output == [root.path("keep.txt") + ":needle"])
-        #expect(errors.count == 1)
+        #expect(output.isEmpty)
+        #expect(errors.first?.contains("unclosed character class") == true)
     }
 
     @Test("honors escaped slash in ignore patterns")

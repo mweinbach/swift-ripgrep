@@ -521,51 +521,17 @@ public struct FileWalker {
         ), messages: parsed.messages)
     }
 
-    private func parseIgnorePatterns(_ contents: String, fileURL: URL) -> (patterns: [String], messages: [String]) {
+    private func parseIgnorePatterns(_ contents: String, fileURL _: URL) -> (patterns: [String], messages: [String]) {
         var patterns: [String] = []
-        var messages: [String] = []
-        for (offset, rawLine) in contents.components(separatedBy: .newlines).enumerated() {
+        for rawLine in contents.components(separatedBy: .newlines) {
             let trimmed = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else {
                 patterns.append(rawLine)
                 continue
             }
-            if hasUnclosedCharacterClass(trimmed) {
-                messages.append("\(fileURL.path): line \(offset + 1): invalid ignore glob '\(trimmed)': unclosed character class")
-                continue
-            }
             patterns.append(rawLine)
         }
-        return (patterns, messages)
-    }
-
-    private func hasUnclosedCharacterClass(_ pattern: String) -> Bool {
-        var escaped = false
-        var index = pattern.startIndex
-        while index < pattern.endIndex {
-            let character = pattern[index]
-            if escaped {
-                escaped = false
-            } else if character == "\\" {
-                escaped = true
-            } else if character == "[" {
-                var cursor = pattern.index(after: index)
-                var foundClose = false
-                while cursor < pattern.endIndex {
-                    if pattern[cursor] == "]" {
-                        foundClose = true
-                        break
-                    }
-                    cursor = pattern.index(after: cursor)
-                }
-                if !foundClose {
-                    return true
-                }
-                index = cursor
-            }
-            index = pattern.index(after: index)
-        }
-        return false
+        return (patterns, [])
     }
 
     private func globalGitIgnoreFile() -> URL? {
