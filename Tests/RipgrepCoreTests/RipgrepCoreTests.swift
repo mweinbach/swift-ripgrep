@@ -165,6 +165,7 @@ struct RipgrepSearcherTests {
         try root.write("café\nπ\n_\n", to: "classes.txt")
         try root.write("éx\nxé\nx\n", to: "words.txt")
         try root.write("Σ\nσ\n", to: "casefold.txt")
+        try root.write("ABC\nabc\nδ\n", to: "ascii-case.txt")
         try root.write("\n##\n", to: "empty-word.txt")
 
         #expect(try run(["-o", #"\w+"#, root.path("classes.txt")]) == ["café", "π", "_"])
@@ -175,6 +176,10 @@ struct RipgrepSearcherTests {
         #expect(try run(["--no-unicode", "-w", "x", root.path("words.txt")]) == ["éx", "xé", "x"])
         #expect(try run(["-F", "-i", "σ", root.path("casefold.txt")]) == ["Σ", "σ"])
         #expect(try run(["--no-unicode", "-F", "-i", "σ", root.path("casefold.txt")]) == ["σ"])
+        #expect(try run(["--no-unicode", "-i", "abc", root.path("ascii-case.txt")]) == ["ABC", "abc"])
+        #expect(try run(["--no-unicode", "-i", "[a-z]+", root.path("ascii-case.txt")]) == ["ABC", "abc"])
+        #expect(try run(["--no-unicode", "-i", "[[:alpha:]]+", root.path("ascii-case.txt")]) == ["ABC", "abc"])
+        #expect(try runAllowingNoMatch(["--no-unicode", "-i", "Δ", root.path("ascii-case.txt")]) == [])
         #expect(try run(["--no-unicode", "--unicode", "-o", #"\w+"#, root.path("classes.txt")]) == ["café", "π", "_"])
         #expect(try run(["--no-pcre2-unicode", "--pcre2-unicode", "-o", #"\w+"#, root.path("classes.txt")]) == ["café", "π", "_"])
     }

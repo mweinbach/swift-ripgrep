@@ -34,7 +34,7 @@ public struct PatternMatcher {
                     throw RipgrepError.invalidRegex("compiled regex exceeds size limit of \(regexSizeLimit)")
                 }
                 do {
-                    var regexOptions: NSRegularExpression.Options = options.effectiveIgnoreCase ? [.caseInsensitive] : []
+                    var regexOptions: NSRegularExpression.Options = options.effectiveIgnoreCase && !options.noUnicode ? [.caseInsensitive] : []
                     if options.multiline {
                         regexOptions.insert(.anchorsMatchLines)
                     }
@@ -190,7 +190,11 @@ public struct PatternMatcher {
             source = "(?:)"
         }
         if options.noUnicode {
+            source = asciiPOSIXClasses(for: source)
             source = asciiRegexPattern(for: source)
+        }
+        if options.noUnicode && options.effectiveIgnoreCase {
+            source = asciiCaseInsensitivePattern(for: source)
         }
         if options.wordRegexp && !isEmptyPattern {
             source = options.noUnicode
@@ -340,6 +344,251 @@ public struct PatternMatcher {
             output.append("\\")
         }
         return output
+    }
+
+    private static func asciiPOSIXClasses(for pattern: String) -> String {
+        var output = ""
+        var escaped = false
+        var inClass = false
+        var index = pattern.startIndex
+
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                output.append(character)
+                escaped = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "\\" {
+                output.append(character)
+                escaped = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "[" {
+                if inClass, let replacement = asciiPOSIXClassReplacement(at: index, in: pattern) {
+                    output += replacement.value
+                    index = replacement.end
+                    continue
+                }
+                inClass = true
+                output.append(character)
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "]" {
+                inClass = false
+            }
+            output.append(character)
+            index = pattern.index(after: index)
+        }
+
+        return output
+    }
+
+    private static func asciiPOSIXClassReplacement(
+        at index: String.Index,
+        in pattern: String
+    ) -> (value: String, end: String.Index)? {
+        let replacements = [
+            "[:alnum:]": "0-9A-Za-z",
+            "[:alpha:]": "A-Za-z",
+            "[:blank:]": " \\t",
+            "[:digit:]": "0-9",
+            "[:lower:]": "a-z",
+            "[:space:]": " \\t\\r\\n\\f",
+            "[:upper:]": "A-Z",
+            "[:word:]": "0-9A-Za-z_",
+            "[:xdigit:]": "0-9A-Fa-f",
+        ]
+        for (token, value) in replacements where pattern[index...].hasPrefix(token) {
+            return (value, pattern.index(index, offsetBy: token.count))
+        }
+        return nil
+    }
+
+    private static func asciiCaseInsensitivePattern(for pattern: String) -> String {
+        var output = ""
+        var escaped = false
+        var index = pattern.startIndex
+
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                output.append("\\")
+                output.append(character)
+                escaped = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "(",
+               let prefixEnd = regexSyntaxGroupPrefixEnd(in: pattern, openingAt: index) {
+                output += pattern[index..<prefixEnd]
+                index = prefixEnd
+                continue
+            }
+            if character == "[" {
+                guard let classEnd = characterClassEnd(in: pattern, openingAt: index) else {
+                    output.append(character)
+                    index = pattern.index(after: index)
+                    continue
+                }
+                let classStart = pattern.index(after: index)
+                let content = String(pattern[classStart..<classEnd])
+                output += "[\(asciiCaseInsensitiveClass(content))]"
+                index = pattern.index(after: classEnd)
+                continue
+            }
+            if let alternate = asciiCaseAlternate(for: character) {
+                output += "[\(character)\(alternate)]"
+                index = pattern.index(after: index)
+                continue
+            }
+            output.append(character)
+            index = pattern.index(after: index)
+        }
+        if escaped {
+            output.append("\\")
+        }
+        return output
+    }
+
+    private static func regexSyntaxGroupPrefixEnd(in pattern: String, openingAt opening: String.Index) -> String.Index? {
+        let question = pattern.index(after: opening)
+        guard question < pattern.endIndex, pattern[question] == "?" else {
+            return nil
+        }
+        let marker = pattern.index(after: question)
+        guard marker < pattern.endIndex else {
+            return nil
+        }
+
+        if pattern[marker] == "<" {
+            let nameStart = pattern.index(after: marker)
+            guard nameStart < pattern.endIndex,
+                  pattern[nameStart] != "=",
+                  pattern[nameStart] != "!" else {
+                return nil
+            }
+            var nameEnd = nameStart
+            while nameEnd < pattern.endIndex, pattern[nameEnd] != ">" {
+                nameEnd = pattern.index(after: nameEnd)
+            }
+            return nameEnd < pattern.endIndex ? pattern.index(after: nameEnd) : nil
+        }
+
+        var cursor = marker
+        var sawFlag = false
+        while cursor < pattern.endIndex {
+            let character = pattern[cursor]
+            if character == ":" || character == ")" {
+                return sawFlag ? cursor : nil
+            }
+            guard character == "-" || character.isASCII && character.isLetter else {
+                return nil
+            }
+            sawFlag = true
+            cursor = pattern.index(after: cursor)
+        }
+        return nil
+    }
+
+    private static func characterClassEnd(in pattern: String, openingAt opening: String.Index) -> String.Index? {
+        var escaped = false
+        var index = pattern.index(after: opening)
+
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                escaped = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "]", index != pattern.index(after: opening) {
+                return index
+            }
+            if character == "[",
+               let next = pattern.index(index, offsetBy: 1, limitedBy: pattern.endIndex),
+               next < pattern.endIndex,
+               pattern[next] == ":" || pattern[next] == "." || pattern[next] == "=",
+               let posixEnd = posixClassEnd(in: pattern, from: next) {
+                index = pattern.index(after: posixEnd)
+                continue
+            }
+            index = pattern.index(after: index)
+        }
+        return nil
+    }
+
+    private static func posixClassEnd(in pattern: String, from marker: String.Index) -> String.Index? {
+        let markerCharacter = pattern[marker]
+        var index = pattern.index(after: marker)
+
+        while index < pattern.endIndex {
+            if pattern[index] == markerCharacter {
+                let close = pattern.index(after: index)
+                if close < pattern.endIndex, pattern[close] == "]" {
+                    return close
+                }
+            }
+            index = pattern.index(after: index)
+        }
+        return nil
+    }
+
+    private static func asciiCaseInsensitiveClass(_ content: String) -> String {
+        let characters = Array(content)
+        var additions = ""
+        var index = 0
+
+        while index < characters.count {
+            let character = characters[index]
+            if character == "\\" {
+                index += 2
+                continue
+            }
+            if index + 2 < characters.count,
+               characters[index + 1] == "-",
+               let startAlternate = asciiCaseAlternate(for: character),
+               let endAlternate = asciiCaseAlternate(for: characters[index + 2]) {
+                additions.append(startAlternate)
+                additions.append("-")
+                additions.append(endAlternate)
+                index += 3
+                continue
+            }
+            if let alternate = asciiCaseAlternate(for: character) {
+                additions.append(alternate)
+            }
+            index += 1
+        }
+
+        return content + additions
+    }
+
+    private static func asciiCaseAlternate(for character: Character) -> Character? {
+        guard character.unicodeScalars.count == 1,
+              let value = character.unicodeScalars.first?.value else {
+            return nil
+        }
+        if value >= 65, value <= 90, let scalar = UnicodeScalar(value + 32) {
+            return Character(scalar)
+        }
+        if value >= 97, value <= 122, let scalar = UnicodeScalar(value - 32) {
+            return Character(scalar)
+        }
+        return nil
     }
 
     private static func crlfAnchorPattern(for pattern: String) -> String {
