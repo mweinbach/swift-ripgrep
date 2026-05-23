@@ -1724,12 +1724,21 @@ struct RipgrepSearcherTests {
     func handlesBinaryDetectionModes() throws {
         let root = try TemporaryDirectory()
         try root.write(Data("needle\0tail\n".utf8), to: "bin.dat")
+        try root.write(Data("needle\n\0tail\n".utf8), to: "before-nul.dat")
 
         #expect(try runAllowingNoMatch(["needle", root.url.path]) == [])
         #expect(try run(["needle", root.path("bin.dat")]) == [
             #"binary file matches (found "\0" byte around offset 6)"#,
         ])
-        #expect(pathBasenames(try run(["--binary", "needle", root.url.path])) == ["bin.dat"])
+        #expect(try run(["-n", "needle", root.path("before-nul.dat")]) == [
+            "1:needle",
+            #"binary file matches (found "\0" byte around offset 7)"#,
+        ])
+        #expect(try run(["-n", "tail", root.path("before-nul.dat")]) == [
+            #"binary file matches (found "\0" byte around offset 7)"#,
+        ])
+        #expect(try run(["-c", "needle", root.path("before-nul.dat")]) == ["1"])
+        #expect(pathBasenames(try run(["--binary", "needle", root.url.path])) == ["before-nul.dat", "before-nul.dat", "bin.dat"])
         #expect(try run(["-a", "needle", root.path("bin.dat")]) == [
             "needle\0tail",
         ])

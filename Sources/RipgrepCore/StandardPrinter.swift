@@ -60,16 +60,17 @@ public struct StandardPrinter {
                 return results.files.flatMap { multilineMatchLines(for: $0, showPath: showPath(for: results)) }
             }
             return results.files.flatMap { result in
+                let matchLines = result.matches.flatMap { formatSearchMatch($0, showPath: showPath(for: results)) }
                 if let binaryLine = formatBinaryMatch(result, showPath: showPath(for: results)) {
-                    return [binaryLine]
+                    return matchLines + [binaryLine]
                 }
-                return result.matches.flatMap { formatSearchMatch($0, showPath: showPath(for: results)) }
+                return matchLines
             }
         case .count:
             return results.files.filter { options.includeZero ? $0.searched : $0.hasMatch }.map { result in
                 let count = options.onlyMatching
                     ? result.matches.reduce(0) { $0 + $1.matchCount }
-                    : result.matches.count + (result.hasBinaryMatch ? 1 : 0)
+                    : result.matches.isEmpty && result.hasBinaryMatch ? 1 : result.matches.count
                 if showPath(for: results) {
                     return "\(renderPath(for: result.fileURL))\(pathFieldSeparator())\(count)"
                 }
@@ -77,7 +78,7 @@ public struct StandardPrinter {
             }
         case .countMatches:
             return results.files.filter { options.includeZero ? $0.searched : $0.hasMatch }.map { result in
-                let count = result.matches.reduce(0) { $0 + $1.matchCount } + (result.hasBinaryMatch ? 1 : 0)
+                let count = result.matches.isEmpty && result.hasBinaryMatch ? 1 : result.matches.reduce(0) { $0 + $1.matchCount }
                 if showPath(for: results) {
                     return "\(renderPath(for: result.fileURL))\(pathFieldSeparator())\(count)"
                 }

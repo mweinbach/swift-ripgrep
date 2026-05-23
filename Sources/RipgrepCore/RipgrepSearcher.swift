@@ -186,9 +186,10 @@ public struct RipgrepSearcher {
 
             let contents = decode(data, options: options)
             let result = searchContents(contents, fileURL: fileURL, matcher: matcher, options: options)
+            let printableMatches = matchesBeforeBinary(result.matches, binaryByteOffset: binaryByteOffset)
             return FileSearchOutcome(result: SearchFileResult(
                 fileURL: fileURL,
-                matches: [],
+                matches: printableMatches,
                 lines: result.lines,
                 binaryByteOffset: binaryByteOffset,
                 hasBinaryMatch: result.hasMatch,
@@ -205,6 +206,12 @@ public struct RipgrepSearcher {
             bytesSearched: data.count,
             searched: result.searched
         ))
+    }
+
+    private func matchesBeforeBinary(_ matches: [SearchMatch], binaryByteOffset: Int) -> [SearchMatch] {
+        matches.filter { match in
+            match.absoluteOffset + match.lineWithTerminator.utf8.count <= binaryByteOffset
+        }
     }
 
     private func shouldPreprocess(_ haystack: Haystack, options: RipgrepOptions) -> Bool {
