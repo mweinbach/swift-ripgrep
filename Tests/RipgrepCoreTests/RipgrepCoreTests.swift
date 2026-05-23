@@ -455,7 +455,12 @@ struct RipgrepSearcherTests {
             "2:bar",
         ])
         #expect(try run(["-U", "-o", #"foo\nbar"#, root.path("multi.txt")]) == [
-            "foo\nbar",
+            "foo",
+            "bar",
+        ])
+        #expect(try run(["-n", "-U", "-o", #"foo[\s\S]+?bar"#, root.path("multi.txt")]) == [
+            "1:foo",
+            "2:bar",
         ])
         #expect(try runAllowingNoMatch(["-n", "-U", "foo.bar", root.path("multi.txt")]) == [])
         #expect(try run(["-n", "-U", "--multiline-dotall", "foo.bar", root.path("multi.txt")]) == [

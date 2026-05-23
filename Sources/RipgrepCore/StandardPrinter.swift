@@ -154,7 +154,10 @@ public struct StandardPrinter {
     }
 
     private func formatOnlyMatching(_ match: SearchMatch, showPath: Bool) -> [String] {
-        match.spans.map { span in
+        match.spans.flatMap { span in
+            if options.multiline, span.text.contains("\n") || span.text.contains("\0") {
+                return formatOnlyMatchingMultiline(span, in: match, showPath: showPath)
+            }
             var fields: [OutputField] = []
             let path = showPath ? renderPath(for: match.fileURL, line: match.lineNumber, column: span.startColumn) : nil
             if options.wantsLineNumber {
@@ -167,7 +170,32 @@ public struct StandardPrinter {
                 fields.append(OutputField("\(match.absoluteOffset + span.startByte)", colorTarget: nil))
             }
             let text = "\(onlyMatchingText(span, in: match))\(outputTerminator(match.lineTerminator))"
-            return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(text)"
+            return ["\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(text)"]
+        }
+    }
+
+    private func formatOnlyMatchingMultiline(_ span: MatchSpan, in match: SearchMatch, showPath: Bool) -> [String] {
+        let text = span.replacement ?? span.text
+        let chunks = splitRenderedLines(text)
+        let startLineOffset = lineOffset(in: match.lineWithTerminator, beforeByteOffset: span.startByte)
+        var runningByteOffset = match.absoluteOffset + span.startByte
+
+        return chunks.enumerated().map { offset, chunk in
+            let lineNumber = match.lineNumber + startLineOffset + offset
+            var fields: [OutputField] = []
+            let column = offset == 0 ? span.startColumn : 1
+            let path = showPath ? renderPath(for: match.fileURL, line: lineNumber, column: column) : nil
+            if options.wantsLineNumber {
+                fields.append(OutputField("\(lineNumber)", colorTarget: .line))
+            }
+            if options.column {
+                fields.append(OutputField("\(column)", colorTarget: .column))
+            }
+            if options.byteOffset {
+                fields.append(OutputField("\(runningByteOffset)", colorTarget: nil))
+            }
+            runningByteOffset += chunk.utf8.count + 1
+            return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(colors.apply(.match, to: chunk))\(outputTerminator(match.lineTerminator))"
         }
     }
 
@@ -427,6 +455,22 @@ public struct StandardPrinter {
         }
         if !current.isEmpty || text.last != terminator {
             lines.append(current)
+        }
+        return lines
+    }
+
+    private func lineOffset(in text: String, beforeByteOffset byteOffset: Int) -> Int {
+        var bytes = 0
+        var lines = 0
+        let terminator: Character = text.contains("\0") ? "\0" : "\n"
+        for character in text {
+            guard bytes < byteOffset else {
+                break
+            }
+            bytes += String(character).utf8.count
+            if character == terminator {
+                lines += 1
+            }
         }
         return lines
     }
