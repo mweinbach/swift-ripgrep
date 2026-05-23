@@ -88,7 +88,7 @@ public struct RipgrepSearcher {
             filesSearched: files.filter(\.searched).count,
             filesWithMatches: matchedFiles.count,
             matchedLines: matchedFiles.reduce(0) { total, file in
-                total + file.matches.reduce(0) { $0 + matchedLineCount($1) }
+                total + file.matches.reduce(0) { $0 + MatchedLineCounter.count($1, options: options) }
             },
             totalMatches: matchedFiles.reduce(0) { total, file in
                 total + file.matches.reduce(0) { $0 + $1.matchCount } + (file.hasBinaryMatch ? 1 : 0)
@@ -102,12 +102,6 @@ public struct RipgrepSearcher {
             diagnostics: diagnostics,
             filtered: walkResults.filtered
         )
-    }
-
-    private func matchedLineCount(_ match: SearchMatch) -> Int {
-        let terminator: Character = match.lineWithTerminator.contains("\0") ? "\0" : "\n"
-        let count = match.lineWithTerminator.filter { $0 == terminator }.count
-        return max(1, count)
     }
 
     private func sorted(_ files: [SearchFileResult], options: RipgrepOptions) -> [SearchFileResult] {
@@ -559,7 +553,12 @@ public struct RipgrepSearcher {
                     spans: adjustedSpans
                 )
             }
-            return SearchFileResult(fileURL: fileURL, matches: matches, lines: searchLines)
+            return SearchFileResult(
+                fileURL: fileURL,
+                matches: matches,
+                lines: searchLines,
+                bytesSearched: absoluteOffset
+            )
         }
 
         let candidates = limitedSpans.compactMap { span -> MultilineSpanCandidate? in
@@ -614,7 +613,12 @@ public struct RipgrepSearcher {
             )
         }
 
-        return SearchFileResult(fileURL: fileURL, matches: matches, lines: searchLines)
+        return SearchFileResult(
+            fileURL: fileURL,
+            matches: matches,
+            lines: searchLines,
+            bytesSearched: absoluteOffset
+        )
     }
 
     private func multilineReplacementBlockText(

@@ -172,3 +172,40 @@ public enum RipgrepError: Error, CustomStringConvertible, Equatable, Sendable {
         }
     }
 }
+
+enum MatchedLineCounter {
+    static func count(_ match: SearchMatch, options: RipgrepOptions) -> Int {
+        if options.multiline {
+            return multilineCount(match, options: options)
+        }
+        let terminator: Character = match.lineWithTerminator.contains("\0") ? "\0" : "\n"
+        return max(1, match.lineWithTerminator.filter { $0 == terminator }.count)
+    }
+
+    private static func multilineCount(_ match: SearchMatch, options: RipgrepOptions) -> Int {
+        var lineStarts = [0]
+        let separator = options.nullData ? UInt8(0) : UInt8(ascii: "\n")
+        for (offset, byte) in match.lineWithTerminator.utf8.enumerated() where byte == separator {
+            lineStarts.append(offset + 1)
+        }
+
+        var covered = Set<Int>()
+        for span in match.spans {
+            let firstLine = lineIndex(containingRelativeByteOffset: span.startByte, lineStarts: lineStarts)
+            let lastByte = max(span.startByte, span.endByte - 1)
+            let lastLine = lineIndex(containingRelativeByteOffset: lastByte, lineStarts: lineStarts)
+            for line in firstLine...lastLine {
+                covered.insert(line)
+            }
+        }
+        return max(1, covered.count)
+    }
+
+    private static func lineIndex(containingRelativeByteOffset byteOffset: Int, lineStarts: [Int]) -> Int {
+        var lineIndex = 0
+        for (index, start) in lineStarts.enumerated() where start <= byteOffset {
+            lineIndex = index
+        }
+        return lineIndex
+    }
+}

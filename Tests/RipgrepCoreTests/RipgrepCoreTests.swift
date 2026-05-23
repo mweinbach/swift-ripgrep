@@ -1353,6 +1353,21 @@ struct RipgrepSearcherTests {
         let binaryOnlyEnd = binaryOnlyMessages[1]["data"] as? [String: Any]
         #expect(binaryOnlyEnd?["binary_offset"] as? Int == 7)
 
+        try root.write("test\r\n\n", to: "crlf-json.txt")
+        let multilineOutput = try run(["-U", "--json", "\\n", root.path("crlf-json.txt")])
+        let multilineMessages = try multilineOutput.map(jsonObject)
+        #expect(multilineMessages.map { $0["type"] as? String } == ["begin", "match", "end", "summary"])
+        let multilineEnd = multilineMessages[2]["data"] as? [String: Any]
+        let multilineStats = multilineEnd?["stats"] as? [String: Any]
+        #expect(multilineStats?["bytes_searched"] as? Int == 7)
+        #expect(multilineStats?["matched_lines"] as? Int == 2)
+        #expect(multilineStats?["matches"] as? Int == 2)
+        let multilineSummary = multilineMessages[3]["data"] as? [String: Any]
+        let multilineSummaryStats = multilineSummary?["stats"] as? [String: Any]
+        #expect(multilineSummaryStats?["bytes_searched"] as? Int == 7)
+        #expect(multilineSummaryStats?["matched_lines"] as? Int == 2)
+        #expect(multilineSummaryStats?["matches"] as? Int == 2)
+
         var relativeOptions = RipgrepOptions()
         relativeOptions.json = true
         relativeOptions.pattern = "needle"
