@@ -30,7 +30,7 @@ public struct RipgrepSearcher {
     }
 
     public func search(options: RipgrepOptions, stdin: String?) throws -> SearchResults {
-        guard let pattern = options.pattern, !pattern.isEmpty else {
+        guard !options.effectivePatterns.isEmpty else {
             throw RipgrepError.emptyPattern
         }
 

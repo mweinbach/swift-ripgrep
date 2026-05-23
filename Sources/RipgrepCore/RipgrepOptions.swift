@@ -16,6 +16,7 @@ public struct RipgrepOptions: Equatable {
     public var mode: SearchMode = .search
     public var printMode: PrintMode = .matchingLines
     public var pattern: String?
+    public var patterns: [String] = []
     public var roots: [URL] = []
     public var ignoreCase = false
     public var smartCase = false
@@ -42,11 +43,20 @@ public struct RipgrepOptions: Equatable {
     }
 
     public var effectiveIgnoreCase: Bool {
-        ignoreCase || (smartCase && pattern?.rangeOfCharacter(from: .uppercaseLetters) == nil)
+        ignoreCase || (smartCase && effectivePatterns.allSatisfy {
+            $0.rangeOfCharacter(from: .uppercaseLetters) == nil
+        })
     }
 
     public var wantsLineNumber: Bool {
         lineNumber && !noLineNumber
+    }
+
+    public var effectivePatterns: [String] {
+        if !patterns.isEmpty {
+            return patterns
+        }
+        return pattern.map { [$0] } ?? []
     }
 }
 
@@ -61,6 +71,7 @@ public enum RipgrepArgumentParser {
     public static func parse(_ arguments: [String]) -> CLIParseResult {
         var options = RipgrepOptions()
         var positionals: [String] = []
+        var explicitPatterns: [String] = []
         var index = 0
 
         while index < arguments.count {
@@ -80,6 +91,32 @@ public enum RipgrepArgumentParser {
                 options.smartCase = true
             case "-F", "--fixed-strings":
                 options.fixedStrings = true
+            case "-e", "--regexp":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--regexp <PATTERN>' requires a value")
+                }
+                explicitPatterns.append(arguments[index])
+                index += 1
+            case let value where value.hasPrefix("--regexp="):
+                explicitPatterns.append(String(value.dropFirst("--regexp=".count)))
+            case "-f", "--file":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--file <PATTERNFILE>' requires a value")
+                }
+                switch readPatterns(from: arguments[index]) {
+                case .patterns(let patterns):
+                    explicitPatterns.append(contentsOf: patterns)
+                case .error(let message):
+                    return .error(message)
+                }
+                index += 1
+            case let value where value.hasPrefix("--file="):
+                switch readPatterns(from: String(value.dropFirst("--file=".count))) {
+                case .patterns(let patterns):
+                    explicitPatterns.append(contentsOf: patterns)
+                case .error(let message):
+                    return .error(message)
+                }
             case "-w", "--word-regexp":
                 options.wordRegexp = true
             case "-x", "--line-regexp":
@@ -140,11 +177,18 @@ public enum RipgrepArgumentParser {
         }
 
         if options.mode == .search {
-            guard let pattern = positionals.first, !pattern.isEmpty else {
-                return .error(usage())
+            if explicitPatterns.isEmpty {
+                guard let pattern = positionals.first, !pattern.isEmpty else {
+                    return .error(usage())
+                }
+                options.pattern = pattern
+                options.patterns = [pattern]
+                options.roots = positionals.dropFirst().map { URL(fileURLWithPath: $0) }
+            } else {
+                options.pattern = explicitPatterns.first
+                options.patterns = explicitPatterns
+                options.roots = positionals.map { URL(fileURLWithPath: $0) }
             }
-            options.pattern = pattern
-            options.roots = positionals.dropFirst().map { URL(fileURLWithPath: $0) }
             if options.roots.isEmpty && !options.useStdin {
                 options.roots = [URL(fileURLWithPath: ".")]
             }
@@ -170,6 +214,8 @@ public enum RipgrepArgumentParser {
           -i, --ignore-case          Search case insensitively
           -S, --smart-case           Search case insensitively if the pattern is lowercase
           -F, --fixed-strings        Treat the pattern as a literal string
+          -e, --regexp PATTERN       Add a pattern to search for
+          -f, --file PATTERNFILE     Read patterns from a file
           -w, --word-regexp          Only show matches surrounded by word boundaries
           -x, --line-regexp          Only show matches spanning an entire line
           -v, --invert-match         Show non-matching lines
@@ -192,4 +238,20 @@ public enum RipgrepArgumentParser {
               --version              Print version
         """
     }
+
+    private static func readPatterns(from path: String) -> PatternFileResult {
+        do {
+            let contents = try String(contentsOf: URL(fileURLWithPath: path), encoding: .utf8)
+            return .patterns(contents.components(separatedBy: "\n").map {
+                $0.hasSuffix("\r") ? String($0.dropLast()) : $0
+            }.filter { !$0.isEmpty })
+        } catch {
+            return .error("error: failed to read pattern file '\(path)': \(error)")
+        }
+    }
+}
+
+private enum PatternFileResult {
+    case patterns([String])
+    case error(String)
 }

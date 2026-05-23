@@ -2,41 +2,44 @@ import Foundation
 
 public struct PatternMatcher {
     private let options: RipgrepOptions
-    private let regex: NSRegularExpression?
-    private let literal: String
+    private let patterns: [CompiledPattern]
 
     public init(options: RipgrepOptions) throws {
-        guard let pattern = options.pattern, !pattern.isEmpty else {
+        let patternSources = options.effectivePatterns
+        guard !patternSources.isEmpty, patternSources.allSatisfy({ !$0.isEmpty }) else {
             throw RipgrepError.emptyPattern
         }
 
         self.options = options
-        self.literal = options.effectiveIgnoreCase ? pattern.lowercased() : pattern
-
-        if options.fixedStrings {
-            self.regex = nil
-        } else {
-            let source = Self.regexPattern(for: pattern, options: options)
-            do {
-                self.regex = try NSRegularExpression(
-                    pattern: source,
-                    options: options.effectiveIgnoreCase ? [.caseInsensitive] : []
-                )
-            } catch {
-                throw RipgrepError.invalidRegex(error.localizedDescription)
+        self.patterns = try patternSources.map { pattern in
+            if options.fixedStrings {
+                return .literal(options.effectiveIgnoreCase ? pattern.lowercased() : pattern)
+            } else {
+                let source = Self.regexPattern(for: pattern, options: options)
+                do {
+                    return .regex(try NSRegularExpression(
+                        pattern: source,
+                        options: options.effectiveIgnoreCase ? [.caseInsensitive] : []
+                    ))
+                } catch {
+                    throw RipgrepError.invalidRegex(error.localizedDescription)
+                }
             }
         }
     }
 
     public func matches(in line: String) -> [Range<String.Index>] {
-        let ranges: [Range<String.Index>]
-        if let regex {
-            ranges = regex.matches(
-                in: line,
-                range: NSRange(line.startIndex..., in: line)
-            ).compactMap { Range($0.range, in: line) }
-        } else {
-            ranges = literalRanges(in: line)
+        var ranges: [Range<String.Index>] = []
+        for pattern in patterns {
+            switch pattern {
+            case .regex(let regex):
+                ranges.append(contentsOf: regex.matches(
+                    in: line,
+                    range: NSRange(line.startIndex..., in: line)
+                ).compactMap { Range($0.range, in: line) })
+            case .literal(let literal):
+                ranges.append(contentsOf: literalRanges(literal, in: line))
+            }
         }
 
         let filtered = ranges.filter { range in
@@ -57,7 +60,7 @@ public struct PatternMatcher {
         return source
     }
 
-    private func literalRanges(in line: String) -> [Range<String.Index>] {
+    private func literalRanges(_ literal: String, in line: String) -> [Range<String.Index>] {
         let haystack = options.effectiveIgnoreCase ? line.lowercased() : line
         var cursor = haystack.startIndex
         var ranges: [Range<String.Index>] = []
@@ -89,4 +92,9 @@ public struct PatternMatcher {
             CharacterSet.alphanumerics.contains($0) || $0 == "_"
         }
     }
+}
+
+private enum CompiledPattern {
+    case regex(NSRegularExpression)
+    case literal(String)
 }

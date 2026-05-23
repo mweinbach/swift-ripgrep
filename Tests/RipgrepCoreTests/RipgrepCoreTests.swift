@@ -41,6 +41,16 @@ struct RipgrepSearcherTests {
         #expect(try run(["-v", "needle", root.path("case.txt")]) == ["Needle", "hay"])
     }
 
+    @Test("supports multiple regexp and pattern file inputs")
+    func supportsMultiplePatterns() throws {
+        let root = try TemporaryDirectory()
+        try root.write("alpha\nbeta\ngamma\n", to: "words.txt")
+        try root.write("alpha\ngamma\n", to: "patterns")
+
+        #expect(try run(["-e", "alpha", "-e", "gamma", root.path("words.txt")]) == ["alpha", "gamma"])
+        #expect(try run(["-f", root.path("patterns"), root.path("words.txt")]) == ["alpha", "gamma"])
+    }
+
     @Test("formats line numbers columns counts and filename modes")
     func formatsOutputModes() throws {
         let root = try TemporaryDirectory()
