@@ -332,6 +332,22 @@ struct RipgrepSearcherTests {
             "needle",
             "needle",
         ])
+        #expect(try run(["-M", "12", "--replace", "PIN", "needle", root.path("columns.txt")]) == [
+            "[Omitted long line with 1 match]",
+            "[Omitted long line with 1 match]",
+        ])
+        try root.write("needle middle needle tail\n", to: "replacement-preview.txt")
+        #expect(try run([
+            "-M",
+            "14",
+            "--max-columns-preview",
+            "--replace",
+            "PIN",
+            "needle",
+            root.path("replacement-preview.txt"),
+        ]) == [
+            "PIN middle PIN [... 1 more match]",
+        ])
 
         try root.write("needle\nthis context line is very long\n", to: "context-columns.txt")
         #expect(try run(["-M", "20", "-A1", "needle", root.path("context-columns.txt")]) == [

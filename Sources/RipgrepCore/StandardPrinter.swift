@@ -245,13 +245,17 @@ public struct StandardPrinter {
         guard options.replacement != nil, !match.spans.isEmpty else {
             return "\(renderedLine(match.line, spans: match.spans))\(outputTerminator(match.lineTerminator))"
         }
-        var line = match.line
+        let originalLine = match.line
+        var line = originalLine
         for span in match.spans.sorted(by: { $0.startColumn > $1.startColumn }) {
             guard let replacement = span.replacement,
                   let range = indexRange(startColumn: span.startColumn, endColumn: span.endColumn, in: line) else {
                 continue
             }
             line.replaceSubrange(range, with: replacement)
+        }
+        if let rendered = limitedReplacementLine(line, originalLine: originalLine, match: match) {
+            return "\(rendered)\(outputTerminator(match.lineTerminator))"
         }
         return "\(renderedLine(line))\(outputTerminator(match.lineTerminator))"
     }
@@ -315,6 +319,17 @@ public struct StandardPrinter {
             return omittedKind.message
         }
         return "\(line.prefixBytes(maxColumns)) [... omitted end of long line]"
+    }
+
+    private func limitedReplacementLine(_ line: String, originalLine: String, match: SearchMatch) -> String? {
+        guard let maxColumns = options.maxColumns, originalLine.utf8.count >= maxColumns else {
+            return nil
+        }
+        guard options.maxColumnsPreview else {
+            return "[Omitted long line with \(match.matchCount) \(match.matchCount == 1 ? "match" : "matches")]"
+        }
+        let remainingMatches = match.spans.filter { $0.startByte >= maxColumns }.count
+        return "\(line.prefixBytes(maxColumns)) [... \(remainingMatches) more \(remainingMatches == 1 ? "match" : "matches")]"
     }
 
     private func splitRenderedLines(_ text: String) -> [String] {
