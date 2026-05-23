@@ -205,7 +205,7 @@ public struct RipgrepSearcher {
             fileURL: result.fileURL,
             matches: result.matches,
             lines: result.lines,
-            bytesSearched: data.count,
+            bytesSearched: result.bytesSearched,
             searched: result.searched
         ))
     }
@@ -426,10 +426,12 @@ public struct RipgrepSearcher {
         var absoluteOffset = 0
         let maxCount = options.maxCount ?? Int.max
         var hasMatched = false
+        var bytesSearchedThroughMaxCount: Int?
 
         for (offset, splitLine) in lines.enumerated() {
             let line = splitLine.text
             let lineNumber = offset + 1
+            let lineByteCount = splitLine.text.utf8.count + splitLine.terminator.utf8.count
             searchLines.append(SearchLine(
                 lineNumber: lineNumber,
                 line: line,
@@ -438,13 +440,13 @@ public struct RipgrepSearcher {
             ))
 
             guard matches.count < maxCount else {
-                absoluteOffset += splitLine.text.utf8.count + splitLine.terminator.utf8.count
+                absoluteOffset += lineByteCount
                 continue
             }
 
             let spans = matcher.spans(in: line)
             guard !spans.isEmpty else {
-                absoluteOffset += splitLine.text.utf8.count + splitLine.terminator.utf8.count
+                absoluteOffset += lineByteCount
                 if options.stopOnNonmatch && hasMatched {
                     break
                 }
@@ -462,10 +464,18 @@ public struct RipgrepSearcher {
                 matchCount: spans.count,
                 spans: spans
             ))
-            absoluteOffset += splitLine.text.utf8.count + splitLine.terminator.utf8.count
+            absoluteOffset += lineByteCount
+            if matches.count == maxCount {
+                bytesSearchedThroughMaxCount = absoluteOffset
+            }
         }
 
-        return SearchFileResult(fileURL: fileURL, matches: matches, lines: searchLines)
+        return SearchFileResult(
+            fileURL: fileURL,
+            matches: matches,
+            lines: searchLines,
+            bytesSearched: bytesSearchedThroughMaxCount ?? absoluteOffset
+        )
     }
 
     private func searchMultilineContents(

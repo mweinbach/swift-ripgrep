@@ -750,6 +750,11 @@ struct RipgrepSearcherTests {
         #expect(output.contains("1 files searched"))
         #expect(output.contains("23 bytes searched"))
         #expect(output.contains("18 bytes printed"))
+
+        try root.write("foo1\nfoo2\nfoo3\nfoo4\nfoo5\n", to: "max-count-stats.txt")
+        let limitedOutput = try run(["--stats", "-m2", "foo", root.path("max-count-stats.txt")])
+        #expect(limitedOutput.contains("2 matches"))
+        #expect(limitedOutput.contains("10 bytes searched"))
     }
 
     @Test("loads arguments from RIPGREP_CONFIG_PATH")
@@ -1906,6 +1911,24 @@ struct RipgrepSearcherTests {
             "needle",
             root.url.path,
         ])) == ["big.txt", "keep.txt"])
+
+        let braceRoot = try TemporaryDirectory()
+        try braceRoot.createDirectory(".git")
+        try braceRoot.write("", to: "lock")
+        try braceRoot.write("", to: "bar.py")
+        try braceRoot.write("", to: ".git/packed-refs")
+        try braceRoot.write("", to: ".git/description")
+        #expect(try run([
+            "--no-ignore",
+            "--hidden",
+            "--follow",
+            "--files",
+            "--glob",
+            "!{.git,node_modules,plugged}/**",
+            "--glob",
+            "*.{js,json,php,md,styl,scss,sass,pug,html,config,py,cpp,c,go,hs}",
+            braceRoot.url.path,
+        ]).map { URL(fileURLWithPath: $0).lastPathComponent } == ["bar.py"])
     }
 
     @Test("honors custom ignore file and override globs")
@@ -1926,6 +1949,26 @@ struct RipgrepSearcherTests {
             "needle",
             root.url.path,
         ])) == ["keep.swift"])
+
+        let globstarRoot = try TemporaryDirectory()
+        try globstarRoot.createDirectory(".git")
+        try globstarRoot.write("**/**/*", to: ".gitignore")
+        try globstarRoot.createDirectory("a")
+        try globstarRoot.write("needle\n", to: "a/foo")
+        var output: [String] = []
+        var errors: [String] = []
+        let exitCode = RipgrepCLI.run(
+            arguments: ["needle", globstarRoot.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 1)
+        #expect(output.isEmpty)
+        #expect(errors == [
+            "rg: No files were searched, which means ripgrep probably applied a filter you didn't expect.",
+            "Running with --debug will show why files are being skipped.",
+        ])
+        #expect(pathBasenames(try run(["--no-ignore", "needle", globstarRoot.url.path])) == ["foo"])
     }
 
     @Test("filters by built in file types")

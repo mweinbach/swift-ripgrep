@@ -170,8 +170,14 @@ public struct GlobMatcher: Equatable {
             if character == "*" {
                 let next = pattern.index(after: index)
                 if next < pattern.endIndex, pattern[next] == "*" {
-                    source += ".*"
-                    index = pattern.index(after: next)
+                    let afterGlobstar = pattern.index(after: next)
+                    if afterGlobstar < pattern.endIndex, pattern[afterGlobstar] == "/" {
+                        source += "(?:.*/)?"
+                        index = pattern.index(after: afterGlobstar)
+                    } else {
+                        source += ".*"
+                        index = afterGlobstar
+                    }
                 } else {
                     source += "[^/]*"
                     index = next
@@ -186,6 +192,20 @@ public struct GlobMatcher: Equatable {
                     index = pattern.index(after: close)
                 } else {
                     source += "\\["
+                    index = afterOpen
+                }
+            } else if character == "{", let close = pattern[index...].firstIndex(of: "}") {
+                let afterOpen = pattern.index(after: index)
+                if afterOpen < close {
+                    let body = String(pattern[afterOpen..<close])
+                    let alternatives = body
+                        .split(separator: ",", omittingEmptySubsequences: false)
+                        .map { regexSource(for: String($0)) }
+                        .joined(separator: "|")
+                    source += "(?:\(alternatives))"
+                    index = pattern.index(after: close)
+                } else {
+                    source += "\\{"
                     index = afterOpen
                 }
             } else {
