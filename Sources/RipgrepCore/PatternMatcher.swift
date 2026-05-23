@@ -101,7 +101,7 @@ public struct PatternMatcher {
     }
 
     private static func regexPattern(for pattern: String, options: RipgrepOptions) -> String {
-        var source = pattern
+        var source = foundationNamedCapturePattern(for: pattern)
         if options.noUnicode {
             source = asciiRegexPattern(for: source)
         }
@@ -119,6 +119,50 @@ public struct PatternMatcher {
             source = strictLineEndPattern(for: source)
         }
         return source
+    }
+
+    private static func foundationNamedCapturePattern(for pattern: String) -> String {
+        var output = ""
+        var escaped = false
+        var inClass = false
+        var index = pattern.startIndex
+
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                output.append(character)
+                escaped = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "\\" {
+                output.append(character)
+                escaped = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "[" {
+                inClass = true
+                output.append(character)
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "]" {
+                inClass = false
+                output.append(character)
+                index = pattern.index(after: index)
+                continue
+            }
+            if !inClass, pattern[index...].hasPrefix("(?P<") {
+                output += "(?<"
+                index = pattern.index(index, offsetBy: 4)
+                continue
+            }
+            output.append(character)
+            index = pattern.index(after: index)
+        }
+
+        return output
     }
 
     private static func defaultEngineUnsupportedFeature(in pattern: String) -> String? {
@@ -303,10 +347,17 @@ public struct PatternMatcher {
             return nil
         }
         let ranges = (0..<match.numberOfRanges).map { match.range(at: $0) }
-        return renderReplacement(replacement, line: line, ranges: ranges)
+        return renderReplacement(replacement, line: line, ranges: ranges) { name in
+            match.range(withName: name)
+        }
     }
 
-    private func renderReplacement(_ template: String, line: String, ranges: [NSRange]) -> String {
+    private func renderReplacement(
+        _ template: String,
+        line: String,
+        ranges: [NSRange],
+        namedRange: (String) -> NSRange = { _ in NSRange(location: NSNotFound, length: 0) }
+    ) -> String {
         var output = ""
         var index = template.startIndex
 
@@ -337,7 +388,12 @@ public struct PatternMatcher {
                     index = nextIndex
                     continue
                 }
-                output += captureText(String(template[template.index(after: nextIndex)..<close]), line: line, ranges: ranges)
+                output += captureText(
+                    String(template[template.index(after: nextIndex)..<close]),
+                    line: line,
+                    ranges: ranges,
+                    namedRange: namedRange
+                )
                 index = template.index(after: close)
                 continue
             }
@@ -352,18 +408,30 @@ public struct PatternMatcher {
                 index = nextIndex
                 continue
             }
-            output += captureText(String(template[nameStart..<nameEnd]), line: line, ranges: ranges)
+            output += captureText(
+                String(template[nameStart..<nameEnd]),
+                line: line,
+                ranges: ranges,
+                namedRange: namedRange
+            )
             index = nameEnd
         }
 
         return output
     }
 
-    private func captureText(_ name: String, line: String, ranges: [NSRange]) -> String {
-        guard let index = Int(name), index < ranges.count else {
-            return ""
+    private func captureText(
+        _ name: String,
+        line: String,
+        ranges: [NSRange],
+        namedRange: (String) -> NSRange
+    ) -> String {
+        let range: NSRange
+        if let index = Int(name), index < ranges.count {
+            range = ranges[index]
+        } else {
+            range = namedRange(name)
         }
-        let range = ranges[index]
         guard range.location != NSNotFound,
               let stringRange = Range(range, in: line) else {
             return ""

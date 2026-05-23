@@ -862,6 +862,9 @@ struct RipgrepSearcherTests {
         #expect(try run(["--replace", "${0}_${1}_${2}${3}_$$", #"([a-z]+)(\d+)"#, root.path("replace.txt")]) == [
             "abc123_abc_123_$ def456_def_456_$",
         ])
+        #expect(try run(["--replace", "$word:${digits}$missing", #"(?P<word>[a-z]+)(?P<digits>\d+)"#, root.path("replace.txt")]) == [
+            "abc:123 def:456",
+        ])
     }
 
     @Test("prints trim vimgrep and heading modes")
@@ -1042,13 +1045,19 @@ struct RipgrepSearcherTests {
         let root = try TemporaryDirectory()
         try root.write("abc123\n", to: "json-replace.txt")
 
-        let output = try run(["--json", "--replace", "[$1]", #"([a-z]+)\d+"#, root.path("json-replace.txt")])
+        let output = try run([
+            "--json",
+            "--replace",
+            "$word/$digits/$missing",
+            #"(?P<word>[a-z]+)(?P<digits>\d+)"#,
+            root.path("json-replace.txt"),
+        ])
         let messages = try output.map(jsonObject)
         let match = messages.first { $0["type"] as? String == "match" }?["data"] as? [String: Any]
         let submatch = (match?["submatches"] as? [[String: Any]])?.first
         let replacement = submatch?["replacement"] as? [String: String]
 
-        #expect(replacement?["text"] == "[abc]")
+        #expect(replacement?["text"] == "abc/123/")
     }
 
     @Test("JSON quiet stats emits summary only")
