@@ -59,6 +59,9 @@ public struct RipgrepOptions: Equatable {
     public var noLineNumber = false
     public var column = false
     public var byteOffset = false
+    public var heading: Bool?
+    public var trim = false
+    public var vimgrep = false
     public var withFilename: Bool?
     public var hidden = false
     public var noIgnore = false
@@ -190,6 +193,16 @@ public enum RipgrepArgumentParser {
                 options.noLineNumber = true
             case "--column":
                 options.column = true
+            case "--heading":
+                options.heading = true
+            case "--no-heading":
+                options.heading = false
+            case "--trim":
+                options.trim = true
+            case "--no-trim":
+                options.trim = false
+            case "--vimgrep":
+                options.vimgrep = true
             case "--sort":
                 guard index < arguments.count else {
                     return .error("error: The argument '--sort <SORTBY>' requires a value")
@@ -510,6 +523,9 @@ public enum RipgrepArgumentParser {
           -N, --no-line-number       Suppress line numbers
               --column               Show the first match column
           -b, --byte-offset          Show the 0-based byte offset
+              --heading              Group matches by file
+              --trim                 Trim leading ASCII whitespace from printed lines
+              --vimgrep              Print vim-compatible file:line:column matches
               --sort SORTBY          Sort results by path, modified, accessed or created
               --sortr SORTBY         Sort results in reverse order
           -H, --with-filename        Show file names

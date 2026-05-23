@@ -187,6 +187,32 @@ struct RipgrepSearcherTests {
         ])
     }
 
+    @Test("prints trim vimgrep and heading modes")
+    func printsTrimVimgrepAndHeadingModes() throws {
+        let root = try TemporaryDirectory()
+        try root.write("  needle one needle\n  no\n", to: "a.txt")
+        try root.write("xx needle\n", to: "b.txt")
+
+        #expect(try run(["-n", "--trim", "needle", root.path("a.txt")]) == [
+            "1:needle one needle",
+        ])
+        #expect(try run(["--vimgrep", "needle", root.path("a.txt")]) == [
+            "\(root.path("a.txt")):1:3:  needle one needle",
+            "\(root.path("a.txt")):1:14:  needle one needle",
+        ])
+        #expect(try run(["--vimgrep", "-o", "needle", root.path("a.txt")]) == [
+            "\(root.path("a.txt")):1:3:needle",
+            "\(root.path("a.txt")):1:14:needle",
+        ])
+        #expect(try run(["--heading", "-n", "needle", root.url.path]) == [
+            "\(root.path("a.txt"))",
+            "1:  needle one needle",
+            "",
+            "\(root.path("b.txt"))",
+            "1:xx needle",
+        ])
+    }
+
     @Test("prints JSON lines for matches context and summary")
     func printsJSONLines() throws {
         let root = try TemporaryDirectory()

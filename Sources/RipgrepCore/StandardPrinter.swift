@@ -29,6 +29,14 @@ public struct StandardPrinter {
     private func bodyLines(for results: SearchResults) -> [String] {
         switch options.printMode {
         case .matchingLines:
+            if options.vimgrep {
+                return results.files.flatMap { result in
+                    formatVimgrep(result)
+                }
+            }
+            if options.heading == true {
+                return headingLines(for: results)
+            }
             if options.onlyMatching {
                 return results.files.flatMap { result in
                     if let binaryLine = formatBinaryMatch(result, showPath: showPath(for: results)) {
@@ -92,6 +100,17 @@ public struct StandardPrinter {
         return "\(fields.joined(separator: ":")):\(renderedLine(for: match))"
     }
 
+    private func formatVimgrep(_ result: SearchFileResult) -> [String] {
+        result.matches.flatMap { match in
+            match.spans.map { span in
+                let text = options.onlyMatching
+                    ? (span.replacement ?? span.text)
+                    : renderedLine(for: match)
+                return "\(displayPath(for: match.fileURL)):\(match.lineNumber):\(span.startColumn):\(text)"
+            }
+        }
+    }
+
     private func formatBinaryMatch(_ result: SearchFileResult, showPath: Bool) -> String? {
         guard result.hasBinaryMatch, let offset = result.binaryByteOffset else {
             return nil
@@ -124,6 +143,31 @@ public struct StandardPrinter {
             }
             return "\(fields.joined(separator: ":")):\(text)"
         }
+    }
+
+    private func headingLines(for results: SearchResults) -> [String] {
+        var output: [String] = []
+        for result in results.files {
+            let lines: [String]
+            if let binaryLine = formatBinaryMatch(result, showPath: false) {
+                lines = [binaryLine]
+            } else if options.onlyMatching {
+                lines = result.matches.flatMap { formatOnlyMatching($0, showPath: false) }
+            } else if options.passthru || options.beforeContext > 0 || options.afterContext > 0 {
+                lines = contextLines(for: result, showPath: false)
+            } else {
+                lines = result.matches.map { format($0, showPath: false) }
+            }
+            guard !lines.isEmpty else {
+                continue
+            }
+            if !output.isEmpty {
+                output.append("")
+            }
+            output.append(displayPath(for: result.fileURL))
+            output.append(contentsOf: lines)
+        }
+        return output
     }
 
     private func contextLines(for result: SearchFileResult, showPath: Bool) -> [String] {
@@ -172,14 +216,14 @@ public struct StandardPrinter {
         }
 
         if fields.isEmpty {
-            return line.line
+            return renderedLine(line.line)
         }
-        return "\(fields.joined(separator: "-"))-\(line.line)"
+        return "\(fields.joined(separator: "-"))-\(renderedLine(line.line))"
     }
 
     private func renderedLine(for match: SearchMatch) -> String {
         guard options.replacement != nil, !match.spans.isEmpty else {
-            return match.line
+            return renderedLine(match.line)
         }
         var line = match.line
         for span in match.spans.sorted(by: { $0.startColumn > $1.startColumn }) {
@@ -189,7 +233,11 @@ public struct StandardPrinter {
             }
             line.replaceSubrange(range, with: replacement)
         }
-        return line
+        return renderedLine(line)
+    }
+
+    private func renderedLine(_ line: String) -> String {
+        options.trim ? line.trimmingASCIIWhitespacePrefix() : line
     }
 
     private func indexRange(startColumn: Int, endColumn: Int, in line: String) -> Range<String.Index>? {
@@ -248,5 +296,17 @@ public struct StandardPrinter {
         lines.reduce(0) { total, line in
             total + line.utf8.count + 1
         }
+    }
+}
+
+private extension String {
+    func trimmingASCIIWhitespacePrefix() -> String {
+        let firstNonWhitespace = firstIndex { character in
+            character != " " && character != "\t" && character != "\r" && character != "\n"
+        }
+        guard let firstNonWhitespace else {
+            return ""
+        }
+        return String(self[firstNonWhitespace...])
     }
 }
