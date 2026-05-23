@@ -154,15 +154,21 @@ public struct FileWalker {
         let relativePath = relativePath(for: url, rootBase: rootBase)
 
         if !isExplicit {
-            if !options.hidden && isHidden(url) && !isIncludedByIgnore(relativePath: relativePath, isDirectory: isDirectory, ignoreStack: ignoreStack) {
-                debug("ignoring \(url.path): hidden", options: options, diagnostics: &diagnostics)
-                return []
-            }
-            if !overrides.allows(relativePath: relativePath, isDirectory: isDirectory) {
+            let overrideDecision = overrides.decision(relativePath: relativePath, isDirectory: isDirectory)
+            let isIncludedByOverride = overrideDecision == .include
+            if overrideDecision == .exclude
+                || (overrideDecision == nil && !overrides.allows(relativePath: relativePath, isDirectory: isDirectory)) {
                 debug("ignoring \(url.path): override glob", options: options, diagnostics: &diagnostics)
                 return []
             }
-            if !ignoreStack.allows(relativePath: relativePath, isDirectory: isDirectory) {
+            if !isIncludedByOverride,
+               !options.hidden,
+               isHidden(url),
+               !isIncludedByIgnore(relativePath: relativePath, isDirectory: isDirectory, ignoreStack: ignoreStack) {
+                debug("ignoring \(url.path): hidden", options: options, diagnostics: &diagnostics)
+                return []
+            }
+            if !isIncludedByOverride && !ignoreStack.allows(relativePath: relativePath, isDirectory: isDirectory) {
                 debug("ignoring \(url.path): ignore file", options: options, diagnostics: &diagnostics)
                 filtered = true
                 return []

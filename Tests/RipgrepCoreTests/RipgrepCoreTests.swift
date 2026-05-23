@@ -1671,6 +1671,32 @@ struct RipgrepSearcherTests {
         try whitelisted.write("!.foo.txt\n", to: ".ignore")
         #expect(try run(["--files", whitelisted.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == [".foo.txt"])
 
+        let overrideRoot = try TemporaryDirectory()
+        try overrideRoot.createDirectory("sub")
+        try overrideRoot.write("alpha\n", to: "a.txt")
+        try overrideRoot.write("beta\n", to: "b.txt")
+        try overrideRoot.write("secret\n", to: ".hidden.txt")
+        try overrideRoot.write("gamma\n", to: "sub/c.txt")
+        try overrideRoot.write("b.txt\n", to: ".ignore")
+        #expect(pathBasenames(try run([
+            "--files",
+            "--glob",
+            "*.txt",
+            "--sort",
+            "path",
+            overrideRoot.url.path,
+        ])) == [".hidden.txt", "a.txt", "b.txt", "c.txt"])
+        #expect(pathBasenames(try run([
+            "--files",
+            "--glob",
+            "*.txt",
+            "--glob",
+            "!a.txt",
+            "--sort",
+            "path",
+            overrideRoot.url.path,
+        ])) == [".hidden.txt", "b.txt", "c.txt"])
+
         var output: [String] = []
         var errors: [String] = []
         var exitCode = RipgrepCLI.run(
