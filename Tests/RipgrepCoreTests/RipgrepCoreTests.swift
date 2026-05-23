@@ -1717,6 +1717,42 @@ struct RipgrepSearcherTests {
             "rg: No files were searched, which means ripgrep probably applied a filter you didn't expect.",
             "Running with --debug will show why files are being skipped.",
         ])
+
+        let implicit = try TemporaryDirectory()
+        try implicit.write("/a/b\n", to: ".ignore")
+        try implicit.createDirectory("a/b")
+        try implicit.write("needle\n", to: "a/b/file.txt")
+        let originalDirectory = FileManager.default.currentDirectoryPath
+        defer { FileManager.default.changeCurrentDirectoryPath(originalDirectory) }
+        #expect(FileManager.default.changeCurrentDirectoryPath(implicit.url.path))
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["needle"],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == [
+            "rg: No files were searched, which means ripgrep probably applied a filter you didn't expect.",
+            "Running with --debug will show why files are being skipped.",
+        ])
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["-q", "needle"],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == [
+            "rg: No files were searched, which means ripgrep probably applied a filter you didn't expect.",
+            "Running with --debug will show why files are being skipped.",
+        ])
     }
 
     @Test("honors parent ignore files and unrestricted levels")

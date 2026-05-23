@@ -105,6 +105,9 @@ public enum RipgrepCLI {
                 if !results.messages.isEmpty && !(options.quiet && hasSuccessfulOutput) {
                     return 2
                 }
+                if shouldExitForImplicitNothingSearched(results: results, options: options) {
+                    return 2
+                }
                 return hasSuccessfulOutput ? 0 : 1
             } catch {
                 stderr("rg: \(error)")
@@ -124,13 +127,16 @@ public enum RipgrepCLI {
 
     private static func shouldPrintNothingSearchedWarning(results: SearchResults, options: RipgrepOptions) -> Bool {
         guard options.printMode == .matchingLines,
-              !options.quiet,
               results.summary.filesSearched == 0,
               results.messages.isEmpty,
               results.filtered else {
             return false
         }
         return true
+    }
+
+    private static func shouldExitForImplicitNothingSearched(results: SearchResults, options: RipgrepOptions) -> Bool {
+        options.rootPathArguments.isEmpty && shouldPrintNothingSearchedWarning(results: results, options: options)
     }
 
     public static func usage() -> String {
