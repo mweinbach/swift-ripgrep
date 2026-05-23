@@ -702,6 +702,23 @@ struct RipgrepSearcherTests {
         #expect(try run(["--files", "--hidden", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == [".hidden.txt", "visible.txt"])
     }
 
+    @Test("honors symlink and one file system traversal toggles")
+    func honorsSymlinkAndOneFileSystemTraversalToggles() throws {
+        let root = try TemporaryDirectory()
+        try root.createDirectory("real")
+        try root.write("needle\n", to: "real/file.txt")
+        try FileManager.default.createSymbolicLink(
+            at: root.url.appendingPathComponent("link"),
+            withDestinationURL: root.url.appendingPathComponent("real")
+        )
+
+        #expect(pathBasenames(try run(["needle", root.url.path])) == ["file.txt"])
+        #expect(pathBasenames(try run(["--follow", "needle", root.url.path])) == ["file.txt", "file.txt"])
+        #expect(pathBasenames(try run(["--follow", "--no-follow", "needle", root.url.path])) == ["file.txt"])
+        #expect(pathBasenames(try run(["--one-file-system", "needle", root.url.path])) == ["file.txt"])
+        #expect(pathBasenames(try run(["--one-file-system", "--no-one-file-system", "needle", root.url.path])) == ["file.txt"])
+    }
+
     @Test("honors ignore files and no ignore")
     func honorsIgnoreFilesAndNoIgnore() throws {
         let root = try TemporaryDirectory()

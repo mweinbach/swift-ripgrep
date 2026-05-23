@@ -133,6 +133,7 @@ public struct RipgrepOptions: Equatable {
     public var searchZip = false
     public var typeChanges: [TypeChange] = []
     public var followSymlinks = false
+    public var oneFileSystem = false
     public var binaryMode: BinaryMode = .automatic
     public var quiet = false
     public var noMessages = false
@@ -598,6 +599,12 @@ public enum RipgrepArgumentParser {
                 options.typeChanges.append(.clear(String(value.dropFirst("--type-clear=".count))))
             case "-L", "--follow":
                 options.followSymlinks = true
+            case "--no-follow":
+                options.followSymlinks = false
+            case "--one-file-system":
+                options.oneFileSystem = true
+            case "--no-one-file-system":
+                options.oneFileSystem = false
             case "-z", "--search-zip":
                 options.searchZip = true
                 options.preprocessor = nil
@@ -912,6 +919,7 @@ public enum RipgrepArgumentParser {
               --field-context-separator S Set field separator for context lines
               --passthru             Print both matching and non-matching lines
           -L, --follow               Follow symbolic links
+              --one-file-system      Skip directories on other file systems
           -z, --search-zip           Search compressed files
               --binary               Search binary files but suppress binary output
           -a, --text                 Search binary files as text

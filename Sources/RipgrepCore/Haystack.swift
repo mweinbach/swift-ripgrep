@@ -68,11 +68,13 @@ public struct FileWalker {
             var rootIgnoreStack = baseIgnoreStack
             appendGlobalIgnoreFile(to: &rootIgnoreStack, rootBase: rootBase, options: options)
             appendParentIgnoreFiles(to: &rootIgnoreStack, rootBase: rootBase, options: options)
+            let rootVolume = options.oneFileSystem ? volumeIdentifier(for: root.standardizedFileURL) : nil
             haystacks.append(contentsOf: try walk(
                 root.standardizedFileURL,
                 isExplicit: true,
                 depth: 0,
                 rootBase: rootBase,
+                rootVolume: rootVolume,
                 ignoreStack: rootIgnoreStack,
                 overrides: overrides,
                 typeRegistry: typeRegistry,
@@ -91,6 +93,7 @@ public struct FileWalker {
         isExplicit: Bool,
         depth: Int,
         rootBase: URL,
+        rootVolume: String?,
         ignoreStack: IgnoreStack,
         overrides: GlobMatcher,
         typeRegistry: FileTypeRegistry,
@@ -102,6 +105,7 @@ public struct FileWalker {
             .isSymbolicLinkKey,
             .nameKey,
             .fileSizeKey,
+            .volumeIdentifierKey,
         ])
         let isDirectory = values.isDirectory == true
         let relativePath = relativePath(for: url, rootBase: rootBase)
@@ -147,6 +151,13 @@ public struct FileWalker {
         guard resolvedValues.isDirectory == true else {
             return []
         }
+        if !isExplicit,
+           options.oneFileSystem,
+           let rootVolume,
+           let currentVolume = volumeIdentifier(for: resolvedURL),
+           currentVolume != rootVolume {
+            return []
+        }
         if let maxDepth = options.maxDepth, depth >= maxDepth {
             return []
         }
@@ -176,6 +187,7 @@ public struct FileWalker {
                 isExplicit: false,
                 depth: depth + 1,
                 rootBase: rootBase,
+                rootVolume: rootVolume,
                 ignoreStack: directoryIgnoreStack,
                 overrides: overrides,
                 typeRegistry: typeRegistry,
@@ -183,6 +195,13 @@ public struct FileWalker {
             ))
         }
         return haystacks
+    }
+
+    private func volumeIdentifier(for url: URL) -> String? {
+        guard let identifier = try? url.resourceValues(forKeys: [.volumeIdentifierKey]).volumeIdentifier else {
+            return nil
+        }
+        return String(describing: identifier)
     }
 
     private func sorted(_ haystacks: [Haystack], options: RipgrepOptions) -> [Haystack] {
