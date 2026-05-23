@@ -168,6 +168,16 @@ struct RipgrepSearcherTests {
 
         #expect(try run(["-e", "alpha", "-e", "gamma", root.path("words.txt")]) == ["alpha", "gamma"])
         #expect(try run(["-f", root.path("patterns"), root.path("words.txt")]) == ["alpha", "gamma"])
+        #expect(try run(["-f\(root.path("patterns"))", root.path("words.txt")]) == ["alpha", "gamma"])
+
+        var output: [String] = []
+        let exitCode = RipgrepCLI.run(
+            arguments: ["-f-", root.path("words.txt")],
+            stdout: { output.append($0) },
+            stdin: "alpha\ngamma\n"
+        )
+        #expect(exitCode == 0)
+        #expect(output == ["alpha", "gamma"])
     }
 
     @Test("formats line numbers columns counts and filename modes")

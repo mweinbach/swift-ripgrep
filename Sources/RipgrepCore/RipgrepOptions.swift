@@ -133,6 +133,7 @@ public struct RipgrepOptions: Equatable {
     public var printMode: PrintMode = .matchingLines
     public var pattern: String?
     public var patterns: [String] = []
+    public var patternFileStdin = false
     public var roots: [URL] = []
     public var rootPathArguments: [String] = []
     public var ignoreCase = false
@@ -233,6 +234,20 @@ public struct RipgrepOptions: Equatable {
             return patterns
         }
         return pattern.map { [$0] } ?? []
+    }
+
+    public mutating func appendPatternFileContents(_ contents: String) {
+        let loadedPatterns = Self.patterns(fromPatternFileContents: contents)
+        if patterns.isEmpty {
+            pattern = loadedPatterns.first
+        }
+        patterns.append(contentsOf: loadedPatterns)
+    }
+
+    public static func patterns(fromPatternFileContents contents: String) -> [String] {
+        contents.components(separatedBy: "\n").map {
+            $0.hasSuffix("\r") ? String($0.dropLast()) : $0
+        }.filter { !$0.isEmpty }
     }
 }
 
@@ -439,7 +454,13 @@ public enum RipgrepArgumentParser {
                 guard index < arguments.count else {
                     return .error("error: The argument '--file <PATTERNFILE>' requires a value")
                 }
-                switch readPatterns(from: arguments[index]) {
+                let path = arguments[index]
+                if path == "-" {
+                    options.patternFileStdin = true
+                    index += 1
+                    break
+                }
+                switch readPatterns(from: path) {
                 case .patterns(let patterns):
                     explicitPatterns.append(contentsOf: patterns)
                 case .error(let message):
@@ -447,7 +468,24 @@ public enum RipgrepArgumentParser {
                 }
                 index += 1
             case let value where value.hasPrefix("--file="):
-                switch readPatterns(from: String(value.dropFirst("--file=".count))) {
+                let path = String(value.dropFirst("--file=".count))
+                if path == "-" {
+                    options.patternFileStdin = true
+                    break
+                }
+                switch readPatterns(from: path) {
+                case .patterns(let patterns):
+                    explicitPatterns.append(contentsOf: patterns)
+                case .error(let message):
+                    return .error(message)
+                }
+            case let value where value.hasPrefix("-f") && value.count > 2:
+                let path = String(value.dropFirst(2))
+                if path == "-" {
+                    options.patternFileStdin = true
+                    break
+                }
+                switch readPatterns(from: path) {
                 case .patterns(let patterns):
                     explicitPatterns.append(contentsOf: patterns)
                 case .error(let message):
@@ -1099,7 +1137,7 @@ public enum RipgrepArgumentParser {
         }
 
         if options.mode == .search {
-            if explicitPatterns.isEmpty {
+            if explicitPatterns.isEmpty && !options.patternFileStdin {
                 guard let pattern = positionals.first, !pattern.isEmpty else {
                     return .error(usage())
                 }
@@ -1252,9 +1290,7 @@ public enum RipgrepArgumentParser {
     private static func readPatterns(from path: String) -> PatternFileResult {
         do {
             let contents = try String(contentsOf: URL(fileURLWithPath: path), encoding: .utf8)
-            return .patterns(contents.components(separatedBy: "\n").map {
-                $0.hasSuffix("\r") ? String($0.dropLast()) : $0
-            }.filter { !$0.isEmpty })
+            return .patterns(RipgrepOptions.patterns(fromPatternFileContents: contents))
         } catch {
             return .error("error: failed to read pattern file '\(path)': \(error)")
         }

@@ -50,8 +50,16 @@ public enum RipgrepCLI {
         case .error(let message):
             stderr(message)
             return 2
-        case .run(let options):
+        case .run(var options):
             do {
+                let searchStdin: String?
+                if options.patternFileStdin {
+                    let patternInput = stdin ?? String(data: FileHandle.standardInput.readDataToEndOfFile(), encoding: .utf8) ?? ""
+                    options.appendPatternFileContents(patternInput)
+                    searchStdin = nil
+                } else {
+                    searchStdin = stdin
+                }
                 let searcher = RipgrepSearcher(fileManager: fileManager, environment: environment)
                 let printer = StandardPrinter(options: options)
 
@@ -73,7 +81,7 @@ public enum RipgrepCLI {
                     return registry.definitions.isEmpty ? 1 : 0
                 }
 
-                let results = try searcher.search(options: options, stdin: stdin)
+                let results = try searcher.search(options: options, stdin: searchStdin)
                 let outputLines = options.json
                     ? JSONPrinter(options: options).lines(for: results)
                     : printer.lines(for: results)
