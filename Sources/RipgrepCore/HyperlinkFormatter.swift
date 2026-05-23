@@ -10,12 +10,43 @@ struct HyperlinkFormatter {
     init(options: RipgrepOptions, colorsEnabled: Bool) {
         self.format = options.hyperlinkFormat
         self.isEnabled = colorsEnabled && options.hyperlinkFormat.isEnabled
-        self.host = ProcessInfo.processInfo.hostName
+        self.host = Self.hostname(from: options.hostnameBin) ?? ProcessInfo.processInfo.hostName
         if let distro = ProcessInfo.processInfo.environment["WSL_DISTRO_NAME"], !distro.isEmpty {
             self.wslPrefix = "wsl$/\(distro)"
         } else {
             self.wslPrefix = ""
         }
+    }
+
+    private static func hostname(from command: String?) -> String? {
+        guard let command, !command.isEmpty else {
+            return nil
+        }
+        let process = Process()
+        if command.contains("/") {
+            process.executableURL = URL(fileURLWithPath: command)
+        } else {
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.arguments = [command]
+        }
+        process.standardInput = FileHandle.nullDevice
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+        } catch {
+            return nil
+        }
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0,
+              let raw = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        let hostname = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return hostname.isEmpty ? nil : hostname
     }
 
     func label(_ text: String, for url: URL, line: Int? = nil, column: Int? = nil) -> String {

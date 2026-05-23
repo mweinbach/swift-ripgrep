@@ -164,6 +164,7 @@ public struct RipgrepOptions: Equatable {
     public var colorMode: ColorMode = .automatic
     public var colorChanges: [ColorChange] = []
     public var hyperlinkFormat = HyperlinkFormat()
+    public var hostnameBin: String?
     public var nullPathTerminator = false
     public var pathSeparator: Character?
     public var withFilename: Bool?
@@ -520,6 +521,15 @@ public enum RipgrepArgumentParser {
                 } catch {
                     return .error("error: invalid hyperlink format: \(error.localizedDescription)")
                 }
+            case "--hostname-bin":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--hostname-bin <COMMAND>' requires a value")
+                }
+                options.hostnameBin = arguments[index].isEmpty ? nil : arguments[index]
+                index += 1
+            case let value where value.hasPrefix("--hostname-bin="):
+                let raw = String(value.dropFirst("--hostname-bin=".count))
+                options.hostnameBin = raw.isEmpty ? nil : raw
             case "--stats":
                 options.stats = true
             case "--no-stats":
@@ -1081,6 +1091,7 @@ public enum RipgrepArgumentParser {
               --color WHEN           Use color: never, auto, always or ansi
               --colors COLOR_SPEC    Configure output color settings
               --hyperlink-format FMT Format file path hyperlinks
+              --hostname-bin COMMAND Run a program to get the hostname for hyperlinks
               --heading              Group matches by file
               --trim                 Trim leading ASCII whitespace from printed lines
               --vimgrep              Print vim-compatible file:line:column matches

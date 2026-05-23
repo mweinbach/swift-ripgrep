@@ -764,6 +764,23 @@ struct RipgrepSearcherTests {
             "\(linkedPath):2:1:needle",
         ])
 
+        try root.write("#!/bin/sh\nprintf test-host\n", to: "hostname")
+        try root.makeExecutable("hostname")
+        let hostLinkedPath = "\u{1B}]8;;file://test-host\(encodedPath)\u{1B}\\\(path)\u{1B}]8;;\u{1B}\\"
+        #expect(try run([
+            "-H",
+            "--color=always",
+            "--colors=path:none",
+            "--colors=match:none",
+            "--hostname-bin",
+            root.path("hostname"),
+            "--hyperlink-format=file://{host}{path}",
+            "needle",
+            path,
+        ]) == [
+            "\(hostLinkedPath):needle",
+        ])
+
         var output: [String] = []
         var errors: [String] = []
         let exitCode = RipgrepCLI.run(
