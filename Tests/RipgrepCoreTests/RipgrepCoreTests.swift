@@ -313,8 +313,27 @@ struct RipgrepSearcherTests {
 
         #expect(try run(["-m1", "needle", root.path("many.txt")]) == ["needle one"])
         #expect(try run(["--max-count", "2", "needle", root.path("many.txt")]) == ["needle one", "needle two"])
-        #expect(try runAllowingNoMatch(["-m0", "needle", root.path("many.txt")]) == [])
         #expect(try run(["-m1", "-c", "needle", root.path("many.txt")]) == ["1"])
+
+        var output: [String] = []
+        var errors: [String] = []
+        let exitCode = RipgrepCLI.run(
+            arguments: ["-m0", "needle", root.path("many.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["error: invalid max count '0'"])
+
+        errors = []
+        let longExitCode = RipgrepCLI.run(
+            arguments: ["--max-count=0", "needle", root.path("many.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(longExitCode == 2)
+        #expect(errors == ["error: invalid max count '0'"])
     }
 
     @Test("counts matching lines and individual matches")

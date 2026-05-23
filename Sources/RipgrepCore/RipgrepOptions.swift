@@ -963,20 +963,20 @@ public enum RipgrepArgumentParser {
                 guard index < arguments.count else {
                     return .error("error: The argument '--max-count <NUM>' requires a value")
                 }
-                guard let count = parseNonNegativeInt(arguments[index]) else {
+                guard let count = parsePositiveInt(arguments[index]) else {
                     return .error("error: invalid max count '\(arguments[index])'")
                 }
                 options.maxCount = count
                 index += 1
             case let value where value.hasPrefix("--max-count="):
                 let raw = String(value.dropFirst("--max-count=".count))
-                guard let count = parseNonNegativeInt(raw) else {
+                guard let count = parsePositiveInt(raw) else {
                     return .error("error: invalid max count '\(raw)'")
                 }
                 options.maxCount = count
             case let value where value.hasPrefix("-m") && value.count > 2:
                 let raw = String(value.dropFirst(2))
-                guard let count = parseNonNegativeInt(raw) else {
+                guard let count = parsePositiveInt(raw) else {
                     return .error("error: invalid max count '\(raw)'")
                 }
                 options.maxCount = count
@@ -1786,6 +1786,11 @@ public enum RipgrepArgumentParser {
 
     private static func parseNonNegativeInt(_ raw: String) -> Int? {
         guard let count = Int(raw), count >= 0 else { return nil }
+        return count
+    }
+
+    private static func parsePositiveInt(_ raw: String) -> Int? {
+        guard let count = Int(raw), count > 0 else { return nil }
         return count
     }
 
