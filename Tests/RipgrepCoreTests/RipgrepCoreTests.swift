@@ -764,9 +764,19 @@ struct RipgrepSearcherTests {
         #expect(try runAllowingNoMatch(["-n", "-E", "none", "needle", root.path("bom16le.txt")]) == [])
         #expect(try run(["-n", "-E", "utf-16le", "needle", root.path("utf16le.txt")]) == ["2:needle"])
         #expect(try run(["-n", "needle", root.path("bom8.txt")]) == ["1:needle"])
-        #expect(try run(["-n", "-E", "none", "\u{FEFF}needle", root.path("bom8.txt")]) == [
-            "1:ï»¿needle",
-        ])
+        let bomRawOutput = try runExecutableData([
+            "-n",
+            "-E",
+            "none",
+            "\u{FEFF}needle",
+            root.path("bom8.txt"),
+        ], fixture: {})
+        #expect(bomRawOutput == Data([
+            0x31, 0x3A,
+            0xEF, 0xBB, 0xBF,
+            0x6E, 0x65, 0x65, 0x64, 0x6C, 0x65,
+            0x0A,
+        ]))
         let rawOutput = try runExecutableData([
             "--encoding",
             "none",
@@ -792,6 +802,24 @@ struct RipgrepSearcherTests {
             )
         })
         #expect(textOutput == Data([0x32, 0x3A, 0xFF, 0x66, 0x6F, 0x6F, 0x0A]))
+        let onlyMatchingTextOutput = try runExecutableData([
+            "-a",
+            "-o",
+            ".",
+            root.path("invalid-utf8.txt"),
+        ], fixture: {})
+        #expect(onlyMatchingTextOutput == Data([
+            0xC3, 0xA9, 0x0A,
+            0x66, 0x0A,
+            0x6F, 0x0A,
+            0x6F, 0x0A,
+        ]))
+        #expect(try run(["-a", "-bo", "foo", root.path("invalid-utf8.txt")]) == [
+            "4:foo",
+        ])
+        #expect(try run(["-a", "--column", "foo", root.path("invalid-utf8.txt")]) == [
+            "2:2:\u{FF}foo",
+        ])
         let jsonOutput = try run(["--json", "--encoding", "none", "-a", #"\x00"#, root.path("raw-bytes.txt")])
         let jsonMatch = try jsonOutput.map(jsonObject).first { $0["type"] as? String == "match" }?["data"] as? [String: Any]
         let jsonLines = jsonMatch?["lines"] as? [String: String]

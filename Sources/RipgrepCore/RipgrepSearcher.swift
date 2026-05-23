@@ -22,6 +22,11 @@ private struct MultilineSpanCandidate {
     let endLineIndex: Int
 }
 
+private struct RawLineMap {
+    let decodedToRawByteOffsets: [Int]
+    let invalidDecodedRanges: [Range<Int>]
+}
+
 public struct RipgrepSearcher {
     private static let binaryDetectionBufferSize = 64 * 1024
 
@@ -563,7 +568,11 @@ public struct RipgrepSearcher {
                 continue
             }
 
-            let spans = matcher.spans(in: line)
+            let spans = adjustedSpans(
+                matcher.spans(in: line),
+                rawLine: rawLine,
+                options: options
+            )
             guard !spans.isEmpty else {
                 absoluteOffset += lineByteCount
                 if options.stopOnNonmatch && hasMatched {
@@ -742,6 +751,124 @@ public struct RipgrepSearcher {
         options.emitsRawBytes ? data : nil
     }
 
+    private func adjustedSpans(
+        _ spans: [MatchSpan],
+        rawLine: String?,
+        options: RipgrepOptions
+    ) -> [MatchSpan] {
+        guard options.emitsRawBytes,
+              let rawLine,
+              let rawMap = rawLineMap(for: rawLine) else {
+            return spans
+        }
+
+        return spans.compactMap { span in
+            let decodedRange = span.startByte..<span.endByte
+            guard !rawMap.invalidDecodedRanges.contains(where: { rangesOverlap($0, decodedRange) }),
+                  span.startByte < rawMap.decodedToRawByteOffsets.count,
+                  span.endByte < rawMap.decodedToRawByteOffsets.count else {
+                return nil
+            }
+            let rawStart = rawMap.decodedToRawByteOffsets[span.startByte]
+            let rawEnd = rawMap.decodedToRawByteOffsets[span.endByte]
+            return MatchSpan(
+                startColumn: rawStart + 1,
+                endColumn: rawEnd + 1,
+                startByte: rawStart,
+                endByte: rawEnd,
+                text: span.text,
+                replacement: span.replacement
+            )
+        }
+    }
+
+    private func rangesOverlap(_ lhs: Range<Int>, _ rhs: Range<Int>) -> Bool {
+        lhs.lowerBound < rhs.upperBound && rhs.lowerBound < lhs.upperBound
+    }
+
+    private func rawLineMap(for rawLine: String) -> RawLineMap? {
+        let bytes = rawLine.unicodeScalars.compactMap { scalar -> UInt8? in
+            guard scalar.value <= UInt8.max else {
+                return nil
+            }
+            return UInt8(scalar.value)
+        }
+        guard bytes.count == rawLine.unicodeScalars.count else {
+            return nil
+        }
+
+        var decodedToRaw = [0]
+        var invalidRanges: [Range<Int>] = []
+        var rawOffset = 0
+        var decodedOffset = 0
+
+        while rawOffset < bytes.count {
+            if let length = validUTF8SequenceLength(in: bytes, at: rawOffset) {
+                for offset in 1...length {
+                    decodedToRaw.append(rawOffset + offset)
+                }
+                rawOffset += length
+                decodedOffset += length
+            } else {
+                invalidRanges.append(decodedOffset..<(decodedOffset + 3))
+                decodedToRaw.append(rawOffset)
+                decodedToRaw.append(rawOffset)
+                decodedToRaw.append(rawOffset + 1)
+                rawOffset += 1
+                decodedOffset += 3
+            }
+        }
+
+        return RawLineMap(
+            decodedToRawByteOffsets: decodedToRaw,
+            invalidDecodedRanges: invalidRanges
+        )
+    }
+
+    private func validUTF8SequenceLength(in bytes: [UInt8], at offset: Int) -> Int? {
+        let byte = bytes[offset]
+        if byte <= 0x7F {
+            return 1
+        }
+
+        let length: Int
+        let minimumScalar: UInt32
+        var scalar: UInt32
+        switch byte {
+        case 0xC2...0xDF:
+            length = 2
+            minimumScalar = 0x80
+            scalar = UInt32(byte & 0x1F)
+        case 0xE0...0xEF:
+            length = 3
+            minimumScalar = 0x800
+            scalar = UInt32(byte & 0x0F)
+        case 0xF0...0xF4:
+            length = 4
+            minimumScalar = 0x10000
+            scalar = UInt32(byte & 0x07)
+        default:
+            return nil
+        }
+
+        guard offset + length <= bytes.count else {
+            return nil
+        }
+        for index in (offset + 1)..<(offset + length) {
+            let continuation = bytes[index]
+            guard (0x80...0xBF).contains(continuation) else {
+                return nil
+            }
+            scalar = (scalar << 6) | UInt32(continuation & 0x3F)
+        }
+        guard scalar >= minimumScalar,
+              scalar <= 0x10FFFF,
+              !(0xD800...0xDFFF).contains(scalar) else {
+            return nil
+        }
+        return length
+    }
+
     private func multilineReplacementBlockText(
         lines: [SearchLine],
         startLineIndex: Int,
@@ -866,7 +993,7 @@ public struct RipgrepSearcher {
             }
             return decode(data, encoding: .utf8)
         case .disabled:
-            return String(data: data, encoding: .isoLatin1) ?? String(decoding: data, as: UTF8.self)
+            return String(decoding: data, as: UTF8.self)
         case .explicit(let encoding):
             return decode(data, encoding: encoding)
         }

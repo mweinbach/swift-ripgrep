@@ -5,9 +5,7 @@ public struct PatternMatcher {
     private let patterns: [CompiledPattern]
 
     public init(options: RipgrepOptions) throws {
-        let patternSources = options.effectivePatterns.map {
-            options.encodingMode == .disabled ? $0.utf8RawScalars() : $0
-        }
+        let patternSources = options.effectivePatterns
 
         self.options = options
         self.patterns = try patternSources.map { pattern in
@@ -1028,9 +1026,7 @@ public struct PatternMatcher {
 
     private func byteOffset(for index: String.Index, in line: String) -> Int {
         let prefix = line[line.startIndex..<index]
-        return options.encodingMode == .disabled
-            ? prefix.unicodeScalars.count
-            : prefix.utf8.count
+        return prefix.utf8.count
     }
 
     private func stringIndex(in line: String, atByteOffset byteOffset: Int) -> String.Index? {
@@ -1045,7 +1041,7 @@ public struct PatternMatcher {
             if bytes == byteOffset {
                 return index
             }
-            bytes += options.encodingMode == .disabled ? 1 : String(line[index]).utf8.count
+            bytes += String(line[index]).utf8.count
         }
         return bytes == byteOffset ? line.endIndex : nil
     }
@@ -1070,10 +1066,6 @@ public struct PatternMatcher {
 }
 
 private extension String {
-    func utf8RawScalars() -> String {
-        String(data: Data(utf8), encoding: .isoLatin1) ?? self
-    }
-
     func asciiLowercased() -> String {
         String(unicodeScalars.map { scalar in
             guard scalar.value >= 65, scalar.value <= 90,

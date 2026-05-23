@@ -662,7 +662,7 @@ public struct StandardPrinter {
     }
 
     private func onlyMatchingText(_ span: MatchSpan, in match: SearchMatch) -> String {
-        let rawText = span.replacement ?? span.text
+        let rawText = rawOnlyMatchingText(span, in: match) ?? span.replacement ?? span.text
         let text = options.trim ? rawText.trimmingASCIIWhitespacePrefix() : rawText
         guard let maxColumns = options.maxColumns,
               text.utf8.count > maxColumns else {
@@ -672,6 +672,23 @@ public struct StandardPrinter {
             return OmittedLineKind.matching.message
         }
         return previewLineSuffix(text, maxColumns: maxColumns, remainingMatches: 0)
+    }
+
+    private func rawOnlyMatchingText(_ span: MatchSpan, in match: SearchMatch) -> String? {
+        guard options.emitsRawBytes,
+              span.replacement == nil,
+              let rawLine = match.rawLine,
+              span.startByte <= span.endByte else {
+            return nil
+        }
+        let scalars = rawLine.unicodeScalars
+        guard span.startByte >= 0,
+              span.endByte <= scalars.count,
+              let start = scalars.index(scalars.startIndex, offsetBy: span.startByte, limitedBy: scalars.endIndex),
+              let end = scalars.index(scalars.startIndex, offsetBy: span.endByte, limitedBy: scalars.endIndex) else {
+            return nil
+        }
+        return String(String.UnicodeScalarView(scalars[start..<end]))
     }
 
     private func previewLineSuffix(_ line: String, maxColumns: Int, remainingMatches: Int?) -> String {

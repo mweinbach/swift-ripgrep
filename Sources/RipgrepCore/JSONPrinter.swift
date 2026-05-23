@@ -95,6 +95,7 @@ public struct JSONPrinter {
             ("data", lineData(
                 path: path,
                 text: match.lineWithTerminator,
+                rawText: match.rawLine.map { $0 + match.lineTerminator },
                 lineNumber: match.lineNumber,
                 absoluteOffset: match.absoluteOffset,
                 submatches: match.spans
@@ -108,6 +109,7 @@ public struct JSONPrinter {
             ("data", lineData(
                 path: path,
                 text: line.lineWithTerminator,
+                rawText: line.rawLine.map { $0 + line.lineTerminator },
                 lineNumber: line.lineNumber,
                 absoluteOffset: line.absoluteOffset,
                 submatches: []
@@ -118,13 +120,14 @@ public struct JSONPrinter {
     private func lineData(
         path: String,
         text: String,
+        rawText: String? = nil,
         lineNumber: Int,
         absoluteOffset: Int,
         submatches: [MatchSpan]
     ) -> JSONValue {
         .object([
             ("path", dataObject(path)),
-            ("lines", dataObject(text, rawWhenEncodingDisabled: true)),
+            ("lines", dataObject(rawText ?? text, rawWhenEncodingDisabled: rawText != nil || options.encodingMode == .disabled)),
             ("line_number", .int(lineNumber)),
             ("absolute_offset", .int(absoluteOffset)),
             ("submatches", .array(submatches.map(submatchObject))),
