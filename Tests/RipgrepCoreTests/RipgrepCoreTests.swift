@@ -110,6 +110,54 @@ struct RipgrepSearcherTests {
         error: backreferences are not supported
         """])
 
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["[", root.path("engine.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["""
+        rg: regex parse error:
+            (?:[)
+               ^
+        error: unclosed character class
+        """])
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["a{", root.path("engine.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["""
+        rg: regex parse error:
+            (?:a{)
+                 ^
+        error: repetition quantifier expects a valid decimal
+        """])
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["abc)", root.path("engine.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["""
+        rg: regex parse error:
+            (?:abc))
+                   ^
+        error: unopened group
+        """])
+
         #expect(try run(["-o", "--engine=auto", "a.", root.path("engine.txt")]) == ["ab", "ac"])
 
         output = []

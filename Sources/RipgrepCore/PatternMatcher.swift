@@ -34,6 +34,9 @@ public struct PatternMatcher {
                 if options.engineMode == .automatic, let unsupported = Self.defaultEngineUnsupportedFeature(in: pattern) {
                     throw RipgrepError.message(Self.automaticEngineUnavailableMessage(pattern: pattern, feature: unsupported))
                 }
+                if let parseError = Self.defaultRegexParseErrorIfRecognized(pattern) {
+                    throw RipgrepError.message(parseError)
+                }
                 let source = Self.regexPattern(for: pattern, options: options)
                 do {
                     var regexOptions: NSRegularExpression.Options = options.effectiveIgnoreCase && !options.noUnicode ? [.caseInsensitive] : []
@@ -324,6 +327,124 @@ public struct PatternMatcher {
         """
     }
 
+    private static func defaultRegexParseErrorIfRecognized(_ pattern: String) -> String? {
+        if let diagnostic = unclosedOrInvalidClassDiagnostic(pattern) {
+            return defaultRegexParseError(pattern: pattern, feature: diagnostic)
+        }
+        if let diagnostic = invalidRepetitionDiagnostic(pattern) {
+            return defaultRegexParseError(pattern: pattern, feature: diagnostic)
+        }
+        if let diagnostic = unopenedGroupDiagnostic(pattern) {
+            return defaultRegexParseError(pattern: pattern, feature: diagnostic)
+        }
+        return nil
+    }
+
+    private static func unclosedOrInvalidClassDiagnostic(_ pattern: String) -> UnsupportedRegexFeature? {
+        var escaped = false
+        var index = pattern.startIndex
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                escaped = false
+            } else if character == "\\" {
+                escaped = true
+            } else if character == "[" {
+                if pattern[index...].hasSuffix("-") {
+                    let start = pattern.index(after: index)
+                    return UnsupportedRegexFeature(
+                        byteOffset: pattern[..<start].utf8.count,
+                        caretLength: pattern[start...].utf8.count + 1,
+                        message: "invalid character class range, the start must be <= the end"
+                    )
+                }
+                if !hasClosingBracket(after: index, in: pattern) {
+                    return UnsupportedRegexFeature(
+                        byteOffset: pattern[..<index].utf8.count,
+                        caretLength: 1,
+                        message: "unclosed character class"
+                    )
+                }
+            }
+            index = pattern.index(after: index)
+        }
+        return nil
+    }
+
+    private static func invalidRepetitionDiagnostic(_ pattern: String) -> UnsupportedRegexFeature? {
+        var escaped = false
+        var inClass = false
+        var index = pattern.startIndex
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                escaped = false
+            } else if character == "\\" {
+                escaped = true
+            } else if character == "[" {
+                inClass = true
+            } else if character == "]" {
+                inClass = false
+            } else if !inClass, character == "{" {
+                let digitStart = pattern.index(after: index)
+                let digitEnd = pattern[digitStart...].firstIndex { !$0.isNumber } ?? pattern.endIndex
+                let digitCount = pattern[digitStart..<digitEnd].count
+                if digitCount == 0 {
+                    return UnsupportedRegexFeature(
+                        byteOffset: pattern[..<index].utf8.count + 1,
+                        caretLength: 1,
+                        message: "repetition quantifier expects a valid decimal"
+                    )
+                }
+                if digitCount > 19 {
+                    return UnsupportedRegexFeature(
+                        byteOffset: pattern[..<digitStart].utf8.count,
+                        caretLength: pattern[digitStart..<digitEnd].utf8.count,
+                        message: "decimal literal invalid"
+                    )
+                }
+            }
+            index = pattern.index(after: index)
+        }
+        return nil
+    }
+
+    private static func unopenedGroupDiagnostic(_ pattern: String) -> UnsupportedRegexFeature? {
+        var escaped = false
+        var inClass = false
+        var depth = 0
+        var index = pattern.startIndex
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                escaped = false
+            } else if character == "\\" {
+                escaped = true
+            } else if character == "[" {
+                inClass = true
+            } else if character == "]" {
+                inClass = false
+            } else if !inClass, character == "(" {
+                depth += 1
+            } else if !inClass, character == ")" {
+                guard depth > 0 else {
+                    guard !pattern[pattern.index(after: index)...].contains("(") else {
+                        index = pattern.index(after: index)
+                        continue
+                    }
+                    return UnsupportedRegexFeature(
+                        byteOffset: pattern[..<index].utf8.count + 1,
+                        caretLength: 1,
+                        message: "unopened group"
+                    )
+                }
+                depth -= 1
+            }
+            index = pattern.index(after: index)
+        }
+        return nil
+    }
+
     private static func automaticEngineUnavailableMessage(pattern: String, feature: UnsupportedRegexFeature) -> String {
         let defaultError = defaultRegexParseError(pattern: pattern, feature: feature)
         return """
@@ -347,6 +468,23 @@ public struct PatternMatcher {
             return 4
         }
         return nil
+    }
+
+    private static func hasClosingBracket(after open: String.Index, in pattern: String) -> Bool {
+        var escaped = false
+        var index = pattern.index(after: open)
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                escaped = false
+            } else if character == "\\" {
+                escaped = true
+            } else if character == "]" {
+                return true
+            }
+            index = pattern.index(after: index)
+        }
+        return false
     }
 
     private static func asciiRegexPattern(for pattern: String) -> String {
