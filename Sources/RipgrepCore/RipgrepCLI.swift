@@ -185,6 +185,7 @@ public enum RipgrepCLI {
 
     private static func shouldPrintNothingSearchedWarning(results: SearchResults, options: RipgrepOptions) -> Bool {
         guard options.printMode == .matchingLines,
+              options.rootPathArguments.isEmpty,
               results.summary.filesSearched == 0,
               results.messages.isEmpty,
               results.filtered,

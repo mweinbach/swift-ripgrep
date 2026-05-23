@@ -2366,10 +2366,7 @@ struct RipgrepSearcherTests {
         )
         #expect(exitCode == 1)
         #expect(output.isEmpty)
-        #expect(errors == [
-            "rg: No files were searched, which means ripgrep probably applied a filter you didn't expect.",
-            "Running with --debug will show why files are being skipped.",
-        ])
+        #expect(errors.isEmpty)
 
         output = []
         errors = []
@@ -2392,15 +2389,10 @@ struct RipgrepSearcherTests {
         #expect(exitCode == 1)
         #expect(output.isEmpty)
         #expect(errors.contains { $0.contains("DEBUG|swift-ripgrep::walk|") && $0.contains("ignored-dir") && $0.contains("ignore file") })
-        #expect(errors.suffix(2) == [
-            "rg: No files were searched, which means ripgrep probably applied a filter you didn't expect.",
-            "Running with --debug will show why files are being skipped.",
-        ])
 
         let implicit = try TemporaryDirectory()
-        try implicit.write("/a/b\n", to: ".ignore")
-        try implicit.createDirectory("a/b")
-        try implicit.write("needle\n", to: "a/b/file.txt")
+        try implicit.write("*\n", to: ".ignore")
+        try implicit.write("needle\n", to: "file.txt")
         let originalDirectory = FileManager.default.currentDirectoryPath
         defer { FileManager.default.changeCurrentDirectoryPath(originalDirectory) }
         #expect(FileManager.default.changeCurrentDirectoryPath(implicit.url.path))
@@ -2653,10 +2645,7 @@ struct RipgrepSearcherTests {
         )
         #expect(exitCode == 1)
         #expect(output.isEmpty)
-        #expect(errors == [
-            "rg: No files were searched, which means ripgrep probably applied a filter you didn't expect.",
-            "Running with --debug will show why files are being skipped.",
-        ])
+        #expect(errors.isEmpty)
         #expect(pathBasenames(try run(["--no-ignore", "needle", globstarRoot.url.path])) == ["foo"])
     }
 
