@@ -56,10 +56,13 @@ public enum RipgrepCLI {
                 let printer = StandardPrinter(options: options)
 
                 if options.mode == .files {
-                    for line in try printer.paths(searcher.files(options: options)) {
-                        stdout(line)
+                    let files = try searcher.files(options: options)
+                    if !options.quiet {
+                        for line in printer.paths(files) {
+                            stdout(line)
+                        }
                     }
-                    return 0
+                    return files.isEmpty ? 1 : 0
                 }
                 if options.mode == .types {
                     var registry = FileTypeRegistry()
@@ -86,14 +89,24 @@ public enum RipgrepCLI {
                     }
                 }
 
-                if !results.messages.isEmpty && !(options.quiet && results.hasMatch) {
+                let hasSuccessfulOutput = hasSuccessfulOutput(results: results, options: options)
+                if !results.messages.isEmpty && !(options.quiet && hasSuccessfulOutput) {
                     return 2
                 }
-                return results.hasMatch ? 0 : 1
+                return hasSuccessfulOutput ? 0 : 1
             } catch {
                 stderr("rg: \(error)")
                 return 2
             }
+        }
+    }
+
+    private static func hasSuccessfulOutput(results: SearchResults, options: RipgrepOptions) -> Bool {
+        switch options.printMode {
+        case .matchingLines, .count, .countMatches, .filesWithMatches:
+            return results.hasMatch
+        case .filesWithoutMatch:
+            return results.files.contains { $0.searched && !$0.hasMatch }
         }
     }
 

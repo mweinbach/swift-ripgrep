@@ -202,6 +202,23 @@ struct RipgrepSearcherTests {
         ])
         #expect(try run(["-l", "needle", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == ["one.txt"])
         #expect(try run(["--files-without-match", "needle", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == ["two.txt"])
+
+        var output: [String] = []
+        var exitCode = RipgrepCLI.run(
+            arguments: ["--files-without-match", "-q", "needle", root.path("two.txt")],
+            stdout: { output.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(output.isEmpty)
+
+        output = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--files-without-match", "-q", "needle", root.path("one.txt")],
+            stdout: { output.append($0) }
+        )
+        #expect(exitCode == 1)
+        #expect(output.isEmpty)
+
         try root.write("pin\nmiddle\nhay\n", to: "ctx.txt")
         #expect(try run([
             "-n",
@@ -1053,6 +1070,22 @@ struct RipgrepSearcherTests {
 
         #expect(try run(["--files", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == ["visible.txt"])
         #expect(try run(["--files", "--hidden", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == [".hidden.txt", "visible.txt"])
+
+        var output: [String] = []
+        var exitCode = RipgrepCLI.run(
+            arguments: ["--quiet", "--files", "--glob", "*.txt", root.url.path],
+            stdout: { output.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(output.isEmpty)
+
+        output = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--quiet", "--files", "--glob", "*.md", root.url.path],
+            stdout: { output.append($0) }
+        )
+        #expect(exitCode == 1)
+        #expect(output.isEmpty)
     }
 
     @Test("prints debug diagnostics for skipped files")
