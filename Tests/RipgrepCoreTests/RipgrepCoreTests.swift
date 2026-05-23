@@ -33,6 +33,37 @@ struct RipgrepSearcherTests {
         #expect(try run(["-x", "abc", root.path("patterns.txt")]) == ["abc"])
         #expect(try run(["-w", "-x", "abc", root.path("patterns.txt")]) == ["abc"])
         #expect(try run(["-x", "-w", "abc", root.path("patterns.txt")]) == ["abc.123", "abc", "abc def"])
+        #expect(try run(["-e", ")(", root.path("patterns.txt")]) == ["abc123", "abc.123", "abc", "abc def", "xabc"])
+
+        var output: [String] = []
+        var errors: [String] = []
+        var exitCode = RipgrepCLI.run(
+            arguments: [#"foo\x00?"#, root.path("patterns.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["""
+        rg: pattern contains "\\0" but it is impossible to match
+
+        Consider enabling text mode with the --text flag (or -a for short). Otherwise,
+        binary detection is enabled and matching a NUL byte is impossible.
+        """])
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--binary", #"foo\x00?"#, root.path("patterns.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors.first?.contains("pattern contains") == true)
+
+        #expect(try run(["-a", #"abc\x00?"#, root.path("patterns.txt")]) == ["abc123", "abc.123", "abc", "abc def", "xabc"])
+        #expect(try runAllowingNoMatch(["-F", #"foo\x00?"#, root.path("patterns.txt")]) == [])
     }
 
     @Test("honors regex engine flag ordering")

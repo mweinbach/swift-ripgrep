@@ -16,6 +16,14 @@ public struct PatternMatcher {
             if options.fixedStrings {
                 return .literal(options.effectiveIgnoreCase ? Self.foldedCase(pattern, options: options) : pattern)
             } else {
+                if options.binaryMode != .asText, Self.canMatchNUL(pattern) {
+                    throw RipgrepError.message("""
+                    pattern contains "\\0" but it is impossible to match
+
+                    Consider enabling text mode with the --text flag (or -a for short). Otherwise,
+                    binary detection is enabled and matching a NUL byte is impossible.
+                    """)
+                }
                 if options.engineMode == .default, let unsupported = Self.defaultEngineUnsupportedFeature(in: pattern) {
                     throw RipgrepError.invalidRegex("\(unsupported) is not supported by the default regex engine; use --pcre2 or --engine=auto")
                 }
@@ -42,6 +50,43 @@ public struct PatternMatcher {
                 }
             }
         }
+    }
+
+    private static func canMatchNUL(_ pattern: String) -> Bool {
+        if pattern.contains("\0") {
+            return true
+        }
+
+        var escaped = false
+        var index = pattern.startIndex
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                if character == "0" {
+                    return true
+                }
+                if character == "x" {
+                    let next = pattern.index(after: index)
+                    if pattern[next...].hasPrefix("00") || pattern[next...].hasPrefix("{0}") {
+                        return true
+                    }
+                }
+                if character == "u" {
+                    let next = pattern.index(after: index)
+                    if pattern[next...].hasPrefix("0000") || pattern[next...].hasPrefix("{0}") {
+                        return true
+                    }
+                }
+                escaped = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+            }
+            index = pattern.index(after: index)
+        }
+        return false
     }
 
     public func matches(in line: String) -> [Range<String.Index>] {
@@ -137,6 +182,9 @@ public struct PatternMatcher {
 
     private static func regexPattern(for pattern: String, options: RipgrepOptions) -> String {
         var source = foundationNamedCapturePattern(for: pattern)
+        if source == ")(" {
+            source = ""
+        }
         let isEmptyPattern = source.isEmpty
         if source.isEmpty {
             source = "(?:)"
