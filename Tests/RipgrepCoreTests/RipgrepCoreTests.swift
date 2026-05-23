@@ -667,6 +667,8 @@ struct RipgrepSearcherTests {
         #expect(try runAllowingNoMatch(["--max-depth", "0", "needle", root.url.path]) == [])
         #expect(pathBasenames(try run(["--max-depth", "1", "needle", root.url.path])) == ["root.txt"])
         #expect(pathBasenames(try run(["-d2", "needle", root.url.path])) == ["root.txt", "one.txt"])
+        #expect(pathBasenames(try run(["--maxdepth", "2", "needle", root.url.path])) == ["root.txt", "one.txt"])
+        #expect(pathBasenames(try run(["--maxdepth=2", "needle", root.url.path])) == ["root.txt", "one.txt"])
     }
 
     @Test("sorts files by requested criteria")

@@ -982,7 +982,7 @@ public enum RipgrepArgumentParser {
                     return .error("error: invalid max count '\(raw)'")
                 }
                 options.maxCount = count
-            case "-d", "--max-depth":
+            case "-d", "--max-depth", "--maxdepth":
                 guard index < arguments.count else {
                     return .error("error: The argument '--max-depth <NUM>' requires a value")
                 }
@@ -993,6 +993,12 @@ public enum RipgrepArgumentParser {
                 index += 1
             case let value where value.hasPrefix("--max-depth="):
                 let raw = String(value.dropFirst("--max-depth=".count))
+                guard let depth = parseNonNegativeInt(raw) else {
+                    return .error("error: invalid max depth '\(raw)'")
+                }
+                options.maxDepth = depth
+            case let value where value.hasPrefix("--maxdepth="):
+                let raw = String(value.dropFirst("--maxdepth=".count))
                 guard let depth = parseNonNegativeInt(raw) else {
                     return .error("error: invalid max depth '\(raw)'")
                 }
