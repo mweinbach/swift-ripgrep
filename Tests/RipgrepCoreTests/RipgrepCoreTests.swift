@@ -666,9 +666,9 @@ struct RipgrepSearcherTests {
 
         #expect(try runAllowingNoMatch(["--max-depth", "0", "needle", root.url.path]) == [])
         #expect(pathBasenames(try run(["--max-depth", "1", "needle", root.url.path])) == ["root.txt"])
-        #expect(pathBasenames(try run(["-d2", "needle", root.url.path])) == ["root.txt", "one.txt"])
-        #expect(pathBasenames(try run(["--maxdepth", "2", "needle", root.url.path])) == ["root.txt", "one.txt"])
-        #expect(pathBasenames(try run(["--maxdepth=2", "needle", root.url.path])) == ["root.txt", "one.txt"])
+        #expect(Set(pathBasenames(try run(["-d2", "needle", root.url.path]))) == Set(["root.txt", "one.txt"]))
+        #expect(Set(pathBasenames(try run(["--maxdepth", "2", "needle", root.url.path]))) == Set(["root.txt", "one.txt"]))
+        #expect(Set(pathBasenames(try run(["--maxdepth=2", "needle", root.url.path]))) == Set(["root.txt", "one.txt"]))
     }
 
     @Test("sorts files by requested criteria")
@@ -1094,7 +1094,7 @@ struct RipgrepSearcherTests {
             "\(root.path("vimgrep.txt")):8:Watson Sherlock",
             "\(root.path("vimgrep.txt")):1:Sherlock Holmes",
         ])
-        #expect(try run(["--heading", "-n", "needle", root.url.path]) == [
+        #expect(try run(["--heading", "-n", "--sort=path", "needle", root.url.path]) == [
             "\(root.path("a.txt"))",
             "1:  needle one needle",
             "",
@@ -1117,7 +1117,7 @@ struct RipgrepSearcherTests {
         #expect(try run(["--color=always", "-n", "needle", root.path("a.txt")]) == [
             "\(reset)\(green)1\(reset):alpha \(reset)\(redBold)needle\(reset) beta",
         ])
-        #expect(try run(["--pretty", "--color=never", "needle", root.url.path]) == [
+        #expect(try run(["--pretty", "--color=never", "--sort=path", "needle", root.url.path]) == [
             "\(root.path("a.txt"))",
             "1:alpha needle beta",
             "",
@@ -1142,7 +1142,7 @@ struct RipgrepSearcherTests {
         ]) == [
             "alpha \(reset)\u{1B}[1m\(magenta)needle\(reset) beta",
         ])
-        #expect(try run(["--pretty", "needle", root.url.path]) == [
+        #expect(try run(["--pretty", "--sort=path", "needle", root.url.path]) == [
             "\(reset)\(magenta)\(root.path("a.txt"))\(reset)",
             "\(reset)\(green)1\(reset):alpha \(reset)\(redBold)needle\(reset) beta",
             "",
@@ -1324,7 +1324,7 @@ struct RipgrepSearcherTests {
         try root.write("secret\n", to: ".hidden.txt")
 
         #expect(try run(["--files", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == ["visible.txt"])
-        #expect(try run(["--files", "--hidden", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == [".hidden.txt", "visible.txt"])
+        #expect(Set(try run(["--files", "--hidden", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent }) == Set([".hidden.txt", "visible.txt"]))
 
         let whitelisted = try TemporaryDirectory()
         try whitelisted.createDirectory("subdir")
@@ -1430,7 +1430,7 @@ struct RipgrepSearcherTests {
         try root.createDirectory(".git")
 
         #expect(pathBasenames(try run(["needle", root.url.path])) == ["keep.txt"])
-        #expect(pathBasenames(try run(["--no-ignore", "needle", root.url.path])) == ["keep.txt", "skip.log"])
+        #expect(Set(pathBasenames(try run(["--no-ignore", "needle", root.url.path]))) == Set(["keep.txt", "skip.log"]))
     }
 
     @Test("honors git info exclude and its toggle")
@@ -1441,14 +1441,14 @@ struct RipgrepSearcherTests {
         try root.write("skip.txt\n", to: ".git/info/exclude")
 
         #expect(pathBasenames(try run(["needle", root.url.path])) == ["keep.txt"])
-        #expect(pathBasenames(try run(["--no-ignore-exclude", "needle", root.url.path])) == ["keep.txt", "skip.txt"])
+        #expect(Set(pathBasenames(try run(["--no-ignore-exclude", "needle", root.url.path]))) == Set(["keep.txt", "skip.txt"]))
         #expect(pathBasenames(try run([
             "--no-ignore-exclude",
             "--ignore-exclude",
             "needle",
             root.url.path,
         ])) == ["keep.txt"])
-        #expect(pathBasenames(try run(["--no-ignore", "needle", root.url.path])) == ["keep.txt", "skip.txt"])
+        #expect(Set(pathBasenames(try run(["--no-ignore", "needle", root.url.path]))) == Set(["keep.txt", "skip.txt"]))
     }
 
     @Test("honors global git ignore and its toggle")
@@ -1465,22 +1465,22 @@ struct RipgrepSearcherTests {
         ]
 
         #expect(pathBasenames(try run(["needle", root.url.path], environment: environment)) == ["keep.txt"])
-        #expect(pathBasenames(try run([
+        #expect(Set(pathBasenames(try run([
             "--no-ignore-global",
             "needle",
             root.url.path,
-        ], environment: environment)) == ["keep.txt", "skip.txt"])
+        ], environment: environment))) == Set(["keep.txt", "skip.txt"]))
         #expect(pathBasenames(try run([
             "--no-ignore-global",
             "--ignore-global",
             "needle",
             root.url.path,
         ], environment: environment)) == ["keep.txt"])
-        #expect(pathBasenames(try run([
+        #expect(Set(pathBasenames(try run([
             "--no-ignore",
             "needle",
             root.url.path,
-        ], environment: environment)) == ["keep.txt", "skip.txt"])
+        ], environment: environment))) == Set(["keep.txt", "skip.txt"]))
 
         let configuredHome = try TemporaryDirectory()
         let configuredRoot = try TemporaryDirectory()
@@ -1513,33 +1513,33 @@ struct RipgrepSearcherTests {
             "needle",
             root.url.path,
         ])) == ["keep.txt"])
-        #expect(pathBasenames(try run([
+        #expect(Set(pathBasenames(try run([
             "--no-ignore-dot",
             "--ignore-file",
             root.path("ignore.txt"),
             "needle",
             root.url.path,
-        ])) == ["keep.txt", "skip-dot.txt"])
-        #expect(pathBasenames(try run([
+        ]))) == Set(["keep.txt", "skip-dot.txt"]))
+        #expect(Set(pathBasenames(try run([
             "--no-ignore-vcs",
             "--ignore-file",
             root.path("ignore.txt"),
             "needle",
             root.url.path,
-        ])) == ["keep.txt", "skip-vcs.txt"])
-        #expect(pathBasenames(try run([
+        ]))) == Set(["keep.txt", "skip-vcs.txt"]))
+        #expect(Set(pathBasenames(try run([
             "--no-ignore-files",
             "--ignore-file",
             root.path("ignore.txt"),
             "needle",
             root.url.path,
-        ])) == ["keep.txt", "skip-explicit.txt"])
+        ]))) == Set(["keep.txt", "skip-explicit.txt"]))
 
         let outsideGit = try TemporaryDirectory()
         try outsideGit.write("needle\n", to: "keep.txt")
         try outsideGit.write("needle\n", to: "skip-vcs.txt")
         try outsideGit.write("skip-vcs.txt\n", to: ".gitignore")
-        #expect(pathBasenames(try run(["needle", outsideGit.url.path])) == ["keep.txt", "skip-vcs.txt"])
+        #expect(Set(pathBasenames(try run(["needle", outsideGit.url.path]))) == Set(["keep.txt", "skip-vcs.txt"]))
         #expect(pathBasenames(try run(["--no-require-git", "needle", outsideGit.url.path])) == ["keep.txt"])
     }
 
@@ -1651,10 +1651,10 @@ struct RipgrepSearcherTests {
         try parent.write("needle\n", to: "sub/skip.txt")
 
         #expect(pathBasenames(try run(["needle", parent.path("sub")])) == ["keep.txt"])
-        #expect(pathBasenames(try run(["--no-ignore-parent", "needle", parent.path("sub")])) == [
+        #expect(Set(pathBasenames(try run(["--no-ignore-parent", "needle", parent.path("sub")]))) == Set([
             "keep.txt",
             "skip.txt",
-        ])
+        ]))
 
         let nested = try TemporaryDirectory()
         try nested.createDirectory(".git")
@@ -1665,10 +1665,10 @@ struct RipgrepSearcherTests {
         try nested.write("needle\n", to: "repo/bar/skip.txt")
         try nested.write("needle\n", to: "repo/bar/rgskip.txt")
 
-        #expect(pathBasenames(try run(["needle", nested.path("repo/bar")])) == [
+        #expect(Set(pathBasenames(try run(["needle", nested.path("repo/bar")]))) == Set([
             "keep.txt",
             "skip.txt",
-        ])
+        ]))
 
         let nestedFileMarker = try TemporaryDirectory()
         try nestedFileMarker.createDirectory(".git")
@@ -1676,10 +1676,10 @@ struct RipgrepSearcherTests {
         try nestedFileMarker.write("", to: "repo/.git")
         try nestedFileMarker.write("needle\n", to: "repo/bar/keep.txt")
         try nestedFileMarker.write("needle\n", to: "repo/bar/skip.txt")
-        #expect(pathBasenames(try run(["needle", nestedFileMarker.path("repo/bar")])) == [
+        #expect(Set(pathBasenames(try run(["needle", nestedFileMarker.path("repo/bar")]))) == Set([
             "keep.txt",
             "skip.txt",
-        ])
+        ]))
 
         let root = try TemporaryDirectory()
         try root.write("needle\n", to: "keep.txt")
@@ -1717,11 +1717,11 @@ struct RipgrepSearcherTests {
             "UPPER.TXT",
             "keep.txt",
         ])
-        #expect(pathBasenames(try run(["--max-filesize", "1K", "needle", root.url.path])) == [
+        #expect(Set(pathBasenames(try run(["--max-filesize", "1K", "needle", root.url.path]))) == Set([
             "UPPER.TXT",
             "big.txt",
             "keep.txt",
-        ])
+        ]))
         #expect(try run(["--max-filesize", "10", "needle", root.path("big.txt")]) == [
             "needle \(String(repeating: "x", count: 100))",
         ])
@@ -1753,21 +1753,21 @@ struct RipgrepSearcherTests {
             "needle",
             root.url.path,
         ])) == ["big.txt", "keep.txt"])
-        #expect(pathBasenames(try run([
+        #expect(Set(pathBasenames(try run([
             "--no-ignore",
             "--glob-case-insensitive",
             "-g",
             "*.txt",
             "needle",
             root.url.path,
-        ])) == ["UPPER.TXT", "big.txt", "keep.txt"])
-        #expect(pathBasenames(try run([
+        ]))) == Set(["UPPER.TXT", "big.txt", "keep.txt"]))
+        #expect(Set(pathBasenames(try run([
             "--no-ignore",
             "--iglob",
             "*.txt",
             "needle",
             root.url.path,
-        ])) == ["UPPER.TXT", "big.txt", "keep.txt"])
+        ]))) == Set(["UPPER.TXT", "big.txt", "keep.txt"]))
         #expect(pathBasenames(try run([
             "--ignore-file-case-insensitive",
             "needle",
@@ -1815,12 +1815,12 @@ struct RipgrepSearcherTests {
         try root.write("needle\n", to: "three.rs")
 
         #expect(pathBasenames(try run(["--type-add", "foo:*.foo", "-tfoo", "needle", root.url.path])) == ["one.foo"])
-        #expect(pathBasenames(try run([
+        #expect(Set(pathBasenames(try run([
             "--type-add", "src:include:swift,rust",
             "-tsrc",
             "needle",
             root.url.path,
-        ])) == ["three.rs", "two.swift"])
+        ]))) == Set(["three.rs", "two.swift"]))
         #expect(pathBasenames(try run([
             "--type-clear", "swift",
             "--type-add", "swift:*.foo",

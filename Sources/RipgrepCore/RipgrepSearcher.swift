@@ -108,7 +108,7 @@ public struct RipgrepSearcher {
 
     private func sorted(_ files: [SearchFileResult], options: RipgrepOptions) -> [SearchFileResult] {
         guard let sortMode = options.sortMode else {
-            return files.sorted { $0.fileURL.path < $1.fileURL.path }
+            return files
         }
         return files.sorted { lhs, rhs in
             let order = compare(lhs.fileURL, rhs.fileURL, by: sortMode.kind)

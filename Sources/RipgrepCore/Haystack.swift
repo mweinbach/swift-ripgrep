@@ -220,7 +220,6 @@ public struct FileWalker {
             ],
             options: []
         )
-        .sorted { $0.path < $1.path }
 
         var haystacks: [Haystack] = []
         for child in children {
@@ -258,7 +257,7 @@ public struct FileWalker {
 
     private func sorted(_ haystacks: [Haystack], options: RipgrepOptions) -> [Haystack] {
         guard let sortMode = options.sortMode else {
-            return haystacks.sorted { $0.url.path < $1.url.path }
+            return haystacks
         }
         return haystacks.sorted { lhs, rhs in
             let order = compare(lhs.url, rhs.url, by: sortMode.kind)
