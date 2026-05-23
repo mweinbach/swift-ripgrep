@@ -187,6 +187,23 @@ struct RipgrepSearcherTests {
         #expect(typeList.contains("swift: *.swift"))
     }
 
+    @Test("handles binary detection modes")
+    func handlesBinaryDetectionModes() throws {
+        let root = try TemporaryDirectory()
+        try root.write(Data("needle\0tail\n".utf8), to: "bin.dat")
+
+        #expect(try runAllowingNoMatch(["needle", root.url.path]) == [])
+        #expect(try run(["needle", root.path("bin.dat")]) == [
+            #"binary file matches (found "\0" byte around offset 6)"#,
+        ])
+        #expect(pathBasenames(try run(["--binary", "needle", root.url.path])) == ["bin.dat"])
+        #expect(try run(["-a", "needle", root.path("bin.dat")]) == [
+            "needle\0tail",
+        ])
+        #expect(try run(["-c", "needle", root.path("bin.dat")]) == ["1"])
+        #expect(pathBasenames(try run(["-l", "needle", root.path("bin.dat")])) == ["bin.dat"])
+    }
+
     @Test("searches provided stdin")
     func searchesProvidedStdin() throws {
         var output: [String] = []
@@ -245,6 +262,19 @@ struct RipgrepSearcherTests {
         return output
     }
 
+    private func runAllowingNoMatch(_ arguments: [String]) throws -> [String] {
+        var output: [String] = []
+        var errors: [String] = []
+        let exitCode = RipgrepCLI.run(
+            arguments: arguments,
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(errors.isEmpty)
+        #expect(exitCode == (output.isEmpty ? 1 : 0))
+        return output
+    }
+
     private func pathBasenames(_ lines: [String]) -> [String] {
         lines.map { line in
             let path = line.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? line
@@ -274,12 +304,16 @@ private final class TemporaryDirectory {
     }
 
     func write(_ contents: String, to relativePath: String) throws {
+        try write(Data(contents.utf8), to: relativePath)
+    }
+
+    func write(_ data: Data, to relativePath: String) throws {
         let fileURL = url.appendingPathComponent(relativePath, isDirectory: false)
         try FileManager.default.createDirectory(
             at: fileURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        try contents.write(to: fileURL, atomically: true, encoding: .utf8)
+        try data.write(to: fileURL)
     }
 
     func path(_ relativePath: String) -> String {

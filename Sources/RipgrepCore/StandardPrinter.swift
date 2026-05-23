@@ -23,20 +23,26 @@ public struct StandardPrinter {
         case .matchingLines:
             if options.onlyMatching {
                 return results.files.flatMap { result in
-                    result.matches.flatMap { formatOnlyMatching($0, showPath: showPath(for: results)) }
+                    if let binaryLine = formatBinaryMatch(result, showPath: showPath(for: results)) {
+                        return [binaryLine]
+                    }
+                    return result.matches.flatMap { formatOnlyMatching($0, showPath: showPath(for: results)) }
                 }
             }
             if options.passthru || options.beforeContext > 0 || options.afterContext > 0 {
                 return results.files.flatMap { contextLines(for: $0, showPath: showPath(for: results)) }
             }
             return results.files.flatMap { result in
-                result.matches.map { format($0, showPath: showPath(for: results)) }
+                if let binaryLine = formatBinaryMatch(result, showPath: showPath(for: results)) {
+                    return [binaryLine]
+                }
+                return result.matches.map { format($0, showPath: showPath(for: results)) }
             }
         case .count:
             return results.files.map { result in
                 let count = options.onlyMatching
                     ? result.matches.reduce(0) { $0 + $1.matchCount }
-                    : result.matches.count
+                    : result.matches.count + (result.hasBinaryMatch ? 1 : 0)
                 if showPath(for: results) {
                     return "\(displayPath(for: result.fileURL)):\(count)"
                 }
@@ -44,11 +50,11 @@ public struct StandardPrinter {
             }
         case .filesWithMatches:
             return results.files
-                .filter { !$0.matches.isEmpty }
+                .filter(\.hasMatch)
                 .map { displayPath(for: $0.fileURL) }
         case .filesWithoutMatch:
             return results.files
-                .filter { $0.matches.isEmpty }
+                .filter { !$0.hasMatch }
                 .map { displayPath(for: $0.fileURL) }
         }
     }
@@ -73,6 +79,17 @@ public struct StandardPrinter {
             return renderedLine(for: match)
         }
         return "\(fields.joined(separator: ":")):\(renderedLine(for: match))"
+    }
+
+    private func formatBinaryMatch(_ result: SearchFileResult, showPath: Bool) -> String? {
+        guard result.hasBinaryMatch, let offset = result.binaryByteOffset else {
+            return nil
+        }
+        let message = #"binary file matches (found "\0" byte around offset \#(offset))"#
+        if showPath {
+            return "\(displayPath(for: result.fileURL)): \(message)"
+        }
+        return message
     }
 
     private func formatOnlyMatching(_ match: SearchMatch, showPath: Bool) -> [String] {

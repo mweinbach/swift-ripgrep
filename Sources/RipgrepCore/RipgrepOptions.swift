@@ -13,6 +13,12 @@ public enum PrintMode: Equatable {
     case filesWithoutMatch
 }
 
+public enum BinaryMode: Equatable {
+    case automatic
+    case searchAndSuppress
+    case asText
+}
+
 public struct RipgrepOptions: Equatable {
     public var mode: SearchMode = .search
     public var printMode: PrintMode = .matchingLines
@@ -37,6 +43,7 @@ public struct RipgrepOptions: Equatable {
     public var globPatterns: [String] = []
     public var typeChanges: [TypeChange] = []
     public var followSymlinks = false
+    public var binaryMode: BinaryMode = .automatic
     public var quiet = false
     public var useStdin = false
     public var beforeContext = 0
@@ -210,6 +217,14 @@ public enum RipgrepArgumentParser {
                 options.typeChanges.append(.clear(String(value.dropFirst("--type-clear=".count))))
             case "-L", "--follow":
                 options.followSymlinks = true
+            case "--binary":
+                options.binaryMode = .searchAndSuppress
+            case "--no-binary":
+                options.binaryMode = .automatic
+            case "-a", "--text":
+                options.binaryMode = .asText
+            case "--no-text":
+                options.binaryMode = .automatic
             case "-q", "--quiet":
                 options.quiet = true
             case "--passthru":
@@ -380,6 +395,8 @@ public enum RipgrepArgumentParser {
           -C, --context NUM          Show NUM lines before and after each match
               --passthru             Print both matching and non-matching lines
           -L, --follow               Follow symbolic links
+              --binary               Search binary files but suppress binary output
+          -a, --text                 Search binary files as text
           -q, --quiet                Do not print matches
           -h, --help                 Print help
               --version              Print version

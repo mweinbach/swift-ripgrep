@@ -40,7 +40,7 @@ public struct RipgrepSearcher {
             : try FileWalker(fileManager: fileManager)
                 .haystacks(for: options)
                 .map { haystack in
-                    searchFile(haystack.url, matcher: matcher, options: options)
+                    searchFile(haystack, matcher: matcher, options: options)
                 }
 
         if options.useStdin {
@@ -52,13 +52,13 @@ public struct RipgrepSearcher {
             lhs.fileURL.path < rhs.fileURL.path
         }
 
-        let matchedFiles = files.filter { !$0.matches.isEmpty }
+        let matchedFiles = files.filter(\.hasMatch)
         let summary = SearchSummary(
             filesSearched: files.filter(\.searched).count,
             filesWithMatches: matchedFiles.count,
             matchedLines: matchedFiles.reduce(0) { $0 + $1.matches.count },
             totalMatches: matchedFiles.reduce(0) { total, file in
-                total + file.matches.reduce(0) { $0 + $1.matchCount }
+                total + file.matches.reduce(0) { $0 + $1.matchCount } + (file.hasBinaryMatch ? 1 : 0)
             }
         )
 
@@ -66,14 +66,33 @@ public struct RipgrepSearcher {
     }
 
     private func searchFile(
-        _ fileURL: URL,
+        _ haystack: Haystack,
         matcher: PatternMatcher,
         options: RipgrepOptions
     ) -> SearchFileResult {
-        guard let contents = try? String(contentsOf: fileURL, encoding: .utf8) else {
+        let fileURL = haystack.url
+        guard let data = try? Data(contentsOf: fileURL) else {
             return SearchFileResult(fileURL: fileURL, matches: [], searched: false)
         }
 
+        let binaryByteOffset = data.firstIndex(of: 0)
+        if let binaryByteOffset, options.binaryMode != .asText {
+            if options.binaryMode == .automatic && !haystack.isExplicit {
+                return SearchFileResult(fileURL: fileURL, matches: [], searched: false)
+            }
+
+            let contents = String(decoding: data, as: UTF8.self)
+            let result = searchContents(contents, fileURL: fileURL, matcher: matcher, options: options)
+            return SearchFileResult(
+                fileURL: fileURL,
+                matches: [],
+                lines: result.lines,
+                binaryByteOffset: binaryByteOffset,
+                hasBinaryMatch: result.hasMatch
+            )
+        }
+
+        let contents = String(decoding: data, as: UTF8.self)
         return searchContents(contents, fileURL: fileURL, matcher: matcher, options: options)
     }
 

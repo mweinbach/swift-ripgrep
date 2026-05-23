@@ -53,18 +53,28 @@ public struct SearchFileResult: Equatable, Sendable {
     public let fileURL: URL
     public let matches: [SearchMatch]
     public let lines: [SearchLine]
+    public let binaryByteOffset: Int?
+    public let hasBinaryMatch: Bool
     public let searched: Bool
 
     public init(
         fileURL: URL,
         matches: [SearchMatch],
         lines: [SearchLine] = [],
+        binaryByteOffset: Int? = nil,
+        hasBinaryMatch: Bool = false,
         searched: Bool = true
     ) {
         self.fileURL = fileURL
         self.matches = matches
         self.lines = lines
+        self.binaryByteOffset = binaryByteOffset
+        self.hasBinaryMatch = hasBinaryMatch
         self.searched = searched
+    }
+
+    public var hasMatch: Bool {
+        hasBinaryMatch || !matches.isEmpty
     }
 }
 
