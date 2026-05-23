@@ -1630,6 +1630,26 @@ struct RipgrepSearcherTests {
             root.url.path,
         ])) == ["keep.txt"])
         #expect(Set(pathBasenames(try run(["--no-ignore", "needle", root.url.path]))) == Set(["keep.txt", "skip.txt"]))
+
+        let worktree = try TemporaryDirectory()
+        try worktree.createDirectory("repo/.git/info")
+        try worktree.write("ignored\n", to: "repo/.git/info/exclude")
+        try worktree.createDirectory("repo/.git/worktrees/repotree")
+        try worktree.write("../..\n", to: "repo/.git/worktrees/repotree/commondir")
+        try worktree.createDirectory("repotree")
+        try worktree.write("gitdir: repo/.git/worktrees/repotree\n", to: "repotree/.git")
+        try worktree.write("", to: "repotree/ignored")
+        try worktree.write("", to: "repotree/not-ignored")
+
+        let originalDirectory = FileManager.default.currentDirectoryPath
+        defer { FileManager.default.changeCurrentDirectoryPath(originalDirectory) }
+        #expect(FileManager.default.changeCurrentDirectoryPath(worktree.url.path))
+
+        #expect(try run(["--sort", "path", "--files", "repotree"]) == ["repotree/not-ignored"])
+        #expect(Set(try run(["--no-ignore-exclude", "--sort", "path", "--files", "repotree"])) == Set([
+            "repotree/ignored",
+            "repotree/not-ignored",
+        ]))
     }
 
     @Test("honors global git ignore and its toggle")

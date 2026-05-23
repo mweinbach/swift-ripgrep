@@ -422,9 +422,9 @@ public struct FileWalker {
             options: options
         )
         if !options.noIgnoreExclude,
-           fileManager.fileExists(atPath: parentURL.appendingPathComponent(".git").path) {
+           let excludeURL = gitInfoExcludeURL(for: parentURL) {
             appendLoadedMatcher(
-                from: parentURL.appendingPathComponent(".git/info/exclude"),
+                from: excludeURL,
                 to: &ignoreStack,
                 messages: &messages,
                 rootBase: rootBase,
@@ -447,6 +447,75 @@ public struct FileWalker {
 
     private func hasGitMarker(in directoryURL: URL) -> Bool {
         fileManager.fileExists(atPath: directoryURL.appendingPathComponent(".git").path)
+    }
+
+    private func gitInfoExcludeURL(for directoryURL: URL) -> URL? {
+        let markerURL = directoryURL.appendingPathComponent(".git")
+        var isDirectory: ObjCBool = false
+        guard fileManager.fileExists(atPath: markerURL.path, isDirectory: &isDirectory) else {
+            return nil
+        }
+        if isDirectory.boolValue {
+            return markerURL
+                .appendingPathComponent("info", isDirectory: true)
+                .appendingPathComponent("exclude")
+        }
+        guard let gitDirectory = gitDirectory(fromGitFile: markerURL, worktreeDirectory: directoryURL) else {
+            return nil
+        }
+        let commonDirectory = commonGitDirectory(from: gitDirectory)
+        return commonDirectory
+            .appendingPathComponent("info", isDirectory: true)
+            .appendingPathComponent("exclude")
+    }
+
+    private func gitDirectory(fromGitFile gitFileURL: URL, worktreeDirectory: URL) -> URL? {
+        guard let contents = try? String(contentsOf: gitFileURL, encoding: .utf8) else {
+            return nil
+        }
+        guard let rawLine = contents.components(separatedBy: .newlines).first(where: {
+            $0.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("gitdir:")
+        }) else {
+            return nil
+        }
+        let value = rawLine
+            .dropFirst("gitdir:".count)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else {
+            return nil
+        }
+        return resolvedGitPath(value, relativeTo: worktreeDirectory)
+    }
+
+    private func commonGitDirectory(from gitDirectory: URL) -> URL {
+        let commondirURL = gitDirectory.appendingPathComponent("commondir")
+        guard let contents = try? String(contentsOf: commondirURL, encoding: .utf8) else {
+            return gitDirectory
+        }
+        let value = contents.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else {
+            return gitDirectory
+        }
+        return resolvedGitPath(value, relativeTo: gitDirectory) ?? gitDirectory
+    }
+
+    private func resolvedGitPath(_ rawPath: String, relativeTo baseURL: URL) -> URL? {
+        if rawPath.hasPrefix("/") {
+            return URL(fileURLWithPath: rawPath).standardizedFileURL
+        }
+        let relativeToBase = baseURL
+            .appendingPathComponent(rawPath)
+            .standardizedFileURL
+        if fileManager.fileExists(atPath: relativeToBase.path) {
+            return relativeToBase
+        }
+        let relativeToCWD = URL(fileURLWithPath: fileManager.currentDirectoryPath, isDirectory: true)
+            .appendingPathComponent(rawPath)
+            .standardizedFileURL
+        if fileManager.fileExists(atPath: relativeToCWD.path) {
+            return relativeToCWD
+        }
+        return relativeToBase
     }
 
     private func isAtOrBelow(_ url: URL, _ ancestor: URL) -> Bool {
@@ -703,9 +772,9 @@ public struct FileWalker {
         if !options.noIgnoreExclude,
            !options.noIgnoreVCS,
            (options.noRequireGit || isInGitRepository(directoryURL)),
-           fileManager.fileExists(atPath: directoryURL.appendingPathComponent(".git").path) {
+           let excludeURL = gitInfoExcludeURL(for: directoryURL) {
             appendLoadedMatcher(
-                from: directoryURL.appendingPathComponent(".git/info/exclude"),
+                from: excludeURL,
                 to: &ignoreStack,
                 messages: &messages,
                 rootBase: rootBase,
