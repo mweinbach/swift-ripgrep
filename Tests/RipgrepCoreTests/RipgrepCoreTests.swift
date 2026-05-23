@@ -1005,6 +1005,17 @@ struct RipgrepSearcherTests {
         #expect(try run(["--replace", "${}_${bad-name}_${1}", #"([a-z]+)\d+"#, root.path("replace.txt")]) == [
             "${}_${bad-name}_abc ${}_${bad-name}_def",
         ])
+
+        try root.write("foo bar -baz\n", to: "hyphen.txt")
+        #expect(try run(["-e-baz", "-e", "-baz", root.path("hyphen.txt")]) == [
+            "foo bar -baz",
+        ])
+        #expect(try run(["-rni", "bar", root.path("hyphen.txt")]) == [
+            "foo ni -baz",
+        ])
+        #expect(try run(["-r", "-n", "-i", "bar", root.path("hyphen.txt")]) == [
+            "foo -n -baz",
+        ])
     }
 
     @Test("prints trim vimgrep and heading modes")

@@ -450,6 +450,8 @@ public enum RipgrepArgumentParser {
                 index += 1
             case let value where value.hasPrefix("--regexp="):
                 explicitPatterns.append(String(value.dropFirst("--regexp=".count)))
+            case let value where value.hasPrefix("-e") && value.count > 2:
+                explicitPatterns.append(String(value.dropFirst(2)))
             case "-f", "--file":
                 guard index < arguments.count else {
                     return .error("error: The argument '--file <PATTERNFILE>' requires a value")
@@ -532,6 +534,8 @@ public enum RipgrepArgumentParser {
                 index += 1
             case let value where value.hasPrefix("--replace="):
                 options.replacement = String(value.dropFirst("--replace=".count))
+            case let value where value.hasPrefix("-r") && value.count > 2:
+                options.replacement = String(value.dropFirst(2))
             case "-n", "--line-number":
                 options.lineNumber = true
                 options.noLineNumber = false
