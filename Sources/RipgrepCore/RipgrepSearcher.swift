@@ -2,9 +2,14 @@ import Foundation
 
 public struct RipgrepSearcher {
     private let fileManager: FileManager
+    private let environment: [String: String]
 
-    public init(fileManager: FileManager = .default) {
+    public init(
+        fileManager: FileManager = .default,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) {
         self.fileManager = fileManager
+        self.environment = environment
     }
 
     public func search(
@@ -21,6 +26,7 @@ public struct RipgrepSearcher {
 
     public func files(options: RipgrepOptions) throws -> [URL] {
         try FileWalker(fileManager: fileManager)
+            .withEnvironment(environment)
             .haystacks(for: options)
             .map(\.url)
     }
@@ -38,6 +44,7 @@ public struct RipgrepSearcher {
         let walkResults = options.useStdin && options.roots.isEmpty
             ? FileWalkResults(haystacks: [], messages: [])
             : try FileWalker(fileManager: fileManager)
+                .withEnvironment(environment)
                 .haystacksWithMessages(for: options)
         var files = walkResults.haystacks.map { haystack in
             searchFile(haystack, matcher: matcher, options: options)

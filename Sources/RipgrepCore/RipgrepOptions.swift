@@ -85,6 +85,7 @@ public struct RipgrepOptions: Equatable {
     public var noIgnoreDot = false
     public var noIgnoreExclude = false
     public var noIgnoreFiles = false
+    public var noIgnoreGlobal = false
     public var noIgnoreParent = false
     public var noIgnoreVCS = false
     public var noRequireGit = false
@@ -393,12 +394,14 @@ public enum RipgrepArgumentParser {
                 options.noIgnoreDot = true
                 options.noIgnoreExclude = true
                 options.noIgnoreParent = true
+                options.noIgnoreGlobal = true
                 options.noIgnoreVCS = true
             case "--ignore":
                 options.noIgnore = false
                 options.noIgnoreDot = false
                 options.noIgnoreExclude = false
                 options.noIgnoreParent = false
+                options.noIgnoreGlobal = false
                 options.noIgnoreVCS = false
             case "--no-ignore-dot":
                 options.noIgnoreDot = true
@@ -408,6 +411,10 @@ public enum RipgrepArgumentParser {
                 options.noIgnoreExclude = true
             case "--ignore-exclude":
                 options.noIgnoreExclude = false
+            case "--no-ignore-global":
+                options.noIgnoreGlobal = true
+            case "--ignore-global":
+                options.noIgnoreGlobal = false
             case "--no-ignore-parent":
                 options.noIgnoreParent = true
             case "--ignore-parent":
@@ -768,6 +775,7 @@ public enum RipgrepArgumentParser {
               --no-ignore-dot        Do not respect .ignore or .rgignore files
               --no-ignore-exclude    Do not respect .git/info/exclude
               --no-ignore-files      Do not respect --ignore-file arguments
+              --no-ignore-global     Do not respect global git ignore files
               --no-ignore-parent     Do not respect ignore files in parent directories
               --no-ignore-vcs        Do not respect VCS ignore files
               --no-require-git       Use VCS ignore files outside repositories

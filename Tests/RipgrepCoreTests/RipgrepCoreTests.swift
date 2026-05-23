@@ -528,6 +528,50 @@ struct RipgrepSearcherTests {
         #expect(pathBasenames(try run(["--no-ignore", "needle", root.url.path])) == ["keep.txt", "skip.txt"])
     }
 
+    @Test("honors global git ignore and its toggle")
+    func honorsGlobalGitIgnoreAndToggle() throws {
+        let home = try TemporaryDirectory()
+        let root = try TemporaryDirectory()
+        try root.write("needle\n", to: "keep.txt")
+        try root.write("needle\n", to: "skip.txt")
+        try root.createDirectory(".git")
+        try home.write("skip.txt\n", to: ".config/git/ignore")
+        let environment = [
+            "HOME": home.url.path,
+            "XDG_CONFIG_HOME": home.path(".config"),
+        ]
+
+        #expect(pathBasenames(try run(["needle", root.url.path], environment: environment)) == ["keep.txt"])
+        #expect(pathBasenames(try run([
+            "--no-ignore-global",
+            "needle",
+            root.url.path,
+        ], environment: environment)) == ["keep.txt", "skip.txt"])
+        #expect(pathBasenames(try run([
+            "--no-ignore-global",
+            "--ignore-global",
+            "needle",
+            root.url.path,
+        ], environment: environment)) == ["keep.txt"])
+        #expect(pathBasenames(try run([
+            "--no-ignore",
+            "needle",
+            root.url.path,
+        ], environment: environment)) == ["keep.txt", "skip.txt"])
+
+        let configuredHome = try TemporaryDirectory()
+        let configuredRoot = try TemporaryDirectory()
+        try configuredRoot.write("needle\n", to: "keep.txt")
+        try configuredRoot.write("needle\n", to: "configured.txt")
+        try configuredRoot.createDirectory(".git")
+        try configuredHome.write("[core]\nexcludesFile = ~/custom-ignore\n", to: ".gitconfig")
+        try configuredHome.write("configured.txt\n", to: "custom-ignore")
+        #expect(pathBasenames(try run([
+            "needle",
+            configuredRoot.url.path,
+        ], environment: ["HOME": configuredHome.url.path])) == ["keep.txt"])
+    }
+
     @Test("honors rgignore and ignore family switches")
     func honorsRgignoreAndIgnoreFamilySwitches() throws {
         let root = try TemporaryDirectory()
@@ -801,13 +845,17 @@ struct RipgrepSearcherTests {
         #expect(output.first?.contains("--files") == true)
     }
 
-    private func run(_ arguments: [String]) throws -> [String] {
+    private func run(
+        _ arguments: [String],
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) throws -> [String] {
         var output: [String] = []
         var errors: [String] = []
         let exitCode = RipgrepCLI.run(
             arguments: arguments,
             stdout: { output.append($0) },
-            stderr: { errors.append($0) }
+            stderr: { errors.append($0) },
+            environment: environment
         )
         #expect(errors.isEmpty)
         #expect(exitCode == (output.isEmpty ? 1 : 0))

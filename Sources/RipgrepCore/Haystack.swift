@@ -17,9 +17,18 @@ public struct FileWalkResults: Equatable {
 
 public struct FileWalker {
     private let fileManager: FileManager
+    private let environment: [String: String]
 
-    public init(fileManager: FileManager = .default) {
+    public init(
+        fileManager: FileManager = .default,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) {
         self.fileManager = fileManager
+        self.environment = environment
+    }
+
+    public func withEnvironment(_ environment: [String: String]) -> FileWalker {
+        FileWalker(fileManager: fileManager, environment: environment)
     }
 
     public func haystacks(for options: RipgrepOptions) throws -> [Haystack] {
@@ -57,6 +66,7 @@ public struct FileWalker {
             }
             let rootBase = rootBase(for: root.standardizedFileURL)
             var rootIgnoreStack = baseIgnoreStack
+            appendGlobalIgnoreFile(to: &rootIgnoreStack, rootBase: rootBase, options: options)
             appendParentIgnoreFiles(to: &rootIgnoreStack, rootBase: rootBase, options: options)
             haystacks.append(contentsOf: try walk(
                 root.standardizedFileURL,
@@ -259,6 +269,24 @@ public struct FileWalker {
         }
     }
 
+    private func appendGlobalIgnoreFile(
+        to ignoreStack: inout IgnoreStack,
+        rootBase: URL,
+        options: RipgrepOptions
+    ) {
+        guard !options.noIgnore,
+              !options.noIgnoreVCS,
+              !options.noIgnoreGlobal,
+              options.noRequireGit || isInGitRepository(rootBase),
+              let globalIgnoreFile = globalGitIgnoreFile() else {
+            return
+        }
+        ignoreStack.append(loadMatcher(
+            from: globalIgnoreFile,
+            caseInsensitive: options.ignoreFileCaseInsensitive
+        ))
+    }
+
     private func ancestorPaths(of path: String) -> [String] {
         var paths: [String] = []
         var current = (path as NSString).deletingLastPathComponent
@@ -309,6 +337,89 @@ public struct FileWalker {
             patterns: contents.components(separatedBy: .newlines),
             caseInsensitive: caseInsensitive
         )
+    }
+
+    private func globalGitIgnoreFile() -> URL? {
+        if let homeConfig = readGitConfig(homeGitConfigURL()),
+           let excludesFile = parseExcludesFile(from: homeConfig) {
+            return excludesFile
+        }
+        if let xdgConfig = readGitConfig(xdgGitConfigURL()),
+           let excludesFile = parseExcludesFile(from: xdgConfig) {
+            return excludesFile
+        }
+        return defaultGlobalGitIgnoreURL()
+    }
+
+    private func readGitConfig(_ url: URL?) -> String? {
+        guard let url else {
+            return nil
+        }
+        return try? String(contentsOf: url, encoding: .utf8)
+    }
+
+    private func homeGitConfigURL() -> URL? {
+        homeURL()?.appendingPathComponent(".gitconfig")
+    }
+
+    private func xdgGitConfigURL() -> URL? {
+        let configDirectory = xdgConfigHomeURL() ?? homeURL()?.appendingPathComponent(".config", isDirectory: true)
+        return configDirectory?
+            .appendingPathComponent("git", isDirectory: true)
+            .appendingPathComponent("config")
+    }
+
+    private func defaultGlobalGitIgnoreURL() -> URL? {
+        let configDirectory = xdgConfigHomeURL() ?? homeURL()?.appendingPathComponent(".config", isDirectory: true)
+        return configDirectory?
+            .appendingPathComponent("git", isDirectory: true)
+            .appendingPathComponent("ignore")
+    }
+
+    private func xdgConfigHomeURL() -> URL? {
+        guard let raw = environment["XDG_CONFIG_HOME"], !raw.isEmpty else {
+            return nil
+        }
+        return URL(fileURLWithPath: raw, isDirectory: true)
+    }
+
+    private func homeURL() -> URL? {
+        guard let raw = environment["HOME"], !raw.isEmpty else {
+            return nil
+        }
+        return URL(fileURLWithPath: raw, isDirectory: true)
+    }
+
+    private func parseExcludesFile(from config: String) -> URL? {
+        for rawLine in config.components(separatedBy: .newlines) {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            let lowercased = line.lowercased()
+            guard lowercased.hasPrefix("excludesfile") else {
+                continue
+            }
+            let parts = line.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            guard parts.count == 2 else {
+                continue
+            }
+            var value = parts[1].trimmingCharacters(in: .whitespaces)
+            if value.hasPrefix("\""), value.hasSuffix("\""), value.count >= 2 {
+                value.removeFirst()
+                value.removeLast()
+                value = value.trimmingCharacters(in: .whitespaces)
+            }
+            guard !value.isEmpty, !value.contains(" ") else {
+                continue
+            }
+            return URL(fileURLWithPath: expandTilde(value), isDirectory: false)
+        }
+        return nil
+    }
+
+    private func expandTilde(_ path: String) -> String {
+        guard path.hasPrefix("~"), let home = environment["HOME"], !home.isEmpty else {
+            return path
+        }
+        return path.replacingOccurrences(of: "~", with: home)
     }
 
     private func appendIgnoreFiles(

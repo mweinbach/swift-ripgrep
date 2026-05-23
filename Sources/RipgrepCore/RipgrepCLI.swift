@@ -27,6 +27,7 @@ public enum RipgrepCLI {
             }
         },
         fileManager: FileManager = .default,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
         stdin: String? = nil
     ) -> Int32 {
         switch RipgrepArgumentParser.parse(arguments) {
@@ -41,7 +42,7 @@ public enum RipgrepCLI {
             return 2
         case .run(let options):
             do {
-                let searcher = RipgrepSearcher(fileManager: fileManager)
+                let searcher = RipgrepSearcher(fileManager: fileManager, environment: environment)
                 let printer = StandardPrinter(options: options)
 
                 if options.mode == .files {
