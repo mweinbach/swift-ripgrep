@@ -261,6 +261,30 @@ struct RipgrepSearcherTests {
         #expect(submatch?["end"] as? Int == 7)
     }
 
+    @Test("honors CRLF anchor mode")
+    func honorsCRLFAnchorMode() throws {
+        let root = try TemporaryDirectory()
+        try root.write("foo\r\nbar\rquux\nbaz\r\n", to: "crlf.txt")
+
+        #expect(try runAllowingNoMatch(["-n", "foo$", root.path("crlf.txt")]) == [])
+        #expect(try run(["--crlf", "-n", "foo$", root.path("crlf.txt")]) == [
+            "1:foo\r",
+        ])
+        #expect(try run(["--crlf", "-n", "bar$", root.path("crlf.txt")]) == [
+            "2:bar\rquux",
+        ])
+        #expect(try run(["--crlf", "-n", "^quux", root.path("crlf.txt")]) == [
+            "2:bar\rquux",
+        ])
+        #expect(try run(["--crlf", "-x", "foo", root.path("crlf.txt")]) == [
+            "foo\r",
+        ])
+        #expect(try runAllowingNoMatch(["--crlf", "--null-data", "-n", "foo$", root.path("crlf.txt")]) == [])
+        #expect(try run(["--null-data", "--crlf", "-n", "foo$", root.path("crlf.txt")]) == [
+            "1:foo\r",
+        ])
+    }
+
     @Test("limits traversal depth")
     func limitsTraversalDepth() throws {
         let root = try TemporaryDirectory()

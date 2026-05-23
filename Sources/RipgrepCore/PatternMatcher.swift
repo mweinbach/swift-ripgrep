@@ -65,7 +65,7 @@ public struct PatternMatcher {
 
         let filtered = candidates.filter { candidate in
             (!options.wordRegexp || isWordBounded(candidate.range, in: line))
-                && (!options.lineRegexp || (candidate.range.lowerBound == line.startIndex && candidate.range.upperBound == line.endIndex))
+                && (!options.lineRegexp || (candidate.range.lowerBound == lineStartIndex(in: line) && candidate.range.upperBound == lineEndIndex(in: line)))
         }
 
         if options.invertMatch {
@@ -101,7 +101,70 @@ public struct PatternMatcher {
         if options.lineRegexp {
             source = "^(?:\(source))$"
         }
+        if options.crlf {
+            source = crlfAnchorPattern(for: source)
+        } else if !options.multiline {
+            source = strictLineEndPattern(for: source)
+        }
         return source
+    }
+
+    private static func crlfAnchorPattern(for pattern: String) -> String {
+        transformAnchors(in: pattern) { anchor in
+            switch anchor {
+            case "^":
+                return "(?:^|(?<=\\r))"
+            case "$":
+                return "(?=\\r?$|\\r)"
+            default:
+                return String(anchor)
+            }
+        }
+    }
+
+    private static func strictLineEndPattern(for pattern: String) -> String {
+        transformAnchors(in: pattern) { anchor in
+            anchor == "$" ? "(?=\\z)" : String(anchor)
+        }
+    }
+
+    private static func transformAnchors(
+        in pattern: String,
+        replacement: (Character) -> String
+    ) -> String {
+        var output = ""
+        var escaped = false
+        var inClass = false
+
+        for character in pattern {
+            if escaped {
+                output.append(character)
+                escaped = false
+                continue
+            }
+            if character == "\\" {
+                output.append(character)
+                escaped = true
+                continue
+            }
+            if character == "[" {
+                inClass = true
+                output.append(character)
+                continue
+            }
+            if character == "]" {
+                inClass = false
+                output.append(character)
+                continue
+            }
+            if !inClass && (character == "^" || character == "$") {
+                output += replacement(character)
+                continue
+            }
+            output.append(character)
+        }
+
+        return output
     }
 
     private func literalRanges(_ literal: String, in line: String) -> [Range<String.Index>] {
@@ -127,6 +190,17 @@ public struct PatternMatcher {
             return nil
         }
         return replacement.replacingOccurrences(of: "$0", with: String(line[range]))
+    }
+
+    private func lineStartIndex(in line: String) -> String.Index {
+        line.startIndex
+    }
+
+    private func lineEndIndex(in line: String) -> String.Index {
+        guard options.crlf, line.hasSuffix("\r") else {
+            return line.endIndex
+        }
+        return line.index(before: line.endIndex)
     }
 
     private func indexRange(for span: MatchSpan, in line: String) -> Range<String.Index>? {

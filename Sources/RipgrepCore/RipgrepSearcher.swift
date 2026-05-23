@@ -326,45 +326,44 @@ public struct RipgrepSearcher {
         }
 
         var lines: [(String, String)] = []
-        var current = ""
-        var index = contents.startIndex
+        var current = String.UnicodeScalarView()
 
-        while index < contents.endIndex {
-            let character = contents[index]
-            if character == "\n" {
-                if current.hasSuffix("\r") {
-                    current.removeLast()
-                    lines.append((current, "\r\n"))
-                } else {
-                    lines.append((current, "\n"))
-                }
-                current = ""
+        for scalar in contents.unicodeScalars {
+            if scalar == "\n" {
+                lines.append((String(current), "\n"))
+                current.removeAll(keepingCapacity: true)
             } else {
-                current.append(character)
+                current.append(scalar)
             }
-            index = contents.index(after: index)
         }
 
-        if !current.isEmpty || !contents.hasSuffix("\n") {
-            lines.append((current, ""))
+        if !current.isEmpty || !lastScalar(in: contents, equals: "\n") {
+            lines.append((String(current), ""))
         }
         return lines
     }
 
     private func splitNulDelimited(_ contents: String) -> [(text: String, terminator: String)] {
         var lines: [(String, String)] = []
-        var current = ""
-        for character in contents {
-            if character == "\0" {
-                lines.append((current, "\0"))
-                current = ""
+        var current = String.UnicodeScalarView()
+        for scalar in contents.unicodeScalars {
+            if scalar == "\0" {
+                lines.append((String(current), "\0"))
+                current.removeAll(keepingCapacity: true)
             } else {
-                current.append(character)
+                current.append(scalar)
             }
         }
-        if !current.isEmpty || !contents.hasSuffix("\0") {
-            lines.append((current, ""))
+        if !current.isEmpty || !lastScalar(in: contents, equals: "\0") {
+            lines.append((String(current), ""))
         }
         return lines
+    }
+
+    private func lastScalar(in contents: String, equals expected: UnicodeScalar) -> Bool {
+        guard let last = contents.unicodeScalars.last else {
+            return false
+        }
+        return last == expected
     }
 }

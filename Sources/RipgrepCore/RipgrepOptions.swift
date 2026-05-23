@@ -57,6 +57,7 @@ public struct RipgrepOptions: Equatable {
     public var lineRegexp = false
     public var multiline = false
     public var multilineDotall = false
+    public var crlf = false
     public var invertMatch = false
     public var onlyMatching = false
     public var replacement: String?
@@ -222,6 +223,11 @@ public enum RipgrepArgumentParser {
                 options.multilineDotall = true
             case "--no-multiline-dotall":
                 options.multilineDotall = false
+            case "--crlf":
+                options.crlf = true
+                options.nullData = false
+            case "--no-crlf":
+                options.crlf = false
             case "-v", "--invert-match":
                 options.invertMatch = true
             case "-o", "--only-matching":
@@ -489,6 +495,7 @@ public enum RipgrepArgumentParser {
                 options.noMessages = false
             case "--null-data":
                 options.nullData = true
+                options.crlf = false
                 options.binaryMode = .asText
             case "-u", "--unrestricted":
                 applyUnrestricted(to: &options)
@@ -718,6 +725,7 @@ public enum RipgrepArgumentParser {
           -x, --line-regexp          Only show matches spanning an entire line
           -U, --multiline            Enable matching across line terminators
               --multiline-dotall     Make '.' match line terminators in multiline mode
+              --crlf                 Treat CRLF as a line terminator for anchors
           -v, --invert-match         Show non-matching lines
           -o, --only-matching        Print only the matched text
           -r, --replace TEXT         Replace matches with the given text
