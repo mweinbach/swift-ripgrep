@@ -714,6 +714,37 @@ struct RipgrepSearcherTests {
         #expect(errors.isEmpty)
     }
 
+    @Test("suppresses non fatal file messages")
+    func suppressesNonFatalFileMessages() throws {
+        let root = try TemporaryDirectory()
+        try root.write("needle\n", to: "ok.txt")
+        let missingPath = root.path("missing.txt")
+
+        var output: [String] = []
+        var errors: [String] = []
+        var exitCode = RipgrepCLI.run(
+            arguments: ["needle", root.path("ok.txt"), missingPath],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+
+        #expect(exitCode == 2)
+        #expect(output == ["\(root.path("ok.txt")):needle"])
+        #expect(errors == ["rg: \(missingPath): No such file or directory (os error 2)"])
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--no-messages", "needle", root.path("ok.txt"), missingPath],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+
+        #expect(exitCode == 2)
+        #expect(output == ["\(root.path("ok.txt")):needle"])
+        #expect(errors.isEmpty)
+    }
+
     @Test("prints help")
     func printsHelp() {
         var output: [String] = []

@@ -94,6 +94,7 @@ public struct RipgrepOptions: Equatable {
     public var followSymlinks = false
     public var binaryMode: BinaryMode = .automatic
     public var quiet = false
+    public var noMessages = false
     public var useStdin = false
     public var beforeContext = 0
     public var afterContext = 0
@@ -482,6 +483,10 @@ public enum RipgrepArgumentParser {
                 options.binaryMode = .automatic
             case "-q", "--quiet":
                 options.quiet = true
+            case "--no-messages":
+                options.noMessages = true
+            case "--messages":
+                options.noMessages = false
             case "--null-data":
                 options.nullData = true
                 options.binaryMode = .asText
@@ -771,6 +776,7 @@ public enum RipgrepArgumentParser {
           -a, --text                 Search binary files as text
               --null-data            Use NUL as a line terminator
           -q, --quiet                Do not print matches
+              --no-messages          Suppress file open/read error messages
           -h, --help                 Print help
               --version              Print version
         """

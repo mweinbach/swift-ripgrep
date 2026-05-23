@@ -66,10 +66,18 @@ public enum RipgrepCLI {
                 for line in outputLines {
                     stdout(line)
                 }
+                if !options.noMessages {
+                    for message in results.messages {
+                        stderr("rg: \(message)")
+                    }
+                }
 
+                if !results.messages.isEmpty {
+                    return 2
+                }
                 return results.hasMatch ? 0 : 1
             } catch {
-                stderr("error: \(error)")
+                stderr("rg: \(error)")
                 return 2
             }
         }

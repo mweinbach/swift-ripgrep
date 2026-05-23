@@ -10,6 +10,11 @@ public struct Haystack: Equatable {
     }
 }
 
+public struct FileWalkResults: Equatable {
+    public let haystacks: [Haystack]
+    public let messages: [String]
+}
+
 public struct FileWalker {
     private let fileManager: FileManager
 
@@ -18,7 +23,16 @@ public struct FileWalker {
     }
 
     public func haystacks(for options: RipgrepOptions) throws -> [Haystack] {
+        let results = try haystacksWithMessages(for: options)
+        if let message = results.messages.first {
+            throw RipgrepError.message(message)
+        }
+        return results.haystacks
+    }
+
+    public func haystacksWithMessages(for options: RipgrepOptions) throws -> FileWalkResults {
         var haystacks: [Haystack] = []
+        var messages: [String] = []
         var baseIgnoreStack = IgnoreStack()
         if !options.noIgnoreFiles {
             for ignoreFile in options.ignoreFiles {
@@ -38,7 +52,8 @@ public struct FileWalker {
 
         for root in options.effectiveRoots {
             guard fileManager.fileExists(atPath: root.path) else {
-                throw RipgrepError.missingPath(root.path)
+                messages.append("\(root.path): No such file or directory (os error 2)")
+                continue
             }
             let rootBase = rootBase(for: root.standardizedFileURL)
             var rootIgnoreStack = baseIgnoreStack
@@ -55,7 +70,10 @@ public struct FileWalker {
             ))
         }
 
-        return sorted(haystacks, options: options)
+        return FileWalkResults(
+            haystacks: sorted(haystacks, options: options),
+            messages: messages
+        )
     }
 
     private func walk(

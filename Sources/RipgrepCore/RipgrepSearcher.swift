@@ -35,12 +35,12 @@ public struct RipgrepSearcher {
         }
 
         let matcher = try PatternMatcher(options: options)
-        var files = options.useStdin && options.roots.isEmpty
-            ? []
+        let walkResults = options.useStdin && options.roots.isEmpty
+            ? FileWalkResults(haystacks: [], messages: [])
             : try FileWalker(fileManager: fileManager)
-                .haystacks(for: options)
-                .map { haystack in
-                    searchFile(haystack, matcher: matcher, options: options)
+                .haystacksWithMessages(for: options)
+        var files = walkResults.haystacks.map { haystack in
+            searchFile(haystack, matcher: matcher, options: options)
         }
 
         if options.useStdin {
@@ -62,7 +62,7 @@ public struct RipgrepSearcher {
             }
         )
 
-        return SearchResults(files: files, summary: summary)
+        return SearchResults(files: files, summary: summary, messages: walkResults.messages)
     }
 
     private func matchedLineCount(_ match: SearchMatch) -> Int {

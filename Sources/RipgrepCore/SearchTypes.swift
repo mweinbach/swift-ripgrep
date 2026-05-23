@@ -127,6 +127,17 @@ public struct SearchSummary: Equatable, Sendable {
 public struct SearchResults: Equatable, Sendable {
     public let files: [SearchFileResult]
     public let summary: SearchSummary
+    public let messages: [String]
+
+    public init(
+        files: [SearchFileResult],
+        summary: SearchSummary,
+        messages: [String] = []
+    ) {
+        self.files = files
+        self.summary = summary
+        self.messages = messages
+    }
 
     public var hasMatch: Bool {
         summary.filesWithMatches > 0
@@ -137,6 +148,7 @@ public enum RipgrepError: Error, CustomStringConvertible, Equatable, Sendable {
     case emptyPattern
     case missingPath(String)
     case invalidRegex(String)
+    case message(String)
 
     public var description: String {
         switch self {
@@ -146,6 +158,8 @@ public enum RipgrepError: Error, CustomStringConvertible, Equatable, Sendable {
             return "path does not exist: \(path)"
         case .invalidRegex(let message):
             return "regex parse error: \(message)"
+        case .message(let message):
+            return message
         }
     }
 }
