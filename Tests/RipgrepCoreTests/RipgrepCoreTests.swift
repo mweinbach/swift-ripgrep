@@ -409,7 +409,12 @@ struct RipgrepSearcherTests {
         )
         #expect(exitCode == 2)
         #expect(output.isEmpty)
-        #expect(errors.first?.contains("exactly one byte") == true)
+        #expect(errors == [
+            """
+            rg: error parsing flag --path-separator: A path separator must be exactly one byte, but the given separator is 2 bytes: ø
+            In some shells on Windows '/' is automatically expanded. Use '//' instead.
+            """,
+        ])
     }
 
     @Test("limits matching lines per file")

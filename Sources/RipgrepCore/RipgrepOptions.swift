@@ -713,7 +713,7 @@ public enum RipgrepArgumentParser {
                     return .error("error: The argument '--path-separator <SEPARATOR>' requires a value")
                 }
                 guard let parsed = parsePathSeparator(arguments[index]) else {
-                    return .error("error: path separator must be exactly one byte")
+                    return .error(invalidPathSeparator(arguments[index]))
                 }
                 switch parsed {
                 case .automatic:
@@ -725,7 +725,7 @@ public enum RipgrepArgumentParser {
             case let value where value.hasPrefix("--path-separator="):
                 let raw = String(value.dropFirst("--path-separator=".count))
                 guard let parsed = parsePathSeparator(raw) else {
-                    return .error("error: path separator must be exactly one byte")
+                    return .error(invalidPathSeparator(raw))
                 }
                 switch parsed {
                 case .automatic:
@@ -1864,6 +1864,15 @@ public enum RipgrepArgumentParser {
             return nil
         }
         return .separator(separator)
+    }
+
+    private static func invalidPathSeparator(_ raw: String) -> String {
+        let value = parseEscapedSeparator(raw)
+        let byteCount = value.utf8.count
+        return """
+        error parsing flag --path-separator: A path separator must be exactly one byte, but the given separator is \(byteCount) bytes: \(value)
+        In some shells on Windows '/' is automatically expanded. Use '//' instead.
+        """
     }
 
     private static func parseEscapedSeparator(_ raw: String) -> String {
