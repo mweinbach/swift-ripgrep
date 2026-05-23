@@ -381,6 +381,26 @@ struct RipgrepSearcherTests {
         #expect(output.contains("18 bytes printed"))
     }
 
+    @Test("loads arguments from RIPGREP_CONFIG_PATH")
+    func loadsArgumentsFromRipgrepConfigPath() throws {
+        let root = try TemporaryDirectory()
+        try root.write("Needle\n", to: "a.txt")
+        try root.write("Needle\n", to: "a.log")
+        try root.write("# comment\n--ignore-case\n--line-number\n--glob\n*.txt\n", to: "ripgreprc")
+        let environment = ["RIPGREP_CONFIG_PATH": root.path("ripgreprc")]
+
+        #expect(try run(["needle", root.url.path], environment: environment) == [
+            "\(root.path("a.txt")):1:Needle",
+        ])
+        #expect(try run(["--no-config", "needle", root.url.path], environment: environment) == [])
+        #expect(try run(["--case-sensitive", "needle", root.url.path], environment: environment) == [])
+
+        try root.write("--replace\n\"X Y\"\n", to: "ripgreprc")
+        #expect(try run(["Needle", root.path("a.txt")], environment: environment) == [
+            "\"X Y\"",
+        ])
+    }
+
     @Test("quiet mode still prints stats")
     func quietModeStillPrintsStats() throws {
         let root = try TemporaryDirectory()

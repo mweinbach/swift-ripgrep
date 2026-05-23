@@ -30,7 +30,7 @@ public enum RipgrepCLI {
         environment: [String: String] = ProcessInfo.processInfo.environment,
         stdin: String? = nil
     ) -> Int32 {
-        switch RipgrepArgumentParser.parse(arguments) {
+        switch RipgrepArgumentParser.parse(arguments, environment: environment) {
         case .help:
             stdout(usage())
             return 0

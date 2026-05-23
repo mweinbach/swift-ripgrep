@@ -187,7 +187,20 @@ public enum CLIParseResult: Equatable {
 }
 
 public enum RipgrepArgumentParser {
-    public static func parse(_ arguments: [String]) -> CLIParseResult {
+    public static func parse(
+        _ arguments: [String],
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> CLIParseResult {
+        let finalArguments: [String]
+        if shouldLoadConfig(for: arguments) {
+            finalArguments = configArguments(environment: environment) + arguments
+        } else {
+            finalArguments = arguments
+        }
+        return parseFinal(finalArguments)
+    }
+
+    private static func parseFinal(_ arguments: [String]) -> CLIParseResult {
         var options = RipgrepOptions()
         var positionals: [String] = []
         var explicitPatterns: [String] = []
@@ -202,6 +215,8 @@ public enum RipgrepArgumentParser {
                 return .help
             case "--version":
                 return .version
+            case "--no-config":
+                break
             case "--files":
                 options.mode = .files
             case "--type-list":
@@ -980,6 +995,7 @@ public enum RipgrepArgumentParser {
               --null-data            Use NUL as a line terminator
           -q, --quiet                Do not print matches
               --no-messages          Suppress file open/read error messages
+              --no-config            Do not read RIPGREP_CONFIG_PATH
           -h, --help                 Print help
               --version              Print version
         """
@@ -993,6 +1009,28 @@ public enum RipgrepArgumentParser {
             }.filter { !$0.isEmpty })
         } catch {
             return .error("error: failed to read pattern file '\(path)': \(error)")
+        }
+    }
+
+    private static func shouldLoadConfig(for arguments: [String]) -> Bool {
+        !arguments.contains { argument in
+            argument == "-h" || argument == "--help" || argument == "--version" || argument == "--no-config"
+        }
+    }
+
+    private static func configArguments(environment: [String: String]) -> [String] {
+        guard let path = environment["RIPGREP_CONFIG_PATH"], !path.isEmpty else {
+            return []
+        }
+        guard let contents = try? String(contentsOf: URL(fileURLWithPath: path), encoding: .utf8) else {
+            return []
+        }
+        return contents.components(separatedBy: .newlines).compactMap { line in
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else {
+                return nil
+            }
+            return trimmed
         }
     }
 
