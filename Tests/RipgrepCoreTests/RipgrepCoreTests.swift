@@ -1689,8 +1689,8 @@ struct RipgrepSearcherTests {
         try root.write("secret\n", to: ".hidden.txt")
 
         #expect(try run(["--files", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == ["visible.txt"])
-        #expect(try run(["--files", "--hidden", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == [".hidden.txt", "visible.txt"])
-        #expect(pathBasenames(try run(["--hidden", "e", root.url.path])) == [".hidden.txt", "visible.txt"])
+        #expect(Set(try run(["--files", "--hidden", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent }) == Set([".hidden.txt", "visible.txt"]))
+        #expect(Set(pathBasenames(try run(["--hidden", "e", root.url.path]))) == Set([".hidden.txt", "visible.txt"]))
 
         let whitelisted = try TemporaryDirectory()
         try whitelisted.createDirectory("subdir")
@@ -1833,7 +1833,7 @@ struct RipgrepSearcherTests {
         )
 
         #expect(pathBasenames(try run(["needle", root.url.path])) == ["file.txt"])
-        #expect(try run(["--follow", "needle", root.url.path]).map { URL(fileURLWithPath: String($0.split(separator: ":", maxSplits: 1)[0])).deletingLastPathComponent().lastPathComponent } == ["link", "real"])
+        #expect(Set(try run(["--follow", "needle", root.url.path]).map { URL(fileURLWithPath: String($0.split(separator: ":", maxSplits: 1)[0])).deletingLastPathComponent().lastPathComponent }) == Set(["link", "real"]))
         #expect(pathBasenames(try run(["--follow", "--no-follow", "needle", root.url.path])) == ["file.txt"])
         #expect(pathBasenames(try run(["--one-file-system", "needle", root.url.path])) == ["file.txt"])
         #expect(pathBasenames(try run(["--one-file-system", "--no-one-file-system", "needle", root.url.path])) == ["file.txt"])
@@ -2201,10 +2201,10 @@ struct RipgrepSearcherTests {
         try root.write("needle\n", to: "UPPER.TXT")
         try root.write("upper.txt\n", to: ".ignore")
 
-        #expect(pathBasenames(try run(["--max-filesize", "10", "needle", root.url.path])) == [
+        #expect(Set(pathBasenames(try run(["--max-filesize", "10", "needle", root.url.path]))) == Set([
             "keep.txt",
             "UPPER.TXT",
-        ])
+        ]))
         #expect(Set(pathBasenames(try run(["--max-filesize", "1K", "needle", root.url.path]))) == Set([
             "UPPER.TXT",
             "big.txt",

@@ -247,7 +247,7 @@ public struct FileWalker {
                 .nameKey,
             ],
             options: []
-        ).sorted(by: defaultWalkOrder)
+        )
 
         var haystacks: [Haystack] = []
         for child in children {
@@ -297,12 +297,6 @@ public struct FileWalker {
             }
             return order == .orderedAscending
         }
-    }
-
-    private func defaultWalkOrder(_ lhs: URL, _ rhs: URL) -> Bool {
-        let lhsName = lhs.lastPathComponent
-        let rhsName = rhs.lastPathComponent
-        return lhsName.localizedStandardCompare(rhsName) == .orderedAscending
     }
 
     private func compare(_ lhs: URL, _ rhs: URL, by kind: SortKind) -> ComparisonResult {
