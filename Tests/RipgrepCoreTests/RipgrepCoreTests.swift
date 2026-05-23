@@ -1565,7 +1565,8 @@ struct RipgrepSearcherTests {
         try root.write("secret\n", to: ".hidden.txt")
 
         #expect(try run(["--files", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == ["visible.txt"])
-        #expect(Set(try run(["--files", "--hidden", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent }) == Set([".hidden.txt", "visible.txt"]))
+        #expect(try run(["--files", "--hidden", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == ["visible.txt", ".hidden.txt"])
+        #expect(pathBasenames(try run(["--hidden", "e", root.url.path])) == ["visible.txt", ".hidden.txt"])
 
         let whitelisted = try TemporaryDirectory()
         try whitelisted.createDirectory("subdir")
@@ -1574,20 +1575,37 @@ struct RipgrepSearcherTests {
         #expect(try run(["--files", whitelisted.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == [".foo.txt"])
 
         var output: [String] = []
+        var errors: [String] = []
         var exitCode = RipgrepCLI.run(
             arguments: ["--quiet", "--files", "--glob", "*.txt", root.url.path],
-            stdout: { output.append($0) }
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
         )
         #expect(exitCode == 0)
         #expect(output.isEmpty)
+        #expect(errors.isEmpty)
 
         output = []
+        errors = []
         exitCode = RipgrepCLI.run(
             arguments: ["--quiet", "--files", "--glob", "*.md", root.url.path],
-            stdout: { output.append($0) }
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
         )
         #expect(exitCode == 1)
         #expect(output.isEmpty)
+        #expect(errors.isEmpty)
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--glob", "*.txt", "--glob", "!visible.txt", "visible", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 1)
+        #expect(output.isEmpty)
+        #expect(errors.isEmpty)
     }
 
     @Test("preserves explicit current directory path prefixes")
@@ -1665,7 +1683,7 @@ struct RipgrepSearcherTests {
         )
 
         #expect(pathBasenames(try run(["needle", root.url.path])) == ["file.txt"])
-        #expect(pathBasenames(try run(["--follow", "needle", root.url.path])) == ["file.txt", "file.txt"])
+        #expect(try run(["--follow", "needle", root.url.path]).map { URL(fileURLWithPath: String($0.split(separator: ":", maxSplits: 1)[0])).deletingLastPathComponent().lastPathComponent } == ["link", "real"])
         #expect(pathBasenames(try run(["--follow", "--no-follow", "needle", root.url.path])) == ["file.txt"])
         #expect(pathBasenames(try run(["--one-file-system", "needle", root.url.path])) == ["file.txt"])
         #expect(pathBasenames(try run(["--one-file-system", "--no-one-file-system", "needle", root.url.path])) == ["file.txt"])
@@ -2034,8 +2052,8 @@ struct RipgrepSearcherTests {
         try root.write("upper.txt\n", to: ".ignore")
 
         #expect(pathBasenames(try run(["--max-filesize", "10", "needle", root.url.path])) == [
-            "UPPER.TXT",
             "keep.txt",
+            "UPPER.TXT",
         ])
         #expect(Set(pathBasenames(try run(["--max-filesize", "1K", "needle", root.url.path]))) == Set([
             "UPPER.TXT",
@@ -2162,6 +2180,7 @@ struct RipgrepSearcherTests {
 
         #expect(pathBasenames(try run(["-tswift", "needle", root.url.path])) == ["main.swift"])
         #expect(pathBasenames(try run(["-trust", "needle", root.url.path])) == ["main.rs"])
+        #expect(pathBasenames(try run(["-T", "rust", "needle", root.url.path])) == ["README.md", "main.swift"])
         #expect(pathBasenames(try run(["-tall", "-Tmd", "needle", root.url.path])) == ["main.rs", "main.swift"])
     }
 

@@ -153,12 +153,10 @@ public struct FileWalker {
         if !isExplicit {
             if !options.hidden && isHidden(url) && !isIncludedByIgnore(relativePath: relativePath, isDirectory: isDirectory, ignoreStack: ignoreStack) {
                 debug("ignoring \(url.path): hidden", options: options, diagnostics: &diagnostics)
-                filtered = true
                 return []
             }
             if !overrides.allows(relativePath: relativePath, isDirectory: isDirectory) {
                 debug("ignoring \(url.path): override glob", options: options, diagnostics: &diagnostics)
-                filtered = true
                 return []
             }
             if !ignoreStack.allows(relativePath: relativePath, isDirectory: isDirectory) {
@@ -168,7 +166,6 @@ public struct FileWalker {
             }
             if !isDirectory && !typeRegistry.allows(path: relativePath) {
                 debug("ignoring \(url.path): file type filter", options: options, diagnostics: &diagnostics)
-                filtered = true
                 return []
             }
         }
@@ -193,7 +190,6 @@ public struct FileWalker {
                let fileSize = values.fileSize,
                UInt64(fileSize) > maxFileSize {
                 debug("ignoring \(url.path): \(fileSize) bytes exceeds max filesize \(maxFileSize)", options: options, diagnostics: &diagnostics)
-                filtered = true
                 return []
             }
             return [Haystack(url: url, isExplicit: isExplicit)]
@@ -235,12 +231,15 @@ public struct FileWalker {
                 .nameKey,
             ],
             options: []
-        )
+        ).sorted(by: defaultWalkOrder)
 
         var haystacks: [Haystack] = []
         for child in children {
+            let childURL = resolvedURL == url
+                ? child
+                : url.appendingPathComponent(child.lastPathComponent)
             haystacks.append(contentsOf: try walk(
-                child,
+                childURL,
                 isExplicit: false,
                 depth: depth + 1,
                 rootBase: rootBase,
@@ -282,6 +281,17 @@ public struct FileWalker {
             }
             return order == .orderedAscending
         }
+    }
+
+    private func defaultWalkOrder(_ lhs: URL, _ rhs: URL) -> Bool {
+        let lhsName = lhs.lastPathComponent
+        let rhsName = rhs.lastPathComponent
+        let lhsHidden = lhsName.hasPrefix(".")
+        let rhsHidden = rhsName.hasPrefix(".")
+        if lhsHidden != rhsHidden {
+            return !lhsHidden
+        }
+        return lhsName.localizedStandardCompare(rhsName) == .orderedAscending
     }
 
     private func compare(_ lhs: URL, _ rhs: URL, by kind: SortKind) -> ComparisonResult {
