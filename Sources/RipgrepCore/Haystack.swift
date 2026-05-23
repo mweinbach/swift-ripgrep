@@ -51,10 +51,14 @@ public struct FileWalker {
                 ))
             }
         }
+        let overrideEntries = options.globPatterns.map { pattern in
+            (pattern: pattern, caseInsensitive: options.globCaseInsensitive)
+        } + options.caseInsensitiveGlobPatterns.map { pattern in
+            (pattern: pattern, caseInsensitive: true)
+        }
         let overrides = GlobMatcher(
-            patterns: options.globPatterns,
+            patternEntries: overrideEntries,
             overrideSemantics: true,
-            caseInsensitive: options.globCaseInsensitive
         )
         var typeRegistry = FileTypeRegistry()
         typeRegistry.apply(options.typeChanges)

@@ -9,11 +9,12 @@ public struct GlobMatcher: Equatable {
     public struct Rule: Equatable {
         let pattern: String
         let decision: Decision
+        let caseInsensitive: Bool
         let directoryOnly: Bool
         let anchored: Bool
         let basenameOnly: Bool
 
-        init(pattern: String, decision: Decision) {
+        init(pattern: String, decision: Decision, caseInsensitive: Bool) {
             var source = pattern
             let directoryOnly = source.hasSuffix("/")
             if directoryOnly {
@@ -26,6 +27,7 @@ public struct GlobMatcher: Equatable {
 
             self.pattern = source
             self.decision = decision
+            self.caseInsensitive = caseInsensitive
             self.directoryOnly = directoryOnly
             self.anchored = anchored
             self.basenameOnly = !source.contains("/")
@@ -34,15 +36,25 @@ public struct GlobMatcher: Equatable {
 
     private let rules: [Rule]
     private let requirePositiveMatch: Bool
-    private let caseInsensitive: Bool
 
     public init(
         patterns: [String],
         overrideSemantics: Bool = false,
         caseInsensitive: Bool = false
     ) {
+        self.init(
+            patternEntries: patterns.map { ($0, caseInsensitive) },
+            overrideSemantics: overrideSemantics
+        )
+    }
+
+    public init(
+        patternEntries: [(pattern: String, caseInsensitive: Bool)],
+        overrideSemantics: Bool = false
+    ) {
         var rules: [Rule] = []
-        for raw in patterns {
+        for entry in patternEntries {
+            let raw = entry.pattern
             let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else {
                 continue
@@ -56,12 +68,15 @@ public struct GlobMatcher: Equatable {
             } else {
                 decision = isNegated ? .include : .exclude
             }
-            rules.append(Rule(pattern: pattern, decision: decision))
+            rules.append(Rule(
+                pattern: pattern,
+                decision: decision,
+                caseInsensitive: entry.caseInsensitive
+            ))
         }
 
         self.rules = rules
         self.requirePositiveMatch = overrideSemantics && rules.contains { $0.decision == .include }
-        self.caseInsensitive = caseInsensitive
     }
 
     public var isEmpty: Bool {
@@ -92,20 +107,21 @@ public struct GlobMatcher: Equatable {
         }
         if rule.basenameOnly {
             return pathComponents(relativePath).contains { component in
-                matchesGlob(rule.pattern, component)
+                matchesGlob(rule.pattern, component, caseInsensitive: rule.caseInsensitive)
             }
         }
         if rule.anchored {
-            return matchesGlob(rule.pattern, relativePath)
+            return matchesGlob(rule.pattern, relativePath, caseInsensitive: rule.caseInsensitive)
         }
-        return matchesGlob("**/\(rule.pattern)", relativePath) || matchesGlob(rule.pattern, relativePath)
+        return matchesGlob("**/\(rule.pattern)", relativePath, caseInsensitive: rule.caseInsensitive)
+            || matchesGlob(rule.pattern, relativePath, caseInsensitive: rule.caseInsensitive)
     }
 
     private func pathComponents(_ path: String) -> [String] {
         path.split(separator: "/").map(String.init)
     }
 
-    private func matchesGlob(_ pattern: String, _ value: String) -> Bool {
+    private func matchesGlob(_ pattern: String, _ value: String, caseInsensitive: Bool) -> Bool {
         let regex = "^\(regexSource(for: pattern))$"
         let options: String.CompareOptions = caseInsensitive
             ? [.regularExpression, .caseInsensitive]

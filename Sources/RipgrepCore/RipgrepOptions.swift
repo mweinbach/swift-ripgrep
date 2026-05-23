@@ -129,6 +129,7 @@ public struct RipgrepOptions: Equatable {
     public var ignoreFileCaseInsensitive = false
     public var ignoreFiles: [URL] = []
     public var globPatterns: [String] = []
+    public var caseInsensitiveGlobPatterns: [String] = []
     public var preprocessor: String?
     public var preGlobPatterns: [String] = []
     public var searchZip = false
@@ -571,6 +572,14 @@ public enum RipgrepArgumentParser {
                 index += 1
             case let value where value.hasPrefix("--glob="):
                 options.globPatterns.append(String(value.dropFirst("--glob=".count)))
+            case "--iglob":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--iglob <GLOB>' requires a value")
+                }
+                options.caseInsensitiveGlobPatterns.append(arguments[index])
+                index += 1
+            case let value where value.hasPrefix("--iglob="):
+                options.caseInsensitiveGlobPatterns.append(String(value.dropFirst("--iglob=".count)))
             case "-t", "--type":
                 guard index < arguments.count else {
                     return .error("error: The argument '--type <TYPE>' requires a value")
@@ -918,6 +927,7 @@ public enum RipgrepArgumentParser {
               --pre COMMAND          Search stdout of COMMAND for each path
               --pre-glob GLOB        Include or exclude files from preprocessing
           -g, --glob GLOB            Include or exclude paths with an override glob
+              --iglob GLOB           Include/exclude paths case insensitively
           -t, --type TYPE            Only search files matching TYPE
           -T, --type-not TYPE        Do not search files matching TYPE
               --type-add TYPESPEC    Add a new glob for a file type

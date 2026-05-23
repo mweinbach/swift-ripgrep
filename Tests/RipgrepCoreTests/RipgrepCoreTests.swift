@@ -935,6 +935,13 @@ struct RipgrepSearcherTests {
             root.url.path,
         ])) == ["UPPER.TXT", "big.txt", "keep.txt"])
         #expect(pathBasenames(try run([
+            "--no-ignore",
+            "--iglob",
+            "*.txt",
+            "needle",
+            root.url.path,
+        ])) == ["UPPER.TXT", "big.txt", "keep.txt"])
+        #expect(pathBasenames(try run([
             "--ignore-file-case-insensitive",
             "needle",
             root.url.path,
@@ -951,6 +958,12 @@ struct RipgrepSearcherTests {
         #expect(pathBasenames(try run(["--ignore-file", root.path("ignore.txt"), "needle", root.url.path])) == ["keep.swift"])
         #expect(pathBasenames(try run(["-g", "*.swift", "needle", root.url.path])) == ["keep.swift"])
         #expect(pathBasenames(try run(["-g", "!skip.txt", "needle", root.url.path])) == ["keep.swift"])
+        #expect(pathBasenames(try run([
+            "--iglob",
+            "!*.TXT",
+            "needle",
+            root.url.path,
+        ])) == ["keep.swift"])
     }
 
     @Test("filters by built in file types")
