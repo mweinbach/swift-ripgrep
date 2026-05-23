@@ -547,6 +547,14 @@ struct RipgrepSearcherTests {
             "1:4:0:xx needle yy",
             "2:1:13:needle",
         ])
+
+        try root.write("éabc\n", to: "unicode-offsets.txt")
+        #expect(try run(["-o", "--column", "abc", root.path("unicode-offsets.txt")]) == [
+            "1:3:abc",
+        ])
+        #expect(try run(["-o", "--byte-offset", "--column", "abc", root.path("unicode-offsets.txt")]) == [
+            "1:3:2:abc",
+        ])
     }
 
     @Test("searches NUL delimited data")

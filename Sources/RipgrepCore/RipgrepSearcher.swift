@@ -709,7 +709,7 @@ public struct RipgrepSearcher {
             if character == "\n" || character == "\0" {
                 column = 1
             } else {
-                column += 1
+                column = bytes + 1
             }
         }
         return column

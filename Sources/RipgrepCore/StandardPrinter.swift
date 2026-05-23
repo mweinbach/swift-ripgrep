@@ -832,15 +832,15 @@ private struct ANSIColorPalette {
             return line
         }
         let orderedSpans = spans.sorted {
-            if $0.startColumn == $1.startColumn {
-                return $0.endColumn < $1.endColumn
+            if $0.startByte == $1.startByte {
+                return $0.endByte < $1.endByte
             }
-            return $0.startColumn < $1.startColumn
+            return $0.startByte < $1.startByte
         }
         var output = ""
         var cursor = line.startIndex
         for span in orderedSpans {
-            guard let range = indexRange(startColumn: span.startColumn, endColumn: span.endColumn, in: line),
+            guard let range = indexRange(startByte: span.startByte, endByte: span.endByte, in: line),
                   range.lowerBound >= cursor else {
                 continue
             }
@@ -861,13 +861,30 @@ private struct ANSIColorPalette {
         }
     }
 
-    private func indexRange(startColumn: Int, endColumn: Int, in line: String) -> Range<String.Index>? {
-        let lowerOffset = startColumn - 1
-        let upperOffset = endColumn - 1
-        guard lowerOffset >= 0, upperOffset >= lowerOffset, upperOffset <= line.count else {
+    private func indexRange(startByte: Int, endByte: Int, in line: String) -> Range<String.Index>? {
+        guard startByte >= 0, endByte >= startByte,
+              let lower = stringIndex(in: line, atByteOffset: startByte),
+              let upper = stringIndex(in: line, atByteOffset: endByte) else {
             return nil
         }
-        return line.index(line.startIndex, offsetBy: lowerOffset)..<line.index(line.startIndex, offsetBy: upperOffset)
+        return lower..<upper
+    }
+
+    private func stringIndex(in line: String, atByteOffset byteOffset: Int) -> String.Index? {
+        guard byteOffset >= 0 else {
+            return nil
+        }
+        if byteOffset == 0 {
+            return line.startIndex
+        }
+        var bytes = 0
+        for index in line.indices {
+            if bytes == byteOffset {
+                return index
+            }
+            bytes += String(line[index]).utf8.count
+        }
+        return bytes == byteOffset ? line.endIndex : nil
     }
 
     private static func applyStyle(_ name: String, to style: inout Style) {

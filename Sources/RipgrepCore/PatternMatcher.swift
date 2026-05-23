@@ -817,21 +817,18 @@ public struct PatternMatcher {
     }
 
     private func indexRange(for span: MatchSpan, in line: String) -> Range<String.Index>? {
-        guard span.startColumn >= 1, span.endColumn >= span.startColumn else {
+        guard span.startByte >= 0, span.endByte >= span.startByte else {
             return nil
         }
-        let lowerOffset = span.startColumn - 1
-        let upperOffset = span.endColumn - 1
-        guard lowerOffset <= line.count, upperOffset <= line.count else {
+        guard let lower = stringIndex(in: line, atByteOffset: span.startByte),
+              let upper = stringIndex(in: line, atByteOffset: span.endByte) else {
             return nil
         }
-        let lower = line.index(line.startIndex, offsetBy: lowerOffset)
-        let upper = line.index(line.startIndex, offsetBy: upperOffset)
         return lower..<upper
     }
 
     private func column(for index: String.Index, in line: String) -> Int {
-        line.distance(from: line.startIndex, to: index) + 1
+        byteOffset(for: index, in: line) + 1
     }
 
     private func byteOffset(for index: String.Index, in line: String) -> Int {
@@ -839,6 +836,23 @@ public struct PatternMatcher {
         return options.encodingMode == .disabled
             ? prefix.unicodeScalars.count
             : prefix.utf8.count
+    }
+
+    private func stringIndex(in line: String, atByteOffset byteOffset: Int) -> String.Index? {
+        guard byteOffset >= 0 else {
+            return nil
+        }
+        if byteOffset == 0 {
+            return line.startIndex
+        }
+        var bytes = 0
+        for index in line.indices {
+            if bytes == byteOffset {
+                return index
+            }
+            bytes += options.encodingMode == .disabled ? 1 : String(line[index]).utf8.count
+        }
+        return bytes == byteOffset ? line.endIndex : nil
     }
 
     private func isWordBounded(_ range: Range<String.Index>, in line: String) -> Bool {
