@@ -588,8 +588,28 @@ struct RipgrepSearcherTests {
         #expect(try run(["-n", "-E", "utf-16le", "needle", root.path("utf16le.txt")]) == ["2:needle"])
         #expect(try run(["-n", "needle", root.path("bom8.txt")]) == ["1:needle"])
         #expect(try run(["-n", "-E", "none", "\u{FEFF}needle", root.path("bom8.txt")]) == [
-            "1:\u{FEFF}needle",
+            "1:ï»¿needle",
         ])
+        let rawOutput = try runExecutableData([
+            "--encoding",
+            "none",
+            "-a",
+            #"\x00"#,
+            root.path("raw-bytes.txt"),
+        ], fixture: {
+            try root.write(Data([0xFF, 0xFE, 0x00, 0x62]), to: "raw-bytes.txt")
+        })
+        #expect(rawOutput == Data([0xFF, 0xFE, 0x00, 0x62, 0x0A]))
+        #expect(try run(["--encoding", "none", "-a", "-o", "--byte-offset", #"\x00"#, root.path("raw-bytes.txt")]) == [
+            "2:\0",
+        ])
+        let jsonOutput = try run(["--json", "--encoding", "none", "-a", #"\x00"#, root.path("raw-bytes.txt")])
+        let jsonMatch = try jsonOutput.map(jsonObject).first { $0["type"] as? String == "match" }?["data"] as? [String: Any]
+        let jsonLines = jsonMatch?["lines"] as? [String: String]
+        let jsonSubmatches = jsonMatch?["submatches"] as? [[String: Any]]
+        #expect(jsonLines?["bytes"] == "//4AYg==")
+        #expect(jsonSubmatches?.first?["start"] as? Int == 2)
+        #expect(jsonSubmatches?.first?["end"] as? Int == 3)
         #expect(try run(["-n", "-Esjis", "Шерлок Холмс", root.path("sjis.txt")]) == ["1:Шерлок Холмс"])
         #expect(try run(["-n", "-Eeuc-jp", "Шерлок Холмс", root.path("eucjp.txt")]) == ["1:Шерлок Холмс"])
     }
@@ -2552,6 +2572,26 @@ struct RipgrepSearcherTests {
         let data = try #require(line.data(using: .utf8))
         let object = try JSONSerialization.jsonObject(with: data)
         return try #require(object as? [String: Any])
+    }
+
+    private func runExecutableData(_ arguments: [String], fixture: () throws -> Void) throws -> Data {
+        try fixture()
+        let executable = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent(".build/debug/ripgrep")
+        let process = Process()
+        process.executableURL = executable
+        process.arguments = arguments
+        let output = Pipe()
+        let error = Pipe()
+        process.standardOutput = output
+        process.standardError = error
+        try process.run()
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        let errorData = error.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        #expect(errorData.isEmpty)
+        #expect(process.terminationStatus == (data.isEmpty ? 1 : 0))
+        return data
     }
 }
 

@@ -15,12 +15,7 @@ public enum RipgrepCLI {
 
     public static func run(
         arguments: [String],
-        stdout: (String) -> Void = { line in
-            let output = line.hasSuffix("\0") ? line : "\(line)\n"
-            if let data = output.data(using: .utf8) {
-                FileHandle.standardOutput.write(data)
-            }
-        },
+        stdout: ((String) -> Void)? = nil,
         stderr: (String) -> Void = { message in
             if let data = "\(message)\n".data(using: .utf8) {
                 FileHandle.standardError.write(data)
@@ -33,20 +28,20 @@ public enum RipgrepCLI {
     ) -> Int32 {
         switch RipgrepArgumentParser.parse(arguments, environment: environment) {
         case .help:
-            stdout(usage())
+            emitStdout(usage(), stdout: stdout)
             return 0
         case .version:
-            stdout("ripgrep \(version)")
+            emitStdout("ripgrep \(version)", stdout: stdout)
             return 0
         case .pcre2Version:
             if let version = pcre2Version(environment: environment) {
-                stdout("PCRE2 \(version) is available (JIT availability unknown)")
+                emitStdout("PCRE2 \(version) is available (JIT availability unknown)", stdout: stdout)
                 return 0
             }
             stderr("PCRE2 is not available in this Swift build")
             return 2
         case .generate(let mode):
-            stdout(generate(mode))
+            emitStdout(generate(mode), stdout: stdout)
             return 0
         case .error(let message):
             stderr(message)
@@ -76,7 +71,7 @@ public enum RipgrepCLI {
                     let files = try searcher.files(options: options)
                     if !options.quiet {
                         for line in printer.paths(files) {
-                            stdout(line)
+                            emitStdout(line, stdout: stdout, suppressNewlineForTrailingNul: options.nullPathTerminator)
                         }
                     }
                     return files.isEmpty ? 1 : 0
@@ -85,7 +80,7 @@ public enum RipgrepCLI {
                     var registry = FileTypeRegistry()
                     registry.apply(options.typeChanges)
                     for line in registry.typeListLines() {
-                        stdout(line)
+                        emitStdout(line, stdout: stdout)
                     }
                     return registry.definitions.isEmpty ? 1 : 0
                 }
@@ -95,7 +90,12 @@ public enum RipgrepCLI {
                     ? JSONPrinter(options: options).lines(for: results)
                     : printer.lines(for: results)
                 for line in outputLines {
-                    stdout(line)
+                    emitStdout(
+                        line,
+                        stdout: stdout,
+                        encodingMode: options.json ? nil : options.encodingMode,
+                        suppressNewlineForTrailingNul: options.nullData
+                    )
                 }
                 for diagnostic in results.diagnostics {
                     stderr("rg: \(diagnostic)")
@@ -123,6 +123,23 @@ public enum RipgrepCLI {
                 return 2
             }
         }
+    }
+
+    private static func emitStdout(
+        _ line: String,
+        stdout: ((String) -> Void)?,
+        encodingMode: EncodingMode? = nil,
+        suppressNewlineForTrailingNul: Bool = false
+    ) {
+        if let stdout {
+            stdout(line)
+            return
+        }
+        let output = suppressNewlineForTrailingNul && line.hasSuffix("\0") ? line : "\(line)\n"
+        let data = encodingMode == .disabled
+            ? output.rawByteData()
+            : Data(output.utf8)
+        FileHandle.standardOutput.write(data)
     }
 
     private static func hasSuccessfulOutput(results: SearchResults, options: RipgrepOptions) -> Bool {
@@ -413,5 +430,19 @@ public enum RipgrepCLI {
                 totalMatches: match.matchCount
             )
         )).first ?? match.line
+    }
+}
+
+private extension String {
+    func rawByteData() -> Data {
+        var data = Data()
+        for scalar in unicodeScalars {
+            if scalar.value <= UInt8.max {
+                data.append(UInt8(scalar.value))
+            } else {
+                data.append(contentsOf: String(scalar).utf8)
+            }
+        }
+        return data
     }
 }

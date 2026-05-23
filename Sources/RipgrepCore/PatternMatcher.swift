@@ -5,7 +5,9 @@ public struct PatternMatcher {
     private let patterns: [CompiledPattern]
 
     public init(options: RipgrepOptions) throws {
-        let patternSources = options.effectivePatterns
+        let patternSources = options.effectivePatterns.map {
+            options.encodingMode == .disabled ? $0.utf8RawScalars() : $0
+        }
 
         self.options = options
         var compiledRegexSourceBytes = 0
@@ -833,7 +835,10 @@ public struct PatternMatcher {
     }
 
     private func byteOffset(for index: String.Index, in line: String) -> Int {
-        line[line.startIndex..<index].utf8.count
+        let prefix = line[line.startIndex..<index]
+        return options.encodingMode == .disabled
+            ? prefix.unicodeScalars.count
+            : prefix.utf8.count
     }
 
     private func isWordBounded(_ range: Range<String.Index>, in line: String) -> Bool {
@@ -856,6 +861,10 @@ public struct PatternMatcher {
 }
 
 private extension String {
+    func utf8RawScalars() -> String {
+        String(data: Data(utf8), encoding: .isoLatin1) ?? self
+    }
+
     func asciiLowercased() -> String {
         String(unicodeScalars.map { scalar in
             guard scalar.value >= 65, scalar.value <= 90,

@@ -436,7 +436,7 @@ public struct RipgrepSearcher {
         for (offset, splitLine) in lines.enumerated() {
             let line = splitLine.text
             let lineNumber = offset + 1
-            let lineByteCount = splitLine.text.utf8.count + splitLine.terminator.utf8.count
+            let lineByteCount = byteCount(splitLine.text, options: options) + byteCount(splitLine.terminator, options: options)
             searchLines.append(SearchLine(
                 lineNumber: lineNumber,
                 line: line,
@@ -502,7 +502,7 @@ public struct RipgrepSearcher {
                 lineTerminator: splitLine.terminator,
                 absoluteOffset: absoluteOffset
             ))
-            absoluteOffset += splitLine.text.utf8.count + splitLine.terminator.utf8.count
+            absoluteOffset += byteCount(splitLine.text, options: options) + byteCount(splitLine.terminator, options: options)
         }
 
         let spans = matcher.spans(in: contents)
@@ -526,15 +526,16 @@ public struct RipgrepSearcher {
                     lines: searchLines,
                     startLineIndex: startLineIndex,
                     endLineIndex: endLineIndex,
-                    group: group
+                    group: group,
+                    options: options
                 )
                 let blockOffset = searchLines[startLineIndex].absoluteOffset
                 let adjustedSpans = group.map { candidate in
                     let startByte = candidate.span.startByte - blockOffset
                     let endByte = candidate.span.endByte - blockOffset
                     return MatchSpan(
-                        startColumn: column(in: blockText, byteOffset: startByte),
-                        endColumn: column(in: blockText, byteOffset: endByte),
+                        startColumn: column(in: blockText, byteOffset: startByte, options: options),
+                        endColumn: column(in: blockText, byteOffset: endByte, options: options),
                         startByte: startByte,
                         endByte: endByte,
                         text: candidate.span.text,
@@ -578,15 +579,16 @@ public struct RipgrepSearcher {
                 lines: searchLines,
                 startLineIndex: startLineIndex,
                 endLineIndex: endLineIndex,
-                group: group
+                group: group,
+                options: options
             )
             let blockOffset = searchLines[startLineIndex].absoluteOffset
             let adjustedSpans = group.map { candidate in
                 let startByte = candidate.span.startByte - blockOffset
                 let endByte = candidate.span.endByte - blockOffset
                 return MatchSpan(
-                    startColumn: column(in: blockText, byteOffset: startByte),
-                    endColumn: column(in: blockText, byteOffset: endByte),
+                    startColumn: column(in: blockText, byteOffset: startByte, options: options),
+                    endColumn: column(in: blockText, byteOffset: endByte, options: options),
                     startByte: startByte,
                     endByte: endByte,
                     text: candidate.span.text,
@@ -594,7 +596,7 @@ public struct RipgrepSearcher {
                 )
             }
             let endLine = searchLines[endLineIndex]
-            let endLineTextEnd = endLine.absoluteOffset + endLine.line.utf8.count
+            let endLineTextEnd = endLine.absoluteOffset + byteCount(endLine.line, options: options)
             let includesEndTerminator = group.contains { $0.span.endByte > endLineTextEnd }
             let reachesEndLineText = group.contains { $0.span.endByte > endLine.absoluteOffset }
             let lineTerminator = !includesEndTerminator && (startLineIndex == endLineIndex || reachesEndLineText)
@@ -625,10 +627,11 @@ public struct RipgrepSearcher {
         lines: [SearchLine],
         startLineIndex: Int,
         endLineIndex: Int,
-        group: [MultilineSpanCandidate]
+        group: [MultilineSpanCandidate],
+        options: RipgrepOptions
     ) -> String {
         let endLine = lines[endLineIndex]
-        let endLineTextEnd = endLine.absoluteOffset + endLine.line.utf8.count
+        let endLineTextEnd = endLine.absoluteOffset + byteCount(endLine.line, options: options)
         let includeEndTerminator = group.contains { $0.span.endByte > endLineTextEnd }
 
         var text = ""
@@ -695,14 +698,14 @@ public struct RipgrepSearcher {
         )
     }
 
-    private func column(in text: String, byteOffset: Int) -> Int {
+    private func column(in text: String, byteOffset: Int, options: RipgrepOptions) -> Int {
         var bytes = 0
         var column = 1
         for character in text {
             guard bytes < byteOffset else {
                 break
             }
-            bytes += String(character).utf8.count
+            bytes += byteCount(String(character), options: options)
             if character == "\n" || character == "\0" {
                 column = 1
             } else {
@@ -710,6 +713,10 @@ public struct RipgrepSearcher {
             }
         }
         return column
+    }
+
+    private func byteCount(_ text: String, options: RipgrepOptions) -> Int {
+        options.encodingMode == .disabled ? text.unicodeScalars.count : text.utf8.count
     }
 
     private func lineIndex(containingByteOffset byteOffset: Int, lineStartOffsets: [Int]) -> Int? {
@@ -740,7 +747,7 @@ public struct RipgrepSearcher {
             }
             return decode(data, encoding: .utf8)
         case .disabled:
-            return String(decoding: data, as: UTF8.self)
+            return String(data: data, encoding: .isoLatin1) ?? String(decoding: data, as: UTF8.self)
         case .explicit(let encoding):
             return decode(data, encoding: encoding)
         }

@@ -124,7 +124,7 @@ public struct JSONPrinter {
     ) -> [String: Any] {
         [
             "path": dataObject(path),
-            "lines": dataObject(text),
+            "lines": dataObject(text, rawWhenEncodingDisabled: true),
             "line_number": lineNumber,
             "absolute_offset": absoluteOffset,
             "submatches": submatches.map(submatchObject),
@@ -133,7 +133,7 @@ public struct JSONPrinter {
 
     private func submatchObject(_ span: MatchSpan) -> [String: Any] {
         var object: [String: Any] = [
-            "match": dataObject(span.text),
+            "match": dataObject(span.text, rawWhenEncodingDisabled: true),
             "start": span.startByte,
             "end": span.endByte,
         ]
@@ -175,8 +175,14 @@ public struct JSONPrinter {
         ]
     }
 
-    private func dataObject(_ text: String) -> [String: String] {
-        ["text": text]
+    private func dataObject(_ text: String, rawWhenEncodingDisabled: Bool = false) -> [String: String] {
+        if rawWhenEncodingDisabled, options.encodingMode == .disabled {
+            let data = text.rawByteData()
+            if String(data: data, encoding: .utf8) == nil {
+                return ["bytes": data.base64EncodedString()]
+            }
+        }
+        return ["text": text]
     }
 
     private func displayPath(for url: URL) -> String {
@@ -192,5 +198,19 @@ public struct JSONPrinter {
         lines.reduce(0) { total, line in
             total + line.utf8.count + 1
         }
+    }
+}
+
+private extension String {
+    func rawByteData() -> Data {
+        var data = Data()
+        for scalar in unicodeScalars {
+            if scalar.value <= UInt8.max {
+                data.append(UInt8(scalar.value))
+            } else {
+                data.append(contentsOf: String(scalar).utf8)
+            }
+        }
+        return data
     }
 }
