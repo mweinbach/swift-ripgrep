@@ -16,8 +16,11 @@ struct RipgrepSearcherTests {
             roots: [root.url]
         )
 
-        #expect(matches.map(\.line) == ["another needle", "needle here"])
-        #expect(matches.map(\.lineNumber) == [1, 2])
+        #expect(Set(matches.map(\.line)) == Set(["another needle", "needle here"]))
+        #expect(Dictionary(uniqueKeysWithValues: matches.map { ($0.line, $0.lineNumber) }) == [
+            "another needle": 1,
+            "needle here": 2,
+        ])
     }
 
     @Test("supports regex fixed string word and line matching")
@@ -1139,6 +1142,16 @@ struct RipgrepSearcherTests {
         #expect(pathBasenames(try run(["--sort", "modified", "needle", root.url.path])) == ["b.txt", "a.txt"])
         #expect(pathBasenames(try run(["--sort-files", "--files", root.url.path])) == ["a.txt", "b.txt"])
 
+        let traversalRoot = try TemporaryDirectory()
+        try traversalRoot.createDirectory("a")
+        try traversalRoot.createDirectory("b")
+        try traversalRoot.write("needle\n", to: "b/two.txt")
+        try traversalRoot.write("needle\n", to: "a/one.txt")
+        try traversalRoot.write("needle\n", to: "A.txt")
+        #expect(pathBasenames(try run(["needle", traversalRoot.url.path])) == ["two.txt", "A.txt", "one.txt"])
+        #expect(pathBasenames(try run(["--sort", "none", "needle", traversalRoot.url.path])) == ["two.txt", "A.txt", "one.txt"])
+        #expect(pathBasenames(try run(["--sort", "path", "needle", traversalRoot.url.path])) == ["A.txt", "one.txt", "two.txt"])
+
         var output: [String] = []
         var errors: [String] = []
         var exitCode = RipgrepCLI.run(
@@ -2223,10 +2236,10 @@ struct RipgrepSearcherTests {
             "\(root.path("real/file.txt")):needle",
             "\(root.path("real/nested/deep.txt")):needle",
         ])
-        #expect(try run(["needle", root.path("link")]) == [
+        #expect(Set(try run(["needle", root.path("link")])) == Set([
             "\(root.path("link/file.txt")):needle",
             "\(root.path("link/nested/deep.txt")):needle",
-        ])
+        ]))
         #expect(pathBasenames(try run(["--follow", "--no-follow", "--sort", "path", "needle", root.url.path])) == ["file.txt", "deep.txt"])
         #expect(pathBasenames(try run(["--one-file-system", "--sort", "path", "needle", root.url.path])) == ["file.txt", "deep.txt"])
         #expect(pathBasenames(try run(["--one-file-system", "--no-one-file-system", "--sort", "path", "needle", root.url.path])) == ["file.txt", "deep.txt"])
@@ -2644,13 +2657,13 @@ struct RipgrepSearcherTests {
         #expect(exitCode == 2)
         #expect(errors == ["rg: error parsing flag --max-filesize: invalid size: size too big in '34359738368G'"])
 
-        #expect(pathBasenames(try run([
+        #expect(Set(pathBasenames(try run([
             "--no-ignore",
             "-g",
             "*.txt",
             "needle",
             root.url.path,
-        ])) == ["big.txt", "keep.txt"])
+        ]))) == Set(["big.txt", "keep.txt"]))
         #expect(Set(pathBasenames(try run([
             "--no-ignore",
             "--glob-case-insensitive",
@@ -2666,11 +2679,11 @@ struct RipgrepSearcherTests {
             "needle",
             root.url.path,
         ]))) == Set(["UPPER.TXT", "big.txt", "keep.txt"]))
-        #expect(pathBasenames(try run([
+        #expect(Set(pathBasenames(try run([
             "--ignore-file-case-insensitive",
             "needle",
             root.url.path,
-        ])) == ["big.txt", "keep.txt"])
+        ]))) == Set(["big.txt", "keep.txt"]))
 
         let braceRoot = try TemporaryDirectory()
         try braceRoot.createDirectory(".git")
@@ -2801,7 +2814,7 @@ struct RipgrepSearcherTests {
             "main.swift",
         ])
         #expect(pathBasenames(try run(["-trust", "needle", root.url.path])) == ["main.rs"])
-        #expect(pathBasenames(try run(["-T", "rust", "needle", root.url.path])) == ["README.md", "main.swift"])
+        #expect(Set(pathBasenames(try run(["-T", "rust", "needle", root.url.path]))) == Set(["README.md", "main.swift"]))
         #expect(pathBasenames(try run(["--sort", "path", "-tall", "-Tmd", "needle", root.url.path])) == [
             ".hidden.swift",
             "main.rs",

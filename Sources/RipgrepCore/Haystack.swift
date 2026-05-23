@@ -286,7 +286,8 @@ public struct FileWalker {
         )
 
         var haystacks: [Haystack] = []
-        for child in children {
+        let walkChildren = options.sortMode == nil ? children.reversed() : children
+        for child in walkChildren {
             let childURL = url.appendingPathComponent(child.lastPathComponent)
             haystacks.append(contentsOf: try walk(
                 childURL,
