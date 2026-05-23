@@ -9,9 +9,11 @@ public struct JSONPrinter {
 
     public func lines(for results: SearchResults) -> [String] {
         var output: [String] = []
+        var totalBytesPrinted = 0
         if !options.quiet {
             for result in results.files where result.hasMatch {
-                output.append(jsonLine([
+                var fileOutput: [String] = []
+                fileOutput.append(jsonLine([
                     "type": "begin",
                     "data": [
                         "path": dataObject(result.fileURL.path),
@@ -19,15 +21,18 @@ public struct JSONPrinter {
                 ]))
 
                 for message in messages(for: result) {
-                    output.append(jsonLine(message))
+                    fileOutput.append(jsonLine(message))
                 }
 
+                let fileBytesPrinted = bytesPrinted(fileOutput)
+                totalBytesPrinted += fileBytesPrinted
+                output += fileOutput
                 output.append(jsonLine([
                     "type": "end",
                     "data": [
                         "path": dataObject(result.fileURL.path),
                         "binary_offset": result.binaryByteOffset.map { $0 as Any } ?? NSNull(),
-                        "stats": statsObject(for: result),
+                        "stats": statsObject(for: result, bytesPrinted: fileBytesPrinted),
                     ],
                 ]))
             }
@@ -36,7 +41,7 @@ public struct JSONPrinter {
         output.append(jsonLine([
             "type": "summary",
             "data": [
-                "stats": summaryStatsObject(for: results),
+                "stats": summaryStatsObject(for: results, bytesPrinted: totalBytesPrinted),
                 "elapsed_total": elapsedObject(),
             ],
         ]))
@@ -132,25 +137,25 @@ public struct JSONPrinter {
         return object
     }
 
-    private func statsObject(for result: SearchFileResult) -> [String: Any] {
+    private func statsObject(for result: SearchFileResult, bytesPrinted: Int) -> [String: Any] {
         [
             "elapsed": elapsedObject(),
             "searches": result.searched ? 1 : 0,
             "searches_with_match": result.hasMatch ? 1 : 0,
             "bytes_searched": result.bytesSearched,
-            "bytes_printed": 0,
+            "bytes_printed": bytesPrinted,
             "matched_lines": result.matches.reduce(0) { $0 + matchedLineCount($1) },
             "matches": result.matches.reduce(0) { $0 + $1.matchCount } + (result.hasBinaryMatch ? 1 : 0),
         ]
     }
 
-    private func summaryStatsObject(for results: SearchResults) -> [String: Any] {
+    private func summaryStatsObject(for results: SearchResults, bytesPrinted: Int) -> [String: Any] {
         [
             "elapsed": elapsedObject(),
             "searches": results.summary.filesSearched,
             "searches_with_match": results.summary.filesWithMatches,
             "bytes_searched": results.files.reduce(0) { $0 + $1.bytesSearched },
-            "bytes_printed": 0,
+            "bytes_printed": bytesPrinted,
             "matched_lines": results.summary.matchedLines,
             "matches": results.summary.totalMatches,
         ]
@@ -176,5 +181,11 @@ public struct JSONPrinter {
     private func jsonLine(_ object: [String: Any]) -> String {
         let data = try! JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
         return String(decoding: data, as: UTF8.self)
+    }
+
+    private func bytesPrinted(_ lines: [String]) -> Int {
+        lines.reduce(0) { total, line in
+            total + line.utf8.count + 1
+        }
     }
 }

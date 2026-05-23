@@ -1028,8 +1028,13 @@ struct RipgrepSearcherTests {
         let stats = end?["stats"] as? [String: Any]
         #expect(stats?["searches"] as? Int == 1)
         #expect(stats?["searches_with_match"] as? Int == 1)
+        #expect(stats?["bytes_printed"] as? Int == output.prefix(4).reduce(0) { $0 + $1.utf8.count + 1 })
         #expect(stats?["matched_lines"] as? Int == 1)
         #expect(stats?["matches"] as? Int == 1)
+
+        let summary = messages[5]["data"] as? [String: Any]
+        let summaryStats = summary?["stats"] as? [String: Any]
+        #expect(summaryStats?["bytes_printed"] as? Int == stats?["bytes_printed"] as? Int)
     }
 
     @Test("prints JSON replacement fields")
@@ -1058,6 +1063,7 @@ struct RipgrepSearcherTests {
         let stats = summary?["stats"] as? [String: Any]
         #expect(stats?["searches_with_match"] as? Int == 1)
         #expect(stats?["bytes_searched"] as? Int == 11)
+        #expect(stats?["bytes_printed"] as? Int == 0)
     }
 
     @Test("JSON mode follows output mode flag ordering")
