@@ -1407,6 +1407,69 @@ struct RipgrepSearcherTests {
         }
     }
 
+    @Test("generates man pages and completions")
+    func generatesManPagesAndCompletions() throws {
+        let root = try TemporaryDirectory()
+        try root.write("needle\n", to: "generate.txt")
+
+        var output: [String] = []
+        var errors: [String] = []
+        var exitCode = RipgrepCLI.run(
+            arguments: ["--generate", "man"],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(errors.isEmpty)
+        #expect(output.first?.contains(".TH RG 1") == true)
+        #expect(output.first?.contains("--ignore-case") == true)
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--generate=complete-bash"],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(errors.isEmpty)
+        #expect(output.first?.contains("complete -F _rg rg") == true)
+        #expect(output.first?.contains("--generate") == true)
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--generate", "complete-bash", "--generate=man"],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(errors.isEmpty)
+        #expect(output.first?.contains(".TH RG 1") == true)
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--generate", "man", "-l", "needle", root.path("generate.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(errors.isEmpty)
+        #expect(output == [root.path("generate.txt")])
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--generate", "bogus"],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["error: choice 'bogus' is unrecognized"])
+    }
+
     @Test("prints detected PCRE2 version")
     func printsDetectedPCRE2Version() throws {
         let root = try TemporaryDirectory()

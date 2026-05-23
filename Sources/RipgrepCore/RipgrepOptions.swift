@@ -56,6 +56,14 @@ public enum MmapMode: Equatable {
     case never
 }
 
+public enum GenerateMode: String, Equatable {
+    case man
+    case completeBash = "complete-bash"
+    case completeZsh = "complete-zsh"
+    case completeFish = "complete-fish"
+    case completePowerShell = "complete-powershell"
+}
+
 public enum ColorTarget: Equatable {
     case path
     case line
@@ -121,6 +129,7 @@ public struct SortMode: Equatable {
 
 public struct RipgrepOptions: Equatable {
     public var mode: SearchMode = .search
+    public var generateMode: GenerateMode?
     public var printMode: PrintMode = .matchingLines
     public var pattern: String?
     public var patterns: [String] = []
@@ -231,6 +240,7 @@ public enum CLIParseResult: Equatable {
     case help
     case version
     case pcre2Version
+    case generate(GenerateMode)
     case error(String)
 }
 
@@ -271,10 +281,27 @@ public enum RipgrepArgumentParser {
                 options.loggingMode = .debug
             case "--trace":
                 options.loggingMode = .trace
+            case "--generate":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--generate <KIND>' requires a value")
+                }
+                guard let mode = GenerateMode(rawValue: arguments[index]) else {
+                    return .error("error: choice '\(arguments[index])' is unrecognized")
+                }
+                options.generateMode = mode
+                index += 1
+            case let value where value.hasPrefix("--generate="):
+                let raw = String(value.dropFirst("--generate=".count))
+                guard let mode = GenerateMode(rawValue: raw) else {
+                    return .error("error: choice '\(raw)' is unrecognized")
+                }
+                options.generateMode = mode
             case "--files":
                 options.mode = .files
+                options.generateMode = nil
             case "--type-list":
                 options.mode = .types
+                options.generateMode = nil
             case "-i", "--ignore-case":
                 options.ignoreCase = true
                 options.smartCase = false
@@ -471,8 +498,10 @@ public enum RipgrepArgumentParser {
                 options.byteOffset = false
             case "--json":
                 options.json = true
+                options.generateMode = nil
             case "--no-json":
                 options.json = false
+                options.generateMode = nil
             case "-p", "--pretty":
                 options.colorMode = .always
                 options.heading = true
@@ -1006,15 +1035,19 @@ public enum RipgrepArgumentParser {
             case "-c", "--count":
                 options.printMode = .count
                 options.json = false
+                options.generateMode = nil
             case "--count-matches":
                 options.printMode = .countMatches
                 options.json = false
+                options.generateMode = nil
             case "-l", "--files-with-matches":
                 options.printMode = .filesWithMatches
                 options.json = false
+                options.generateMode = nil
             case "--files-without-match":
                 options.printMode = .filesWithoutMatch
                 options.json = false
+                options.generateMode = nil
             case "--":
                 positionals.append(contentsOf: arguments[index...])
                 index = arguments.count
@@ -1026,6 +1059,10 @@ public enum RipgrepArgumentParser {
                 }
                 positionals.append(argument)
             }
+        }
+
+        if let generateMode = options.generateMode {
+            return .generate(generateMode)
         }
 
         if options.mode == .search {
@@ -1161,6 +1198,7 @@ public enum RipgrepArgumentParser {
           -q, --quiet                Do not print matches
               --debug                Show debug messages
               --trace                Show trace messages
+              --generate KIND        Generate man pages and completion scripts
               --line-buffered        Force line buffering
               --block-buffered       Force block buffering
               --no-messages          Suppress file open/read error messages

@@ -44,6 +44,9 @@ public enum RipgrepCLI {
             }
             stderr("PCRE2 is not available in this Swift build")
             return 2
+        case .generate(let mode):
+            stdout(generate(mode))
+            return 0
         case .error(let message):
             stderr(message)
             return 2
@@ -122,6 +125,153 @@ public enum RipgrepCLI {
         let version = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         return version.isEmpty ? nil : version
     }
+
+    private static func generate(_ mode: GenerateMode) -> String {
+        switch mode {
+        case .man:
+            return """
+            .TH RG 1
+            .SH NAME
+            rg \\- recursively search the current directory for lines matching a pattern
+            .SH SYNOPSIS
+            .B rg
+            [OPTIONS] <pattern> [path ...]
+            .SH DESCRIPTION
+            swift-ripgrep is a Swift port of ripgrep. This generated page is derived from the Swift CLI usage surface.
+            .SH OPTIONS
+            \(usage().replacingOccurrences(of: "\n", with: "\n.br\n"))
+            """
+        case .completeBash:
+            return """
+            _rg() {
+                local cur="${COMP_WORDS[COMP_CWORD]}"
+                COMPREPLY=( $(compgen -W "\(completionWords)" -- "$cur") )
+            }
+            complete -F _rg rg
+            """
+        case .completeZsh:
+            return """
+            #compdef rg
+            _arguments '*::arg:->args' \\
+              '(- *)'{\(completionWords.split(separator: " ").joined(separator: ","))}'[swift-ripgrep option]'
+            """
+        case .completeFish:
+            return completionWords
+                .split(separator: " ")
+                .map { "complete -c rg -l \(String($0).dropFirst(2))" }
+                .joined(separator: "\n")
+        case .completePowerShell:
+            return """
+            Register-ArgumentCompleter -Native -CommandName rg -ScriptBlock {
+                param($wordToComplete)
+                '\(completionWords)' -split ' ' | Where-Object { $_ -like "$wordToComplete*" }
+            }
+            """
+        }
+    }
+
+    private static let completionWords = [
+        "--after-context",
+        "--auto-hybrid-regex",
+        "--before-context",
+        "--binary",
+        "--block-buffered",
+        "--byte-offset",
+        "--case-sensitive",
+        "--color",
+        "--colors",
+        "--column",
+        "--context",
+        "--count",
+        "--count-matches",
+        "--crlf",
+        "--debug",
+        "--dfa-size-limit",
+        "--encoding",
+        "--engine",
+        "--field-context-separator",
+        "--field-match-separator",
+        "--file",
+        "--files",
+        "--files-with-matches",
+        "--files-without-match",
+        "--fixed-strings",
+        "--follow",
+        "--generate",
+        "--glob",
+        "--glob-case-insensitive",
+        "--heading",
+        "--help",
+        "--hidden",
+        "--hostname-bin",
+        "--hyperlink-format",
+        "--iglob",
+        "--ignore-case",
+        "--ignore-file",
+        "--ignore-file-case-insensitive",
+        "--include-zero",
+        "--invert-match",
+        "--json",
+        "--line-buffered",
+        "--line-number",
+        "--max-columns",
+        "--max-columns-preview",
+        "--max-count",
+        "--max-depth",
+        "--max-filesize",
+        "--mmap",
+        "--multiline",
+        "--multiline-dotall",
+        "--no-config",
+        "--no-filename",
+        "--no-ignore",
+        "--no-ignore-dot",
+        "--no-ignore-exclude",
+        "--no-ignore-files",
+        "--no-ignore-global",
+        "--no-ignore-messages",
+        "--no-ignore-parent",
+        "--no-ignore-vcs",
+        "--no-messages",
+        "--no-require-git",
+        "--no-unicode",
+        "--null",
+        "--null-data",
+        "--one-file-system",
+        "--only-matching",
+        "--path-separator",
+        "--passthru",
+        "--pcre2",
+        "--pcre2-version",
+        "--pre",
+        "--pre-glob",
+        "--pretty",
+        "--quiet",
+        "--regex-size-limit",
+        "--regexp",
+        "--replace",
+        "--search-zip",
+        "--smart-case",
+        "--sort",
+        "--sort-files",
+        "--sortr",
+        "--stats",
+        "--stop-on-nonmatch",
+        "--text",
+        "--threads",
+        "--trace",
+        "--trim",
+        "--type",
+        "--type-add",
+        "--type-clear",
+        "--type-list",
+        "--type-not",
+        "--unrestricted",
+        "--version",
+        "--vimgrep",
+        "--with-filename",
+        "--word-regexp",
+    ].joined(separator: " ")
 
     private static func resolveExecutable(_ name: String, environment: [String: String]) -> URL? {
         let paths = (environment["PATH"] ?? "").split(separator: ":").map(String.init)
