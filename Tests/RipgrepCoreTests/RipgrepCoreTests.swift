@@ -1680,6 +1680,9 @@ struct RipgrepSearcherTests {
         let output = try run(["--json", "-n", "-C1", "needle", root.path("json.txt")])
         let messages = try output.map(jsonObject)
 
+        #expect(output[0] == #"{"type":"begin","data":{"path":{"text":"\#(root.path("json.txt"))"}}}"#)
+        #expect(!output[0].contains("\\/"))
+        #expect(output[5].hasPrefix(#"{"data":{"elapsed_total":{"human":"0.000000s","nanos":0,"secs":0},"stats":{"bytes_printed":"#))
         #expect(messages.map { $0["type"] as? String } == ["begin", "context", "match", "context", "end", "summary"])
 
         let match = messages[2]["data"] as? [String: Any]
@@ -1709,8 +1712,11 @@ struct RipgrepSearcherTests {
 
         let binaryOutput = try run(["--json", "-n", "needle", root.path("binary.txt")])
         let binaryMessages = try binaryOutput.map(jsonObject)
-        #expect(binaryMessages.map { $0["type"] as? String } == ["begin", "end", "summary"])
-        let binaryEnd = binaryMessages[1]["data"] as? [String: Any]
+        #expect(binaryMessages.map { $0["type"] as? String } == ["begin", "match", "end", "summary"])
+        let binaryMatch = binaryMessages[1]["data"] as? [String: Any]
+        let binaryLines = binaryMatch?["lines"] as? [String: String]
+        #expect(binaryLines?["text"] == "needle\n")
+        let binaryEnd = binaryMessages[2]["data"] as? [String: Any]
         #expect(binaryEnd?["binary_offset"] as? Int == 7)
 
         let binaryOnlyOutput = try run(["--json", "-n", "tail", root.path("binary.txt")])

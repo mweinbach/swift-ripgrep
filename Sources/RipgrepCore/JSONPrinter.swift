@@ -19,12 +19,12 @@ public struct JSONPrinter {
             for result in results.files where result.hasMatch {
                 let path = displayPath(for: result.fileURL)
                 var fileOutput: [String] = []
-                fileOutput.append(jsonLine([
-                    "type": "begin",
-                    "data": [
-                        "path": dataObject(path),
-                    ],
-                ]))
+                fileOutput.append(jsonLine(.object([
+                    ("type", .string("begin")),
+                    ("data", .object([
+                        ("path", dataObject(path)),
+                    ])),
+                ])))
 
                 for message in messages(for: result, path: path) {
                     fileOutput.append(jsonLine(message))
@@ -33,35 +33,35 @@ public struct JSONPrinter {
                 let fileBytesPrinted = bytesPrinted(fileOutput)
                 totalBytesPrinted += fileBytesPrinted
                 output += fileOutput
-                output.append(jsonLine([
-                    "type": "end",
-                    "data": [
-                        "path": dataObject(path),
-                        "binary_offset": result.binaryByteOffset.map { $0 as Any } ?? NSNull(),
-                        "stats": statsObject(for: result, bytesPrinted: fileBytesPrinted),
-                    ],
-                ]))
+                output.append(jsonLine(.object([
+                    ("type", .string("end")),
+                    ("data", .object([
+                        ("path", dataObject(path)),
+                        ("binary_offset", result.binaryByteOffset.map(JSONValue.int) ?? .null),
+                        ("stats", fileStatsObject(for: result, bytesPrinted: fileBytesPrinted)),
+                    ])),
+                ])))
             }
         }
 
-        output.append(jsonLine([
-            "type": "summary",
-            "data": [
-                "stats": summaryStatsObject(for: results, bytesPrinted: totalBytesPrinted),
-                "elapsed_total": elapsedObject(),
-            ],
-        ]))
+        output.append(jsonLine(.object([
+            ("data", .object([
+                ("elapsed_total", elapsedObject()),
+                ("stats", summaryStatsObject(for: results, bytesPrinted: totalBytesPrinted)),
+            ])),
+            ("type", .string("summary")),
+        ])))
         return output
     }
 
-    private func messages(for result: SearchFileResult, path: String) -> [[String: Any]] {
+    private func messages(for result: SearchFileResult, path: String) -> [JSONValue] {
         if options.passthru || options.beforeContext > 0 || options.afterContext > 0 {
             return contextAwareMessages(for: result, path: path)
         }
         return result.matches.map { matchMessage($0, path: path) }
     }
 
-    private func contextAwareMessages(for result: SearchFileResult, path: String) -> [[String: Any]] {
+    private func contextAwareMessages(for result: SearchFileResult, path: String) -> [JSONValue] {
         let matchesByLine = Dictionary(uniqueKeysWithValues: result.matches.map { ($0.lineNumber, $0) })
         let selectedLineNumbers: [Int]
         if options.passthru {
@@ -89,30 +89,30 @@ public struct JSONPrinter {
         }
     }
 
-    private func matchMessage(_ match: SearchMatch, path: String) -> [String: Any] {
-        [
-            "type": "match",
-            "data": lineData(
+    private func matchMessage(_ match: SearchMatch, path: String) -> JSONValue {
+        .object([
+            ("type", .string("match")),
+            ("data", lineData(
                 path: path,
                 text: match.lineWithTerminator,
                 lineNumber: match.lineNumber,
                 absoluteOffset: match.absoluteOffset,
                 submatches: match.spans
-            ),
-        ]
+            )),
+        ])
     }
 
-    private func contextMessage(_ line: SearchLine, path: String) -> [String: Any] {
-        [
-            "type": "context",
-            "data": lineData(
+    private func contextMessage(_ line: SearchLine, path: String) -> JSONValue {
+        .object([
+            ("type", .string("context")),
+            ("data", lineData(
                 path: path,
                 text: line.lineWithTerminator,
                 lineNumber: line.lineNumber,
                 absoluteOffset: line.absoluteOffset,
                 submatches: []
-            ),
-        ]
+            )),
+        ])
     }
 
     private func lineData(
@@ -121,83 +121,145 @@ public struct JSONPrinter {
         lineNumber: Int,
         absoluteOffset: Int,
         submatches: [MatchSpan]
-    ) -> [String: Any] {
-        [
-            "path": dataObject(path),
-            "lines": dataObject(text, rawWhenEncodingDisabled: true),
-            "line_number": lineNumber,
-            "absolute_offset": absoluteOffset,
-            "submatches": submatches.map(submatchObject),
-        ]
+    ) -> JSONValue {
+        .object([
+            ("path", dataObject(path)),
+            ("lines", dataObject(text, rawWhenEncodingDisabled: true)),
+            ("line_number", .int(lineNumber)),
+            ("absolute_offset", .int(absoluteOffset)),
+            ("submatches", .array(submatches.map(submatchObject))),
+        ])
     }
 
-    private func submatchObject(_ span: MatchSpan) -> [String: Any] {
-        var object: [String: Any] = [
-            "match": dataObject(span.text, rawWhenEncodingDisabled: true),
-            "start": span.startByte,
-            "end": span.endByte,
+    private func submatchObject(_ span: MatchSpan) -> JSONValue {
+        var fields: [(String, JSONValue)] = [
+            ("match", dataObject(span.text, rawWhenEncodingDisabled: true)),
         ]
         if let replacement = span.replacement {
-            object["replacement"] = dataObject(replacement)
+            fields.append(("replacement", dataObject(replacement)))
         }
-        return object
+        fields.append(("start", .int(span.startByte)))
+        fields.append(("end", .int(span.endByte)))
+        return .object(fields)
     }
 
-    private func statsObject(for result: SearchFileResult, bytesPrinted: Int) -> [String: Any] {
-        [
-            "elapsed": elapsedObject(),
-            "searches": result.searched ? 1 : 0,
-            "searches_with_match": result.hasMatch ? 1 : 0,
-            "bytes_searched": result.bytesSearched,
-            "bytes_printed": bytesPrinted,
-            "matched_lines": result.matches.reduce(0) { $0 + MatchedLineCounter.count($1, options: options) },
-            "matches": result.matches.reduce(0) { $0 + $1.matchCount } + (result.hasBinaryMatch ? 1 : 0),
-        ]
+    private func fileStatsObject(for result: SearchFileResult, bytesPrinted: Int) -> JSONValue {
+        let matchCount = result.matches.reduce(0) { $0 + $1.matchCount }
+        return .object([
+            ("elapsed", fileElapsedObject()),
+            ("searches", .int(result.searched ? 1 : 0)),
+            ("searches_with_match", .int(result.hasMatch ? 1 : 0)),
+            ("bytes_searched", .int(result.bytesSearched)),
+            ("bytes_printed", .int(bytesPrinted)),
+            ("matched_lines", .int(result.matches.reduce(0) { $0 + MatchedLineCounter.count($1, options: options) })),
+            ("matches", .int(matchCount == 0 && result.hasBinaryMatch ? 1 : matchCount)),
+        ])
     }
 
-    private func summaryStatsObject(for results: SearchResults, bytesPrinted: Int) -> [String: Any] {
-        [
-            "elapsed": elapsedObject(),
-            "searches": results.summary.filesSearched,
-            "searches_with_match": results.summary.filesWithMatches,
-            "bytes_searched": results.files.reduce(0) { $0 + $1.bytesSearched },
-            "bytes_printed": bytesPrinted,
-            "matched_lines": results.summary.matchedLines,
-            "matches": results.summary.totalMatches,
-        ]
+    private func summaryStatsObject(for results: SearchResults, bytesPrinted: Int) -> JSONValue {
+        .object([
+            ("bytes_printed", .int(bytesPrinted)),
+            ("bytes_searched", .int(results.files.reduce(0) { $0 + $1.bytesSearched })),
+            ("elapsed", elapsedObject()),
+            ("matched_lines", .int(results.summary.matchedLines)),
+            ("matches", .int(results.summary.totalMatches)),
+            ("searches", .int(results.summary.filesSearched)),
+            ("searches_with_match", .int(results.summary.filesWithMatches)),
+        ])
     }
 
-    private func elapsedObject() -> [String: Any] {
-        [
-            "secs": 0,
-            "nanos": 0,
-            "human": "0.000000s",
-        ]
+    private func elapsedObject() -> JSONValue {
+        .object([
+            ("human", .string("0.000000s")),
+            ("nanos", .int(0)),
+            ("secs", .int(0)),
+        ])
     }
 
-    private func dataObject(_ text: String, rawWhenEncodingDisabled: Bool = false) -> [String: String] {
+    private func fileElapsedObject() -> JSONValue {
+        .object([
+            ("secs", .int(0)),
+            ("nanos", .int(0)),
+            ("human", .string("0.000000s")),
+        ])
+    }
+
+    private func dataObject(_ text: String, rawWhenEncodingDisabled: Bool = false) -> JSONValue {
         if rawWhenEncodingDisabled, options.encodingMode == .disabled {
             let data = text.rawByteData()
             if String(data: data, encoding: .utf8) == nil {
-                return ["bytes": data.base64EncodedString()]
+                return .object([("bytes", .string(data.base64EncodedString()))])
             }
         }
-        return ["text": text]
+        return .object([("text", .string(text))])
     }
 
     private func displayPath(for url: URL) -> String {
         pathFormatter.displayPath(for: url)
     }
 
-    private func jsonLine(_ object: [String: Any]) -> String {
-        let data = try! JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
-        return String(decoding: data, as: UTF8.self)
+    private func jsonLine(_ object: JSONValue) -> String {
+        object.rendered()
     }
 
     private func bytesPrinted(_ lines: [String]) -> Int {
         lines.reduce(0) { total, line in
             total + line.utf8.count + 1
         }
+    }
+}
+
+private enum JSONValue {
+    case object([(String, JSONValue)])
+    case array([JSONValue])
+    case string(String)
+    case int(Int)
+    case null
+
+    func rendered() -> String {
+        switch self {
+        case .object(let fields):
+            let body = fields
+                .map { field in "\(Self.escaped(field.0)):\(field.1.rendered())" }
+                .joined(separator: ",")
+            return "{\(body)}"
+        case .array(let values):
+            return "[\(values.map { $0.rendered() }.joined(separator: ","))]"
+        case .string(let text):
+            return Self.escaped(text)
+        case .int(let value):
+            return String(value)
+        case .null:
+            return "null"
+        }
+    }
+
+    private static func escaped(_ text: String) -> String {
+        var output = "\""
+        for scalar in text.unicodeScalars {
+            switch scalar.value {
+            case 0x08:
+                output += "\\b"
+            case 0x09:
+                output += "\\t"
+            case 0x0A:
+                output += "\\n"
+            case 0x0C:
+                output += "\\f"
+            case 0x0D:
+                output += "\\r"
+            case 0x22:
+                output += "\\\""
+            case 0x5C:
+                output += "\\\\"
+            case 0x00...0x1F:
+                output += String(format: "\\u%04X", scalar.value)
+            default:
+                output.unicodeScalars.append(scalar)
+            }
+        }
+        output += "\""
+        return output
     }
 }
 

@@ -91,7 +91,8 @@ public struct RipgrepSearcher {
                 total + file.matches.reduce(0) { $0 + MatchedLineCounter.count($1, options: options) }
             },
             totalMatches: matchedFiles.reduce(0) { total, file in
-                total + file.matches.reduce(0) { $0 + $1.matchCount } + (file.hasBinaryMatch ? 1 : 0)
+                let matchCount = file.matches.reduce(0) { $0 + $1.matchCount }
+                return total + (matchCount == 0 && file.hasBinaryMatch ? 1 : matchCount)
             }
         )
 
@@ -181,7 +182,7 @@ public struct RipgrepSearcher {
             let contents = decode(data, options: options)
             let result = searchContents(contents, fileURL: fileURL, matcher: matcher, options: options)
             let binaryDetectedBeforeSearch = binaryByteOffset < Self.binaryDetectionBufferSize
-            let printableMatches = binaryDetectedBeforeSearch
+            let printableMatches = binaryDetectedBeforeSearch && !haystack.isExplicit
                 ? []
                 : matchesBeforeBinary(result.matches, binaryByteOffset: binaryByteOffset)
             if options.binaryMode == .automatic && !haystack.isExplicit && binaryDetectedBeforeSearch {
