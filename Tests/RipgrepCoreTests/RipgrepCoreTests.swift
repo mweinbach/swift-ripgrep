@@ -2842,6 +2842,16 @@ struct RipgrepSearcherTests {
             "file1.txt:2",
             "file2.txt:1",
         ])
+        let binaryStats = try run(["--stats", "cat", countRoot.path("file1.txt")])
+        #expect(binaryStats.contains("2 matches"))
+        #expect(binaryStats.contains("1 matched lines"))
+        #expect(binaryStats.contains("55 bytes printed"))
+        #expect(binaryStats.contains("8 bytes searched"))
+
+        let postNulStats = try run(["--stats", "tail", countRoot.path("file1.txt")])
+        #expect(postNulStats.contains("1 matches"))
+        #expect(postNulStats.contains("1 matched lines"))
+        #expect(postNulStats.contains("26 bytes searched"))
 
         let withoutRoot = try TemporaryDirectory()
         try withoutRoot.write(Data("hay\0cat\n".utf8), to: "binary.txt")

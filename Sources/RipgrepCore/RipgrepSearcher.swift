@@ -132,7 +132,8 @@ public struct RipgrepSearcher {
             filesSearched: files.filter(\.searched).count,
             filesWithMatches: matchedFiles.count,
             matchedLines: matchedFiles.reduce(0) { total, file in
-                total + file.matches.reduce(0) { $0 + MatchedLineCounter.count($1, options: options) }
+                let matchedLines = file.matches.reduce(0) { $0 + MatchedLineCounter.count($1, options: options) }
+                return total + (matchedLines == 0 && file.hasBinaryMatch ? 1 : matchedLines)
             },
             totalMatches: matchedFiles.reduce(0) { total, file in
                 let matchCount = file.matches.reduce(0) { $0 + $1.matchCount }
@@ -272,7 +273,11 @@ public struct RipgrepSearcher {
                 binaryByteOffset: binaryByteOffset,
                 hasBinaryMatch: result.hasMatch,
                 stoppedBinaryAfterMatch: options.binaryMode == .automatic && !haystack.isExplicit,
-                bytesSearched: data.count
+                bytesSearched: suppressedBinaryBytesSearched(
+                    dataCount: data.count,
+                    visibleMatches: visibleMatches,
+                    options: options
+                )
             ))
         }
 
@@ -341,6 +346,18 @@ public struct RipgrepSearcher {
         case .matchingLines, .filesWithMatches, .filesWithoutMatch:
             return false
         }
+    }
+
+    private func suppressedBinaryBytesSearched(
+        dataCount: Int,
+        visibleMatches: [SearchMatch],
+        options: RipgrepOptions
+    ) -> Int {
+        guard options.printMode == .matchingLines,
+              let firstMatch = visibleMatches.first else {
+            return dataCount
+        }
+        return firstMatch.absoluteOffset + firstMatch.lineWithTerminator.utf8.count
     }
 
     private func shouldPreprocess(_ haystack: Haystack, options: RipgrepOptions) -> Bool {
