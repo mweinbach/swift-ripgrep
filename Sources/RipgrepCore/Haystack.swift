@@ -322,6 +322,15 @@ public struct FileWalker {
                 caseInsensitive: options.ignoreFileCaseInsensitive
             ))
         }
+        if !options.noIgnoreExclude,
+           !options.noIgnoreVCS,
+           (options.noRequireGit || isInGitRepository(directoryURL)),
+           fileManager.fileExists(atPath: directoryURL.appendingPathComponent(".git").path) {
+            ignoreStack.append(loadMatcher(
+                from: directoryURL.appendingPathComponent(".git/info/exclude"),
+                caseInsensitive: options.ignoreFileCaseInsensitive
+            ))
+        }
         if !options.noIgnoreDot {
             ignoreStack.append(loadMatcher(
                 from: directoryURL.appendingPathComponent(".ignore"),

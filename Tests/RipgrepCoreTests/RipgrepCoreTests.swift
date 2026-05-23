@@ -510,6 +510,24 @@ struct RipgrepSearcherTests {
         #expect(pathBasenames(try run(["--no-ignore", "needle", root.url.path])) == ["keep.txt", "skip.log"])
     }
 
+    @Test("honors git info exclude and its toggle")
+    func honorsGitInfoExcludeAndToggle() throws {
+        let root = try TemporaryDirectory()
+        try root.write("needle\n", to: "keep.txt")
+        try root.write("needle\n", to: "skip.txt")
+        try root.write("skip.txt\n", to: ".git/info/exclude")
+
+        #expect(pathBasenames(try run(["needle", root.url.path])) == ["keep.txt"])
+        #expect(pathBasenames(try run(["--no-ignore-exclude", "needle", root.url.path])) == ["keep.txt", "skip.txt"])
+        #expect(pathBasenames(try run([
+            "--no-ignore-exclude",
+            "--ignore-exclude",
+            "needle",
+            root.url.path,
+        ])) == ["keep.txt"])
+        #expect(pathBasenames(try run(["--no-ignore", "needle", root.url.path])) == ["keep.txt", "skip.txt"])
+    }
+
     @Test("honors rgignore and ignore family switches")
     func honorsRgignoreAndIgnoreFamilySwitches() throws {
         let root = try TemporaryDirectory()

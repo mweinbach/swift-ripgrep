@@ -83,6 +83,7 @@ public struct RipgrepOptions: Equatable {
     public var hidden = false
     public var noIgnore = false
     public var noIgnoreDot = false
+    public var noIgnoreExclude = false
     public var noIgnoreFiles = false
     public var noIgnoreParent = false
     public var noIgnoreVCS = false
@@ -390,17 +391,23 @@ public enum RipgrepArgumentParser {
             case "--no-ignore":
                 options.noIgnore = true
                 options.noIgnoreDot = true
+                options.noIgnoreExclude = true
                 options.noIgnoreParent = true
                 options.noIgnoreVCS = true
             case "--ignore":
                 options.noIgnore = false
                 options.noIgnoreDot = false
+                options.noIgnoreExclude = false
                 options.noIgnoreParent = false
                 options.noIgnoreVCS = false
             case "--no-ignore-dot":
                 options.noIgnoreDot = true
             case "--ignore-dot":
                 options.noIgnoreDot = false
+            case "--no-ignore-exclude":
+                options.noIgnoreExclude = true
+            case "--ignore-exclude":
+                options.noIgnoreExclude = false
             case "--no-ignore-parent":
                 options.noIgnoreParent = true
             case "--ignore-parent":
@@ -759,6 +766,7 @@ public enum RipgrepArgumentParser {
           -u, --unrestricted         Reduce filtering; repeat to include hidden/binary files
               --no-ignore            Do not respect ignore files
               --no-ignore-dot        Do not respect .ignore or .rgignore files
+              --no-ignore-exclude    Do not respect .git/info/exclude
               --no-ignore-files      Do not respect --ignore-file arguments
               --no-ignore-parent     Do not respect ignore files in parent directories
               --no-ignore-vcs        Do not respect VCS ignore files
