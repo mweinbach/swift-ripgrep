@@ -871,6 +871,8 @@ public enum RipgrepArgumentParser {
                 index += 1
             case let value where value.hasPrefix("--glob="):
                 options.globPatterns.append(String(value.dropFirst("--glob=".count)))
+            case let value where value.hasPrefix("-g") && value.count > 2:
+                options.globPatterns.append(String(value.dropFirst(2)))
             case "--iglob":
                 guard index < arguments.count else {
                     return .error("error: The argument '--iglob <GLOB>' requires a value")

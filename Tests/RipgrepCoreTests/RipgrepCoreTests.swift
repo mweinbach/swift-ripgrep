@@ -1750,7 +1750,9 @@ struct RipgrepSearcherTests {
 
         #expect(pathBasenames(try run(["--ignore-file", root.path("ignore.txt"), "needle", root.url.path])) == ["keep.swift"])
         #expect(pathBasenames(try run(["-g", "*.swift", "needle", root.url.path])) == ["keep.swift"])
+        #expect(pathBasenames(try run(["-g*.swift", "needle", root.url.path])) == ["keep.swift"])
         #expect(pathBasenames(try run(["-g", "!skip.txt", "needle", root.url.path])) == ["keep.swift"])
+        #expect(pathBasenames(try run(["-g!skip.txt", "needle", root.url.path])) == ["keep.swift"])
         #expect(pathBasenames(try run([
             "--iglob",
             "!*.TXT",
