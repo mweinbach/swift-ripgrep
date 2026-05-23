@@ -739,6 +739,43 @@ struct RipgrepSearcherTests {
         #expect(errors == ["error: choice 'Always' is unrecognized"])
     }
 
+    @Test("prints OSC8 hyperlinks for paths")
+    func printsOSC8HyperlinksForPaths() throws {
+        let root = try TemporaryDirectory()
+        try root.createDirectory("links")
+        try root.write("hay\nneedle\n", to: "links/a file.txt")
+        let path = root.path("links/a file.txt")
+        let encodedPath = path.replacingOccurrences(of: " ", with: "%20")
+        let linkedPath = "\u{1B}]8;;grep+://\(encodedPath):2\u{1B}\\\(path)\u{1B}]8;;\u{1B}\\"
+
+        #expect(try run([
+            "-H",
+            "-n",
+            "--column",
+            "--color=always",
+            "--colors=path:none",
+            "--colors=line:none",
+            "--colors=column:none",
+            "--colors=match:none",
+            "--hyperlink-format=grep+",
+            "needle",
+            path,
+        ]) == [
+            "\(linkedPath):2:1:needle",
+        ])
+
+        var output: [String] = []
+        var errors: [String] = []
+        let exitCode = RipgrepCLI.run(
+            arguments: ["--hyperlink-format", "file://example.invalid", "needle", path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors.first?.contains("invalid hyperlink format") == true)
+    }
+
     @Test("prints JSON lines for matches context and summary")
     func printsJSONLines() throws {
         let root = try TemporaryDirectory()

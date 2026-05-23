@@ -81,6 +81,27 @@ public struct ColorChange: Equatable {
     }
 }
 
+public struct HyperlinkFormat: Equatable {
+    public enum Part: Equatable {
+        case text(String)
+        case path
+        case line
+        case column
+        case host
+        case wslPrefix
+    }
+
+    public var parts: [Part]
+
+    public init(parts: [Part] = []) {
+        self.parts = parts
+    }
+
+    public var isEnabled: Bool {
+        !parts.isEmpty
+    }
+}
+
 public enum SortKind: Equatable {
     case path
     case modified
@@ -142,6 +163,7 @@ public struct RipgrepOptions: Equatable {
     public var vimgrep = false
     public var colorMode: ColorMode = .automatic
     public var colorChanges: [ColorChange] = []
+    public var hyperlinkFormat = HyperlinkFormat()
     public var nullPathTerminator = false
     public var pathSeparator: Character?
     public var withFilename: Bool?
@@ -481,6 +503,23 @@ public enum RipgrepArgumentParser {
                     return .error("error: invalid color spec '\(raw)'")
                 }
                 options.colorChanges.append(change)
+            case "--hyperlink-format":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--hyperlink-format <FORMAT>' requires a value")
+                }
+                do {
+                    options.hyperlinkFormat = try parseHyperlinkFormat(arguments[index])
+                } catch {
+                    return .error("error: invalid hyperlink format: \(error.localizedDescription)")
+                }
+                index += 1
+            case let value where value.hasPrefix("--hyperlink-format="):
+                let raw = String(value.dropFirst("--hyperlink-format=".count))
+                do {
+                    options.hyperlinkFormat = try parseHyperlinkFormat(raw)
+                } catch {
+                    return .error("error: invalid hyperlink format: \(error.localizedDescription)")
+                }
             case "--stats":
                 options.stats = true
             case "--no-stats":
@@ -1041,6 +1080,7 @@ public enum RipgrepArgumentParser {
           -p, --pretty               Alias for colors, headings and line numbers
               --color WHEN           Use color: never, auto, always or ansi
               --colors COLOR_SPEC    Configure output color settings
+              --hyperlink-format FMT Format file path hyperlinks
               --heading              Group matches by file
               --trim                 Trim leading ASCII whitespace from printed lines
               --vimgrep              Print vim-compatible file:line:column matches
@@ -1274,6 +1314,111 @@ public enum RipgrepArgumentParser {
         return UInt8(value)
     }
 
+    private static func parseHyperlinkFormat(_ raw: String) throws -> HyperlinkFormat {
+        let expanded = hyperlinkAliases[raw] ?? raw
+        guard !expanded.isEmpty else {
+            return HyperlinkFormat()
+        }
+
+        var parts: [HyperlinkFormat.Part] = []
+        var text = ""
+        var index = expanded.startIndex
+
+        func flushText() {
+            if !text.isEmpty {
+                parts.append(.text(text))
+                text = ""
+            }
+        }
+
+        while index < expanded.endIndex {
+            let character = expanded[index]
+            if character == "{" {
+                let next = expanded.index(after: index)
+                if next < expanded.endIndex, expanded[next] == "{" {
+                    text.append("{")
+                    index = expanded.index(after: next)
+                    continue
+                }
+                guard let close = expanded[next...].firstIndex(of: "}") else {
+                    throw HyperlinkFormatParseError("unclosed variable: found '{' without a corresponding '}' following it")
+                }
+                let name = String(expanded[next..<close])
+                flushText()
+                switch name {
+                case "path":
+                    parts.append(.path)
+                case "line":
+                    parts.append(.line)
+                case "column":
+                    parts.append(.column)
+                case "host":
+                    parts.append(.host)
+                case "wslprefix":
+                    parts.append(.wslPrefix)
+                default:
+                    throw HyperlinkFormatParseError("invalid hyperlink format variable: '\(name)', choose from: path, line, column, host, wslprefix")
+                }
+                index = expanded.index(after: close)
+            } else if character == "}" {
+                let next = expanded.index(after: index)
+                if next < expanded.endIndex, expanded[next] == "}" {
+                    text.append("}")
+                    index = expanded.index(after: next)
+                } else {
+                    throw HyperlinkFormatParseError("unopened variable: found '}' without a corresponding '{' preceding it")
+                }
+            } else {
+                text.append(character)
+                index = expanded.index(after: index)
+            }
+        }
+        flushText()
+
+        guard parts.contains(.path) else {
+            if parts.allSatisfy({
+                if case .text = $0 { return true }
+                return false
+            }) {
+                throw HyperlinkFormatParseError("at least a {path} variable is required in a hyperlink format, or otherwise use a valid alias: default, none, cursor, file, grep+, kitty, macvim, textmate, vscode, vscode-insiders, vscodium")
+            }
+            throw HyperlinkFormatParseError("the {path} variable is required in a hyperlink format")
+        }
+        if parts.contains(.column), !parts.contains(.line) {
+            throw HyperlinkFormatParseError("the hyperlink format contains a {column} variable, but no {line} variable is present")
+        }
+        try validateHyperlinkScheme(parts)
+        return HyperlinkFormat(parts: parts)
+    }
+
+    private static let hyperlinkAliases = [
+        "cursor": "cursor://file{path}:{line}:{column}",
+        "default": "file://{host}{path}",
+        "file": "file://{host}{path}",
+        "grep+": "grep+://{path}:{line}",
+        "kitty": "file://{host}{path}#{line}",
+        "macvim": "mvim://open?url=file://{path}&line={line}&column={column}",
+        "none": "",
+        "textmate": "txmt://open?url=file://{path}&line={line}&column={column}",
+        "vscode": "vscode://file{path}:{line}:{column}",
+        "vscode-insiders": "vscode-insiders://file{path}:{line}:{column}",
+        "vscodium": "vscodium://file{path}:{line}:{column}",
+    ]
+
+    private static func validateHyperlinkScheme(_ parts: [HyperlinkFormat.Part]) throws {
+        guard case .text(let prefix) = parts.first,
+              let colon = prefix.firstIndex(of: ":") else {
+            throw HyperlinkFormatParseError("the hyperlink format must start with a valid URL scheme, i.e., [0-9A-Za-z+-.]+:")
+        }
+        let scheme = prefix[..<colon]
+        guard !scheme.isEmpty,
+              scheme.allSatisfy({ character in
+                  character.isASCII && (character.isLetter || character.isNumber || character == "+" || character == "-" || character == ".")
+              }) else {
+            throw HyperlinkFormatParseError("the hyperlink format must start with a valid URL scheme, i.e., [0-9A-Za-z+-.]+:")
+        }
+    }
+
     private static func parsePathSeparator(_ raw: String) -> Character? {
         let value: String
         switch raw {
@@ -1409,4 +1554,16 @@ public enum RipgrepArgumentParser {
 private enum PatternFileResult {
     case patterns([String])
     case error(String)
+}
+
+private struct HyperlinkFormatParseError: LocalizedError {
+    let message: String
+
+    init(_ message: String) {
+        self.message = message
+    }
+
+    var errorDescription: String? {
+        message
+    }
 }

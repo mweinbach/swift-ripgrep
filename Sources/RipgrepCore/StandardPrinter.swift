@@ -4,13 +4,16 @@ public struct StandardPrinter {
     private let options: RipgrepOptions
     private let currentDirectory: String
     private let colors: ANSIColorPalette
+    private let hyperlinks: HyperlinkFormatter
 
     public init(
         options: RipgrepOptions,
         currentDirectory: String = FileManager.default.currentDirectoryPath
     ) {
         self.options = options
-        self.colors = ANSIColorPalette(options: options)
+        let colorPalette = ANSIColorPalette(options: options)
+        self.colors = colorPalette
+        self.hyperlinks = HyperlinkFormatter(options: options, colorsEnabled: colorPalette.isEnabled)
         self.currentDirectory = URL(fileURLWithPath: currentDirectory)
             .standardizedFileURL
             .path
@@ -65,7 +68,7 @@ public struct StandardPrinter {
                     ? result.matches.reduce(0) { $0 + $1.matchCount }
                     : result.matches.count + (result.hasBinaryMatch ? 1 : 0)
                 if showPath(for: results) {
-                    return "\(displayPath(for: result.fileURL))\(pathFieldSeparator())\(count)"
+                    return "\(renderPath(for: result.fileURL))\(pathFieldSeparator())\(count)"
                 }
                 return "\(count)"
             }
@@ -73,28 +76,28 @@ public struct StandardPrinter {
             return results.files.filter { options.includeZero ? $0.searched : $0.hasMatch }.map { result in
                 let count = result.matches.reduce(0) { $0 + $1.matchCount } + (result.hasBinaryMatch ? 1 : 0)
                 if showPath(for: results) {
-                    return "\(displayPath(for: result.fileURL))\(pathFieldSeparator())\(count)"
+                    return "\(renderPath(for: result.fileURL))\(pathFieldSeparator())\(count)"
                 }
                 return "\(count)"
             }
         case .filesWithMatches:
             return results.files
                 .filter(\.hasMatch)
-                .map { "\(displayPath(for: $0.fileURL))\(pathTerminator())" }
+                .map { "\(renderPath(for: $0.fileURL))\(pathTerminator())" }
         case .filesWithoutMatch:
             return results.files
                 .filter { !$0.hasMatch }
-                .map { "\(displayPath(for: $0.fileURL))\(pathTerminator())" }
+                .map { "\(renderPath(for: $0.fileURL))\(pathTerminator())" }
         }
     }
 
     public func paths(_ urls: [URL]) -> [String] {
-        urls.map { "\(displayPath(for: $0))\(pathTerminator())" }
+        urls.map { "\(renderPath(for: $0))\(pathTerminator())" }
     }
 
     private func format(_ match: SearchMatch, showPath: Bool) -> String {
         var fields: [OutputField] = []
-        let path = showPath ? displayPath(for: match.fileURL) : nil
+        let path = showPath ? renderPath(for: match.fileURL, line: match.lineNumber, column: match.column) : nil
         if options.wantsLineNumber {
             fields.append(OutputField("\(match.lineNumber)", colorTarget: .line))
         }
@@ -115,7 +118,7 @@ public struct StandardPrinter {
 
         return splitRenderedLines(match.lineWithTerminator).enumerated().map { offset, line in
             var fields: [OutputField] = []
-            let path = showPath ? displayPath(for: match.fileURL) : nil
+            let path = showPath ? renderPath(for: match.fileURL, line: match.lineNumber + offset) : nil
             if options.wantsLineNumber {
                 fields.append(OutputField("\(match.lineNumber + offset)", colorTarget: .line))
             }
@@ -130,7 +133,8 @@ public struct StandardPrinter {
                 let text = options.onlyMatching
                     ? (span.replacement ?? span.text)
                     : renderedLine(match.line)
-                return "\(displayPath(for: match.fileURL))\(matchPathFieldSeparator())\(match.lineNumber)\(options.fieldMatchSeparator)\(span.startColumn)\(options.fieldMatchSeparator)\(text)\(outputTerminator(match.lineTerminator))"
+                let path = renderPath(for: match.fileURL, line: match.lineNumber, column: span.startColumn)
+                return "\(path)\(matchPathFieldSeparator())\(match.lineNumber)\(options.fieldMatchSeparator)\(span.startColumn)\(options.fieldMatchSeparator)\(text)\(outputTerminator(match.lineTerminator))"
             }
         }
     }
@@ -141,7 +145,7 @@ public struct StandardPrinter {
         }
         let message = #"binary file matches (found "\0" byte around offset \#(offset))"#
         if showPath {
-            return "\(displayPath(for: result.fileURL))\(matchPathFieldSeparator()) \(message)"
+            return "\(renderPath(for: result.fileURL))\(matchPathFieldSeparator()) \(message)"
         }
         return message
     }
@@ -149,7 +153,7 @@ public struct StandardPrinter {
     private func formatOnlyMatching(_ match: SearchMatch, showPath: Bool) -> [String] {
         match.spans.map { span in
             var fields: [OutputField] = []
-            let path = showPath ? displayPath(for: match.fileURL) : nil
+            let path = showPath ? renderPath(for: match.fileURL, line: match.lineNumber, column: span.startColumn) : nil
             if options.wantsLineNumber {
                 fields.append(OutputField("\(match.lineNumber)", colorTarget: .line))
             }
@@ -183,7 +187,7 @@ public struct StandardPrinter {
             if !output.isEmpty {
                 output.append("")
             }
-            output.append(colors.apply(.path, to: displayPath(for: result.fileURL)))
+            output.append(renderPath(for: result.fileURL))
             output.append(contentsOf: lines)
         }
         return output
@@ -229,7 +233,7 @@ public struct StandardPrinter {
 
     private func formatContextLine(_ line: SearchLine, fileURL: URL, showPath: Bool) -> String {
         var fields: [OutputField] = []
-        let path = showPath ? displayPath(for: fileURL) : nil
+        let path = showPath ? renderPath(for: fileURL, line: line.lineNumber) : nil
         if options.wantsLineNumber {
             fields.append(OutputField("\(line.lineNumber)", colorTarget: .line))
         }
@@ -283,7 +287,7 @@ public struct StandardPrinter {
     private func prefix(path: String?, fields: [OutputField], fieldSeparator: String) -> String {
         var prefix = ""
         if let path {
-            prefix += colors.apply(.path, to: path)
+            prefix += path
             prefix += options.nullPathTerminator ? "\0" : fieldSeparator
         }
         if !fields.isEmpty {
@@ -296,6 +300,11 @@ public struct StandardPrinter {
             prefix += fieldSeparator
         }
         return prefix
+    }
+
+    private func renderPath(for url: URL, line: Int? = nil, column: Int? = nil) -> String {
+        let text = colors.apply(.path, to: displayPath(for: url))
+        return hyperlinks.label(text, for: url, line: line, column: column)
     }
 
     private func limitedLine(_ line: String) -> String {
