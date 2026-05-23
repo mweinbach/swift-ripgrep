@@ -313,14 +313,14 @@ public enum RipgrepArgumentParser {
                     return .error("error: The argument '--generate <KIND>' requires a value")
                 }
                 guard let mode = GenerateMode(rawValue: arguments[index]) else {
-                    return .error("error: choice '\(arguments[index])' is unrecognized")
+                    return .error(unrecognizedChoice(flag: "--generate", value: arguments[index]))
                 }
                 options.generateMode = mode
                 index += 1
             case let value where value.hasPrefix("--generate="):
                 let raw = String(value.dropFirst("--generate=".count))
                 guard let mode = GenerateMode(rawValue: raw) else {
-                    return .error("error: choice '\(raw)' is unrecognized")
+                    return .error(unrecognizedChoice(flag: "--generate", value: raw))
                 }
                 options.generateMode = mode
             case "--files":
@@ -347,14 +347,14 @@ public enum RipgrepArgumentParser {
                     return .error("error: The argument '--engine <ENGINE>' requires a value")
                 }
                 guard let mode = parseEngineMode(arguments[index]) else {
-                    return .error("error: unrecognized regex engine '\(arguments[index])'")
+                    return .error(unrecognizedEngine(flag: "--engine", value: arguments[index]))
                 }
                 options.engineMode = mode
                 index += 1
             case let value where value.hasPrefix("--engine="):
                 let raw = String(value.dropFirst("--engine=".count))
                 guard let mode = parseEngineMode(raw) else {
-                    return .error("error: unrecognized regex engine '\(raw)'")
+                    return .error(unrecognizedEngine(flag: "--engine", value: raw))
                 }
                 options.engineMode = mode
             case "-P", "--pcre2":
@@ -370,14 +370,14 @@ public enum RipgrepArgumentParser {
                     return .error("error: The argument '--dfa-size-limit <NUM>' requires a value")
                 }
                 guard let limit = parseHumanReadableSize(arguments[index]) else {
-                    return .error("error: invalid DFA size limit '\(arguments[index])'")
+                    return .error(invalidSize(flag: "--dfa-size-limit", value: arguments[index]))
                 }
                 options.dfaSizeLimit = limit
                 index += 1
             case let value where value.hasPrefix("--dfa-size-limit="):
                 let raw = String(value.dropFirst("--dfa-size-limit=".count))
                 guard let limit = parseHumanReadableSize(raw) else {
-                    return .error("error: invalid DFA size limit '\(raw)'")
+                    return .error(invalidSize(flag: "--dfa-size-limit", value: raw))
                 }
                 options.dfaSizeLimit = limit
             case "--regex-size-limit":
@@ -385,14 +385,14 @@ public enum RipgrepArgumentParser {
                     return .error("error: The argument '--regex-size-limit <NUM>' requires a value")
                 }
                 guard let limit = parseHumanReadableSize(arguments[index]) else {
-                    return .error("error: invalid regex size limit '\(arguments[index])'")
+                    return .error(invalidSize(flag: "--regex-size-limit", value: arguments[index]))
                 }
                 options.regexSizeLimit = limit
                 index += 1
             case let value where value.hasPrefix("--regex-size-limit="):
                 let raw = String(value.dropFirst("--regex-size-limit=".count))
                 guard let limit = parseHumanReadableSize(raw) else {
-                    return .error("error: invalid regex size limit '\(raw)'")
+                    return .error(invalidSize(flag: "--regex-size-limit", value: raw))
                 }
                 options.regexSizeLimit = limit
             case "-j", "--threads":
@@ -400,20 +400,20 @@ public enum RipgrepArgumentParser {
                     return .error("error: The argument '--threads <NUM>' requires a value")
                 }
                 guard let threads = parseNonNegativeInt(arguments[index]) else {
-                    return .error("error: invalid thread count '\(arguments[index])'")
+                    return .error(invalidNumber(flag: argument))
                 }
                 options.threadCount = threads == 0 ? nil : threads
                 index += 1
             case let value where value.hasPrefix("--threads="):
                 let raw = String(value.dropFirst("--threads=".count))
                 guard let threads = parseNonNegativeInt(raw) else {
-                    return .error("error: invalid thread count '\(raw)'")
+                    return .error(invalidNumber(flag: "--threads"))
                 }
                 options.threadCount = threads == 0 ? nil : threads
             case let value where value.hasPrefix("-j") && value.count > 2:
                 let raw = String(value.dropFirst(2))
                 guard let threads = parseNonNegativeInt(raw) else {
-                    return .error("error: invalid thread count '\(raw)'")
+                    return .error(invalidNumber(flag: "-j"))
                 }
                 options.threadCount = threads == 0 ? nil : threads
             case "--mmap":
@@ -585,14 +585,14 @@ public enum RipgrepArgumentParser {
                     return .error("error: The argument '--color <WHEN>' requires a value")
                 }
                 guard let mode = parseColorMode(arguments[index]) else {
-                    return .error("error: choice '\(arguments[index])' is unrecognized")
+                    return .error(unrecognizedChoice(flag: "--color", value: arguments[index]))
                 }
                 options.colorMode = mode
                 index += 1
             case let value where value.hasPrefix("--color="):
                 let raw = String(value.dropFirst("--color=".count))
                 guard let mode = parseColorMode(raw) else {
-                    return .error("error: choice '\(raw)' is unrecognized")
+                    return .error(unrecognizedChoice(flag: "--color", value: raw))
                 }
                 options.colorMode = mode
             case "--no-color":
@@ -676,14 +676,14 @@ public enum RipgrepArgumentParser {
                     return .error("error: The argument '--max-filesize <NUM>' requires a value")
                 }
                 guard let size = parseHumanReadableSize(arguments[index]) else {
-                    return .error("error: invalid max filesize '\(arguments[index])'")
+                    return .error(invalidSize(flag: "--max-filesize", value: arguments[index]))
                 }
                 options.maxFileSize = size
                 index += 1
             case let value where value.hasPrefix("--max-filesize="):
                 let raw = String(value.dropFirst("--max-filesize=".count))
                 guard let size = parseHumanReadableSize(raw) else {
-                    return .error("error: invalid max filesize '\(raw)'")
+                    return .error(invalidSize(flag: "--max-filesize", value: raw))
                 }
                 options.maxFileSize = size
             case "-N", "--no-line-number":
@@ -1006,20 +1006,20 @@ public enum RipgrepArgumentParser {
                     return .error("error: The argument '--max-count <NUM>' requires a value")
                 }
                 guard let count = parseNonNegativeInt(arguments[index]) else {
-                    return .error("error: invalid max count '\(arguments[index])'")
+                    return .error(invalidNumber(flag: argument))
                 }
                 options.maxCount = count
                 index += 1
             case let value where value.hasPrefix("--max-count="):
                 let raw = String(value.dropFirst("--max-count=".count))
                 guard let count = parseNonNegativeInt(raw) else {
-                    return .error("error: invalid max count '\(raw)'")
+                    return .error(invalidNumber(flag: "--max-count"))
                 }
                 options.maxCount = count
             case let value where value.hasPrefix("-m") && value.count > 2:
                 let raw = String(value.dropFirst(2))
                 guard let count = parseNonNegativeInt(raw) else {
-                    return .error("error: invalid max count '\(raw)'")
+                    return .error(invalidNumber(flag: "-m"))
                 }
                 options.maxCount = count
             case "-d", "--max-depth", "--maxdepth":
@@ -1890,6 +1890,55 @@ public enum RipgrepArgumentParser {
     private static func parsePositiveInt(_ raw: String) -> Int? {
         guard let count = Int(raw), count > 0 else { return nil }
         return count
+    }
+
+    private static func invalidNumber(flag: String) -> String {
+        "error parsing flag \(flag): value is not a valid number: invalid digit found in string"
+    }
+
+    private static func unrecognizedChoice(flag: String, value: String) -> String {
+        "error parsing flag \(flag): choice '\(value)' is unrecognized"
+    }
+
+    private static func unrecognizedEngine(flag: String, value: String) -> String {
+        "error parsing flag \(flag): unrecognized regex engine '\(value)'"
+    }
+
+    private static func invalidSize(flag: String, value: String) -> String {
+        "error parsing flag \(flag): invalid size: \(invalidSizeDetail(value))"
+    }
+
+    private static func invalidSizeDetail(_ raw: String) -> String {
+        let formatMessage = "invalid format for size '\(raw)', which should be a non-empty sequence of digits followed by an optional 'K', 'M' or 'G' suffix"
+        guard !raw.isEmpty else {
+            return formatMessage
+        }
+        let suffix = raw.last!
+        let multiplier: UInt64
+        let digits: Substring
+        switch suffix {
+        case "K":
+            multiplier = 1024
+            digits = raw.dropLast()
+        case "M":
+            multiplier = 1024 * 1024
+            digits = raw.dropLast()
+        case "G":
+            multiplier = 1024 * 1024 * 1024
+            digits = raw.dropLast()
+        default:
+            guard suffix.isNumber else {
+                return formatMessage
+            }
+            multiplier = 1
+            digits = Substring(raw)
+        }
+        guard let value = UInt64(digits) else {
+            return formatMessage
+        }
+        return value.multipliedReportingOverflow(by: multiplier).overflow
+            ? "size too big in '\(raw)'"
+            : formatMessage
     }
 
     private static func parseHumanReadableSize(_ raw: String) -> UInt64? {

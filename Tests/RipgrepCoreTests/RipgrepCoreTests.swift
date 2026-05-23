@@ -127,6 +127,17 @@ struct RipgrepSearcherTests {
         #expect(exitCode == 2)
         #expect(output.isEmpty)
         #expect(errors.joined(separator: "\n").contains("PCRE2 is not available"))
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--engine=bogus", "ab", root.path("engine.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["rg: error parsing flag --engine: unrecognized regex engine 'bogus'"])
     }
 
     @Test("accepts runtime resource flags")
@@ -156,7 +167,7 @@ struct RipgrepSearcherTests {
         )
         #expect(exitCode == 2)
         #expect(output.isEmpty)
-        #expect(errors == ["rg: error: invalid thread count 'many'"])
+        #expect(errors == ["rg: error parsing flag --threads: value is not a valid number: invalid digit found in string"])
     }
 
     @Test("enforces regex size limit")
@@ -420,6 +431,17 @@ struct RipgrepSearcherTests {
         #expect(exitCode == 1)
         #expect(output.isEmpty)
         #expect(errors.isEmpty)
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["-m", "nope", "needle", root.path("many.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["rg: error parsing flag -m: value is not a valid number: invalid digit found in string"])
     }
 
     @Test("counts matching lines and individual matches")
@@ -1412,7 +1434,7 @@ struct RipgrepSearcherTests {
             stderr: { errors.append($0) }
         )
         #expect(exitCode == 2)
-        #expect(errors == ["rg: error: choice 'Always' is unrecognized"])
+        #expect(errors == ["rg: error parsing flag --color: choice 'Always' is unrecognized"])
     }
 
     @Test("prints OSC8 hyperlinks for paths")
@@ -2130,7 +2152,7 @@ struct RipgrepSearcherTests {
         )
         #expect(exitCode == 2)
         #expect(output.isEmpty)
-        #expect(errors == ["rg: error: invalid max filesize '45k'"])
+        #expect(errors == ["rg: error parsing flag --max-filesize: invalid size: invalid format for size '45k', which should be a non-empty sequence of digits followed by an optional 'K', 'M' or 'G' suffix"])
 
         errors = []
         exitCode = RipgrepCLI.run(
@@ -2139,7 +2161,7 @@ struct RipgrepSearcherTests {
             stderr: { errors.append($0) }
         )
         #expect(exitCode == 2)
-        #expect(errors == ["rg: error: invalid max filesize '34359738368G'"])
+        #expect(errors == ["rg: error parsing flag --max-filesize: invalid size: size too big in '34359738368G'"])
 
         #expect(pathBasenames(try run([
             "--no-ignore",
@@ -2574,7 +2596,7 @@ struct RipgrepSearcherTests {
         )
         #expect(exitCode == 2)
         #expect(output.isEmpty)
-        #expect(errors == ["rg: error: choice 'bogus' is unrecognized"])
+        #expect(errors == ["rg: error parsing flag --generate: choice 'bogus' is unrecognized"])
     }
 
     @Test("prints detected PCRE2 version")
