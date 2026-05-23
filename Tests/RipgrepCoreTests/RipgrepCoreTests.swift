@@ -31,6 +31,22 @@ struct RipgrepSearcherTests {
         #expect(try run(["-x", "abc", root.path("patterns.txt")]) == ["abc"])
     }
 
+    @Test("honors no unicode regex and literal semantics")
+    func honorsNoUnicodeSemantics() throws {
+        let root = try TemporaryDirectory()
+        try root.write("café\nπ\n_\n", to: "classes.txt")
+        try root.write("éx\nxé\nx\n", to: "words.txt")
+        try root.write("Σ\nσ\n", to: "casefold.txt")
+
+        #expect(try run(["-o", #"\w+"#, root.path("classes.txt")]) == ["café", "π", "_"])
+        #expect(try run(["--no-unicode", "-o", #"\w+"#, root.path("classes.txt")]) == ["caf", "_"])
+        #expect(try run(["-w", "x", root.path("words.txt")]) == ["x"])
+        #expect(try run(["--no-unicode", "-w", "x", root.path("words.txt")]) == ["éx", "xé", "x"])
+        #expect(try run(["-F", "-i", "σ", root.path("casefold.txt")]) == ["Σ", "σ"])
+        #expect(try run(["--no-unicode", "-F", "-i", "σ", root.path("casefold.txt")]) == ["σ"])
+        #expect(try run(["--no-unicode", "--unicode", "-o", #"\w+"#, root.path("classes.txt")]) == ["café", "π", "_"])
+    }
+
     @Test("supports smart case and inverted matches")
     func supportsSmartCaseAndInvertedMatches() throws {
         let root = try TemporaryDirectory()

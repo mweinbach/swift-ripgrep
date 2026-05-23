@@ -87,6 +87,7 @@ public struct RipgrepOptions: Equatable {
     public var encodingMode: EncodingMode = .automatic
     public var wordRegexp = false
     public var lineRegexp = false
+    public var noUnicode = false
     public var multiline = false
     public var multilineDotall = false
     public var crlf = false
@@ -261,6 +262,10 @@ public enum RipgrepArgumentParser {
                 options.wordRegexp = true
             case "-x", "--line-regexp":
                 options.lineRegexp = true
+            case "--no-unicode":
+                options.noUnicode = true
+            case "--unicode":
+                options.noUnicode = false
             case "-U", "--multiline":
                 options.multiline = true
                 options.stopOnNonmatch = false
@@ -860,6 +865,7 @@ public enum RipgrepArgumentParser {
           -f, --file PATTERNFILE     Read patterns from a file
           -w, --word-regexp          Only show matches surrounded by word boundaries
           -x, --line-regexp          Only show matches spanning an entire line
+              --no-unicode           Disable Unicode mode
           -U, --multiline            Enable matching across line terminators
               --multiline-dotall     Make '.' match line terminators in multiline mode
               --crlf                 Treat CRLF as a line terminator for anchors

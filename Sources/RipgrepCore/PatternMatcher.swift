@@ -13,7 +13,7 @@ public struct PatternMatcher {
         self.options = options
         self.patterns = try patternSources.map { pattern in
             if options.fixedStrings {
-                return .literal(options.effectiveIgnoreCase ? pattern.lowercased() : pattern)
+                return .literal(options.effectiveIgnoreCase ? Self.foldedCase(pattern, options: options) : pattern)
             } else {
                 let source = Self.regexPattern(for: pattern, options: options)
                 do {
@@ -95,8 +95,13 @@ public struct PatternMatcher {
 
     private static func regexPattern(for pattern: String, options: RipgrepOptions) -> String {
         var source = pattern
+        if options.noUnicode {
+            source = asciiRegexPattern(for: source)
+        }
         if options.wordRegexp {
-            source = "\\b(?:\(source))\\b"
+            source = options.noUnicode
+                ? "(?<![0-9A-Za-z_])(?:\(source))(?![0-9A-Za-z_])"
+                : "\\b(?:\(source))\\b"
         }
         if options.lineRegexp {
             source = "^(?:\(source))$"
@@ -107,6 +112,50 @@ public struct PatternMatcher {
             source = strictLineEndPattern(for: source)
         }
         return source
+    }
+
+    private static func asciiRegexPattern(for pattern: String) -> String {
+        var output = ""
+        var escaped = false
+        var inClass = false
+
+        for character in pattern {
+            if escaped {
+                switch character {
+                case "w":
+                    output += inClass ? "0-9A-Za-z_" : "[0-9A-Za-z_]"
+                case "W":
+                    output += inClass ? "\\W" : "[^0-9A-Za-z_]"
+                case "d":
+                    output += inClass ? "0-9" : "[0-9]"
+                case "D":
+                    output += inClass ? "\\D" : "[^0-9]"
+                case "s":
+                    output += inClass ? " \\t\\r\\n\\f" : "[ \\t\\r\\n\\f]"
+                case "S":
+                    output += inClass ? "\\S" : "[^ \\t\\r\\n\\f]"
+                default:
+                    output.append("\\")
+                    output.append(character)
+                }
+                escaped = false
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                continue
+            }
+            if character == "[" {
+                inClass = true
+            } else if character == "]" {
+                inClass = false
+            }
+            output.append(character)
+        }
+        if escaped {
+            output.append("\\")
+        }
+        return output
     }
 
     private static func crlfAnchorPattern(for pattern: String) -> String {
@@ -168,7 +217,7 @@ public struct PatternMatcher {
     }
 
     private func literalRanges(_ literal: String, in line: String) -> [Range<String.Index>] {
-        let haystack = options.effectiveIgnoreCase ? line.lowercased() : line
+        let haystack = options.effectiveIgnoreCase ? Self.foldedCase(line, options: options) : line
         var cursor = haystack.startIndex
         var ranges: [Range<String.Index>] = []
 
@@ -183,6 +232,10 @@ public struct PatternMatcher {
         }
 
         return ranges
+    }
+
+    private static func foldedCase(_ text: String, options: RipgrepOptions) -> String {
+        options.noUnicode ? text.asciiLowercased() : text.lowercased()
     }
 
     private func replacement(for range: Range<String.Index>, in line: String) -> String? {
@@ -235,9 +288,36 @@ public struct PatternMatcher {
         guard let character else {
             return false
         }
+        if options.noUnicode {
+            return character.isASCIIWordCharacter
+        }
         return character.unicodeScalars.allSatisfy {
             CharacterSet.alphanumerics.contains($0) || $0 == "_"
         }
+    }
+}
+
+private extension String {
+    func asciiLowercased() -> String {
+        String(unicodeScalars.map { scalar in
+            guard scalar.value >= 65, scalar.value <= 90,
+                  let lowered = UnicodeScalar(scalar.value + 32) else {
+                return Character(scalar)
+            }
+            return Character(lowered)
+        })
+    }
+}
+
+private extension Character {
+    var isASCIIWordCharacter: Bool {
+        guard unicodeScalars.count == 1, let value = unicodeScalars.first?.value else {
+            return false
+        }
+        return (value >= 48 && value <= 57)
+            || (value >= 65 && value <= 90)
+            || (value >= 97 && value <= 122)
+            || value == 95
     }
 }
 
