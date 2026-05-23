@@ -263,6 +263,8 @@ public enum RipgrepArgumentParser {
         var options = RipgrepOptions()
         var positionals: [String] = []
         var explicitPatterns: [String] = []
+        var beforeContextWasSet = false
+        var afterContextWasSet = false
         var index = 0
 
         while index < arguments.count {
@@ -952,6 +954,7 @@ public enum RipgrepArgumentParser {
                     return .error("error: invalid context length '\(arguments[index])'")
                 }
                 options.afterContext = count
+                afterContextWasSet = true
                 options.passthru = false
                 index += 1
             case let value where value.hasPrefix("--after-context="):
@@ -960,6 +963,7 @@ public enum RipgrepArgumentParser {
                     return .error("error: invalid context length '\(raw)'")
                 }
                 options.afterContext = count
+                afterContextWasSet = true
                 options.passthru = false
             case let value where value.hasPrefix("-A") && value.count > 2:
                 let raw = String(value.dropFirst(2))
@@ -967,6 +971,7 @@ public enum RipgrepArgumentParser {
                     return .error("error: invalid context length '\(raw)'")
                 }
                 options.afterContext = count
+                afterContextWasSet = true
                 options.passthru = false
             case "-B", "--before-context":
                 guard index < arguments.count else {
@@ -976,6 +981,7 @@ public enum RipgrepArgumentParser {
                     return .error("error: invalid context length '\(arguments[index])'")
                 }
                 options.beforeContext = count
+                beforeContextWasSet = true
                 options.passthru = false
                 index += 1
             case let value where value.hasPrefix("--before-context="):
@@ -984,6 +990,7 @@ public enum RipgrepArgumentParser {
                     return .error("error: invalid context length '\(raw)'")
                 }
                 options.beforeContext = count
+                beforeContextWasSet = true
                 options.passthru = false
             case let value where value.hasPrefix("-B") && value.count > 2:
                 let raw = String(value.dropFirst(2))
@@ -991,6 +998,7 @@ public enum RipgrepArgumentParser {
                     return .error("error: invalid context length '\(raw)'")
                 }
                 options.beforeContext = count
+                beforeContextWasSet = true
                 options.passthru = false
             case "-C", "--context":
                 guard index < arguments.count else {
@@ -999,8 +1007,12 @@ public enum RipgrepArgumentParser {
                 guard let count = parseContextCount(arguments[index], flag: argument) else {
                     return .error("error: invalid context length '\(arguments[index])'")
                 }
-                options.beforeContext = count
-                options.afterContext = count
+                if !beforeContextWasSet {
+                    options.beforeContext = count
+                }
+                if !afterContextWasSet {
+                    options.afterContext = count
+                }
                 options.passthru = false
                 index += 1
             case let value where value.hasPrefix("--context="):
@@ -1008,16 +1020,24 @@ public enum RipgrepArgumentParser {
                 guard let count = parseContextCount(raw, flag: "--context") else {
                     return .error("error: invalid context length '\(raw)'")
                 }
-                options.beforeContext = count
-                options.afterContext = count
+                if !beforeContextWasSet {
+                    options.beforeContext = count
+                }
+                if !afterContextWasSet {
+                    options.afterContext = count
+                }
                 options.passthru = false
             case let value where value.hasPrefix("-C") && value.count > 2:
                 let raw = String(value.dropFirst(2))
                 guard let count = parseContextCount(raw, flag: "-C") else {
                     return .error("error: invalid context length '\(raw)'")
                 }
-                options.beforeContext = count
-                options.afterContext = count
+                if !beforeContextWasSet {
+                    options.beforeContext = count
+                }
+                if !afterContextWasSet {
+                    options.afterContext = count
+                }
                 options.passthru = false
             case "--context-separator":
                 guard index < arguments.count else {

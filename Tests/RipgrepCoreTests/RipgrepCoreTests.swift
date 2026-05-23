@@ -709,6 +709,19 @@ struct RipgrepSearcherTests {
             "3:match",
             "4-four",
         ])
+        try root.write("1\n2\n3\n4\n5\n6\n7\n8\n9\n", to: "context-override.txt")
+        #expect(try run(["-C1", "-A2", "5", root.path("context-override.txt")]) == [
+            "4",
+            "5",
+            "6",
+            "7",
+        ])
+        #expect(try run(["-A2", "-C1", "5", root.path("context-override.txt")]) == [
+            "4",
+            "5",
+            "6",
+            "7",
+        ])
         #expect(try run(["-n", "-A1", "-e", "match", "-e", "other", root.path("context.txt")]) == [
             "3:match",
             "4-four",
