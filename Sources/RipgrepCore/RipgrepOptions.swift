@@ -9,6 +9,7 @@ public enum SearchMode: Equatable {
 public enum PrintMode: Equatable {
     case matchingLines
     case count
+    case countMatches
     case filesWithMatches
     case filesWithoutMatch
 }
@@ -53,6 +54,8 @@ public struct RipgrepOptions: Equatable {
     public var json = false
     public var stats = false
     public var maxCount: Int?
+    public var maxColumns: Int?
+    public var maxColumnsPreview = false
     public var maxDepth: Int?
     public var sortMode: SortMode?
     public var lineNumber = false
@@ -78,6 +81,7 @@ public struct RipgrepOptions: Equatable {
     public var useStdin = false
     public var beforeContext = 0
     public var afterContext = 0
+    public var contextSeparator: String? = "--"
     public var passthru = false
 
     public init() {}
@@ -193,6 +197,31 @@ public enum RipgrepArgumentParser {
                 options.stats = true
             case "--no-stats":
                 options.stats = false
+            case "-M", "--max-columns":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--max-columns <NUM>' requires a value")
+                }
+                guard let columns = parseNonNegativeInt(arguments[index]) else {
+                    return .error("error: invalid max columns '\(arguments[index])'")
+                }
+                options.maxColumns = columns == 0 ? nil : columns
+                index += 1
+            case let value where value.hasPrefix("--max-columns="):
+                let raw = String(value.dropFirst("--max-columns=".count))
+                guard let columns = parseNonNegativeInt(raw) else {
+                    return .error("error: invalid max columns '\(raw)'")
+                }
+                options.maxColumns = columns == 0 ? nil : columns
+            case let value where value.hasPrefix("-M") && value.count > 2:
+                let raw = String(value.dropFirst(2))
+                guard let columns = parseNonNegativeInt(raw) else {
+                    return .error("error: invalid max columns '\(raw)'")
+                }
+                options.maxColumns = columns == 0 ? nil : columns
+            case "--max-columns-preview":
+                options.maxColumnsPreview = true
+            case "--no-max-columns-preview":
+                options.maxColumnsPreview = false
             case "-N", "--no-line-number":
                 options.noLineNumber = true
             case "--column":
@@ -472,8 +501,21 @@ public enum RipgrepArgumentParser {
                 options.beforeContext = count
                 options.afterContext = count
                 options.passthru = false
+            case "--context-separator":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--context-separator <SEPARATOR>' requires a value")
+                }
+                options.contextSeparator = arguments[index]
+                index += 1
+            case let value where value.hasPrefix("--context-separator="):
+                options.contextSeparator = String(value.dropFirst("--context-separator=".count))
+            case "--no-context-separator":
+                options.contextSeparator = nil
             case "-c", "--count":
                 options.printMode = .count
+                options.json = false
+            case "--count-matches":
+                options.printMode = .countMatches
                 options.json = false
             case "-l", "--files-with-matches":
                 options.printMode = .filesWithMatches
@@ -544,6 +586,8 @@ public enum RipgrepArgumentParser {
               --json                 Show search results in JSON Lines format
               --stats                Print statistics about the search
           -m, --max-count NUM        Limit matching lines per file
+          -M, --max-columns NUM      Omit matching lines at least NUM bytes long
+              --max-columns-preview  Show a preview for omitted long lines
           -d, --max-depth NUM        Descend at most NUM directory levels
           -n, --line-number          Show line numbers
           -N, --no-line-number       Suppress line numbers
@@ -557,6 +601,7 @@ public enum RipgrepArgumentParser {
           -H, --with-filename        Show file names
           -I, --no-filename          Suppress file names
           -c, --count                Show match counts per file
+              --count-matches        Show individual match counts per file
               -l, --files-with-matches   Show only paths with matches
               --files-without-match  Show only paths without matches
               --files                Print files that would be searched
@@ -576,6 +621,7 @@ public enum RipgrepArgumentParser {
           -A, --after-context NUM    Show NUM lines after each match
           -B, --before-context NUM   Show NUM lines before each match
           -C, --context NUM          Show NUM lines before and after each match
+              --context-separator S  Set the separator for context chunks
               --passthru             Print both matching and non-matching lines
           -L, --follow               Follow symbolic links
               --binary               Search binary files but suppress binary output

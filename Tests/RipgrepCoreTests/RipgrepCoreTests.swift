@@ -79,6 +79,41 @@ struct RipgrepSearcherTests {
         #expect(try run(["-m1", "-c", "needle", root.path("many.txt")]) == ["1"])
     }
 
+    @Test("counts matching lines and individual matches")
+    func countsMatchingLinesAndIndividualMatches() throws {
+        let root = try TemporaryDirectory()
+        try root.write("needle needle\nno\nneedle\n", to: "many.txt")
+        try root.write("hay\n", to: "none.txt")
+
+        #expect(try run(["-c", "needle", root.path("many.txt")]) == ["2"])
+        #expect(try run(["--count-matches", "needle", root.path("many.txt")]) == ["3"])
+        #expect(pathBasenames(try run(["--count-matches", "needle", root.url.path])) == ["many.txt"])
+        #expect(try runAllowingNoMatch(["-c", "needle", root.path("none.txt")]) == [])
+    }
+
+    @Test("omits long matching lines after max columns")
+    func omitsLongMatchingLinesAfterMaxColumns() throws {
+        let root = try TemporaryDirectory()
+        try root.write("short needle\nverylong needle tail\n", to: "columns.txt")
+
+        #expect(try run(["--max-columns", "12", "needle", root.path("columns.txt")]) == [
+            "[Omitted long matching line]",
+            "[Omitted long matching line]",
+        ])
+        #expect(try run(["--max-columns", "12", "--max-columns-preview", "needle", root.path("columns.txt")]) == [
+            "short needle [... omitted end of long line]",
+            "verylong nee [... omitted end of long line]",
+        ])
+        #expect(try run(["-M0", "needle", root.path("columns.txt")]) == [
+            "short needle",
+            "verylong needle tail",
+        ])
+        #expect(try run(["-o", "--max-columns", "12", "needle", root.path("columns.txt")]) == [
+            "needle",
+            "needle",
+        ])
+    }
+
     @Test("prints byte offsets for lines and only matches")
     func printsByteOffsets() throws {
         let root = try TemporaryDirectory()
@@ -155,6 +190,38 @@ struct RipgrepSearcherTests {
             "3:match",
             "4-four",
             "--",
+            "6:other",
+            "7-seven",
+        ])
+        #expect(try run([
+            "-n",
+            "-A1",
+            "--context-separator",
+            "SEP",
+            "-e",
+            "match",
+            "-e",
+            "other",
+            root.path("context.txt"),
+        ]) == [
+            "3:match",
+            "4-four",
+            "SEP",
+            "6:other",
+            "7-seven",
+        ])
+        #expect(try run([
+            "-n",
+            "-A1",
+            "--no-context-separator",
+            "-e",
+            "match",
+            "-e",
+            "other",
+            root.path("context.txt"),
+        ]) == [
+            "3:match",
+            "4-four",
             "6:other",
             "7-seven",
         ])

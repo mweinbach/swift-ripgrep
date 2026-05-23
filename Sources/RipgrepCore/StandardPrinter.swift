@@ -55,10 +55,18 @@ public struct StandardPrinter {
                 return result.matches.map { format($0, showPath: showPath(for: results)) }
             }
         case .count:
-            return results.files.map { result in
+            return results.files.filter(\.hasMatch).map { result in
                 let count = options.onlyMatching
                     ? result.matches.reduce(0) { $0 + $1.matchCount }
                     : result.matches.count + (result.hasBinaryMatch ? 1 : 0)
+                if showPath(for: results) {
+                    return "\(displayPath(for: result.fileURL)):\(count)"
+                }
+                return "\(count)"
+            }
+        case .countMatches:
+            return results.files.filter(\.hasMatch).map { result in
+                let count = result.matches.reduce(0) { $0 + $1.matchCount } + (result.hasBinaryMatch ? 1 : 0)
                 if showPath(for: results) {
                     return "\(displayPath(for: result.fileURL)):\(count)"
                 }
@@ -191,7 +199,9 @@ public struct StandardPrinter {
         var previous: Int?
         for lineNumber in selectedLineNumbers {
             if let previous, lineNumber > previous + 1, !options.passthru {
-                output.append("--")
+                if let contextSeparator = options.contextSeparator {
+                    output.append(contextSeparator)
+                }
             }
             guard let line = result.lines.first(where: { $0.lineNumber == lineNumber }) else {
                 continue
@@ -237,7 +247,18 @@ public struct StandardPrinter {
     }
 
     private func renderedLine(_ line: String) -> String {
-        options.trim ? line.trimmingASCIIWhitespacePrefix() : line
+        let trimmed = options.trim ? line.trimmingASCIIWhitespacePrefix() : line
+        return limitedLine(trimmed)
+    }
+
+    private func limitedLine(_ line: String) -> String {
+        guard let maxColumns = options.maxColumns, line.utf8.count >= maxColumns else {
+            return line
+        }
+        guard options.maxColumnsPreview else {
+            return "[Omitted long matching line]"
+        }
+        return "\(line.prefixBytes(maxColumns)) [... omitted end of long line]"
     }
 
     private func indexRange(startColumn: Int, endColumn: Int, in line: String) -> Range<String.Index>? {
@@ -308,5 +329,22 @@ private extension String {
             return ""
         }
         return String(self[firstNonWhitespace...])
+    }
+
+    func prefixBytes(_ byteCount: Int) -> String {
+        guard byteCount > 0 else {
+            return ""
+        }
+        var output = ""
+        var bytes = 0
+        for character in self {
+            let width = String(character).utf8.count
+            guard bytes + width <= byteCount else {
+                break
+            }
+            output.append(character)
+            bytes += width
+        }
+        return output
     }
 }
