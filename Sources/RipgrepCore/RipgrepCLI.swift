@@ -28,7 +28,8 @@ public enum RipgrepCLI {
         },
         fileManager: FileManager = .default,
         environment: [String: String] = ProcessInfo.processInfo.environment,
-        stdin: String? = nil
+        stdin: String? = nil,
+        standardInputIsTerminal: Bool = true
     ) -> Int32 {
         switch RipgrepArgumentParser.parse(arguments, environment: environment) {
         case .help:
@@ -52,6 +53,14 @@ public enum RipgrepCLI {
             return 2
         case .run(var options):
             do {
+                if shouldSearchImplicitStdin(
+                    options: options,
+                    stdinProvided: stdin != nil,
+                    standardInputIsTerminal: standardInputIsTerminal
+                ) {
+                    options.useStdin = true
+                    options.roots = []
+                }
                 let searchStdin: String?
                 if options.patternFileStdin {
                     let patternInput = stdin ?? String(data: FileHandle.standardInput.readDataToEndOfFile(), encoding: .utf8) ?? ""
@@ -123,6 +132,19 @@ public enum RipgrepCLI {
         case .filesWithoutMatch:
             return results.files.contains { $0.searched && !$0.hasMatch }
         }
+    }
+
+    private static func shouldSearchImplicitStdin(
+        options: RipgrepOptions,
+        stdinProvided: Bool,
+        standardInputIsTerminal: Bool
+    ) -> Bool {
+        options.mode == .search
+            && !options.useStdin
+            && options.rootPathArguments.isEmpty
+            && options.roots.count == 1
+            && options.roots[0].path == FileManager.default.currentDirectoryPath
+            && (stdinProvided || !standardInputIsTerminal)
     }
 
     private static func shouldPrintNothingSearchedWarning(results: SearchResults, options: RipgrepOptions) -> Bool {

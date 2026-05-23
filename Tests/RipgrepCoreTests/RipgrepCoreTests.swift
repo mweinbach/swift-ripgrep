@@ -2149,6 +2149,31 @@ struct RipgrepSearcherTests {
         #expect(output == ["2:needle"])
     }
 
+    @Test("searches piped stdin for implicit default path")
+    func searchesPipedStdinForImplicitDefaultPath() throws {
+        let root = try TemporaryDirectory()
+        try root.createDirectory("-")
+        try root.write("{}", to: "a.json")
+        try root.write("some text", to: "a.txt")
+
+        let originalDirectory = FileManager.default.currentDirectoryPath
+        defer { FileManager.default.changeCurrentDirectoryPath(originalDirectory) }
+        #expect(FileManager.default.changeCurrentDirectoryPath(root.url.path))
+
+        var output: [String] = []
+        var errors: [String] = []
+        let exitCode = RipgrepCLI.run(
+            arguments: ["a"],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) },
+            stdin: "a.json\na.txt\n"
+        )
+
+        #expect(exitCode == 0)
+        #expect(output == ["a.json", "a.txt"])
+        #expect(errors.isEmpty)
+    }
+
     @Test("returns exit code one when no matches are found")
     func returnsExitCodeOneWhenNoMatchesAreFound() throws {
         let root = try TemporaryDirectory()
