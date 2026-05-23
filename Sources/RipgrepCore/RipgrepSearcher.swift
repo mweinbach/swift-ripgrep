@@ -73,6 +73,7 @@ public struct RipgrepSearcher {
                 .withEnvironment(environment)
                 .haystacksWithMessages(for: options)
         var messages = walkResults.messages
+        let warnings = walkResults.warnings
         let diagnostics = walkResults.diagnostics
         let searchedHaystacks = walkResults.haystacks.map { haystack in
             let outcome = searchFile(haystack, matcher: matcher, options: options)
@@ -138,6 +139,7 @@ public struct RipgrepSearcher {
             files: files,
             summary: summary,
             messages: messages,
+            warnings: warnings,
             diagnostics: diagnostics,
             filtered: walkResults.filtered
         )

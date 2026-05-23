@@ -131,6 +131,7 @@ public struct SearchResults: Equatable, Sendable {
     public let files: [SearchFileResult]
     public let summary: SearchSummary
     public let messages: [String]
+    public let warnings: [String]
     public let diagnostics: [String]
     public let filtered: Bool
 
@@ -138,12 +139,14 @@ public struct SearchResults: Equatable, Sendable {
         files: [SearchFileResult],
         summary: SearchSummary,
         messages: [String] = [],
+        warnings: [String] = [],
         diagnostics: [String] = [],
         filtered: Bool = false
     ) {
         self.files = files
         self.summary = summary
         self.messages = messages
+        self.warnings = warnings
         self.diagnostics = diagnostics
         self.filtered = filtered
     }

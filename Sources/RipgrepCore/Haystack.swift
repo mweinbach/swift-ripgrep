@@ -13,12 +13,20 @@ public struct Haystack: Equatable {
 public struct FileWalkResults: Equatable {
     public let haystacks: [Haystack]
     public let messages: [String]
+    public let warnings: [String]
     public let diagnostics: [String]
     public let filtered: Bool
 
-    public init(haystacks: [Haystack], messages: [String], diagnostics: [String] = [], filtered: Bool = false) {
+    public init(
+        haystacks: [Haystack],
+        messages: [String],
+        warnings: [String] = [],
+        diagnostics: [String] = [],
+        filtered: Bool = false
+    ) {
         self.haystacks = haystacks
         self.messages = messages
+        self.warnings = warnings
         self.diagnostics = diagnostics
         self.filtered = filtered
     }
@@ -56,6 +64,7 @@ public struct FileWalker {
     public func haystacksWithMessages(for options: RipgrepOptions) throws -> FileWalkResults {
         var haystacks: [Haystack] = []
         var messages: [String] = []
+        var warnings: [String] = []
         var diagnostics: [String] = []
         var filtered = false
         var baseIgnoreStack = IgnoreStack()
@@ -64,8 +73,9 @@ public struct FileWalker {
                 appendLoadedMatcher(
                     from: ignoreFile,
                     to: &baseIgnoreStack,
-                    messages: &messages,
+                    warnings: &warnings,
                     rootBase: nil,
+                    reportLoadErrors: true,
                     options: options
                 )
             }
@@ -98,13 +108,13 @@ public struct FileWalker {
             }
             let rootBase = rootBase(for: root.standardizedFileURL)
             var rootIgnoreStack = baseIgnoreStack
-            appendGlobalIgnoreFile(to: &rootIgnoreStack, rootBase: rootBase, messages: &messages, options: options)
-            appendParentIgnoreFiles(to: &rootIgnoreStack, rootBase: rootBase, messages: &messages, options: options)
+            appendGlobalIgnoreFile(to: &rootIgnoreStack, rootBase: rootBase, warnings: &warnings, options: options)
+            appendParentIgnoreFiles(to: &rootIgnoreStack, rootBase: rootBase, warnings: &warnings, options: options)
             appendLogicalParentIgnoreFiles(
                 for: root.standardizedFileURL,
                 rootBase: rootBase,
                 to: &rootIgnoreStack,
-                messages: &messages,
+                warnings: &warnings,
                 options: options
             )
             let rootVolume = options.oneFileSystem ? volumeIdentifier(for: root.standardizedFileURL) : nil
@@ -116,6 +126,7 @@ public struct FileWalker {
                 rootBase: rootBase,
                 rootVolume: rootVolume,
                 messages: &messages,
+                warnings: &warnings,
                 diagnostics: &diagnostics,
                 filtered: &filtered,
                 ignoreStack: rootIgnoreStack,
@@ -128,6 +139,7 @@ public struct FileWalker {
         return FileWalkResults(
             haystacks: sorted(haystacks, options: options),
             messages: messages,
+            warnings: warnings,
             diagnostics: diagnostics,
             filtered: filtered
         )
@@ -156,6 +168,7 @@ public struct FileWalker {
         rootBase: URL,
         rootVolume: String?,
         messages: inout [String],
+        warnings: inout [String],
         diagnostics: inout [String],
         filtered: inout Bool,
         ignoreStack: IgnoreStack,
@@ -247,7 +260,7 @@ public struct FileWalker {
             appendIgnoreFiles(
                 in: resolvedURL,
                 to: &directoryIgnoreStack,
-                messages: &messages,
+                warnings: &warnings,
                 rootBase: rootBase,
                 options: options
             )
@@ -275,6 +288,7 @@ public struct FileWalker {
                 rootBase: rootBase,
                 rootVolume: rootVolume,
                 messages: &messages,
+                warnings: &warnings,
                 diagnostics: &diagnostics,
                 filtered: &filtered,
                 ignoreStack: directoryIgnoreStack,
@@ -375,7 +389,7 @@ public struct FileWalker {
         for root: URL,
         rootBase: URL,
         to ignoreStack: inout IgnoreStack,
-        messages: inout [String],
+        warnings: inout [String],
         options: RipgrepOptions
     ) {
         guard options.followSymlinks,
@@ -386,7 +400,7 @@ public struct FileWalker {
         appendIgnoreFiles(
             in: rootBase,
             to: &ignoreStack,
-            messages: &messages,
+            warnings: &warnings,
             rootBase: rootBase,
             options: options
         )
@@ -395,7 +409,7 @@ public struct FileWalker {
     private func appendParentIgnoreFiles(
         to ignoreStack: inout IgnoreStack,
         rootBase: URL,
-        messages: inout [String],
+        warnings: inout [String],
         options: RipgrepOptions
     ) {
         guard !options.noIgnore, !options.noIgnoreParent else {
@@ -411,7 +425,7 @@ public struct FileWalker {
             appendParentDotIgnoreFiles(
                 in: parentURL,
                 to: &ignoreStack,
-                messages: &messages,
+                warnings: &warnings,
                 rootBase: rootBase,
                 options: options
             )
@@ -419,7 +433,7 @@ public struct FileWalker {
                 in: parentURL,
                 gitBoundary: gitBoundary,
                 to: &ignoreStack,
-                messages: &messages,
+                warnings: &warnings,
                 rootBase: rootBase,
                 options: options
             )
@@ -429,7 +443,7 @@ public struct FileWalker {
     private func appendParentDotIgnoreFiles(
         in parentURL: URL,
         to ignoreStack: inout IgnoreStack,
-        messages: inout [String],
+        warnings: inout [String],
         rootBase: URL,
         options: RipgrepOptions
     ) {
@@ -439,14 +453,14 @@ public struct FileWalker {
         appendLoadedMatcher(
             from: parentURL.appendingPathComponent(".ignore"),
             to: &ignoreStack,
-            messages: &messages,
+            warnings: &warnings,
             rootBase: rootBase,
             options: options
         )
         appendLoadedMatcher(
             from: parentURL.appendingPathComponent(".rgignore"),
             to: &ignoreStack,
-            messages: &messages,
+            warnings: &warnings,
             rootBase: rootBase,
             options: options
         )
@@ -456,7 +470,7 @@ public struct FileWalker {
         in parentURL: URL,
         gitBoundary: URL?,
         to ignoreStack: inout IgnoreStack,
-        messages: inout [String],
+        warnings: inout [String],
         rootBase: URL,
         options: RipgrepOptions
     ) {
@@ -467,7 +481,7 @@ public struct FileWalker {
         appendLoadedMatcher(
             from: parentURL.appendingPathComponent(".gitignore"),
             to: &ignoreStack,
-            messages: &messages,
+            warnings: &warnings,
             rootBase: rootBase,
             options: options
         )
@@ -476,7 +490,7 @@ public struct FileWalker {
             appendLoadedMatcher(
                 from: excludeURL,
                 to: &ignoreStack,
-                messages: &messages,
+                warnings: &warnings,
                 rootBase: rootBase,
                 scopeDirectory: parentURL,
                 options: options
@@ -581,7 +595,7 @@ public struct FileWalker {
     private func appendGlobalIgnoreFile(
         to ignoreStack: inout IgnoreStack,
         rootBase: URL,
-        messages: inout [String],
+        warnings: inout [String],
         options: RipgrepOptions
     ) {
         guard !options.noIgnore,
@@ -594,7 +608,7 @@ public struct FileWalker {
         appendLoadedMatcher(
             from: globalIgnoreFile,
             to: &ignoreStack,
-            messages: &messages,
+            warnings: &warnings,
             rootBase: nil,
             options: options
         )
@@ -658,20 +672,22 @@ public struct FileWalker {
     private func appendLoadedMatcher(
         from fileURL: URL,
         to ignoreStack: inout IgnoreStack,
-        messages: inout [String],
+        warnings: inout [String],
         rootBase: URL?,
         scopeDirectory: URL? = nil,
+        reportLoadErrors: Bool = false,
         options: RipgrepOptions
     ) {
         let loaded = loadMatcher(
             from: fileURL,
             rootBase: rootBase,
             scopeDirectory: scopeDirectory,
+            reportLoadErrors: reportLoadErrors,
             caseInsensitive: options.ignoreFileCaseInsensitive
         )
         ignoreStack.append(loaded.matcher)
         if !options.noIgnoreMessages {
-            messages.append(contentsOf: loaded.messages)
+            warnings.append(contentsOf: loaded.messages)
         }
     }
 
@@ -679,10 +695,15 @@ public struct FileWalker {
         from fileURL: URL,
         rootBase: URL?,
         scopeDirectory: URL? = nil,
+        reportLoadErrors: Bool = false,
         caseInsensitive: Bool = false
     ) -> LoadedIgnoreMatcher {
-        guard let contents = try? String(contentsOf: fileURL, encoding: .utf8) else {
-            return LoadedIgnoreMatcher(matcher: GlobMatcher(patterns: []), messages: [])
+        let contents: String
+        do {
+            contents = try String(contentsOf: fileURL, encoding: .utf8)
+        } catch {
+            let messages = reportLoadErrors ? [ignoreFileLoadMessage(for: fileURL)] : []
+            return LoadedIgnoreMatcher(matcher: GlobMatcher(patterns: []), messages: messages)
         }
         let parsed = parseIgnorePatterns(contents, fileURL: fileURL)
         let scope = ignoreScope(for: scopeDirectory ?? fileURL.deletingLastPathComponent(), rootBase: rootBase)
@@ -692,6 +713,17 @@ public struct FileWalker {
             stripBasePath: scope.stripBasePath,
             pathPrefix: scope.pathPrefix
         ), messages: parsed.messages)
+    }
+
+    private func ignoreFileLoadMessage(for fileURL: URL) -> String {
+        var isDirectory: ObjCBool = false
+        if fileManager.fileExists(atPath: fileURL.path, isDirectory: &isDirectory), isDirectory.boolValue {
+            return "\(fileURL.path): line 1: Is a directory (os error 21)"
+        }
+        if !fileManager.fileExists(atPath: fileURL.path) {
+            return "\(fileURL.path): No such file or directory (os error 2)"
+        }
+        return "\(fileURL.path): error reading ignore file"
     }
 
     private func ignoreScope(for ignoreDirectory: URL, rootBase: URL?) -> (stripBasePath: String?, pathPrefix: String) {
@@ -806,7 +838,7 @@ public struct FileWalker {
     private func appendIgnoreFiles(
         in directoryURL: URL,
         to ignoreStack: inout IgnoreStack,
-        messages: inout [String],
+        warnings: inout [String],
         rootBase: URL,
         options: RipgrepOptions
     ) {
@@ -814,7 +846,7 @@ public struct FileWalker {
             appendLoadedMatcher(
                 from: directoryURL.appendingPathComponent(".gitignore"),
                 to: &ignoreStack,
-                messages: &messages,
+                warnings: &warnings,
                 rootBase: rootBase,
                 options: options
             )
@@ -826,7 +858,7 @@ public struct FileWalker {
             appendLoadedMatcher(
                 from: excludeURL,
                 to: &ignoreStack,
-                messages: &messages,
+                warnings: &warnings,
                 rootBase: rootBase,
                 scopeDirectory: directoryURL,
                 options: options
@@ -836,14 +868,14 @@ public struct FileWalker {
             appendLoadedMatcher(
                 from: directoryURL.appendingPathComponent(".ignore"),
                 to: &ignoreStack,
-                messages: &messages,
+                warnings: &warnings,
                 rootBase: rootBase,
                 options: options
             )
             appendLoadedMatcher(
                 from: directoryURL.appendingPathComponent(".rgignore"),
                 to: &ignoreStack,
-                messages: &messages,
+                warnings: &warnings,
                 rootBase: rootBase,
                 options: options
             )

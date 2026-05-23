@@ -2602,14 +2602,37 @@ struct RipgrepSearcherTests {
             root.url.path,
         ])) == ["keep.swift"])
 
+        try root.createDirectory("ignore-dir")
+        var output: [String] = []
+        var errors: [String] = []
+        var exitCode = RipgrepCLI.run(
+            arguments: ["--ignore-file", root.path("ignore-dir"), "needle", root.path("keep.swift")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(output == ["needle"])
+        #expect(errors == ["rg: \(root.path("ignore-dir")): line 1: Is a directory (os error 21)"])
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--ignore-file", root.path("missing-ignore"), "needle", root.path("keep.swift")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(output == ["needle"])
+        #expect(errors == ["rg: \(root.path("missing-ignore")): No such file or directory (os error 2)"])
+
         let globstarRoot = try TemporaryDirectory()
         try globstarRoot.createDirectory(".git")
         try globstarRoot.write("**/**/*", to: ".gitignore")
         try globstarRoot.createDirectory("a")
         try globstarRoot.write("needle\n", to: "a/foo")
-        var output: [String] = []
-        var errors: [String] = []
-        let exitCode = RipgrepCLI.run(
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
             arguments: ["needle", globstarRoot.url.path],
             stdout: { output.append($0) },
             stderr: { errors.append($0) }

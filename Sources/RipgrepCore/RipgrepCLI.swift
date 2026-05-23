@@ -119,6 +119,9 @@ public enum RipgrepCLI {
                     for message in results.messages {
                         stderr("rg: \(message)")
                     }
+                    for warning in results.warnings {
+                        stderr("rg: \(warning)")
+                    }
                     if shouldPrintNothingSearchedWarning(results: results, options: options) {
                         stderr("rg: No files were searched, which means ripgrep probably applied a filter you didn't expect.")
                         stderr("Running with --debug will show why files are being skipped.")
