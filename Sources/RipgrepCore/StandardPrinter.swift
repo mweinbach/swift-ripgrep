@@ -462,7 +462,7 @@ public struct StandardPrinter {
 
     private func outputTerminator(_ terminator: String, line: String? = nil) -> String {
         if options.nullData {
-            return terminator
+            return "\0"
         }
         if options.crlf, colors.isEnabled, terminator == "\n", line?.hasSuffix("\r") != true {
             return "\r"

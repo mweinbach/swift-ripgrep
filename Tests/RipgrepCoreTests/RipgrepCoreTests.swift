@@ -624,6 +624,10 @@ struct RipgrepSearcherTests {
         #expect(try run(["--null-data", "-o", "needle", root.path("nul.txt")]) == [
             "needle\0",
         ])
+        try root.write("needle\nunterminated\n", to: "lf.txt")
+        #expect(try run(["--null-data", "needle", root.path("lf.txt")]) == [
+            "needle\nunterminated\n\0",
+        ])
 
         let output = try run(["--json", "--null-data", "needle", root.path("nul.txt")])
         let messages = try output.map(jsonObject)
