@@ -135,7 +135,7 @@ public struct StandardPrinter {
             match.spans.map { span in
                 let text = options.onlyMatching
                     ? (span.replacement ?? span.text)
-                    : renderedLine(match.line)
+                    : renderedLine(firstRenderedLine(match.line))
                 let path = renderPath(for: match.fileURL, line: match.lineNumber, column: span.startColumn)
                 return "\(path)\(matchPathFieldSeparator())\(match.lineNumber)\(options.fieldMatchSeparator)\(span.startColumn)\(options.fieldMatchSeparator)\(text)\(outputTerminator(match.lineTerminator))"
             }
@@ -457,6 +457,10 @@ public struct StandardPrinter {
             lines.append(current)
         }
         return lines
+    }
+
+    private func firstRenderedLine(_ text: String) -> String {
+        splitRenderedLines(text).first ?? ""
     }
 
     private func lineOffset(in text: String, beforeByteOffset byteOffset: Int) -> Int {

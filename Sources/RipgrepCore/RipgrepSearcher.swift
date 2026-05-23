@@ -463,11 +463,13 @@ public struct RipgrepSearcher {
             let blockLines = searchLines[startLineIndex...endLineIndex]
             let blockText = blockLines.map(\.lineWithTerminator).joined()
             let blockOffset = searchLines[startLineIndex].absoluteOffset
+            let startByte = span.startByte - blockOffset
+            let endByte = span.endByte - blockOffset
             let adjustedSpan = MatchSpan(
-                startColumn: span.startColumn,
-                endColumn: span.endColumn,
-                startByte: span.startByte - blockOffset,
-                endByte: span.endByte - blockOffset,
+                startColumn: column(in: blockText, byteOffset: startByte),
+                endColumn: column(in: blockText, byteOffset: endByte),
+                startByte: startByte,
+                endByte: endByte,
                 text: span.text,
                 replacement: span.replacement
             )
@@ -485,6 +487,23 @@ public struct RipgrepSearcher {
         }
 
         return SearchFileResult(fileURL: fileURL, matches: matches, lines: searchLines)
+    }
+
+    private func column(in text: String, byteOffset: Int) -> Int {
+        var bytes = 0
+        var column = 1
+        for character in text {
+            guard bytes < byteOffset else {
+                break
+            }
+            bytes += String(character).utf8.count
+            if character == "\n" || character == "\0" {
+                column = 1
+            } else {
+                column += 1
+            }
+        }
+        return column
     }
 
     private func lineIndex(containingByteOffset byteOffset: Int, lineStartOffsets: [Int]) -> Int? {

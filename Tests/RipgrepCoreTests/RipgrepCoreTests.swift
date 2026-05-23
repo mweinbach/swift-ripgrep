@@ -450,6 +450,7 @@ struct RipgrepSearcherTests {
         try root.write("xxx\nabc\ndefxxxabc\ndefxxx\nxxx", to: "overlap1.txt")
         try root.write("xxx\nabc\ndefabc\ndefxxx\nxxx", to: "overlap2.txt")
         try root.write("a\nbaz\nabc\n", to: "anchors.txt")
+        try root.write("foobar\nfoobar\nfoo quux", to: "vimgrep.txt")
 
         #expect(try run(["-n", "-U", #"foo\nbar"#, root.path("multi.txt")]) == [
             "1:foo",
@@ -488,6 +489,10 @@ struct RipgrepSearcherTests {
         #expect(try run(["-U", "^baz", root.path("anchors.txt")]) == ["baz"])
         #expect(try runAllowingNoMatch(["-U", #"(?-m)^baz"#, root.path("anchors.txt")]) == [])
         #expect(try runAllowingNoMatch(["-U", #"\Abaz"#, root.path("anchors.txt")]) == [])
+        #expect(try run(["-U", "--vimgrep", #"foobar\nfoobar\nfoo|quux"#, root.path("vimgrep.txt")]) == [
+            "\(root.path("vimgrep.txt")):1:1:foobar",
+            "\(root.path("vimgrep.txt")):3:5:foo quux",
+        ])
 
         let output = try run(["--json", "-U", #"foo\nbar"#, root.path("multi.txt")])
         let messages = try output.map(jsonObject)
