@@ -2103,13 +2103,27 @@ struct RipgrepSearcherTests {
             at: root.url.appendingPathComponent("link"),
             withDestinationURL: root.url.appendingPathComponent("real")
         )
+        try FileManager.default.createSymbolicLink(
+            at: root.url.appendingPathComponent("file-link"),
+            withDestinationURL: root.url.appendingPathComponent("real/file.txt")
+        )
 
         #expect(pathBasenames(try run(["--sort", "path", "needle", root.url.path])) == ["file.txt", "deep.txt"])
+        #expect(try run(["needle", root.path("file-link")]) == ["needle"])
+        #expect(try run(["needle", root.path("real/file.txt"), root.path("file-link")]) == [
+            "\(root.path("real/file.txt")):needle",
+            "\(root.path("file-link")):needle",
+        ])
         #expect(try run(["--follow", "--sort", "path", "needle", root.url.path]) == [
+            "\(root.path("file-link")):needle",
             "\(root.path("link/file.txt")):needle",
             "\(root.path("link/nested/deep.txt")):needle",
             "\(root.path("real/file.txt")):needle",
             "\(root.path("real/nested/deep.txt")):needle",
+        ])
+        #expect(try run(["needle", root.path("link")]) == [
+            "\(root.path("link/file.txt")):needle",
+            "\(root.path("link/nested/deep.txt")):needle",
         ])
         #expect(pathBasenames(try run(["--follow", "--no-follow", "--sort", "path", "needle", root.url.path])) == ["file.txt", "deep.txt"])
         #expect(pathBasenames(try run(["--one-file-system", "--sort", "path", "needle", root.url.path])) == ["file.txt", "deep.txt"])

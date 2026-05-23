@@ -754,7 +754,7 @@ public struct StandardPrinter {
         if values.isDirectory == true {
             return true
         }
-        guard options.followSymlinks, values.isSymbolicLink == true else {
+        guard values.isSymbolicLink == true else {
             return false
         }
         return (try? url.resolvingSymlinksInPath().resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true

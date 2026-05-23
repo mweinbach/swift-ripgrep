@@ -219,7 +219,7 @@ public struct FileWalker {
             return []
         }
 
-        let resolvedURL = values.isSymbolicLink == true && options.followSymlinks
+        let resolvedURL = values.isSymbolicLink == true && (options.followSymlinks || isExplicit)
             ? url.resolvingSymlinksInPath()
             : metadataURL
         let resolvedValues = try resolvedURL.resourceValues(forKeys: [
@@ -392,8 +392,7 @@ public struct FileWalker {
         warnings: inout [String],
         options: RipgrepOptions
     ) {
-        guard options.followSymlinks,
-              (try? root.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true,
+        guard (try? root.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true,
               (try? root.resolvingSymlinksInPath().resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else {
             return
         }
