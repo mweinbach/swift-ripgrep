@@ -2123,7 +2123,9 @@ struct RipgrepSearcherTests {
             withDestinationURL: root.url.appendingPathComponent("logreal")
         )
         #expect(try runAllowingNoMatch(["--no-messages", "--follow", "needle", root.path("loglink")]) == [])
-        #expect(try run(["--no-ignore", "--follow", "needle", root.path("loglink")]) == ["needle"])
+        #expect(try run(["--no-ignore", "--follow", "needle", root.path("loglink")]) == [
+            "\(root.path("loglink/skip.log")):needle",
+        ])
     }
 
     @Test("honors ignore files and no ignore")
