@@ -13,7 +13,10 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "RipgrepCore"
+            name: "RipgrepCore",
+            resources: [
+                .process("Resources"),
+            ]
         ),
         .executableTarget(
             name: "ripgrep",

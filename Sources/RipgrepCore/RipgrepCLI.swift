@@ -41,7 +41,7 @@ public enum RipgrepCLI {
             stderr("PCRE2 is not available in this Swift build")
             return 2
         case .generate(let mode):
-            emitStdout(generate(mode), stdout: stdout)
+            emitStdoutVerbatim(generate(mode), stdout: stdout)
             return 0
         case .error(let message):
             stderr(message.hasPrefix("rg: ") ? message : "rg: \(message)")
@@ -158,6 +158,14 @@ public enum RipgrepCLI {
             ? output.rawByteData()
             : Data(output.utf8)
         FileHandle.standardOutput.write(data)
+    }
+
+    private static func emitStdoutVerbatim(_ output: String, stdout: ((String) -> Void)?) {
+        if let stdout {
+            stdout(output)
+            return
+        }
+        FileHandle.standardOutput.write(Data(output.utf8))
     }
 
     private static func outputEncodingMode(for options: RipgrepOptions) -> EncodingMode? {
@@ -280,6 +288,9 @@ public enum RipgrepCLI {
     }
 
     private static func generate(_ mode: GenerateMode) -> String {
+        if let generated = generatedAsset(for: mode) {
+            return generated
+        }
         switch mode {
         case .man:
             return """
@@ -321,6 +332,26 @@ public enum RipgrepCLI {
             }
             """
         }
+    }
+
+    private static func generatedAsset(for mode: GenerateMode) -> String? {
+        let resourceName: String
+        switch mode {
+        case .man:
+            resourceName = "rg.1"
+        case .completeBash:
+            resourceName = "rg.bash"
+        case .completeZsh:
+            resourceName = "_rg"
+        case .completeFish:
+            resourceName = "rg.fish"
+        case .completePowerShell:
+            resourceName = "_rg.ps1"
+        }
+        guard let url = Bundle.module.url(forResource: resourceName, withExtension: nil) else {
+            return nil
+        }
+        return try? String(contentsOf: url, encoding: .utf8)
     }
 
     private static let completionWords = [

@@ -3238,8 +3238,9 @@ struct RipgrepSearcherTests {
         )
         #expect(exitCode == 0)
         #expect(errors.isEmpty)
-        #expect(output.first?.contains(".TH RG 1") == true)
-        #expect(output.first?.contains("--ignore-case") == true)
+        let manOutput = output.joined(separator: "\n")
+        #expect(manOutput.contains(".TH RG 1"))
+        #expect(manOutput.contains("\\fB\\-i\\fP, \\fB\\-\\-ignore\\-case\\fP"))
 
         output = []
         errors = []
@@ -3250,12 +3251,13 @@ struct RipgrepSearcherTests {
         )
         #expect(exitCode == 0)
         #expect(errors.isEmpty)
-        #expect(output.first?.contains("complete -F _rg rg") == true)
-        #expect(output.first?.contains("--generate") == true)
-        #expect(output.first?.contains("--line-regexp") == true)
-        #expect(output.first?.contains("--context-separator") == true)
-        #expect(output.first?.contains("--no-json") == true)
-        #expect(output.first?.contains("--maxdepth") == true)
+        let bashOutput = output.joined(separator: "\n")
+        #expect(bashOutput.contains("complete -F _rg -o bashdefault -o default rg"))
+        #expect(bashOutput.contains("--generate"))
+        #expect(bashOutput.contains("--line-regexp"))
+        #expect(bashOutput.contains("--context-separator"))
+        #expect(bashOutput.contains("--no-json"))
+        #expect(bashOutput.contains("--max-depth"))
 
         output = []
         errors = []
@@ -3266,7 +3268,7 @@ struct RipgrepSearcherTests {
         )
         #expect(exitCode == 0)
         #expect(errors.isEmpty)
-        #expect(output.first?.contains(".TH RG 1") == true)
+        #expect(output.joined(separator: "\n").contains(".TH RG 1"))
 
         output = []
         errors = []
