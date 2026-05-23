@@ -271,19 +271,22 @@ public struct RipgrepSearcher {
 
             let input = try FileHandle(forReadingFrom: fileURL)
             let output = Pipe()
+            let stderr = Pipe()
             process.standardInput = input
             process.standardOutput = output
-            process.standardError = FileHandle.nullDevice
+            process.standardError = stderr
 
             try process.run()
             input.closeFile()
             let data = output.fileHandleForReading.readDataToEndOfFile()
+            let errorData = stderr.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
 
             guard process.terminationStatus == 0 else {
+                let displayPath = OutputPathFormatter(options: options).displayPath(for: fileURL)
                 return FileSearchOutcome(
                     result: SearchFileResult(fileURL: fileURL, matches: [], searched: false),
-                    message: "\(fileURL.path): preprocessor command failed: '\"\(command)\" \"\(fileURL.path)\"': <stderr is empty>"
+                    message: "\(displayPath): preprocessor command failed: '\"\(command)\" \"\(displayPath)\"': \(preprocessorErrorText(errorData))"
                 )
             }
 
@@ -302,6 +305,20 @@ public struct RipgrepSearcher {
                 message: "\(fileURL.path): preprocessor command could not start: '\(command)': \(error)"
             )
         }
+    }
+
+    private func preprocessorErrorText(_ data: Data) -> String {
+        let text = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !text.isEmpty else {
+            return "<stderr is empty>"
+        }
+        return """
+
+        -------------------------------------------------------------------------------
+        \(text)
+        -------------------------------------------------------------------------------
+        """
     }
 
     private func searchDecompressedFile(

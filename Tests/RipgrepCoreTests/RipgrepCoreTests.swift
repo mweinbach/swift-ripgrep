@@ -1180,6 +1180,7 @@ struct RipgrepSearcherTests {
 
         try root.write("""
         #!/bin/sh
+        echo boom >&2
         exit 7
         """, to: "fail.sh")
         try root.makeExecutable("fail.sh")
@@ -1192,7 +1193,17 @@ struct RipgrepSearcherTests {
         )
         #expect(exitCode == 2)
         #expect(output.isEmpty)
-        #expect(errors.first?.contains("preprocessor command failed") == true)
+        let expectedPreprocessorError = "rg: \(root.path("doc.md")): preprocessor command failed: " +
+            "'\"\(root.path("fail.sh"))\" \"\(root.path("doc.md"))\"': " +
+            """
+
+            -------------------------------------------------------------------------------
+            boom
+            -------------------------------------------------------------------------------
+            """
+        #expect(errors == [
+            expectedPreprocessorError
+        ])
     }
 
     @Test("searches gzip compressed files")
