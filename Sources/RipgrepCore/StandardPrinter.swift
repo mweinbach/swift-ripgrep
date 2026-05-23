@@ -118,7 +118,7 @@ public struct StandardPrinter {
     }
 
     private func countLine(_ count: Int, fileURL: URL, showPath: Bool) -> String {
-        let suffix = outputTerminator("")
+        let suffix = options.crlf && !options.nullData ? "\r" : outputTerminator("")
         if showPath {
             return "\(renderPath(for: fileURL))\(pathFieldSeparator())\(count)\(suffix)"
         }

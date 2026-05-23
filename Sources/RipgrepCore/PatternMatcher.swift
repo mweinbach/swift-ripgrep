@@ -780,7 +780,7 @@ public struct PatternMatcher {
             case "^":
                 return "(?:^|(?<=\\r))"
             case "$":
-                return "(?=\\r?$|\\r)"
+                return "(?=\\r|(?<!\\r)$)"
             default:
                 return String(anchor)
             }

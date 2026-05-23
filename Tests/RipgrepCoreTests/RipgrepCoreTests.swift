@@ -1066,6 +1066,12 @@ struct RipgrepSearcherTests {
         #expect(try run(["--crlf", "-o", "quux$", root.path("crlf.txt")]) == [
             "quux\r",
         ])
+        try root.write("foo\r\nbar\r\n\r\n", to: "crlf-empty.txt")
+        let onlyMatchingEndAnchors = try runExecutableData(["--crlf", "-o", "$", root.path("crlf-empty.txt")]) {}
+        #expect(onlyMatchingEndAnchors == Data([13, 10, 13, 10, 13, 10]))
+        #expect(try run(["--crlf", "--count-matches", "$", root.path("crlf-empty.txt")]) == [
+            "3\r",
+        ])
         #expect(try runAllowingNoMatch(["--crlf", "--null-data", "-n", "foo$", root.path("crlf.txt")]) == [])
         #expect(try run(["--null-data", "--crlf", "-n", "foo$", root.path("crlf.txt")]) == [
             "1:foo\r",
