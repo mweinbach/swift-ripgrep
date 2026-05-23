@@ -1220,6 +1220,12 @@ struct RipgrepSearcherTests {
         #expect(try run(["--files", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == ["visible.txt"])
         #expect(try run(["--files", "--hidden", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == [".hidden.txt", "visible.txt"])
 
+        let whitelisted = try TemporaryDirectory()
+        try whitelisted.createDirectory("subdir")
+        try whitelisted.write("text\n", to: "subdir/.foo.txt")
+        try whitelisted.write("!.foo.txt\n", to: ".ignore")
+        #expect(try run(["--files", whitelisted.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == [".foo.txt"])
+
         var output: [String] = []
         var exitCode = RipgrepCLI.run(
             arguments: ["--quiet", "--files", "--glob", "*.txt", root.url.path],

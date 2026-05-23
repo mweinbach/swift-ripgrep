@@ -141,7 +141,7 @@ public struct FileWalker {
         let relativePath = relativePath(for: url, rootBase: rootBase)
 
         if !isExplicit {
-            if !options.hidden && isHidden(url) {
+            if !options.hidden && isHidden(url) && !isIncludedByIgnore(relativePath: relativePath, isDirectory: isDirectory, ignoreStack: ignoreStack) {
                 debug("ignoring \(url.path): hidden", options: options, diagnostics: &diagnostics)
                 filtered = true
                 return []
@@ -314,6 +314,10 @@ public struct FileWalker {
 
     private func isHidden(_ url: URL) -> Bool {
         url.lastPathComponent.hasPrefix(".")
+    }
+
+    private func isIncludedByIgnore(relativePath: String, isDirectory: Bool, ignoreStack: IgnoreStack) -> Bool {
+        ignoreStack.decision(relativePath: relativePath, isDirectory: isDirectory) == .include
     }
 
     private func rootBase(for root: URL) -> URL {

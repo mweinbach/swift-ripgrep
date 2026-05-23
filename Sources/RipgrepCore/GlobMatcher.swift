@@ -190,4 +190,14 @@ public struct IgnoreStack {
         }
         return allowed
     }
+
+    public func decision(relativePath: String, isDirectory: Bool) -> GlobMatcher.Decision? {
+        var decision: GlobMatcher.Decision?
+        for matcher in matchers {
+            if let matcherDecision = matcher.decision(relativePath: relativePath, isDirectory: isDirectory) {
+                decision = matcherDecision
+            }
+        }
+        return decision
+    }
 }
