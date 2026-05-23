@@ -84,6 +84,7 @@ public struct SearchFileResult: Equatable, Sendable {
     public let lines: [SearchLine]
     public let binaryByteOffset: Int?
     public let hasBinaryMatch: Bool
+    public let stoppedBinaryAfterMatch: Bool
     public let bytesSearched: Int
     public let searched: Bool
 
@@ -93,6 +94,7 @@ public struct SearchFileResult: Equatable, Sendable {
         lines: [SearchLine] = [],
         binaryByteOffset: Int? = nil,
         hasBinaryMatch: Bool = false,
+        stoppedBinaryAfterMatch: Bool = false,
         bytesSearched: Int = 0,
         searched: Bool = true
     ) {
@@ -101,6 +103,7 @@ public struct SearchFileResult: Equatable, Sendable {
         self.lines = lines
         self.binaryByteOffset = binaryByteOffset
         self.hasBinaryMatch = hasBinaryMatch
+        self.stoppedBinaryAfterMatch = stoppedBinaryAfterMatch
         self.bytesSearched = bytesSearched
         self.searched = searched
     }

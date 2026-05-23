@@ -1726,7 +1726,11 @@ struct RipgrepSearcherTests {
         try root.write(Data("needle\0tail\n".utf8), to: "bin.dat")
         try root.write(Data("needle\n\0tail\n".utf8), to: "before-nul.dat")
 
-        #expect(try runAllowingNoMatch(["needle", root.url.path]) == [])
+        #expect(try run(["-n", "needle", root.url.path]) == [
+            "\(root.path("before-nul.dat")):1:needle",
+            #"\#(root.path("before-nul.dat")): WARNING: stopped searching binary file after match (found "\0" byte around offset 7)"#,
+        ])
+        #expect(try runAllowingNoMatch(["tail", root.url.path]) == [])
         #expect(try run(["needle", root.path("bin.dat")]) == [
             #"binary file matches (found "\0" byte around offset 6)"#,
         ])

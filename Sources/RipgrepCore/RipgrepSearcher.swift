@@ -180,19 +180,19 @@ public struct RipgrepSearcher {
 
         let binaryByteOffset = shouldCheckBinary(data, options: options) ? data.firstIndex(of: 0) : nil
         if let binaryByteOffset, options.binaryMode != .asText {
-            if options.binaryMode == .automatic && !haystack.isExplicit {
-                return FileSearchOutcome(result: SearchFileResult(fileURL: fileURL, matches: [], searched: false))
-            }
-
             let contents = decode(data, options: options)
             let result = searchContents(contents, fileURL: fileURL, matcher: matcher, options: options)
             let printableMatches = matchesBeforeBinary(result.matches, binaryByteOffset: binaryByteOffset)
+            if options.binaryMode == .automatic && !haystack.isExplicit && printableMatches.isEmpty {
+                return FileSearchOutcome(result: SearchFileResult(fileURL: fileURL, matches: [], searched: false))
+            }
             return FileSearchOutcome(result: SearchFileResult(
                 fileURL: fileURL,
                 matches: printableMatches,
                 lines: result.lines,
                 binaryByteOffset: binaryByteOffset,
                 hasBinaryMatch: result.hasMatch,
+                stoppedBinaryAfterMatch: options.binaryMode == .automatic && !haystack.isExplicit,
                 bytesSearched: data.count
             ))
         }

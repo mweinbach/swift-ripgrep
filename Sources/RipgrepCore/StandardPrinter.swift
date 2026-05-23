@@ -162,7 +162,9 @@ public struct StandardPrinter {
         guard result.hasBinaryMatch, let offset = result.binaryByteOffset else {
             return nil
         }
-        let message = #"binary file matches (found "\0" byte around offset \#(offset))"#
+        let message = result.stoppedBinaryAfterMatch
+            ? #"WARNING: stopped searching binary file after match (found "\0" byte around offset \#(offset))"#
+            : #"binary file matches (found "\0" byte around offset \#(offset))"#
         if showPath {
             return "\(renderPath(for: result.fileURL))\(matchPathFieldSeparator()) \(message)"
         }
