@@ -82,8 +82,29 @@ struct RipgrepSearcherTests {
         #expect(output.isEmpty)
         #expect(errors.first?.contains("look-around") == true)
 
-        #expect(try run(["-o", "--engine=auto", #"(?<=a)b"#, root.path("engine.txt")]) == ["b"])
-        #expect(try run(["-o", "-P", #"(?<=a)b"#, root.path("engine.txt")]) == ["b"])
+        #expect(try run(["-o", "--engine=auto", "a.", root.path("engine.txt")]) == ["ab", "ac"])
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["-o", "--engine=auto", #"(?<=a)b"#, root.path("engine.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors.joined(separator: "\n").contains("PCRE2 is not available"))
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["-o", "-P", #"(?<=a)b"#, root.path("engine.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["rg: PCRE2 is not available in this build of ripgrep"])
 
         output = []
         errors = []
@@ -96,7 +117,16 @@ struct RipgrepSearcherTests {
         #expect(output.isEmpty)
         #expect(errors.first?.contains("look-around") == true)
 
-        #expect(try run(["-o", "--engine=default", "--auto-hybrid-regex", #"(?<=a)b"#, root.path("engine.txt")]) == ["b"])
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["-o", "--engine=default", "--auto-hybrid-regex", #"(?<=a)b"#, root.path("engine.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors.joined(separator: "\n").contains("PCRE2 is not available"))
     }
 
     @Test("accepts runtime resource flags")
@@ -134,22 +164,13 @@ struct RipgrepSearcherTests {
         let root = try TemporaryDirectory()
         try root.write("needle\n", to: "limit.txt")
 
-        var output: [String] = []
-        var errors: [String] = []
-        var exitCode = RipgrepCLI.run(
-            arguments: ["--regex-size-limit=0", "needle", root.path("limit.txt")],
-            stdout: { output.append($0) },
-            stderr: { errors.append($0) }
-        )
-        #expect(exitCode == 2)
-        #expect(output.isEmpty)
-        #expect(errors.first?.contains("compiled regex exceeds size limit of 0") == true)
+        #expect(try run(["--regex-size-limit=0", "needle", root.path("limit.txt")]) == ["needle"])
 
         #expect(try run(["--regex-size-limit=1K", "needle", root.path("limit.txt")]) == ["needle"])
 
-        output = []
-        errors = []
-        exitCode = RipgrepCLI.run(
+        var output: [String] = []
+        var errors: [String] = []
+        let exitCode = RipgrepCLI.run(
             arguments: ["--regex-size-limit=4", "-e", "abc", "-e", "def", root.path("limit.txt")],
             stdout: { output.append($0) },
             stderr: { errors.append($0) }

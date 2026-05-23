@@ -18,6 +18,9 @@ public struct PatternMatcher {
             if options.fixedStrings {
                 return .literal(options.effectiveIgnoreCase ? Self.foldedCase(pattern, options: options) : pattern)
             } else {
+                if options.engineMode == .pcre2 {
+                    throw RipgrepError.message("PCRE2 is not available in this build of ripgrep")
+                }
                 if options.binaryMode != .asText, Self.canMatchNUL(pattern) {
                     throw RipgrepError.message("""
                     pattern contains "\\0" but it is impossible to match
@@ -29,9 +32,13 @@ public struct PatternMatcher {
                 if options.engineMode == .default, let unsupported = Self.defaultEngineUnsupportedFeature(in: pattern) {
                     throw RipgrepError.invalidRegex("\(unsupported) is not supported by the default regex engine; use --pcre2 or --engine=auto")
                 }
+                if options.engineMode == .automatic, let unsupported = Self.defaultEngineUnsupportedFeature(in: pattern) {
+                    throw RipgrepError.message(Self.automaticEngineUnavailableMessage(unsupported: unsupported))
+                }
                 let source = Self.regexPattern(for: pattern, options: options)
                 compiledRegexSourceBytes += source.utf8.count
                 if let regexSizeLimit = options.regexSizeLimit,
+                   regexSizeLimit > 0,
                    UInt64(compiledRegexSourceBytes) > regexSizeLimit {
                     throw RipgrepError.invalidRegex("compiled regex exceeds size limit of \(regexSizeLimit)")
                 }
@@ -296,6 +303,18 @@ public struct PatternMatcher {
             index = pattern.index(after: index)
         }
         return nil
+    }
+
+    private static func automaticEngineUnavailableMessage(unsupported: String) -> String {
+        """
+        regex could not be compiled with either the default regex engine or with PCRE2.
+
+        default regex engine error:
+        \(unsupported) is not supported by the default regex engine
+
+        PCRE2 regex engine error:
+        PCRE2 is not available in this build of ripgrep
+        """
     }
 
     private static func hasAnyPrefix(_ prefixes: [String], at index: String.Index, in text: String) -> Bool {
