@@ -1011,6 +1011,15 @@ struct RipgrepSearcherTests {
         #expect(try run(["--crlf", "-x", "foo", root.path("crlf.txt")]) == [
             "foo\r",
         ])
+        #expect(try run(["--crlf", "-o", "foo$", root.path("crlf.txt")]) == [
+            "foo\r",
+        ])
+        #expect(try run(["--crlf", "-o", "baz$", root.path("crlf.txt")]) == [
+            "baz\r",
+        ])
+        #expect(try run(["--crlf", "-o", "quux$", root.path("crlf.txt")]) == [
+            "quux\r",
+        ])
         #expect(try runAllowingNoMatch(["--crlf", "--null-data", "-n", "foo$", root.path("crlf.txt")]) == [])
         #expect(try run(["--null-data", "--crlf", "-n", "foo$", root.path("crlf.txt")]) == [
             "1:foo\r",

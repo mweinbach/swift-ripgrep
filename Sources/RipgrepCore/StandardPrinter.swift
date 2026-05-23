@@ -177,11 +177,16 @@ public struct StandardPrinter {
                 byteOffset: options.byteOffset ? match.absoluteOffset + span.startByte : nil,
                 text: text
             )
+            let terminator = outputTerminator(
+                match.lineTerminator,
+                line: options.onlyMatching ? span.text : match.line,
+                crlfMatchTerminator: options.onlyMatching
+            )
             guard showPath else {
-                return "\(fields.joined(separator: options.fieldMatchSeparator))\(outputTerminator(match.lineTerminator))"
+                return "\(fields.joined(separator: options.fieldMatchSeparator))\(terminator)"
             }
             let path = renderPath(for: match.fileURL, line: match.lineNumber, column: span.startColumn)
-            return "\(path)\(matchPathFieldSeparator())\(fields.joined(separator: options.fieldMatchSeparator))\(outputTerminator(match.lineTerminator))"
+            return "\(path)\(matchPathFieldSeparator())\(fields.joined(separator: options.fieldMatchSeparator))\(terminator)"
         }
     }
 
@@ -244,7 +249,7 @@ public struct StandardPrinter {
             if options.byteOffset {
                 fields.append(OutputField("\(match.absoluteOffset + span.startByte)", colorTarget: nil))
             }
-            let text = "\(onlyMatchingText(span, in: match))\(outputTerminator(match.lineTerminator, line: match.line))"
+            let text = "\(onlyMatchingText(span, in: match))\(outputTerminator(match.lineTerminator, line: span.text, crlfMatchTerminator: true))"
             return ["\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(text)"]
         }
     }
@@ -283,7 +288,7 @@ public struct StandardPrinter {
                 fields.append(OutputField("\(runningByteOffset)", colorTarget: nil))
             }
             runningByteOffset += chunk.utf8.count + 1
-            return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(colors.apply(.match, to: chunk))\(outputTerminator(match.lineTerminator, line: chunk))"
+            return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(colors.apply(.match, to: chunk))\(outputTerminator(match.lineTerminator, line: chunk, crlfMatchTerminator: true))"
         }
     }
 
@@ -564,11 +569,14 @@ public struct StandardPrinter {
         return colors.colorMatches(in: line, spans: spans)
     }
 
-    private func outputTerminator(_ terminator: String, line: String? = nil) -> String {
+    private func outputTerminator(_ terminator: String, line: String? = nil, crlfMatchTerminator: Bool = false) -> String {
         if options.nullData {
             return "\0"
         }
-        if options.crlf, colors.isEnabled, terminator == "\n", line?.hasSuffix("\r") != true {
+        if options.crlf,
+           (colors.isEnabled || crlfMatchTerminator),
+           terminator == "\n",
+           line?.hasSuffix("\r") != true {
             return "\r"
         }
         return ""
