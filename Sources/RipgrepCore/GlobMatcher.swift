@@ -36,21 +36,29 @@ public struct GlobMatcher: Equatable {
 
     private let rules: [Rule]
     private let requirePositiveMatch: Bool
+    private let stripBasePath: String?
+    private let pathPrefix: String
 
     public init(
         patterns: [String],
         overrideSemantics: Bool = false,
-        caseInsensitive: Bool = false
+        caseInsensitive: Bool = false,
+        stripBasePath: String? = nil,
+        pathPrefix: String = ""
     ) {
         self.init(
             patternEntries: patterns.map { ($0, caseInsensitive) },
-            overrideSemantics: overrideSemantics
+            overrideSemantics: overrideSemantics,
+            stripBasePath: stripBasePath,
+            pathPrefix: pathPrefix
         )
     }
 
     public init(
         patternEntries: [(pattern: String, caseInsensitive: Bool)],
-        overrideSemantics: Bool = false
+        overrideSemantics: Bool = false,
+        stripBasePath: String? = nil,
+        pathPrefix: String = ""
     ) {
         var rules: [Rule] = []
         for entry in patternEntries {
@@ -77,6 +85,8 @@ public struct GlobMatcher: Equatable {
 
         self.rules = rules
         self.requirePositiveMatch = overrideSemantics && rules.contains { $0.decision == .include }
+        self.stripBasePath = stripBasePath?.isEmpty == true ? nil : stripBasePath
+        self.pathPrefix = pathPrefix
     }
 
     public var isEmpty: Bool {
@@ -91,11 +101,33 @@ public struct GlobMatcher: Equatable {
     }
 
     public func decision(relativePath: String, isDirectory: Bool) -> Decision? {
+        guard let scopedPath = scopedPath(for: relativePath) else {
+            return nil
+        }
         var decision: Decision?
-        for rule in rules where matches(rule, relativePath: relativePath, isDirectory: isDirectory) {
+        for rule in rules where matches(rule, relativePath: scopedPath, isDirectory: isDirectory) {
             decision = rule.decision
         }
         return decision
+    }
+
+    private func scopedPath(for relativePath: String) -> String? {
+        var path = relativePath
+        if let stripBasePath {
+            if path == stripBasePath {
+                path = ""
+            } else {
+                let prefix = "\(stripBasePath)/"
+                guard path.hasPrefix(prefix) else {
+                    return nil
+                }
+                path = String(path.dropFirst(prefix.count))
+            }
+        }
+        if !pathPrefix.isEmpty {
+            path = path.isEmpty ? pathPrefix : "\(pathPrefix)/\(path)"
+        }
+        return path
     }
 
     private func matches(_ rule: Rule, relativePath: String, isDirectory: Bool) -> Bool {
@@ -105,13 +137,13 @@ public struct GlobMatcher: Equatable {
         if rule.pattern.isEmpty {
             return false
         }
+        if rule.anchored {
+            return matchesGlob(rule.pattern, relativePath, caseInsensitive: rule.caseInsensitive)
+        }
         if rule.basenameOnly {
             return pathComponents(relativePath).contains { component in
                 matchesGlob(rule.pattern, component, caseInsensitive: rule.caseInsensitive)
             }
-        }
-        if rule.anchored {
-            return matchesGlob(rule.pattern, relativePath, caseInsensitive: rule.caseInsensitive)
         }
         return matchesGlob("**/\(rule.pattern)", relativePath, caseInsensitive: rule.caseInsensitive)
             || matchesGlob(rule.pattern, relativePath, caseInsensitive: rule.caseInsensitive)

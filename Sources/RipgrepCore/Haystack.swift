@@ -65,6 +65,7 @@ public struct FileWalker {
                     from: ignoreFile,
                     to: &baseIgnoreStack,
                     messages: &messages,
+                    rootBase: nil,
                     options: options
                 )
             }
@@ -207,7 +208,13 @@ public struct FileWalker {
 
         var directoryIgnoreStack = ignoreStack
         if !options.noIgnore {
-            appendIgnoreFiles(in: resolvedURL, to: &directoryIgnoreStack, messages: &messages, options: options)
+            appendIgnoreFiles(
+                in: resolvedURL,
+                to: &directoryIgnoreStack,
+                messages: &messages,
+                rootBase: rootBase,
+                options: options
+            )
         }
 
         let children = try fileManager.contentsOfDirectory(
@@ -346,6 +353,7 @@ public struct FileWalker {
                 in: parentURL,
                 to: &ignoreStack,
                 messages: &messages,
+                rootBase: rootBase,
                 options: options
             )
             appendParentVCSIgnoreFiles(
@@ -353,6 +361,7 @@ public struct FileWalker {
                 gitBoundary: gitBoundary,
                 to: &ignoreStack,
                 messages: &messages,
+                rootBase: rootBase,
                 options: options
             )
         }
@@ -362,6 +371,7 @@ public struct FileWalker {
         in parentURL: URL,
         to ignoreStack: inout IgnoreStack,
         messages: inout [String],
+        rootBase: URL,
         options: RipgrepOptions
     ) {
         guard !options.noIgnoreDot else {
@@ -371,12 +381,14 @@ public struct FileWalker {
             from: parentURL.appendingPathComponent(".ignore"),
             to: &ignoreStack,
             messages: &messages,
+            rootBase: rootBase,
             options: options
         )
         appendLoadedMatcher(
             from: parentURL.appendingPathComponent(".rgignore"),
             to: &ignoreStack,
             messages: &messages,
+            rootBase: rootBase,
             options: options
         )
     }
@@ -386,6 +398,7 @@ public struct FileWalker {
         gitBoundary: URL?,
         to ignoreStack: inout IgnoreStack,
         messages: inout [String],
+        rootBase: URL,
         options: RipgrepOptions
     ) {
         guard !options.noIgnoreVCS,
@@ -396,6 +409,7 @@ public struct FileWalker {
             from: parentURL.appendingPathComponent(".gitignore"),
             to: &ignoreStack,
             messages: &messages,
+            rootBase: rootBase,
             options: options
         )
         if !options.noIgnoreExclude,
@@ -404,6 +418,8 @@ public struct FileWalker {
                 from: parentURL.appendingPathComponent(".git/info/exclude"),
                 to: &ignoreStack,
                 messages: &messages,
+                rootBase: rootBase,
+                scopeDirectory: parentURL,
                 options: options
             )
         }
@@ -451,6 +467,7 @@ public struct FileWalker {
             from: globalIgnoreFile,
             to: &ignoreStack,
             messages: &messages,
+            rootBase: nil,
             options: options
         )
     }
@@ -497,28 +514,69 @@ public struct FileWalker {
         return url.lastPathComponent
     }
 
+    private func relativePathIfContained(_ url: URL, in baseURL: URL) -> String? {
+        let path = url.standardizedFileURL.path
+        let basePath = baseURL.standardizedFileURL.path
+        if path == basePath {
+            return ""
+        }
+        let prefix = basePath.hasSuffix("/") ? basePath : "\(basePath)/"
+        guard path.hasPrefix(prefix) else {
+            return nil
+        }
+        return String(path.dropFirst(prefix.count))
+    }
+
     private func appendLoadedMatcher(
         from fileURL: URL,
         to ignoreStack: inout IgnoreStack,
         messages: inout [String],
+        rootBase: URL?,
+        scopeDirectory: URL? = nil,
         options: RipgrepOptions
     ) {
-        let loaded = loadMatcher(from: fileURL, caseInsensitive: options.ignoreFileCaseInsensitive)
+        let loaded = loadMatcher(
+            from: fileURL,
+            rootBase: rootBase,
+            scopeDirectory: scopeDirectory,
+            caseInsensitive: options.ignoreFileCaseInsensitive
+        )
         ignoreStack.append(loaded.matcher)
         if !options.noIgnoreMessages {
             messages.append(contentsOf: loaded.messages)
         }
     }
 
-    private func loadMatcher(from fileURL: URL, caseInsensitive: Bool = false) -> LoadedIgnoreMatcher {
+    private func loadMatcher(
+        from fileURL: URL,
+        rootBase: URL?,
+        scopeDirectory: URL? = nil,
+        caseInsensitive: Bool = false
+    ) -> LoadedIgnoreMatcher {
         guard let contents = try? String(contentsOf: fileURL, encoding: .utf8) else {
             return LoadedIgnoreMatcher(matcher: GlobMatcher(patterns: []), messages: [])
         }
         let parsed = parseIgnorePatterns(contents, fileURL: fileURL)
+        let scope = ignoreScope(for: scopeDirectory ?? fileURL.deletingLastPathComponent(), rootBase: rootBase)
         return LoadedIgnoreMatcher(matcher: GlobMatcher(
             patterns: parsed.patterns,
-            caseInsensitive: caseInsensitive
+            caseInsensitive: caseInsensitive,
+            stripBasePath: scope.stripBasePath,
+            pathPrefix: scope.pathPrefix
         ), messages: parsed.messages)
+    }
+
+    private func ignoreScope(for ignoreDirectory: URL, rootBase: URL?) -> (stripBasePath: String?, pathPrefix: String) {
+        guard let rootBase else {
+            return (nil, "")
+        }
+        if let stripBasePath = relativePathIfContained(ignoreDirectory, in: rootBase) {
+            return (stripBasePath, "")
+        }
+        if let pathPrefix = relativePathIfContained(rootBase, in: ignoreDirectory) {
+            return (nil, pathPrefix)
+        }
+        return (nil, "")
     }
 
     private func parseIgnorePatterns(_ contents: String, fileURL _: URL) -> (patterns: [String], messages: [String]) {
@@ -621,6 +679,7 @@ public struct FileWalker {
         in directoryURL: URL,
         to ignoreStack: inout IgnoreStack,
         messages: inout [String],
+        rootBase: URL,
         options: RipgrepOptions
     ) {
         if !options.noIgnoreVCS && (options.noRequireGit || isInGitRepository(directoryURL)) {
@@ -628,6 +687,7 @@ public struct FileWalker {
                 from: directoryURL.appendingPathComponent(".gitignore"),
                 to: &ignoreStack,
                 messages: &messages,
+                rootBase: rootBase,
                 options: options
             )
         }
@@ -639,6 +699,8 @@ public struct FileWalker {
                 from: directoryURL.appendingPathComponent(".git/info/exclude"),
                 to: &ignoreStack,
                 messages: &messages,
+                rootBase: rootBase,
+                scopeDirectory: directoryURL,
                 options: options
             )
         }
@@ -647,12 +709,14 @@ public struct FileWalker {
                 from: directoryURL.appendingPathComponent(".ignore"),
                 to: &ignoreStack,
                 messages: &messages,
+                rootBase: rootBase,
                 options: options
             )
             appendLoadedMatcher(
                 from: directoryURL.appendingPathComponent(".rgignore"),
                 to: &ignoreStack,
                 messages: &messages,
+                rootBase: rootBase,
                 options: options
             )
         }

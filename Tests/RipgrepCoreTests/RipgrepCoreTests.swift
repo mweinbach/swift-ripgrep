@@ -1493,6 +1493,14 @@ struct RipgrepSearcherTests {
 
         #expect(pathBasenames(try run(["needle", root.url.path])) == ["keep.txt"])
         #expect(Set(pathBasenames(try run(["--no-ignore", "needle", root.url.path]))) == Set(["keep.txt", "skip.log"]))
+
+        let anchored = try TemporaryDirectory()
+        try anchored.createDirectory(".git")
+        try anchored.write("/llvm/\n", to: ".gitignore")
+        try anchored.createDirectory("src/llvm")
+        try anchored.write("needle\n", to: "src/llvm/foo")
+        #expect(try run(["needle", anchored.url.path]) == [anchored.path("src/llvm/foo") + ":needle"])
+        #expect(try run(["needle", anchored.path("src")]) == [anchored.path("src/llvm/foo") + ":needle"])
     }
 
     @Test("honors git info exclude and its toggle")
