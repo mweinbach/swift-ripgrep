@@ -1237,6 +1237,29 @@ struct RipgrepSearcherTests {
         #expect(output.isEmpty)
     }
 
+    @Test("preserves explicit current directory path prefixes")
+    func preservesExplicitCurrentDirectoryPathPrefixes() throws {
+        let root = try TemporaryDirectory()
+        try root.createDirectory("a")
+        try root.write("", to: "a/.ignore")
+        let fileURL = root.url.appendingPathComponent("a/.ignore")
+
+        var options = RipgrepOptions()
+        options.mode = .files
+        options.roots = [root.url]
+        #expect(StandardPrinter(options: options, currentDirectory: root.url.path).paths([fileURL]) == ["a/.ignore"])
+
+        options.rootPathArguments = ["./"]
+        #expect(StandardPrinter(options: options, currentDirectory: root.url.path).paths([fileURL]) == ["./a/.ignore"])
+
+        options.roots = [root.url.appendingPathComponent("a", isDirectory: true)]
+        options.rootPathArguments = ["a"]
+        #expect(StandardPrinter(options: options, currentDirectory: root.url.path).paths([fileURL]) == ["a/.ignore"])
+
+        options.rootPathArguments = ["./a"]
+        #expect(StandardPrinter(options: options, currentDirectory: root.url.path).paths([fileURL]) == ["./a/.ignore"])
+    }
+
     @Test("prints debug diagnostics for skipped files")
     func printsDebugDiagnosticsForSkippedFiles() throws {
         let root = try TemporaryDirectory()

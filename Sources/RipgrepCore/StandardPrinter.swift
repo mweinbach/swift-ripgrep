@@ -533,10 +533,30 @@ public struct StandardPrinter {
         let prefix = currentDirectory.hasSuffix("/") ? currentDirectory : "\(currentDirectory)/"
 
         if path.hasPrefix(prefix) {
-            return applyPathSeparator(String(path.dropFirst(prefix.count)))
+            var relativePath = String(path.dropFirst(prefix.count))
+            if shouldPreserveCurrentDirectoryPrefix(for: url),
+               !relativePath.hasPrefix("./") {
+                relativePath = "./\(relativePath)"
+            }
+            return applyPathSeparator(relativePath)
         }
 
         return applyPathSeparator(path)
+    }
+
+    private func shouldPreserveCurrentDirectoryPrefix(for url: URL) -> Bool {
+        let path = url.standardizedFileURL.path
+        for (rootArgument, root) in zip(options.rootPathArguments, options.roots) {
+            guard rootArgument == "." || rootArgument == "./" || rootArgument.hasPrefix("./") else {
+                continue
+            }
+            let rootPath = root.standardizedFileURL.path
+            let rootPrefix = rootPath.hasSuffix("/") ? rootPath : "\(rootPath)/"
+            if path == rootPath || path.hasPrefix(rootPrefix) {
+                return true
+            }
+        }
+        return false
     }
 
     private func applyPathSeparator(_ path: String) -> String {

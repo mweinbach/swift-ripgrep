@@ -134,6 +134,7 @@ public struct RipgrepOptions: Equatable {
     public var pattern: String?
     public var patterns: [String] = []
     public var roots: [URL] = []
+    public var rootPathArguments: [String] = []
     public var ignoreCase = false
     public var smartCase = false
     public var fixedStrings = false
@@ -1084,22 +1085,29 @@ public enum RipgrepArgumentParser {
                 }
                 options.pattern = pattern
                 options.patterns = [pattern]
-                options.roots = positionals.dropFirst().map { URL(fileURLWithPath: $0) }
+                let roots = Array(positionals.dropFirst())
+                options.rootPathArguments = roots
+                options.roots = roots.map { URL(fileURLWithPath: $0) }
             } else {
                 options.pattern = explicitPatterns.first
                 options.patterns = explicitPatterns
+                options.rootPathArguments = positionals
                 options.roots = positionals.map { URL(fileURLWithPath: $0) }
             }
             if options.roots.isEmpty && !options.useStdin {
                 options.roots = [URL(fileURLWithPath: ".")]
+                options.rootPathArguments = []
             }
         } else if options.mode == .files {
+            options.rootPathArguments = positionals
             options.roots = positionals.map { URL(fileURLWithPath: $0) }
             if options.roots.isEmpty {
                 options.roots = [URL(fileURLWithPath: ".")]
+                options.rootPathArguments = []
             }
         } else {
             options.roots = []
+            options.rootPathArguments = []
         }
 
         return .run(options)
