@@ -3231,19 +3231,36 @@ struct RipgrepSearcherTests {
 
     @Test("prints version from short and long flags")
     func printsVersionFromShortAndLongFlags() {
-        for flag in ["-V", "--version"] {
-            var output: [String] = []
-            var errors: [String] = []
-            let exitCode = RipgrepCLI.run(
-                arguments: [flag],
-                stdout: { output.append($0) },
-                stderr: { errors.append($0) }
-            )
+        var output: [String] = []
+        var errors: [String] = []
+        var exitCode = RipgrepCLI.run(
+            arguments: ["-V"],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(errors.isEmpty)
+        #expect(output == ["ripgrep 15.1.0 (rev 4519153e5e)"])
 
-            #expect(exitCode == 0)
-            #expect(errors.isEmpty)
-            #expect(output == ["ripgrep \(RipgrepCLI.version)"])
-        }
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--version"],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(errors.isEmpty)
+        #expect(output == ["""
+        ripgrep 15.1.0 (rev 4519153e5e)
+
+        features:-pcre2
+        simd(compile):+NEON
+        simd(runtime):+NEON
+
+        PCRE2 is not available in this build of ripgrep.
+
+        """])
     }
 
     @Test("generates man pages and completions")

@@ -1,7 +1,8 @@
 import Foundation
 
 public enum RipgrepCLI {
-    public static let version = "0.1.0"
+    public static let version = "15.1.0"
+    public static let revision = "4519153e5e"
 
     public struct OutputOptions: Equatable {
         public let showFilename: Bool
@@ -30,8 +31,11 @@ public enum RipgrepCLI {
         case .help:
             emitStdout(usage(), stdout: stdout)
             return 0
-        case .version:
-            emitStdout("ripgrep \(version)", stdout: stdout)
+        case .shortVersion:
+            emitStdout("ripgrep \(version) (rev \(revision))", stdout: stdout)
+            return 0
+        case .longVersion:
+            emitStdoutVerbatim(longVersionOutput, stdout: stdout)
             return 0
         case .pcre2Version:
             emitStdout("PCRE2 is not available in this build of ripgrep.", stdout: stdout)
@@ -259,6 +263,19 @@ public enum RipgrepCLI {
 
     public static func usage() -> String {
         RipgrepArgumentParser.usage(version: version)
+    }
+
+    private static var longVersionOutput: String {
+        """
+        ripgrep \(version) (rev \(revision))
+
+        features:-pcre2
+        simd(compile):+NEON
+        simd(runtime):+NEON
+
+        PCRE2 is not available in this build of ripgrep.
+
+        """
     }
 
     private static func generate(_ mode: GenerateMode) -> String {
