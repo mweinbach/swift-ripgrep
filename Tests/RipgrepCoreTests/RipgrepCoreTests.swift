@@ -182,6 +182,19 @@ struct RipgrepSearcherTests {
             "2:needle here",
             "3:needle there",
         ])
+        #expect(try run(["-n", "-N", "needle", root.path("one.txt")]) == [
+            "needle here",
+            "needle there",
+        ])
+        #expect(try run(["-N", "-n", "needle", root.path("one.txt")]) == [
+            "2:needle here",
+            "3:needle there",
+        ])
+        #expect(try run(["-N", "--pretty", "--color=never", "needle", root.path("one.txt")]) == [
+            "\(root.path("one.txt"))",
+            "2:needle here",
+            "3:needle there",
+        ])
         #expect(try run(["-H", "-c", "needle", root.path("one.txt")]) == [
             "\(root.path("one.txt")):2",
         ])

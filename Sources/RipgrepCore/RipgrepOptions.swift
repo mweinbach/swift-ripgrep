@@ -464,6 +464,7 @@ public enum RipgrepArgumentParser {
                 options.replacement = String(value.dropFirst("--replace=".count))
             case "-n", "--line-number":
                 options.lineNumber = true
+                options.noLineNumber = false
             case "-b", "--byte-offset":
                 options.byteOffset = true
             case "--no-byte-offset":
@@ -477,6 +478,7 @@ public enum RipgrepArgumentParser {
                 options.colorMode = .always
                 options.heading = true
                 options.lineNumber = true
+                options.noLineNumber = false
             case "--color":
                 guard index < arguments.count else {
                     return .error("error: The argument '--color <WHEN>' requires a value")
@@ -584,6 +586,7 @@ public enum RipgrepArgumentParser {
                 }
                 options.maxFileSize = size
             case "-N", "--no-line-number":
+                options.lineNumber = false
                 options.noLineNumber = true
             case "--column":
                 options.column = true
