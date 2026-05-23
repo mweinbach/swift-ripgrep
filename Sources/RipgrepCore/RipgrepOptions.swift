@@ -168,6 +168,7 @@ public struct RipgrepOptions: Equatable {
     public var lineNumber = false
     public var noLineNumber = false
     public var column = false
+    public var noColumn = false
     public var byteOffset = false
     public var heading: Bool?
     public var trim = false
@@ -536,6 +537,16 @@ public enum RipgrepArgumentParser {
                 options.replacement = String(value.dropFirst("--replace=".count))
             case let value where value.hasPrefix("-r") && value.count > 2:
                 options.replacement = String(value.dropFirst(2))
+            case let value where isShortFlagCluster(value):
+                if let message = applyShortFlagCluster(
+                    value,
+                    options: &options,
+                    explicitPatterns: &explicitPatterns,
+                    arguments: arguments,
+                    index: &index
+                ) {
+                    return .error(message)
+                }
             case "-n", "--line-number":
                 options.lineNumber = true
                 options.noLineNumber = false
@@ -665,8 +676,10 @@ public enum RipgrepArgumentParser {
                 options.noLineNumber = true
             case "--column":
                 options.column = true
+                options.noColumn = false
             case "--no-column":
                 options.column = false
+                options.noColumn = true
             case "--heading":
                 options.heading = true
             case "--no-heading":
@@ -1298,6 +1311,112 @@ public enum RipgrepArgumentParser {
         } catch {
             return .error("error: failed to read pattern file '\(path)': \(error)")
         }
+    }
+
+    private static func isShortFlagCluster(_ argument: String) -> Bool {
+        guard argument.hasPrefix("-"), !argument.hasPrefix("--"), argument.count > 2 else {
+            return false
+        }
+        let flags = argument.dropFirst()
+        let standaloneFlags = Set("iSsFPwxUvonbpNHILzaqcl")
+        for (offset, flag) in flags.enumerated() {
+            if flag == "f" {
+                return offset == flags.count - 1
+            }
+            if !standaloneFlags.contains(flag) {
+                return false
+            }
+        }
+        return true
+    }
+
+    private static func applyShortFlagCluster(
+        _ argument: String,
+        options: inout RipgrepOptions,
+        explicitPatterns: inout [String],
+        arguments: [String],
+        index: inout Int
+    ) -> String? {
+        for flag in argument.dropFirst() {
+            switch flag {
+            case "i":
+                options.ignoreCase = true
+                options.smartCase = false
+            case "S":
+                options.ignoreCase = false
+                options.smartCase = true
+            case "s":
+                options.ignoreCase = false
+                options.smartCase = false
+            case "F":
+                options.fixedStrings = true
+            case "P":
+                options.engineMode = .pcre2
+            case "w":
+                options.wordRegexp = true
+                options.lineRegexp = false
+            case "x":
+                options.lineRegexp = true
+                options.wordRegexp = false
+            case "U":
+                options.multiline = true
+                options.stopOnNonmatch = false
+            case "v":
+                options.invertMatch = true
+            case "o":
+                options.onlyMatching = true
+            case "n":
+                options.lineNumber = true
+                options.noLineNumber = false
+            case "b":
+                options.byteOffset = true
+            case "p":
+                options.colorMode = .always
+                options.heading = true
+                options.lineNumber = true
+            case "N":
+                options.lineNumber = false
+                options.noLineNumber = true
+            case "H":
+                options.withFilename = true
+            case "I":
+                options.withFilename = false
+            case "L":
+                options.followSymlinks = true
+            case "z":
+                options.searchZip = true
+            case "a":
+                options.binaryMode = .asText
+            case "q":
+                options.quiet = true
+            case "c":
+                options.printMode = .count
+                options.generateMode = nil
+            case "l":
+                options.printMode = .filesWithMatches
+                options.generateMode = nil
+            case "f":
+                guard index < arguments.count else {
+                    return "error: The argument '--file <PATTERNFILE>' requires a value"
+                }
+                let path = arguments[index]
+                if path == "-" {
+                    options.patternFileStdin = true
+                    index += 1
+                    continue
+                }
+                switch readPatterns(from: path) {
+                case .patterns(let patterns):
+                    explicitPatterns.append(contentsOf: patterns)
+                case .error(let message):
+                    return message
+                }
+                index += 1
+            default:
+                return nil
+            }
+        }
+        return nil
     }
 
     private static func shouldLoadConfig(for arguments: [String]) -> Bool {

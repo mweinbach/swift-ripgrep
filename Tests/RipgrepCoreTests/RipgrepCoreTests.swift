@@ -138,6 +138,7 @@ struct RipgrepSearcherTests {
         #expect(try run(["-o", #"\w+"#, root.path("classes.txt")]) == ["café", "π", "_"])
         #expect(try run(["--no-unicode", "-o", #"\w+"#, root.path("classes.txt")]) == ["caf", "_"])
         #expect(try run(["-w", "x", root.path("words.txt")]) == ["x"])
+        #expect(try run(["-won", "x", root.path("words.txt")]) == ["3:x"])
         #expect(try run(["--no-unicode", "-w", "x", root.path("words.txt")]) == ["éx", "xé", "x"])
         #expect(try run(["-F", "-i", "σ", root.path("casefold.txt")]) == ["Σ", "σ"])
         #expect(try run(["--no-unicode", "-F", "-i", "σ", root.path("casefold.txt")]) == ["σ"])
@@ -169,6 +170,11 @@ struct RipgrepSearcherTests {
         #expect(try run(["-e", "alpha", "-e", "gamma", root.path("words.txt")]) == ["alpha", "gamma"])
         #expect(try run(["-f", root.path("patterns"), root.path("words.txt")]) == ["alpha", "gamma"])
         #expect(try run(["-f\(root.path("patterns"))", root.path("words.txt")]) == ["alpha", "gamma"])
+        #expect(try run(["-vf", root.path("patterns"), root.path("words.txt")]) == ["beta"])
+
+        try root.write("alpha.*\n", to: "literal-patterns")
+        try root.write("alpha.*\nalphaX\n", to: "literal.txt")
+        #expect(try run(["-Ff", root.path("literal-patterns"), root.path("literal.txt")]) == ["alpha.*"])
 
         var output: [String] = []
         let exitCode = RipgrepCLI.run(
@@ -1016,6 +1022,9 @@ struct RipgrepSearcherTests {
         #expect(try run(["-r", "-n", "-i", "bar", root.path("hyphen.txt")]) == [
             "foo -n -baz",
         ])
+        #expect(try run(["-n", "-No", "bar", root.path("hyphen.txt")]) == [
+            "bar",
+        ])
     }
 
     @Test("prints trim vimgrep and heading modes")
@@ -1034,6 +1043,23 @@ struct RipgrepSearcherTests {
         #expect(try run(["--vimgrep", "-o", "needle", root.path("a.txt")]) == [
             "\(root.path("a.txt")):1:3:needle",
             "\(root.path("a.txt")):1:14:needle",
+        ])
+        try root.write("Watson Sherlock\nnone\nSherlock Holmes\nDoctor Watson\n", to: "vimgrep.txt")
+        #expect(try run(["--vimgrep", "-N", "Sherlock|Watson", root.path("vimgrep.txt")]) == [
+            "\(root.path("vimgrep.txt")):1:Watson Sherlock",
+            "\(root.path("vimgrep.txt")):8:Watson Sherlock",
+            "\(root.path("vimgrep.txt")):1:Sherlock Holmes",
+            "\(root.path("vimgrep.txt")):8:Doctor Watson",
+        ])
+        #expect(try run(["--vimgrep", "-N", "--no-column", "Sherlock|Watson", root.path("vimgrep.txt")]) == [
+            "\(root.path("vimgrep.txt")):Watson Sherlock",
+            "\(root.path("vimgrep.txt")):Watson Sherlock",
+            "\(root.path("vimgrep.txt")):Sherlock Holmes",
+            "\(root.path("vimgrep.txt")):Doctor Watson",
+        ])
+        #expect(try run(["--vimgrep", "-N", "--no-column", "--column", "Sherlock", root.path("vimgrep.txt")]) == [
+            "\(root.path("vimgrep.txt")):8:Watson Sherlock",
+            "\(root.path("vimgrep.txt")):1:Sherlock Holmes",
         ])
         #expect(try run(["--heading", "-n", "needle", root.url.path]) == [
             "\(root.path("a.txt"))",

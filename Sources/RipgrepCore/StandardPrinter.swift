@@ -137,14 +137,30 @@ public struct StandardPrinter {
                 let text = options.onlyMatching
                     ? (span.replacement ?? span.text)
                     : vimgrepLineText(for: match)
-                let fields = "\(match.lineNumber)\(options.fieldMatchSeparator)\(span.startColumn)\(options.fieldMatchSeparator)\(text)"
+                let fields = vimgrepFields(
+                    lineNumber: match.lineNumber,
+                    column: span.startColumn,
+                    text: text
+                )
                 guard showPath else {
-                    return "\(fields)\(outputTerminator(match.lineTerminator))"
+                    return "\(fields.joined(separator: options.fieldMatchSeparator))\(outputTerminator(match.lineTerminator))"
                 }
                 let path = renderPath(for: match.fileURL, line: match.lineNumber, column: span.startColumn)
-                return "\(path)\(matchPathFieldSeparator())\(fields)\(outputTerminator(match.lineTerminator))"
+                return "\(path)\(matchPathFieldSeparator())\(fields.joined(separator: options.fieldMatchSeparator))\(outputTerminator(match.lineTerminator))"
             }
         }
+    }
+
+    private func vimgrepFields(lineNumber: Int, column: Int, text: String) -> [String] {
+        var fields: [String] = []
+        if !options.noLineNumber {
+            fields.append("\(lineNumber)")
+        }
+        if !options.noColumn {
+            fields.append("\(column)")
+        }
+        fields.append(text)
+        return fields
     }
 
     private func vimgrepLineText(for match: SearchMatch) -> String {
