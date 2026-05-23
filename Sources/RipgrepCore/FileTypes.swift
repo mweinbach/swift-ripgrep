@@ -39,15 +39,27 @@ public struct FileTypeRegistry: Equatable, Sendable {
         definitionsByName.values.sorted { $0.name < $1.name }
     }
 
-    public mutating func apply(_ changes: [TypeChange]) {
+    @discardableResult
+    public mutating func apply(_ changes: [TypeChange]) -> [String] {
+        var errors: [String] = []
         for change in changes {
             switch change {
-            case .select(let name): select(name)
-            case .negate(let name): negate(name)
+            case .select(let name):
+                if !select(name) {
+                    errors.append("unrecognized file type: \(name)")
+                }
+            case .negate(let name):
+                if !negate(name) {
+                    errors.append("unrecognized file type: \(name)")
+                }
             case .clear(let name): clear(name)
-            case .add(let spec): add(spec)
+            case .add(let spec):
+                if !add(spec) {
+                    errors.append("invalid definition (format is type:glob, e.g., html:*.html)")
+                }
             }
         }
+        return errors
     }
 
     public func allows(path: String) -> Bool {
@@ -62,43 +74,60 @@ public struct FileTypeRegistry: Equatable, Sendable {
         definitions.map { "\($0.name): \($0.globs.sorted().joined(separator: ", "))" }
     }
 
-    private mutating func select(_ rawName: String) {
+    private mutating func select(_ rawName: String) -> Bool {
         if rawName == "all" {
             selected = Set(definitionsByName.keys)
-        } else if let name = canonicalName(rawName) ?? validName(rawName) {
-            selected.insert(name)
+            return true
         }
+        guard let name = resolvedName(rawName) else {
+            return false
+        }
+        selected.insert(name)
+        return true
     }
 
-    private mutating func negate(_ rawName: String) {
+    private mutating func negate(_ rawName: String) -> Bool {
         if rawName == "all" {
             negated = Set(definitionsByName.keys)
-        } else if let name = canonicalName(rawName) ?? validName(rawName) {
-            negated.insert(name)
+            return true
         }
+        guard let name = resolvedName(rawName) else {
+            return false
+        }
+        negated.insert(name)
+        return true
     }
 
     private mutating func clear(_ rawName: String) {
-        guard let name = canonicalName(rawName) ?? validName(rawName) else { return }
-        if let old = definitionsByName.removeValue(forKey: name) {
-            for alias in old.aliases { aliasToName.removeValue(forKey: alias) }
+        guard let name = resolvedName(rawName) ?? validName(rawName) else { return }
+        let aliases = aliasToName.compactMap { alias, canonical in
+            canonical == name ? alias : nil
         }
+        for alias in aliases {
+            definitionsByName.removeValue(forKey: alias)
+            aliasToName.removeValue(forKey: alias)
+        }
+        definitionsByName.removeValue(forKey: name)
+        aliasToName.removeValue(forKey: name)
         selected.remove(name)
         negated.remove(name)
     }
 
-    private mutating func add(_ spec: String) {
+    private mutating func add(_ spec: String) -> Bool {
         let parts = spec.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false).map(String.init)
-        guard parts.count >= 2, let name = validName(parts[0]) else { return }
+        guard parts.count >= 2, let name = validName(parts[0]) else { return false }
         if parts.count == 3, parts[1] == "include" {
             let included = parts[2].split(separator: ",").map(String.init)
             for includedName in included {
-                guard let canonical = canonicalName(includedName), let definition = definitionsByName[canonical] else { continue }
+                guard let canonical = resolvedName(includedName), let definition = definitionsByName[canonical] else {
+                    return false
+                }
                 for glob in definition.globs { appendGlob(glob, to: name) }
             }
         } else {
             appendGlob(parts.dropFirst().joined(separator: ":"), to: name)
         }
+        return true
     }
 
     private mutating func appendGlob(_ glob: String, to name: String) {
@@ -122,6 +151,14 @@ public struct FileTypeRegistry: Equatable, Sendable {
 
     private func canonicalName(_ rawName: String) -> String? {
         aliasToName[rawName]
+    }
+
+    private func resolvedName(_ rawName: String) -> String? {
+        guard let name = canonicalName(rawName),
+              definitionsByName[name] != nil else {
+            return nil
+        }
+        return name
     }
 
     private func validName(_ rawName: String) -> String? {

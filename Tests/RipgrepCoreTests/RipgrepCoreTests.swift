@@ -2262,6 +2262,18 @@ struct RipgrepSearcherTests {
         #expect(pathBasenames(try run(["-trust", "needle", root.url.path])) == ["main.rs"])
         #expect(pathBasenames(try run(["-T", "rust", "needle", root.url.path])) == ["README.md", "main.swift"])
         #expect(pathBasenames(try run(["-tall", "-Tmd", "needle", root.url.path])) == ["main.rs", "main.swift"])
+
+        try root.write("needle\n", to: "OnlyMarkdown/README.md")
+        var output: [String] = []
+        var errors: [String] = []
+        let exitCode = RipgrepCLI.run(
+            arguments: ["-Tmd", "needle", root.path("OnlyMarkdown")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 1)
+        #expect(output.isEmpty)
+        #expect(errors.isEmpty)
     }
 
     @Test("supports type add clear include and list")
@@ -2285,6 +2297,28 @@ struct RipgrepSearcherTests {
             "needle",
             root.url.path,
         ])) == ["one.foo"])
+
+        var output: [String] = []
+        var errors: [String] = []
+        var exitCode = RipgrepCLI.run(
+            arguments: ["--type-clear", "md", "-tmd", "needle", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["rg: unrecognized file type: md"])
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--type-add", "bad-definition", "needle", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["rg: invalid definition (format is type:glob, e.g., html:*.html)"])
 
         let typeList = try run(["--type-add", "foo:*.foo", "--type-list"])
         #expect(typeList.contains("foo: *.foo"))

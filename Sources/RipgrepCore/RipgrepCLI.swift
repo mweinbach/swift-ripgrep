@@ -78,7 +78,10 @@ public enum RipgrepCLI {
                 }
                 if options.mode == .types {
                     var registry = FileTypeRegistry()
-                    registry.apply(options.typeChanges)
+                    let typeErrors = registry.apply(options.typeChanges)
+                    if let error = typeErrors.first {
+                        throw RipgrepError.message(error)
+                    }
                     for line in registry.typeListLines() {
                         emitStdout(line, stdout: stdout)
                     }
@@ -168,7 +171,8 @@ public enum RipgrepCLI {
         guard options.printMode == .matchingLines,
               results.summary.filesSearched == 0,
               results.messages.isEmpty,
-              results.filtered else {
+              results.filtered,
+              options.typeChanges.isEmpty else {
             return false
         }
         return true

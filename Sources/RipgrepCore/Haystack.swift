@@ -80,7 +80,10 @@ public struct FileWalker {
             overrideSemantics: true,
         )
         var typeRegistry = FileTypeRegistry()
-        typeRegistry.apply(options.typeChanges)
+        let typeErrors = typeRegistry.apply(options.typeChanges)
+        if let error = typeErrors.first {
+            throw RipgrepError.message(error)
+        }
 
         for (offset, root) in options.effectiveRoots.enumerated() {
             guard fileManager.fileExists(atPath: root.path) else {
