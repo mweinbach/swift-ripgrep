@@ -55,7 +55,10 @@ public enum RipgrepCLI {
                 }
 
                 let results = try searcher.search(options: options, stdin: stdin)
-                for line in printer.lines(for: results) {
+                let outputLines = options.json
+                    ? JSONPrinter(options: options).lines(for: results)
+                    : printer.lines(for: results)
+                for line in outputLines {
                     stdout(line)
                 }
 

@@ -88,12 +88,20 @@ public struct RipgrepSearcher {
                 matches: [],
                 lines: result.lines,
                 binaryByteOffset: binaryByteOffset,
-                hasBinaryMatch: result.hasMatch
+                hasBinaryMatch: result.hasMatch,
+                bytesSearched: data.count
             )
         }
 
         let contents = String(decoding: data, as: UTF8.self)
-        return searchContents(contents, fileURL: fileURL, matcher: matcher, options: options)
+        let result = searchContents(contents, fileURL: fileURL, matcher: matcher, options: options)
+        return SearchFileResult(
+            fileURL: result.fileURL,
+            matches: result.matches,
+            lines: result.lines,
+            bytesSearched: data.count,
+            searched: result.searched
+        )
     }
 
     private func searchContents(
@@ -103,22 +111,23 @@ public struct RipgrepSearcher {
         options: RipgrepOptions
     ) -> SearchFileResult {
         var matches: [SearchMatch] = []
-        var lines = contents.components(separatedBy: "\n")
-        if contents.hasSuffix("\n") {
-            lines.removeLast()
-        }
+        let lines = splitLines(contents)
         var searchLines: [SearchLine] = []
+        var absoluteOffset = 0
 
-        for (offset, lineFragment) in lines.enumerated() {
-            var line = lineFragment
-            if line.hasSuffix("\r") {
-                line.removeLast()
-            }
+        for (offset, splitLine) in lines.enumerated() {
+            let line = splitLine.text
             let lineNumber = offset + 1
-            searchLines.append(SearchLine(lineNumber: lineNumber, line: line))
+            searchLines.append(SearchLine(
+                lineNumber: lineNumber,
+                line: line,
+                lineTerminator: splitLine.terminator,
+                absoluteOffset: absoluteOffset
+            ))
 
             let spans = matcher.spans(in: line)
             guard !spans.isEmpty else {
+                absoluteOffset += splitLine.text.utf8.count + splitLine.terminator.utf8.count
                 continue
             }
 
@@ -127,11 +136,41 @@ public struct RipgrepSearcher {
                 lineNumber: lineNumber,
                 column: options.column ? spans[0].startColumn : nil,
                 line: line,
+                lineTerminator: splitLine.terminator,
+                absoluteOffset: absoluteOffset,
                 matchCount: spans.count,
                 spans: spans
             ))
+            absoluteOffset += splitLine.text.utf8.count + splitLine.terminator.utf8.count
         }
 
         return SearchFileResult(fileURL: fileURL, matches: matches, lines: searchLines)
+    }
+
+    private func splitLines(_ contents: String) -> [(text: String, terminator: String)] {
+        var lines: [(String, String)] = []
+        var current = ""
+        var index = contents.startIndex
+
+        while index < contents.endIndex {
+            let character = contents[index]
+            if character == "\n" {
+                if current.hasSuffix("\r") {
+                    current.removeLast()
+                    lines.append((current, "\r\n"))
+                } else {
+                    lines.append((current, "\n"))
+                }
+                current = ""
+            } else {
+                current.append(character)
+            }
+            index = contents.index(after: index)
+        }
+
+        if !current.isEmpty || !contents.hasSuffix("\n") {
+            lines.append((current, ""))
+        }
+        return lines
     }
 }

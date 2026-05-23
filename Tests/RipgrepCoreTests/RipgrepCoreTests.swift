@@ -114,6 +114,62 @@ struct RipgrepSearcherTests {
         ])
     }
 
+    @Test("prints JSON lines for matches context and summary")
+    func printsJSONLines() throws {
+        let root = try TemporaryDirectory()
+        try root.write("hay\nneedle here\nthere\n", to: "json.txt")
+
+        let output = try run(["--json", "-n", "-C1", "needle", root.path("json.txt")])
+        let messages = try output.map(jsonObject)
+
+        #expect(messages.map { $0["type"] as? String } == ["begin", "context", "match", "context", "end", "summary"])
+
+        let match = messages[2]["data"] as? [String: Any]
+        let lines = match?["lines"] as? [String: String]
+        let submatches = match?["submatches"] as? [[String: Any]]
+        let firstSubmatch = submatches?.first
+        let submatchText = firstSubmatch?["match"] as? [String: String]
+
+        #expect(lines?["text"] == "needle here\n")
+        #expect(match?["line_number"] as? Int == 2)
+        #expect(match?["absolute_offset"] as? Int == 4)
+        #expect(submatchText?["text"] == "needle")
+        #expect(firstSubmatch?["start"] as? Int == 0)
+        #expect(firstSubmatch?["end"] as? Int == 6)
+
+        let end = messages[4]["data"] as? [String: Any]
+        let stats = end?["stats"] as? [String: Any]
+        #expect(stats?["searches"] as? Int == 1)
+        #expect(stats?["searches_with_match"] as? Int == 1)
+        #expect(stats?["matched_lines"] as? Int == 1)
+        #expect(stats?["matches"] as? Int == 1)
+    }
+
+    @Test("prints JSON replacement fields")
+    func printsJSONReplacementFields() throws {
+        let root = try TemporaryDirectory()
+        try root.write("abc123\n", to: "json-replace.txt")
+
+        let output = try run(["--json", "--replace", "[$1]", #"([a-z]+)\d+"#, root.path("json-replace.txt")])
+        let messages = try output.map(jsonObject)
+        let match = messages.first { $0["type"] as? String == "match" }?["data"] as? [String: Any]
+        let submatch = (match?["submatches"] as? [[String: Any]])?.first
+        let replacement = submatch?["replacement"] as? [String: String]
+
+        #expect(replacement?["text"] == "[abc]")
+    }
+
+    @Test("JSON mode follows output mode flag ordering")
+    func jsonModeFollowsOutputModeOrdering() throws {
+        let root = try TemporaryDirectory()
+        try root.write("needle\n", to: "ordering.txt")
+
+        #expect(try run(["--json", "-l", "needle", root.path("ordering.txt")]) == [root.path("ordering.txt")])
+        let output = try run(["-l", "--json", "needle", root.path("ordering.txt")])
+        let messages = try output.map(jsonObject)
+        #expect(messages.first?["type"] as? String == "begin")
+    }
+
     @Test("lists files and honors hidden flag")
     func listsFilesAndHonorsHiddenFlag() throws {
         let root = try TemporaryDirectory()
@@ -280,6 +336,12 @@ struct RipgrepSearcherTests {
             let path = line.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? line
             return URL(fileURLWithPath: path).lastPathComponent
         }
+    }
+
+    private func jsonObject(_ line: String) throws -> [String: Any] {
+        let data = try #require(line.data(using: .utf8))
+        let object = try JSONSerialization.jsonObject(with: data)
+        return try #require(object as? [String: Any])
     }
 }
 

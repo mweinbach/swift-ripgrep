@@ -3,12 +3,23 @@ import Foundation
 public struct MatchSpan: Equatable, Sendable {
     public let startColumn: Int
     public let endColumn: Int
+    public let startByte: Int
+    public let endByte: Int
     public let text: String
     public let replacement: String?
 
-    public init(startColumn: Int, endColumn: Int, text: String, replacement: String? = nil) {
+    public init(
+        startColumn: Int,
+        endColumn: Int,
+        startByte: Int,
+        endByte: Int,
+        text: String,
+        replacement: String? = nil
+    ) {
         self.startColumn = startColumn
         self.endColumn = endColumn
+        self.startByte = startByte
+        self.endByte = endByte
         self.text = text
         self.replacement = replacement
     }
@@ -19,6 +30,8 @@ public struct SearchMatch: Equatable, Sendable {
     public let lineNumber: Int
     public let column: Int?
     public let line: String
+    public let lineTerminator: String
+    public let absoluteOffset: Int
     public let matchCount: Int
     public let spans: [MatchSpan]
 
@@ -27,6 +40,8 @@ public struct SearchMatch: Equatable, Sendable {
         lineNumber: Int,
         column: Int?,
         line: String,
+        lineTerminator: String = "",
+        absoluteOffset: Int = 0,
         matchCount: Int,
         spans: [MatchSpan] = []
     ) {
@@ -34,18 +49,32 @@ public struct SearchMatch: Equatable, Sendable {
         self.lineNumber = lineNumber
         self.column = column
         self.line = line
+        self.lineTerminator = lineTerminator
+        self.absoluteOffset = absoluteOffset
         self.matchCount = matchCount
         self.spans = spans
+    }
+
+    public var lineWithTerminator: String {
+        line + lineTerminator
     }
 }
 
 public struct SearchLine: Equatable, Sendable {
     public let lineNumber: Int
     public let line: String
+    public let lineTerminator: String
+    public let absoluteOffset: Int
 
-    public init(lineNumber: Int, line: String) {
+    public init(lineNumber: Int, line: String, lineTerminator: String = "", absoluteOffset: Int = 0) {
         self.lineNumber = lineNumber
         self.line = line
+        self.lineTerminator = lineTerminator
+        self.absoluteOffset = absoluteOffset
+    }
+
+    public var lineWithTerminator: String {
+        line + lineTerminator
     }
 }
 
@@ -55,6 +84,7 @@ public struct SearchFileResult: Equatable, Sendable {
     public let lines: [SearchLine]
     public let binaryByteOffset: Int?
     public let hasBinaryMatch: Bool
+    public let bytesSearched: Int
     public let searched: Bool
 
     public init(
@@ -63,6 +93,7 @@ public struct SearchFileResult: Equatable, Sendable {
         lines: [SearchLine] = [],
         binaryByteOffset: Int? = nil,
         hasBinaryMatch: Bool = false,
+        bytesSearched: Int = 0,
         searched: Bool = true
     ) {
         self.fileURL = fileURL
@@ -70,6 +101,7 @@ public struct SearchFileResult: Equatable, Sendable {
         self.lines = lines
         self.binaryByteOffset = binaryByteOffset
         self.hasBinaryMatch = hasBinaryMatch
+        self.bytesSearched = bytesSearched
         self.searched = searched
     }
 

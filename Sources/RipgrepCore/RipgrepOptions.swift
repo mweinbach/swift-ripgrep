@@ -33,6 +33,7 @@ public struct RipgrepOptions: Equatable {
     public var invertMatch = false
     public var onlyMatching = false
     public var replacement: String?
+    public var json = false
     public var lineNumber = false
     public var noLineNumber = false
     public var column = false
@@ -151,6 +152,10 @@ public enum RipgrepArgumentParser {
                 options.replacement = String(value.dropFirst("--replace=".count))
             case "-n", "--line-number":
                 options.lineNumber = true
+            case "--json":
+                options.json = true
+            case "--no-json":
+                options.json = false
             case "-N", "--no-line-number":
                 options.noLineNumber = true
             case "--column":
@@ -308,10 +313,13 @@ public enum RipgrepArgumentParser {
                 options.passthru = false
             case "-c", "--count":
                 options.printMode = .count
+                options.json = false
             case "-l", "--files-with-matches":
                 options.printMode = .filesWithMatches
+                options.json = false
             case "--files-without-match":
                 options.printMode = .filesWithoutMatch
+                options.json = false
             case "--":
                 positionals.append(contentsOf: arguments[index...])
                 index = arguments.count
@@ -372,6 +380,7 @@ public enum RipgrepArgumentParser {
           -v, --invert-match         Show non-matching lines
           -o, --only-matching        Print only the matched text
           -r, --replace TEXT         Replace matches with the given text
+              --json                 Show search results in JSON Lines format
           -n, --line-number          Show line numbers
           -N, --no-line-number       Suppress line numbers
               --column               Show the first match column

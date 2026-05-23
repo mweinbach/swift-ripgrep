@@ -66,7 +66,7 @@ public struct PatternMatcher {
 
         if options.invertMatch {
             return filtered.isEmpty ? [
-                MatchSpan(startColumn: 1, endColumn: 1, text: "", replacement: nil),
+                MatchSpan(startColumn: 1, endColumn: 1, startByte: 0, endByte: 0, text: "", replacement: nil),
             ] : []
         }
 
@@ -81,6 +81,8 @@ public struct PatternMatcher {
                 MatchSpan(
                     startColumn: column(for: candidate.range.lowerBound, in: line),
                     endColumn: column(for: candidate.range.upperBound, in: line),
+                    startByte: byteOffset(for: candidate.range.lowerBound, in: line),
+                    endByte: byteOffset(for: candidate.range.upperBound, in: line),
                     text: String(line[candidate.range]),
                     replacement: candidate.replacement
                 )
@@ -139,6 +141,10 @@ public struct PatternMatcher {
 
     private func column(for index: String.Index, in line: String) -> Int {
         line.distance(from: line.startIndex, to: index) + 1
+    }
+
+    private func byteOffset(for index: String.Index, in line: String) -> Int {
+        line[line.startIndex..<index].utf8.count
     }
 
     private func isWordBounded(_ range: Range<String.Index>, in line: String) -> Bool {
