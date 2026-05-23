@@ -1,31 +1,5 @@
 import Foundation
 
-public struct SearchMatch: Equatable {
-    public let fileURL: URL
-    public let lineNumber: Int
-    public let line: String
-
-    public init(fileURL: URL, lineNumber: Int, line: String) {
-        self.fileURL = fileURL
-        self.lineNumber = lineNumber
-        self.line = line
-    }
-}
-
-public enum RipgrepError: Error, CustomStringConvertible, Equatable {
-    case emptyPattern
-    case missingPath(String)
-
-    public var description: String {
-        switch self {
-        case .emptyPattern:
-            return "pattern must not be empty"
-        case .missingPath(let path):
-            return "path does not exist: \(path)"
-        }
-    }
-}
-
 public struct RipgrepSearcher {
     private let fileManager: FileManager
 
@@ -38,102 +12,107 @@ public struct RipgrepSearcher {
         roots: [URL],
         ignoreCase: Bool = false
     ) throws -> [SearchMatch] {
-        guard !pattern.isEmpty else {
+        var options = RipgrepOptions()
+        options.pattern = pattern
+        options.roots = roots
+        options.ignoreCase = ignoreCase
+        return try search(options: options).files.flatMap(\.matches)
+    }
+
+    public func files(options: RipgrepOptions) throws -> [URL] {
+        try FileWalker(fileManager: fileManager)
+            .haystacks(for: options)
+            .map(\.url)
+    }
+
+    public func search(options: RipgrepOptions) throws -> SearchResults {
+        try search(options: options, stdin: nil)
+    }
+
+    public func search(options: RipgrepOptions, stdin: String?) throws -> SearchResults {
+        guard let pattern = options.pattern, !pattern.isEmpty else {
             throw RipgrepError.emptyPattern
         }
 
-        let needle = ignoreCase ? pattern.lowercased() : pattern
-        var matches: [SearchMatch] = []
+        let matcher = try PatternMatcher(options: options)
+        var files = options.useStdin && options.roots.isEmpty
+            ? []
+            : try FileWalker(fileManager: fileManager)
+                .haystacks(for: options)
+                .map { haystack in
+                    searchFile(haystack.url, matcher: matcher, options: options)
+                }
 
-        for root in roots {
-            guard fileManager.fileExists(atPath: root.path) else {
-                throw RipgrepError.missingPath(root.path)
+        if options.useStdin {
+            let input = stdin ?? String(data: FileHandle.standardInput.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            files.append(searchContents(input, fileURL: URL(fileURLWithPath: "-"), matcher: matcher, options: options))
+        }
+
+        files.sort { lhs, rhs in
+            lhs.fileURL.path < rhs.fileURL.path
+        }
+
+        let matchedFiles = files.filter { !$0.matches.isEmpty }
+        let summary = SearchSummary(
+            filesSearched: files.filter(\.searched).count,
+            filesWithMatches: matchedFiles.count,
+            matchedLines: matchedFiles.reduce(0) { $0 + $1.matches.count },
+            totalMatches: matchedFiles.reduce(0) { total, file in
+                total + file.matches.reduce(0) { $0 + $1.matchCount }
             }
-
-            for fileURL in try files(in: root) {
-                matches.append(contentsOf: searchFile(
-                    fileURL,
-                    needle: needle,
-                    ignoreCase: ignoreCase
-                ))
-            }
-        }
-
-        return matches.sorted {
-            if $0.fileURL.path != $1.fileURL.path {
-                return $0.fileURL.path < $1.fileURL.path
-            }
-            return $0.lineNumber < $1.lineNumber
-        }
-    }
-
-    private func files(in url: URL) throws -> [URL] {
-        let values = try url.resourceValues(forKeys: [
-            .isDirectoryKey,
-            .isRegularFileKey,
-            .isSymbolicLinkKey,
-            .nameKey,
-        ])
-
-        guard values.isSymbolicLink != true else {
-            return []
-        }
-
-        if values.isRegularFile == true {
-            return [url]
-        }
-
-        guard values.isDirectory == true else {
-            return []
-        }
-
-        let children = try fileManager.contentsOfDirectory(
-            at: url,
-            includingPropertiesForKeys: [
-                .isDirectoryKey,
-                .isRegularFileKey,
-                .isSymbolicLinkKey,
-                .nameKey,
-            ],
-            options: [.skipsHiddenFiles]
         )
-        .sorted { $0.path < $1.path }
 
-        var files: [URL] = []
-        for child in children {
-            files.append(contentsOf: try self.files(in: child))
-        }
-        return files
+        return SearchResults(files: files, summary: summary)
     }
 
     private func searchFile(
         _ fileURL: URL,
-        needle: String,
-        ignoreCase: Bool
-    ) -> [SearchMatch] {
+        matcher: PatternMatcher,
+        options: RipgrepOptions
+    ) -> SearchFileResult {
         guard let contents = try? String(contentsOf: fileURL, encoding: .utf8) else {
-            return []
+            return SearchFileResult(fileURL: fileURL, matches: [], searched: false)
         }
 
-        var matches: [SearchMatch] = []
-        let lines = contents.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+        return searchContents(contents, fileURL: fileURL, matcher: matcher, options: options)
+    }
 
-        for (offset, lineSubstring) in lines.enumerated() {
-            var line = String(lineSubstring)
+    private func searchContents(
+        _ contents: String,
+        fileURL: URL,
+        matcher: PatternMatcher,
+        options: RipgrepOptions
+    ) -> SearchFileResult {
+        var matches: [SearchMatch] = []
+        var lines = contents.components(separatedBy: "\n")
+        if contents.hasSuffix("\n") {
+            lines.removeLast()
+        }
+
+        for (offset, lineFragment) in lines.enumerated() {
+            var line = lineFragment
             if line.hasSuffix("\r") {
                 line.removeLast()
             }
 
-            let haystack = ignoreCase ? line.lowercased() : line
-            if haystack.contains(needle) {
-                matches.append(SearchMatch(
-                    fileURL: fileURL,
-                    lineNumber: offset + 1,
-                    line: line
-                ))
+            let ranges = matcher.matches(in: line)
+            guard !ranges.isEmpty else {
+                continue
             }
+
+            matches.append(SearchMatch(
+                fileURL: fileURL,
+                lineNumber: offset + 1,
+                column: options.column ? column(for: ranges[0], in: line) : nil,
+                line: line,
+                matchCount: ranges.count
+            ))
         }
 
-        return matches
+        return SearchFileResult(fileURL: fileURL, matches: matches)
+    }
+
+    private func column(for range: Range<String.Index>, in line: String) -> Int {
+        line.distance(from: line.startIndex, to: range.lowerBound) + 1
     }
 }

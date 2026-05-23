@@ -3,6 +3,16 @@ import Foundation
 public enum RipgrepCLI {
     public static let version = "0.1.0"
 
+    public struct OutputOptions: Equatable {
+        public let showFilename: Bool
+        public let showLineNumber: Bool
+
+        public init(showFilename: Bool, showLineNumber: Bool) {
+            self.showFilename = showFilename
+            self.showLineNumber = showLineNumber
+        }
+    }
+
     public static func run(
         arguments: [String],
         stdout: (String) -> Void = { print($0) },
@@ -11,86 +21,63 @@ public enum RipgrepCLI {
                 FileHandle.standardError.write(data)
             }
         },
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        stdin: String? = nil
     ) -> Int32 {
-        var ignoreCase = false
-        var positionals: [String] = []
+        switch RipgrepArgumentParser.parse(arguments) {
+        case .help:
+            stdout(usage())
+            return 0
+        case .version:
+            stdout("ripgrep \(version)")
+            return 0
+        case .error(let message):
+            stderr(message)
+            return 2
+        case .run(let options):
+            do {
+                let searcher = RipgrepSearcher(fileManager: fileManager)
+                let printer = StandardPrinter(options: options)
 
-        for argument in arguments {
-            switch argument {
-            case "-h", "--help":
-                stdout(usage())
-                return 0
-            case "--version":
-                stdout("ripgrep \(version)")
-                return 0
-            case "-i", "--ignore-case":
-                ignoreCase = true
-            default:
-                if argument.hasPrefix("-") {
-                    stderr("error: unrecognized option '\(argument)'")
-                    return 2
+                if options.mode == .files {
+                    for line in try printer.paths(searcher.files(options: options)) {
+                        stdout(line)
+                    }
+                    return 0
                 }
-                positionals.append(argument)
+
+                let results = try searcher.search(options: options, stdin: stdin)
+                for line in printer.lines(for: results) {
+                    stdout(line)
+                }
+
+                return results.hasMatch ? 0 : 1
+            } catch {
+                stderr("error: \(error)")
+                return 2
             }
-        }
-
-        guard let pattern = positionals.first, !pattern.isEmpty else {
-            stderr(usage())
-            return 2
-        }
-
-        let pathArguments = positionals.dropFirst()
-        let roots = (pathArguments.isEmpty ? ["."] : Array(pathArguments))
-            .map { URL(fileURLWithPath: $0) }
-
-        do {
-            let matches = try RipgrepSearcher(fileManager: fileManager).search(
-                pattern: pattern,
-                roots: roots,
-                ignoreCase: ignoreCase
-            )
-
-            for match in matches {
-                stdout(format(match))
-            }
-
-            return matches.isEmpty ? 1 : 0
-        } catch {
-            stderr("error: \(error)")
-            return 2
         }
     }
 
     public static func usage() -> String {
-        """
-        ripgrep \(version)
-
-        USAGE:
-          ripgrep [OPTIONS] <pattern> [path ...]
-
-        OPTIONS:
-          -i, --ignore-case    Search case insensitively
-          -h, --help           Print help
-              --version        Print version
-        """
+        RipgrepArgumentParser.usage(version: version)
     }
 
-    public static func format(_ match: SearchMatch) -> String {
-        "\(displayPath(for: match.fileURL)):\(match.lineNumber):\(match.line)"
-    }
-
-    private static func displayPath(for url: URL) -> String {
-        let path = url.standardizedFileURL.path
-        let currentDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-            .standardizedFileURL
-            .path
-        let prefix = currentDirectory.hasSuffix("/") ? currentDirectory : "\(currentDirectory)/"
-
-        if path.hasPrefix(prefix) {
-            return String(path.dropFirst(prefix.count))
-        }
-
-        return path
+    public static func format(
+        _ match: SearchMatch,
+        options: OutputOptions = OutputOptions(showFilename: true, showLineNumber: true)
+    ) -> String {
+        var ripgrepOptions = RipgrepOptions()
+        ripgrepOptions.withFilename = options.showFilename
+        ripgrepOptions.lineNumber = options.showLineNumber
+        return StandardPrinter(options: ripgrepOptions).lines(for: SearchResults(
+            files: [SearchFileResult(fileURL: match.fileURL, matches: [match])],
+            summary: SearchSummary(
+                filesSearched: 1,
+                filesWithMatches: 1,
+                matchedLines: 1,
+                totalMatches: match.matchCount
+            )
+        )).first ?? match.line
     }
 }
