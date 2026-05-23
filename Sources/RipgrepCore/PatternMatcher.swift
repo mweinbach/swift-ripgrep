@@ -30,10 +30,10 @@ public struct PatternMatcher {
                     """)
                 }
                 if options.engineMode == .default, let unsupported = Self.defaultEngineUnsupportedFeature(in: pattern) {
-                    throw RipgrepError.invalidRegex("\(unsupported) is not supported by the default regex engine; use --pcre2 or --engine=auto")
+                    throw RipgrepError.message(Self.defaultRegexParseError(pattern: pattern, feature: unsupported))
                 }
                 if options.engineMode == .automatic, let unsupported = Self.defaultEngineUnsupportedFeature(in: pattern) {
-                    throw RipgrepError.message(Self.automaticEngineUnavailableMessage(unsupported: unsupported))
+                    throw RipgrepError.message(Self.automaticEngineUnavailableMessage(pattern: pattern, feature: unsupported))
                 }
                 let source = Self.regexPattern(for: pattern, options: options)
                 compiledRegexSourceBytes += source.utf8.count
@@ -265,7 +265,13 @@ public struct PatternMatcher {
         return output
     }
 
-    private static func defaultEngineUnsupportedFeature(in pattern: String) -> String? {
+    private struct UnsupportedRegexFeature {
+        let byteOffset: Int
+        let caretLength: Int
+        let message: String
+    }
+
+    private static func defaultEngineUnsupportedFeature(in pattern: String) -> UnsupportedRegexFeature? {
         var escaped = false
         var inClass = false
         var index = pattern.startIndex
@@ -274,7 +280,11 @@ public struct PatternMatcher {
             let character = pattern[index]
             if escaped {
                 if character.isNumber {
-                    return "backreferences"
+                    return UnsupportedRegexFeature(
+                        byteOffset: pattern[..<pattern.index(before: index)].utf8.count,
+                        caretLength: 2,
+                        message: "backreferences are not supported"
+                    )
                 }
                 escaped = false
                 index = pattern.index(after: index)
@@ -297,30 +307,53 @@ public struct PatternMatcher {
             }
             if !inClass,
                character == "(",
-               hasAnyPrefix(["(?=", "(?!", "(?<=", "(?<!", "(?>"], at: index, in: pattern) {
-                return "look-around"
+               let lookAroundLength = lookAroundPrefixLength(at: index, in: pattern) {
+                return UnsupportedRegexFeature(
+                    byteOffset: pattern[..<index].utf8.count,
+                    caretLength: lookAroundLength,
+                    message: "look-around, including look-ahead and look-behind, is not supported"
+                )
             }
             index = pattern.index(after: index)
         }
         return nil
     }
 
-    private static func automaticEngineUnavailableMessage(unsupported: String) -> String {
+    private static func defaultRegexParseError(pattern: String, feature: UnsupportedRegexFeature) -> String {
+        let wrappedPattern = "(?:\(pattern))"
+        let caretIndent = String(repeating: " ", count: 4 + 3 + feature.byteOffset)
+        let carets = String(repeating: "^", count: feature.caretLength)
+        return """
+        regex parse error:
+            \(wrappedPattern)
+        \(caretIndent)\(carets)
+        error: \(feature.message)
         """
+    }
+
+    private static func automaticEngineUnavailableMessage(pattern: String, feature: UnsupportedRegexFeature) -> String {
+        let defaultError = defaultRegexParseError(pattern: pattern, feature: feature)
+        return """
         regex could not be compiled with either the default regex engine or with PCRE2.
 
         default regex engine error:
-        \(unsupported) is not supported by the default regex engine
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        \(defaultError)
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
         PCRE2 regex engine error:
         PCRE2 is not available in this build of ripgrep
         """
     }
 
-    private static func hasAnyPrefix(_ prefixes: [String], at index: String.Index, in text: String) -> Bool {
-        prefixes.contains { prefix in
-            text[index...].hasPrefix(prefix)
+    private static func lookAroundPrefixLength(at index: String.Index, in text: String) -> Int? {
+        if text[index...].hasPrefix("(?=") || text[index...].hasPrefix("(?!") {
+            return 3
         }
+        if text[index...].hasPrefix("(?<=") || text[index...].hasPrefix("(?<!") {
+            return 4
+        }
+        return nil
     }
 
     private static func asciiRegexPattern(for pattern: String) -> String {

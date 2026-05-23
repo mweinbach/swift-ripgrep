@@ -87,7 +87,28 @@ struct RipgrepSearcherTests {
         )
         #expect(exitCode == 2)
         #expect(output.isEmpty)
-        #expect(errors.first?.contains("look-around") == true)
+        #expect(errors == ["""
+        rg: regex parse error:
+            (?:(?<=a)b)
+               ^^^^
+        error: look-around, including look-ahead and look-behind, is not supported
+        """])
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: [#"(a)\1"#, root.path("engine.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["""
+        rg: regex parse error:
+            (?:(a)\\1)
+                  ^^
+        error: backreferences are not supported
+        """])
 
         #expect(try run(["-o", "--engine=auto", "a.", root.path("engine.txt")]) == ["ab", "ac"])
 
@@ -100,7 +121,20 @@ struct RipgrepSearcherTests {
         )
         #expect(exitCode == 2)
         #expect(output.isEmpty)
-        #expect(errors.joined(separator: "\n").contains("PCRE2 is not available"))
+        #expect(errors == ["""
+        rg: regex could not be compiled with either the default regex engine or with PCRE2.
+
+        default regex engine error:
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        regex parse error:
+            (?:(?<=a)b)
+               ^^^^
+        error: look-around, including look-ahead and look-behind, is not supported
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+        PCRE2 regex engine error:
+        PCRE2 is not available in this build of ripgrep
+        """])
 
         output = []
         errors = []
@@ -122,7 +156,12 @@ struct RipgrepSearcherTests {
         )
         #expect(exitCode == 2)
         #expect(output.isEmpty)
-        #expect(errors.first?.contains("look-around") == true)
+        #expect(errors == ["""
+        rg: regex parse error:
+            (?:(?<=a)b)
+               ^^^^
+        error: look-around, including look-ahead and look-behind, is not supported
+        """])
 
         output = []
         errors = []
