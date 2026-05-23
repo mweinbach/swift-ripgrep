@@ -1804,13 +1804,13 @@ public enum RipgrepArgumentParser {
         let multiplier: UInt64
         let digits: Substring
         switch suffix {
-        case "K", "k":
+        case "K":
             multiplier = 1024
             digits = raw.dropLast()
-        case "M", "m":
+        case "M":
             multiplier = 1024 * 1024
             digits = raw.dropLast()
-        case "G", "g":
+        case "G":
             multiplier = 1024 * 1024 * 1024
             digits = raw.dropLast()
         default:

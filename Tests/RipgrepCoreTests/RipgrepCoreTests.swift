@@ -1712,6 +1712,26 @@ struct RipgrepSearcherTests {
             "needle \(String(repeating: "x", count: 100))",
         ])
 
+        var output: [String] = []
+        var errors: [String] = []
+        var exitCode = RipgrepCLI.run(
+            arguments: ["--max-filesize", "45k", "needle", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["error: invalid max filesize '45k'"])
+
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--max-filesize=34359738368G", "needle", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(errors == ["error: invalid max filesize '34359738368G'"])
+
         #expect(pathBasenames(try run([
             "--no-ignore",
             "-g",
