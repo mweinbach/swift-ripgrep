@@ -67,7 +67,7 @@ public struct StandardPrinter {
                 return matchLines
             }
         case .count:
-            return results.files.filter { options.includeZero ? $0.searched : $0.hasMatch }.map { result in
+            return results.files.filter { countable($0) }.map { result in
                 let count = options.onlyMatching
                     ? result.matches.reduce(0) { $0 + $1.matchCount }
                     : result.matches.isEmpty && result.hasBinaryMatch ? 1 : result.matches.count
@@ -77,7 +77,7 @@ public struct StandardPrinter {
                 return "\(count)"
             }
         case .countMatches:
-            return results.files.filter { options.includeZero ? $0.searched : $0.hasMatch }.map { result in
+            return results.files.filter { countable($0) }.map { result in
                 let count = result.matches.isEmpty && result.hasBinaryMatch ? 1 : result.matches.reduce(0) { $0 + $1.matchCount }
                 if showPath(for: results) {
                     return "\(renderPath(for: result.fileURL))\(pathFieldSeparator())\(count)"
@@ -93,6 +93,13 @@ public struct StandardPrinter {
                 .filter { !$0.hasMatch }
                 .map { "\(renderPath(for: $0.fileURL))\(pathTerminator())" }
         }
+    }
+
+    private func countable(_ result: SearchFileResult) -> Bool {
+        if result.stoppedBinaryAfterMatch {
+            return false
+        }
+        return options.includeZero ? result.searched : result.hasMatch
     }
 
     public func paths(_ urls: [URL]) -> [String] {

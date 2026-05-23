@@ -1824,6 +1824,20 @@ struct RipgrepSearcherTests {
         ])
         #expect(try run(["-c", "needle", root.path("before-nul.dat")]) == ["1"])
         #expect(pathBasenames(try run(["--binary", "needle", root.url.path])) == ["before-nul.dat", "before-nul.dat", "bin.dat"])
+
+        let countRoot = try TemporaryDirectory()
+        try countRoot.write(Data("cat here\npadding\n\0".utf8), to: "file1.txt")
+        try countRoot.write("cat here\n", to: "file2.txt")
+        #expect(pathBasenames(try run(["--sort=path", "-l", "cat", countRoot.url.path])) == ["file1.txt", "file2.txt"])
+        #expect(countBasenames(try run(["--sort=path", "-c", "cat", countRoot.url.path])) == ["file2.txt:1"])
+        #expect(countBasenames(try run(["--sort=path", "-c", "cat", countRoot.url.path, "--binary"])) == [
+            "file1.txt:1",
+            "file2.txt:1",
+        ])
+        #expect(countBasenames(try run(["--sort=path", "-c", "cat", countRoot.url.path, "--text"])) == [
+            "file1.txt:1",
+            "file2.txt:1",
+        ])
         var stdinOutput: [String] = []
         var stdinExitCode = RipgrepCLI.run(
             arguments: ["-n", "needle", "-"],
