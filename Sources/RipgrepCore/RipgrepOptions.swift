@@ -637,17 +637,27 @@ public enum RipgrepArgumentParser {
                 guard index < arguments.count else {
                     return .error("error: The argument '--path-separator <SEPARATOR>' requires a value")
                 }
-                guard let separator = parsePathSeparator(arguments[index]) else {
-                    return .error("error: path separator must be a single character")
+                guard let parsed = parsePathSeparator(arguments[index]) else {
+                    return .error("error: path separator must be exactly one byte")
                 }
-                options.pathSeparator = separator
+                switch parsed {
+                case .automatic:
+                    options.pathSeparator = nil
+                case .separator(let separator):
+                    options.pathSeparator = separator
+                }
                 index += 1
             case let value where value.hasPrefix("--path-separator="):
                 let raw = String(value.dropFirst("--path-separator=".count))
-                guard let separator = parsePathSeparator(raw) else {
-                    return .error("error: path separator must be a single character")
+                guard let parsed = parsePathSeparator(raw) else {
+                    return .error("error: path separator must be exactly one byte")
                 }
-                options.pathSeparator = separator
+                switch parsed {
+                case .automatic:
+                    options.pathSeparator = nil
+                case .separator(let separator):
+                    options.pathSeparator = separator
+                }
             case "--sort":
                 guard index < arguments.count else {
                     return .error("error: The argument '--sort <SORTBY>' requires a value")
@@ -1485,20 +1495,22 @@ public enum RipgrepArgumentParser {
         }
     }
 
-    private static func parsePathSeparator(_ raw: String) -> Character? {
-        let value: String
-        switch raw {
-        case #"\"#, #"\\"#:
-            value = #"\"#
-        case #"\0"#, #"\x00"#, #"\\0"#, #"\\x00"#:
-            value = "\0"
-        default:
-            value = raw
+    private enum PathSeparatorParseResult {
+        case automatic
+        case separator(Character)
+    }
+
+    private static func parsePathSeparator(_ raw: String) -> PathSeparatorParseResult? {
+        guard !raw.isEmpty else {
+            return .automatic
         }
-        guard value.count == 1 else {
+        let value = parseEscapedSeparator(raw)
+        guard value.count == 1,
+              let separator = value.first,
+              String(separator).utf8.count == 1 else {
             return nil
         }
-        return value.first
+        return .separator(separator)
     }
 
     private static func parseEscapedSeparator(_ raw: String) -> String {

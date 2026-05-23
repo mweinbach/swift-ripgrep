@@ -245,6 +245,30 @@ struct RipgrepSearcherTests {
         #expect(try run(["-l", "--path-separator", #"\"#, "needle", root.url.path]) == [
             root.path("dir/one.txt").replacingOccurrences(of: "/", with: #"\"#),
         ])
+        #expect(try run(["-l", "--path-separator", #"\x5A"#, "needle", root.url.path]) == [
+            root.path("dir/one.txt").replacingOccurrences(of: "/", with: "Z"),
+        ])
+        #expect(try run([
+            "-l",
+            "--path-separator",
+            "Z",
+            "--path-separator=",
+            "needle",
+            root.url.path,
+        ]) == [
+            root.path("dir/one.txt"),
+        ])
+
+        var output: [String] = []
+        var errors: [String] = []
+        let exitCode = RipgrepCLI.run(
+            arguments: ["--path-separator", "ø", "needle", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors.first?.contains("exactly one byte") == true)
     }
 
     @Test("limits matching lines per file")
