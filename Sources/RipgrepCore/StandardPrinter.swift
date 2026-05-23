@@ -831,8 +831,11 @@ private struct ANSIColorPalette {
     }
 
     func apply(_ target: ColorTarget, to text: String) -> String {
-        guard isEnabled, let style = styles[target], let escape = style.escape else {
+        guard isEnabled, !text.isEmpty, let style = styles[target] else {
             return text
+        }
+        guard let escape = style.escape else {
+            return shouldResetPlainText(target) ? "\(Self.reset)\(text)\(Self.reset)" : text
         }
         return "\(Self.reset)\(escape)\(text)\(Self.reset)"
     }
@@ -860,6 +863,15 @@ private struct ANSIColorPalette {
         }
         output.append(contentsOf: line[cursor..<line.endIndex])
         return output
+    }
+
+    private func shouldResetPlainText(_ target: ColorTarget) -> Bool {
+        switch target {
+        case .path, .line, .column:
+            return true
+        case .match, .highlight:
+            return false
+        }
     }
 
     private func indexRange(startColumn: Int, endColumn: Int, in line: String) -> Range<String.Index>? {

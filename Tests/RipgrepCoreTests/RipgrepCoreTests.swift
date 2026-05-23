@@ -1161,6 +1161,7 @@ struct RipgrepSearcherTests {
         let root = try TemporaryDirectory()
         try root.write("alpha needle beta\nno\n", to: "a.txt")
         try root.write("needle again\n", to: "b.txt")
+        try root.write("\n\ntest\n", to: "empty.txt")
 
         let reset = "\u{1B}[0m"
         let green = "\u{1B}[32m"
@@ -1195,6 +1196,19 @@ struct RipgrepSearcherTests {
         ]) == [
             "alpha \(reset)\u{1B}[1m\(magenta)needle\(reset) beta",
         ])
+        #expect(try run([
+            "--color=ansi",
+            "--colors=path:none",
+            "--colors=line:none",
+            "--colors=match:fg:red",
+            "--colors=match:style:nobold",
+            "--line-number",
+            "^$",
+            root.path("empty.txt"),
+        ]) == [
+            "\(reset)1\(reset):",
+            "\(reset)2\(reset):",
+        ])
         #expect(try run(["--pretty", "--sort=path", "needle", root.url.path]) == [
             "\(reset)\(magenta)\(root.path("a.txt"))\(reset)",
             "\(reset)\(green)1\(reset):alpha \(reset)\(redBold)needle\(reset) beta",
@@ -1220,7 +1234,8 @@ struct RipgrepSearcherTests {
         try root.write("hay\nneedle\n", to: "links/a file.txt")
         let path = root.path("links/a file.txt")
         let encodedPath = path.replacingOccurrences(of: " ", with: "%20")
-        let linkedPath = "\u{1B}]8;;grep+://\(encodedPath):2\u{1B}\\\(path)\u{1B}]8;;\u{1B}\\"
+        let reset = "\u{1B}[0m"
+        let linkedPath = "\u{1B}]8;;grep+://\(encodedPath):2\u{1B}\\\(reset)\(path)\(reset)\u{1B}]8;;\u{1B}\\"
 
         #expect(try run([
             "-H",
@@ -1235,12 +1250,12 @@ struct RipgrepSearcherTests {
             "needle",
             path,
         ]) == [
-            "\(linkedPath):2:1:needle",
+            "\(linkedPath):\(reset)2\(reset):\(reset)1\(reset):needle",
         ])
 
         try root.write("#!/bin/sh\nprintf test-host\n", to: "hostname")
         try root.makeExecutable("hostname")
-        let hostLinkedPath = "\u{1B}]8;;file://test-host\(encodedPath)\u{1B}\\\(path)\u{1B}]8;;\u{1B}\\"
+        let hostLinkedPath = "\u{1B}]8;;file://test-host\(encodedPath)\u{1B}\\\(reset)\(path)\(reset)\u{1B}]8;;\u{1B}\\"
         #expect(try run([
             "-H",
             "--color=always",
