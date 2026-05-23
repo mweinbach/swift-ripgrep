@@ -2,9 +2,14 @@ import Foundation
 
 public struct JSONPrinter {
     private let options: RipgrepOptions
+    private let pathFormatter: OutputPathFormatter
 
-    public init(options: RipgrepOptions) {
+    public init(
+        options: RipgrepOptions,
+        currentDirectory: String = FileManager.default.currentDirectoryPath
+    ) {
         self.options = options
+        self.pathFormatter = OutputPathFormatter(options: options, currentDirectory: currentDirectory)
     }
 
     public func lines(for results: SearchResults) -> [String] {
@@ -12,15 +17,16 @@ public struct JSONPrinter {
         var totalBytesPrinted = 0
         if !options.quiet {
             for result in results.files where result.hasMatch {
+                let path = displayPath(for: result.fileURL)
                 var fileOutput: [String] = []
                 fileOutput.append(jsonLine([
                     "type": "begin",
                     "data": [
-                        "path": dataObject(result.fileURL.path),
+                        "path": dataObject(path),
                     ],
                 ]))
 
-                for message in messages(for: result) {
+                for message in messages(for: result, path: path) {
                     fileOutput.append(jsonLine(message))
                 }
 
@@ -30,7 +36,7 @@ public struct JSONPrinter {
                 output.append(jsonLine([
                     "type": "end",
                     "data": [
-                        "path": dataObject(result.fileURL.path),
+                        "path": dataObject(path),
                         "binary_offset": result.binaryByteOffset.map { $0 as Any } ?? NSNull(),
                         "stats": statsObject(for: result, bytesPrinted: fileBytesPrinted),
                     ],
@@ -48,14 +54,14 @@ public struct JSONPrinter {
         return output
     }
 
-    private func messages(for result: SearchFileResult) -> [[String: Any]] {
+    private func messages(for result: SearchFileResult, path: String) -> [[String: Any]] {
         if options.passthru || options.beforeContext > 0 || options.afterContext > 0 {
-            return contextAwareMessages(for: result)
+            return contextAwareMessages(for: result, path: path)
         }
-        return result.matches.map { matchMessage($0, path: result.fileURL.path) }
+        return result.matches.map { matchMessage($0, path: path) }
     }
 
-    private func contextAwareMessages(for result: SearchFileResult) -> [[String: Any]] {
+    private func contextAwareMessages(for result: SearchFileResult, path: String) -> [[String: Any]] {
         let matchesByLine = Dictionary(uniqueKeysWithValues: result.matches.map { ($0.lineNumber, $0) })
         let selectedLineNumbers: [Int]
         if options.passthru {
@@ -74,12 +80,12 @@ public struct JSONPrinter {
 
         return selectedLineNumbers.compactMap { lineNumber in
             if let match = matchesByLine[lineNumber] {
-                return matchMessage(match, path: result.fileURL.path)
+                return matchMessage(match, path: path)
             }
             guard let line = result.lines.first(where: { $0.lineNumber == lineNumber }) else {
                 return nil
             }
-            return contextMessage(line, path: result.fileURL.path)
+            return contextMessage(line, path: path)
         }
     }
 
@@ -171,6 +177,10 @@ public struct JSONPrinter {
 
     private func dataObject(_ text: String) -> [String: String] {
         ["text": text]
+    }
+
+    private func displayPath(for url: URL) -> String {
+        pathFormatter.displayPath(for: url)
     }
 
     private func matchedLineCount(_ match: SearchMatch) -> Int {

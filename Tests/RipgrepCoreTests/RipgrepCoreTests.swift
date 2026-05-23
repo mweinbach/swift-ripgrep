@@ -677,6 +677,18 @@ struct RipgrepSearcherTests {
         #expect(match?["line_number"] as? Int == 1)
         #expect(submatch?["start"] as? Int == 0)
         #expect(submatch?["end"] as? Int == 7)
+
+        try root.write("test\r\n\n", to: "crlf-json.txt")
+        let crlfOutput = try run(["--json", "-U", "--crlf", #"\n"#, root.path("crlf-json.txt")])
+        let crlfMessages = try crlfOutput.map(jsonObject)
+        #expect(crlfMessages.map { $0["type"] as? String } == ["begin", "match", "end", "summary"])
+        let crlfMatch = crlfMessages[1]["data"] as? [String: Any]
+        let crlfLines = crlfMatch?["lines"] as? [String: String]
+        let crlfSubmatches = crlfMatch?["submatches"] as? [[String: Any]]
+        #expect(crlfLines?["text"] == "test\r\n\n")
+        #expect(crlfSubmatches?.count == 2)
+        #expect(crlfSubmatches?.map { $0["start"] as? Int } == [5, 6])
+        #expect(crlfSubmatches?.map { $0["end"] as? Int } == [6, 7])
     }
 
     @Test("honors CRLF anchor mode")
@@ -1340,6 +1352,33 @@ struct RipgrepSearcherTests {
         #expect(binaryOnlyMessages.map { $0["type"] as? String } == ["begin", "end", "summary"])
         let binaryOnlyEnd = binaryOnlyMessages[1]["data"] as? [String: Any]
         #expect(binaryOnlyEnd?["binary_offset"] as? Int == 7)
+
+        var relativeOptions = RipgrepOptions()
+        relativeOptions.json = true
+        relativeOptions.pattern = "needle"
+        relativeOptions.patterns = ["needle"]
+        relativeOptions.rootPathArguments = ["json.txt"]
+        relativeOptions.roots = [root.url.appendingPathComponent("json.txt")]
+        let relativeMatch = SearchMatch(
+            fileURL: root.url.appendingPathComponent("json.txt"),
+            lineNumber: 2,
+            column: nil,
+            line: "needle here",
+            lineTerminator: "\n",
+            absoluteOffset: 4,
+            matchCount: 1,
+            spans: [MatchSpan(startColumn: 1, endColumn: 7, startByte: 0, endByte: 6, text: "needle")]
+        )
+        let relativeResult = SearchResults(
+            files: [SearchFileResult(fileURL: relativeMatch.fileURL, matches: [relativeMatch], bytesSearched: 23)],
+            summary: SearchSummary(filesSearched: 1, filesWithMatches: 1, matchedLines: 1, totalMatches: 1)
+        )
+        let relativeMessages = try JSONPrinter(options: relativeOptions, currentDirectory: root.url.path)
+            .lines(for: relativeResult)
+            .map(jsonObject)
+        let relativeBegin = relativeMessages[0]["data"] as? [String: Any]
+        let relativePath = relativeBegin?["path"] as? [String: String]
+        #expect(relativePath?["text"] == "json.txt")
     }
 
     @Test("prints JSON replacement fields")
@@ -1684,7 +1723,7 @@ struct RipgrepSearcherTests {
         )
         #expect(exitCode == 2)
         #expect(output.isEmpty)
-        #expect(errors.first?.contains("unclosed character class") == true)
+        #expect(errors == ["rg: error parsing glob '[broken': unclosed character class; missing ']'"])
     }
 
     @Test("honors escaped slash in ignore patterns")

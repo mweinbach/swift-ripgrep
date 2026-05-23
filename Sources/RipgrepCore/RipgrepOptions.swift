@@ -875,14 +875,14 @@ public enum RipgrepArgumentParser {
                     return .error("error: The argument '--pre-glob <GLOB>' requires a value")
                 }
                 guard let glob = parseStrictGlob(arguments[index]) else {
-                    return .error("error: invalid glob '\(arguments[index])': unclosed character class")
+                    return .error(globParseError(arguments[index]))
                 }
                 options.preGlobPatterns.append(glob)
                 index += 1
             case let value where value.hasPrefix("--pre-glob="):
                 let glob = String(value.dropFirst("--pre-glob=".count))
                 guard let glob = parseStrictGlob(glob) else {
-                    return .error("error: invalid glob '\(glob)': unclosed character class")
+                    return .error(globParseError(glob))
                 }
                 options.preGlobPatterns.append(glob)
             case "-g", "--glob":
@@ -890,20 +890,20 @@ public enum RipgrepArgumentParser {
                     return .error("error: The argument '--glob <GLOB>' requires a value")
                 }
                 guard let glob = parseStrictGlob(arguments[index]) else {
-                    return .error("error: invalid glob '\(arguments[index])': unclosed character class")
+                    return .error(globParseError(arguments[index]))
                 }
                 options.globPatterns.append(glob)
                 index += 1
             case let value where value.hasPrefix("--glob="):
                 let glob = String(value.dropFirst("--glob=".count))
                 guard let glob = parseStrictGlob(glob) else {
-                    return .error("error: invalid glob '\(glob)': unclosed character class")
+                    return .error(globParseError(glob))
                 }
                 options.globPatterns.append(glob)
             case let value where value.hasPrefix("-g") && value.count > 2:
                 let glob = String(value.dropFirst(2))
                 guard let glob = parseStrictGlob(glob) else {
-                    return .error("error: invalid glob '\(glob)': unclosed character class")
+                    return .error(globParseError(glob))
                 }
                 options.globPatterns.append(glob)
             case "--iglob":
@@ -911,14 +911,14 @@ public enum RipgrepArgumentParser {
                     return .error("error: The argument '--iglob <GLOB>' requires a value")
                 }
                 guard let glob = parseStrictGlob(arguments[index]) else {
-                    return .error("error: invalid glob '\(arguments[index])': unclosed character class")
+                    return .error(globParseError(arguments[index]))
                 }
                 options.caseInsensitiveGlobPatterns.append(glob)
                 index += 1
             case let value where value.hasPrefix("--iglob="):
                 let glob = String(value.dropFirst("--iglob=".count))
                 guard let glob = parseStrictGlob(glob) else {
-                    return .error("error: invalid glob '\(glob)': unclosed character class")
+                    return .error(globParseError(glob))
                 }
                 options.caseInsensitiveGlobPatterns.append(glob)
             case "-t", "--type":
@@ -1493,6 +1493,10 @@ public enum RipgrepArgumentParser {
 
     private static func parseStrictGlob(_ raw: String) -> String? {
         hasUnclosedCharacterClass(raw) ? nil : raw
+    }
+
+    private static func globParseError(_ raw: String) -> String {
+        "rg: error parsing glob '\(raw)': unclosed character class; missing ']'"
     }
 
     private static func hasUnclosedCharacterClass(_ pattern: String) -> Bool {
