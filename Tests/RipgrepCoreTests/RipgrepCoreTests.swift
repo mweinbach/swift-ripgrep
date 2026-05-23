@@ -910,6 +910,20 @@ struct RipgrepSearcherTests {
             "foo",
             "bar",
         ])
+        try root.write("ab\n\ncd\n", to: "zero-width.txt")
+        for pattern in ["^", "$", "(?:^)", "(?m:$)"] {
+            var output: [String] = []
+            var errors: [String] = []
+            let exitCode = RipgrepCLI.run(
+                arguments: ["-U", "-o", pattern, root.path("zero-width.txt")],
+                stdout: { output.append($0) },
+                stderr: { errors.append($0) }
+            )
+
+            #expect(exitCode == 0)
+            #expect(output.isEmpty)
+            #expect(errors.isEmpty)
+        }
         #expect(try run(["-n", "-U", "-o", #"foo[\s\S]+?bar"#, root.path("multi.txt")]) == [
             "1:foo",
             "2:bar",

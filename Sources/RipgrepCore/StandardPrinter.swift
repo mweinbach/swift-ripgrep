@@ -245,6 +245,9 @@ public struct StandardPrinter {
 
         let replacementOffsets = replacementStartOffsetsByIndex(for: match)
         return match.spans.enumerated().flatMap { index, span in
+            if shouldSuppressMultilineEmptyOnlyMatch(span) {
+                return [String]()
+            }
             if options.multiline, span.text.contains("\n") || span.text.contains("\0") {
                 return formatOnlyMatchingMultiline(span, in: match, showPath: showPath)
             }
@@ -266,6 +269,32 @@ public struct StandardPrinter {
             let text = "\(onlyMatchingText(span, in: match))\(outputTerminator(match.lineTerminator, line: span.text, crlfMatchTerminator: true))"
             return ["\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(text)"]
         }
+    }
+
+    private func shouldSuppressMultilineEmptyOnlyMatch(_ span: MatchSpan) -> Bool {
+        options.multiline
+            && span.text.isEmpty
+            && span.replacement == nil
+            && !options.fixedStrings
+            && !options.effectivePatterns.isEmpty
+            && options.effectivePatterns.allSatisfy(isZeroWidthAssertionPattern)
+    }
+
+    private func isZeroWidthAssertionPattern(_ pattern: String) -> Bool {
+        switch pattern {
+        case "^", "$", "\\A", "\\z", "\\b", "\\B":
+            return true
+        default:
+            return unwrappedSingleGroupPattern(pattern).map(isZeroWidthAssertionPattern) ?? false
+        }
+    }
+
+    private func unwrappedSingleGroupPattern(_ pattern: String) -> String? {
+        for prefix in ["(?:", "(?m:", "(?-m:"] where pattern.hasPrefix(prefix) && pattern.hasSuffix(")") {
+            let start = pattern.index(pattern.startIndex, offsetBy: prefix.count)
+            return String(pattern[start..<pattern.index(before: pattern.endIndex)])
+        }
+        return nil
     }
 
     private func formatOnlyMatchingInverted(_ match: SearchMatch, showPath: Bool) -> String {
