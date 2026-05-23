@@ -723,6 +723,12 @@ struct RipgrepSearcherTests {
         #expect(try run(["--null-data", "-o", "needle", root.path("nul.txt")]) == [
             "needle\0",
         ])
+        #expect(try run(["--null-data", "-c", "needle", root.path("nul.txt")]) == [
+            "1\0",
+        ])
+        #expect(try run(["--null-data", "--count-matches", "needle", root.path("nul.txt")]) == [
+            "1\0",
+        ])
         try root.write("needle\nunterminated\n", to: "lf.txt")
         #expect(try run(["--null-data", "needle", root.path("lf.txt")]) == [
             "needle\nunterminated\n\0",
