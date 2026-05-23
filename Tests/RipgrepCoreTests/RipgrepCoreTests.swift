@@ -156,7 +156,7 @@ struct RipgrepSearcherTests {
         )
         #expect(exitCode == 2)
         #expect(output.isEmpty)
-        #expect(errors == ["error: invalid thread count 'many'"])
+        #expect(errors == ["rg: error: invalid thread count 'many'"])
     }
 
     @Test("enforces regex size limit")
@@ -257,6 +257,17 @@ struct RipgrepSearcherTests {
         )
         #expect(exitCode == 0)
         #expect(output == ["alpha", "gamma"])
+
+        output = []
+        var errors: [String] = []
+        let missingExitCode = RipgrepCLI.run(
+            arguments: ["-f", "missing", root.path("words.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(missingExitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["rg: missing: No such file or directory (os error 2)"])
     }
 
     @Test("formats line numbers columns counts and filename modes")
@@ -397,7 +408,7 @@ struct RipgrepSearcherTests {
         )
         #expect(exitCode == 2)
         #expect(output.isEmpty)
-        #expect(errors == ["error: invalid max count '0'"])
+        #expect(errors == ["rg: error: invalid max count '0'"])
 
         errors = []
         let longExitCode = RipgrepCLI.run(
@@ -406,7 +417,7 @@ struct RipgrepSearcherTests {
             stderr: { errors.append($0) }
         )
         #expect(longExitCode == 2)
-        #expect(errors == ["error: invalid max count '0'"])
+        #expect(errors == ["rg: error: invalid max count '0'"])
     }
 
     @Test("counts matching lines and individual matches")
@@ -1388,7 +1399,7 @@ struct RipgrepSearcherTests {
             stderr: { errors.append($0) }
         )
         #expect(exitCode == 2)
-        #expect(errors == ["error: choice 'Always' is unrecognized"])
+        #expect(errors == ["rg: error: choice 'Always' is unrecognized"])
     }
 
     @Test("prints OSC8 hyperlinks for paths")
@@ -2106,7 +2117,7 @@ struct RipgrepSearcherTests {
         )
         #expect(exitCode == 2)
         #expect(output.isEmpty)
-        #expect(errors == ["error: invalid max filesize '45k'"])
+        #expect(errors == ["rg: error: invalid max filesize '45k'"])
 
         errors = []
         exitCode = RipgrepCLI.run(
@@ -2115,7 +2126,7 @@ struct RipgrepSearcherTests {
             stderr: { errors.append($0) }
         )
         #expect(exitCode == 2)
-        #expect(errors == ["error: invalid max filesize '34359738368G'"])
+        #expect(errors == ["rg: error: invalid max filesize '34359738368G'"])
 
         #expect(pathBasenames(try run([
             "--no-ignore",
@@ -2550,7 +2561,7 @@ struct RipgrepSearcherTests {
         )
         #expect(exitCode == 2)
         #expect(output.isEmpty)
-        #expect(errors == ["error: choice 'bogus' is unrecognized"])
+        #expect(errors == ["rg: error: choice 'bogus' is unrecognized"])
     }
 
     @Test("prints detected PCRE2 version")

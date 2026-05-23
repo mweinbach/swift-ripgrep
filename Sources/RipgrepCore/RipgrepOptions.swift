@@ -1356,6 +1356,8 @@ public enum RipgrepArgumentParser {
         do {
             let contents = try String(contentsOf: URL(fileURLWithPath: path), encoding: .utf8)
             return .patterns(RipgrepOptions.patterns(fromPatternFileContents: contents))
+        } catch CocoaError.fileReadNoSuchFile {
+            return .error("\(path): No such file or directory (os error 2)")
         } catch {
             return .error("error: failed to read pattern file '\(path)': \(error)")
         }

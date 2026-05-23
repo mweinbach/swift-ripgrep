@@ -44,7 +44,7 @@ public enum RipgrepCLI {
             emitStdout(generate(mode), stdout: stdout)
             return 0
         case .error(let message):
-            stderr(message)
+            stderr(message.hasPrefix("rg: ") ? message : "rg: \(message)")
             return 2
         case .run(var options):
             do {
