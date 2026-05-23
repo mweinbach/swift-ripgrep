@@ -1043,6 +1043,20 @@ struct RipgrepSearcherTests {
         #expect(replacement?["text"] == "[abc]")
     }
 
+    @Test("JSON quiet stats emits summary only")
+    func jsonQuietStatsEmitsSummaryOnly() throws {
+        let root = try TemporaryDirectory()
+        try root.write("hay\nneedle\n", to: "json-quiet.txt")
+
+        let output = try run(["--json", "--quiet", "--stats", "needle", root.path("json-quiet.txt")])
+        let messages = try output.map(jsonObject)
+        #expect(messages.map { $0["type"] as? String } == ["summary"])
+        let summary = messages[0]["data"] as? [String: Any]
+        let stats = summary?["stats"] as? [String: Any]
+        #expect(stats?["searches_with_match"] as? Int == 1)
+        #expect(stats?["bytes_searched"] as? Int == 11)
+    }
+
     @Test("JSON mode follows output mode flag ordering")
     func jsonModeFollowsOutputModeOrdering() throws {
         let root = try TemporaryDirectory()

@@ -9,26 +9,28 @@ public struct JSONPrinter {
 
     public func lines(for results: SearchResults) -> [String] {
         var output: [String] = []
-        for result in results.files where result.hasMatch {
-            output.append(jsonLine([
-                "type": "begin",
-                "data": [
-                    "path": dataObject(result.fileURL.path),
-                ],
-            ]))
+        if !options.quiet {
+            for result in results.files where result.hasMatch {
+                output.append(jsonLine([
+                    "type": "begin",
+                    "data": [
+                        "path": dataObject(result.fileURL.path),
+                    ],
+                ]))
 
-            for message in messages(for: result) {
-                output.append(jsonLine(message))
+                for message in messages(for: result) {
+                    output.append(jsonLine(message))
+                }
+
+                output.append(jsonLine([
+                    "type": "end",
+                    "data": [
+                        "path": dataObject(result.fileURL.path),
+                        "binary_offset": result.binaryByteOffset.map { $0 as Any } ?? NSNull(),
+                        "stats": statsObject(for: result),
+                    ],
+                ]))
             }
-
-            output.append(jsonLine([
-                "type": "end",
-                "data": [
-                    "path": dataObject(result.fileURL.path),
-                    "binary_offset": result.binaryByteOffset.map { $0 as Any } ?? NSNull(),
-                    "stats": statsObject(for: result),
-                ],
-            ]))
         }
 
         output.append(jsonLine([
