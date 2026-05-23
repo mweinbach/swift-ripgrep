@@ -199,6 +199,7 @@ public struct FileWalker {
             if !isIncludedByOverride,
                !options.hidden,
                isHidden(url),
+               (isDirectory || !typeRegistry.selectedTypeAllows(path: relativePath)),
                !isIncludedByIgnore(relativePath: relativePath, isDirectory: isDirectory, ignoreStack: ignoreStack) {
                 debug("ignoring \(url.path): hidden", options: options, diagnostics: &diagnostics)
                 return []

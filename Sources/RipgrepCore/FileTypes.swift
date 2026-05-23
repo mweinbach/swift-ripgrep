@@ -70,6 +70,13 @@ public struct FileTypeRegistry: Equatable, Sendable {
         return true
     }
 
+    public func selectedTypeAllows(path: String) -> Bool {
+        guard !selected.isEmpty else {
+            return false
+        }
+        return allows(path: path)
+    }
+
     public func typeListLines() -> [String] {
         definitions.map { "\($0.name): \($0.globs.sorted().joined(separator: ", "))" }
     }

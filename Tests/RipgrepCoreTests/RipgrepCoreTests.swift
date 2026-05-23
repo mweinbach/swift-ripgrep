@@ -2670,11 +2670,21 @@ struct RipgrepSearcherTests {
         try root.write("needle\n", to: "Sources/main.swift")
         try root.write("needle\n", to: "Sources/main.rs")
         try root.write("needle\n", to: "README.md")
+        try root.write("needle\n", to: ".hidden.swift")
+        try root.createDirectory(".hidden-directory")
+        try root.write("needle\n", to: ".hidden-directory/inside.swift")
 
-        #expect(pathBasenames(try run(["-tswift", "needle", root.url.path])) == ["main.swift"])
+        #expect(pathBasenames(try run(["--sort", "path", "-tswift", "needle", root.url.path])) == [
+            ".hidden.swift",
+            "main.swift",
+        ])
         #expect(pathBasenames(try run(["-trust", "needle", root.url.path])) == ["main.rs"])
         #expect(pathBasenames(try run(["-T", "rust", "needle", root.url.path])) == ["README.md", "main.swift"])
-        #expect(pathBasenames(try run(["-tall", "-Tmd", "needle", root.url.path])) == ["main.rs", "main.swift"])
+        #expect(pathBasenames(try run(["--sort", "path", "-tall", "-Tmd", "needle", root.url.path])) == [
+            ".hidden.swift",
+            "main.rs",
+            "main.swift",
+        ])
 
         try root.write("needle\n", to: "OnlyMarkdown/README.md")
         var output: [String] = []
