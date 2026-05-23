@@ -16,6 +16,12 @@ private struct DecompressionCommand {
     let displayCommand: String
 }
 
+private struct MultilineSpanCandidate {
+    let span: MatchSpan
+    let startLineIndex: Int
+    let endLineIndex: Int
+}
+
 public struct RipgrepSearcher {
     private let fileManager: FileManager
     private let environment: [String: String]
@@ -486,6 +492,55 @@ public struct RipgrepSearcher {
 
         let spans = matcher.spans(in: contents)
         let limitedSpans = Array(spans.prefix(options.maxCount ?? Int.max))
+        if options.replacement != nil, !options.onlyMatching {
+            let candidates = limitedSpans.compactMap { span -> MultilineSpanCandidate? in
+                guard let startLineIndex = lineIndex(containingByteOffset: span.startByte, lineStartOffsets: lineStartOffsets),
+                      let endLineIndex = endLineIndex(for: span, lineStartOffsets: lineStartOffsets) else {
+                    return nil
+                }
+                return MultilineSpanCandidate(span: span, startLineIndex: startLineIndex, endLineIndex: endLineIndex)
+            }
+            let grouped = groupedOverlappingLineSpans(candidates)
+            let matches = grouped.compactMap { group -> SearchMatch? in
+                guard let first = group.first else {
+                    return nil
+                }
+                let startLineIndex = first.startLineIndex
+                let endLineIndex = group.reduce(first.endLineIndex) { max($0, $1.endLineIndex) }
+                let blockText = multilineReplacementBlockText(
+                    lines: searchLines,
+                    startLineIndex: startLineIndex,
+                    endLineIndex: endLineIndex,
+                    group: group
+                )
+                let blockOffset = searchLines[startLineIndex].absoluteOffset
+                let adjustedSpans = group.map { candidate in
+                    let startByte = candidate.span.startByte - blockOffset
+                    let endByte = candidate.span.endByte - blockOffset
+                    return MatchSpan(
+                        startColumn: column(in: blockText, byteOffset: startByte),
+                        endColumn: column(in: blockText, byteOffset: endByte),
+                        startByte: startByte,
+                        endByte: endByte,
+                        text: candidate.span.text,
+                        replacement: candidate.span.replacement
+                    )
+                }
+
+                return SearchMatch(
+                    fileURL: fileURL,
+                    lineNumber: startLineIndex + 1,
+                    column: options.column ? adjustedSpans.first?.startColumn : nil,
+                    line: blockText,
+                    lineTerminator: "",
+                    absoluteOffset: blockOffset,
+                    matchCount: adjustedSpans.count,
+                    spans: adjustedSpans
+                )
+            }
+            return SearchFileResult(fileURL: fileURL, matches: matches, lines: searchLines)
+        }
+
         let matches = limitedSpans.compactMap { span -> SearchMatch? in
             guard let startLineIndex = lineIndex(containingByteOffset: span.startByte, lineStartOffsets: lineStartOffsets),
                   let endLineIndex = lineIndex(containingByteOffset: max(span.endByte - 1, span.startByte), lineStartOffsets: lineStartOffsets) else {
@@ -521,6 +576,61 @@ public struct RipgrepSearcher {
         }
 
         return SearchFileResult(fileURL: fileURL, matches: matches, lines: searchLines)
+    }
+
+    private func multilineReplacementBlockText(
+        lines: [SearchLine],
+        startLineIndex: Int,
+        endLineIndex: Int,
+        group: [MultilineSpanCandidate]
+    ) -> String {
+        let endLine = lines[endLineIndex]
+        let endLineTextEnd = endLine.absoluteOffset + endLine.line.utf8.count
+        let includeEndTerminator = group.contains { $0.span.endByte > endLineTextEnd }
+
+        var text = ""
+        for index in startLineIndex...endLineIndex {
+            if index < endLineIndex || includeEndTerminator {
+                text += lines[index].lineWithTerminator
+            } else {
+                text += lines[index].line
+            }
+        }
+        return text
+    }
+
+    private func groupedOverlappingLineSpans(
+        _ candidates: [MultilineSpanCandidate]
+    ) -> [[MultilineSpanCandidate]] {
+        var groups: [[MultilineSpanCandidate]] = []
+        var current: [MultilineSpanCandidate] = []
+        var currentEndLineIndex: Int?
+
+        for candidate in candidates {
+            if let endLineIndex = currentEndLineIndex,
+               candidate.startLineIndex > endLineIndex {
+                groups.append(current)
+                current = []
+                currentEndLineIndex = nil
+            }
+            current.append(candidate)
+            currentEndLineIndex = max(currentEndLineIndex ?? candidate.endLineIndex, candidate.endLineIndex)
+        }
+        if !current.isEmpty {
+            groups.append(current)
+        }
+        return groups
+    }
+
+    private func endLineIndex(for span: MatchSpan, lineStartOffsets: [Int]) -> Int? {
+        if span.endByte > span.startByte,
+           lineStartOffsets.contains(span.endByte) {
+            return lineIndex(containingByteOffset: span.endByte, lineStartOffsets: lineStartOffsets)
+        }
+        return lineIndex(
+            containingByteOffset: max(span.endByte - 1, span.startByte),
+            lineStartOffsets: lineStartOffsets
+        )
     }
 
     private func column(in text: String, byteOffset: Int) -> Int {

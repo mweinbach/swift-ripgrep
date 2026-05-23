@@ -587,6 +587,9 @@ struct RipgrepSearcherTests {
             "1:foo",
             "2:bar",
         ])
+        #expect(try run(["-U", "-r?", "-n", #"\n"#, root.path("multi.txt")]) == [
+            "1:foo?bar?baz?",
+        ])
         #expect(try run(["-n", "-U", #"abc\ndef"#, root.path("overlap1.txt")]) == [
             "2:abc",
             "3:defxxxabc",
