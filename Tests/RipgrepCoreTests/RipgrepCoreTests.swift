@@ -1944,6 +1944,39 @@ struct RipgrepSearcherTests {
         #expect(exitCode == 1)
         #expect(output.isEmpty)
         #expect(errors.isEmpty)
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--files", "missing", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.map { URL(fileURLWithPath: $0).lastPathComponent } == ["visible.txt"])
+        #expect(errors == ["rg: missing: No such file or directory (os error 2)"])
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--files", "--no-messages", "missing", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.map { URL(fileURLWithPath: $0).lastPathComponent } == ["visible.txt"])
+        #expect(errors.isEmpty)
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--files", "--quiet", "missing", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(output.isEmpty)
+        #expect(errors == ["rg: missing: No such file or directory (os error 2)"])
     }
 
     @Test("preserves explicit current directory path prefixes")

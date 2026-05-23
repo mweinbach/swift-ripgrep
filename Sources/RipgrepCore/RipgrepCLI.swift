@@ -68,11 +68,20 @@ public enum RipgrepCLI {
                 let printer = StandardPrinter(options: options)
 
                 if options.mode == .files {
-                    let files = try searcher.files(options: options)
+                    let walkResults = try searcher.walkFilesWithMessages(options: options)
+                    let files = walkResults.haystacks.map(\.url)
                     if !options.quiet {
                         for line in printer.paths(files) {
                             emitStdout(line, stdout: stdout, suppressNewlineForTrailingNul: options.nullPathTerminator)
                         }
+                    }
+                    if !options.noMessages {
+                        for message in walkResults.messages {
+                            stderr("rg: \(message)")
+                        }
+                    }
+                    if !walkResults.messages.isEmpty && !options.quiet {
+                        return 2
                     }
                     return files.isEmpty ? 1 : 0
                 }

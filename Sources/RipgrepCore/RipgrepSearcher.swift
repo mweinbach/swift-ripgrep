@@ -55,6 +55,12 @@ public struct RipgrepSearcher {
             .map(\.url)
     }
 
+    public func walkFilesWithMessages(options: RipgrepOptions) throws -> FileWalkResults {
+        try FileWalker(fileManager: fileManager)
+            .withEnvironment(environment)
+            .haystacksWithMessages(for: options)
+    }
+
     public func search(options: RipgrepOptions) throws -> SearchResults {
         try search(options: options, stdin: nil)
     }
