@@ -10,7 +10,6 @@ public struct PatternMatcher {
         }
 
         self.options = options
-        var compiledRegexSourceBytes = 0
         self.patterns = try patternSources.map { pattern in
             if options.wordRegexp && pattern.isEmpty {
                 return .emptyWordBoundary
@@ -36,12 +35,6 @@ public struct PatternMatcher {
                     throw RipgrepError.message(Self.automaticEngineUnavailableMessage(pattern: pattern, feature: unsupported))
                 }
                 let source = Self.regexPattern(for: pattern, options: options)
-                compiledRegexSourceBytes += source.utf8.count
-                if let regexSizeLimit = options.regexSizeLimit,
-                   regexSizeLimit > 0,
-                   UInt64(compiledRegexSourceBytes) > regexSizeLimit {
-                    throw RipgrepError.invalidRegex("compiled regex exceeds size limit of \(regexSizeLimit)")
-                }
                 do {
                     var regexOptions: NSRegularExpression.Options = options.effectiveIgnoreCase && !options.noUnicode ? [.caseInsensitive] : []
                     if options.multiline {

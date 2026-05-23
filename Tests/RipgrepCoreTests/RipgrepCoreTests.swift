@@ -216,25 +216,21 @@ struct RipgrepSearcherTests {
         #expect(errors == ["rg: error parsing flag --threads: value is not a valid number: invalid digit found in string"])
     }
 
-    @Test("enforces regex size limit")
-    func enforcesRegexSizeLimit() throws {
+    @Test("accepts regex size limit")
+    func acceptsRegexSizeLimit() throws {
         let root = try TemporaryDirectory()
-        try root.write("needle\n", to: "limit.txt")
+        try root.write("needle\nabc\ndef\n", to: "limit.txt")
 
         #expect(try run(["--regex-size-limit=0", "needle", root.path("limit.txt")]) == ["needle"])
 
         #expect(try run(["--regex-size-limit=1K", "needle", root.path("limit.txt")]) == ["needle"])
 
-        var output: [String] = []
-        var errors: [String] = []
-        let exitCode = RipgrepCLI.run(
-            arguments: ["--regex-size-limit=4", "-e", "abc", "-e", "def", root.path("limit.txt")],
-            stdout: { output.append($0) },
-            stderr: { errors.append($0) }
-        )
-        #expect(exitCode == 2)
-        #expect(output.isEmpty)
-        #expect(errors.first?.contains("compiled regex exceeds size limit of 4") == true)
+        #expect(try run(["--regex-size-limit=1", "abc", root.path("limit.txt")]) == ["abc"])
+
+        #expect(try run(["--regex-size-limit=4", "-e", "abc", "-e", "def", root.path("limit.txt")]) == [
+            "abc",
+            "def",
+        ])
     }
 
     @Test("honors no unicode regex and literal semantics")
