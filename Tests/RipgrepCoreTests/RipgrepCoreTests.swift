@@ -924,6 +924,9 @@ struct RipgrepSearcherTests {
             #expect(output.isEmpty)
             #expect(errors.isEmpty)
         }
+        #expect(try run(["-U", "--count-matches", "$", root.path("zero-width.txt")]) == ["3"])
+        #expect(try run(["-U", "--count-matches", "(?:)", root.path("zero-width.txt")]) == ["7"])
+        #expect(try run(["-U", "--count-matches", "x?", root.path("zero-width.txt")]) == ["7"])
         #expect(try run(["-n", "-U", "-o", #"foo[\s\S]+?bar"#, root.path("multi.txt")]) == [
             "1:foo",
             "2:bar",

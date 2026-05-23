@@ -128,6 +128,7 @@ public struct PatternMatcher {
         let filtered = candidates.filter { candidate in
             (!options.wordRegexp || isWordBounded(candidate.range, in: line))
                 && (!options.lineRegexp || (candidate.range.lowerBound == lineStartIndex(in: line) && candidate.range.upperBound == lineEndIndex(in: line)))
+                && !shouldDropTrailingMultilineEmptySpan(candidate.range, in: line)
         }
 
         if options.invertMatch {
@@ -181,6 +182,38 @@ public struct PatternMatcher {
             output.append(candidate)
         }
         return output
+    }
+
+    private func shouldDropTrailingMultilineEmptySpan(_ range: Range<String.Index>, in line: String) -> Bool {
+        guard options.multiline,
+              !line.isEmpty,
+              range.isEmpty,
+              range.lowerBound == line.endIndex else {
+            return false
+        }
+        if options.effectivePatterns.allSatisfy(Self.isEndAssertionPattern),
+           !line.contains("\n"),
+           !line.contains("\0") {
+            return false
+        }
+        return true
+    }
+
+    private static func isEndAssertionPattern(_ pattern: String) -> Bool {
+        switch pattern {
+        case "$", "\\z":
+            return true
+        default:
+            return unwrappedSingleGroupPattern(pattern).map(isEndAssertionPattern) ?? false
+        }
+    }
+
+    private static func unwrappedSingleGroupPattern(_ pattern: String) -> String? {
+        for prefix in ["(?:", "(?m:", "(?-m:"] where pattern.hasPrefix(prefix) && pattern.hasSuffix(")") {
+            let start = pattern.index(pattern.startIndex, offsetBy: prefix.count)
+            return String(pattern[start..<pattern.index(before: pattern.endIndex)])
+        }
+        return nil
     }
 
     private static func regexPattern(for pattern: String, options: RipgrepOptions) -> String {
