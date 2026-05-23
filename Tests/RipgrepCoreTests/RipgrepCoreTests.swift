@@ -27,6 +27,8 @@ struct RipgrepSearcherTests {
 
         #expect(try run(["abc.123", root.path("patterns.txt")]) == ["abc.123"])
         #expect(try run(["-F", "abc.123", root.path("patterns.txt")]) == ["abc.123"])
+        #expect(try run(["-F", "--no-fixed-strings", "abc.123", root.path("patterns.txt")]) == ["abc.123"])
+        #expect(try run(["--no-fixed-strings", "-F", "abc.123", root.path("patterns.txt")]) == ["abc.123"])
         #expect(try run(["-w", "abc", root.path("patterns.txt")]) == ["abc.123", "abc", "abc def"])
         #expect(try run(["-x", "abc", root.path("patterns.txt")]) == ["abc"])
     }
@@ -108,6 +110,7 @@ struct RipgrepSearcherTests {
         #expect(try run(["-F", "-i", "σ", root.path("casefold.txt")]) == ["Σ", "σ"])
         #expect(try run(["--no-unicode", "-F", "-i", "σ", root.path("casefold.txt")]) == ["σ"])
         #expect(try run(["--no-unicode", "--unicode", "-o", #"\w+"#, root.path("classes.txt")]) == ["café", "π", "_"])
+        #expect(try run(["--no-pcre2-unicode", "--pcre2-unicode", "-o", #"\w+"#, root.path("classes.txt")]) == ["café", "π", "_"])
     }
 
     @Test("supports smart case and inverted matches")
@@ -122,6 +125,7 @@ struct RipgrepSearcherTests {
         #expect(try run(["-i", "--case-sensitive", "needle", root.path("case.txt")]) == ["needle"])
         #expect(try run(["-s", "-i", "needle", root.path("case.txt")]) == ["Needle", "needle"])
         #expect(try run(["-v", "needle", root.path("case.txt")]) == ["Needle", "hay"])
+        #expect(try run(["-v", "--no-invert-match", "needle", root.path("case.txt")]) == ["needle"])
     }
 
     @Test("supports multiple regexp and pattern file inputs")
@@ -143,6 +147,10 @@ struct RipgrepSearcherTests {
         #expect(try run(["-n", "--column", "needle", root.path("one.txt")]) == [
             "2:1:needle here",
             "3:1:needle there",
+        ])
+        #expect(try run(["-n", "--column", "--no-column", "needle", root.path("one.txt")]) == [
+            "2:needle here",
+            "3:needle there",
         ])
         #expect(try run(["-H", "-c", "needle", root.path("one.txt")]) == [
             "\(root.path("one.txt")):2",
@@ -507,6 +515,15 @@ struct RipgrepSearcherTests {
             "7-seven",
         ])
         #expect(try run(["-n", "--passthru", "match", root.path("context.txt")]) == [
+            "1-one",
+            "2-two",
+            "3:match",
+            "4-four",
+            "5-five",
+            "6-other",
+            "7-seven",
+        ])
+        #expect(try run(["-n", "--passthrough", "match", root.path("context.txt")]) == [
             "1-one",
             "2-two",
             "3:match",
@@ -1278,6 +1295,23 @@ struct RipgrepSearcherTests {
         #expect(exitCode == 0)
         #expect(output.first?.contains("USAGE:") == true)
         #expect(output.first?.contains("--files") == true)
+    }
+
+    @Test("prints version from short and long flags")
+    func printsVersionFromShortAndLongFlags() {
+        for flag in ["-V", "--version"] {
+            var output: [String] = []
+            var errors: [String] = []
+            let exitCode = RipgrepCLI.run(
+                arguments: [flag],
+                stdout: { output.append($0) },
+                stderr: { errors.append($0) }
+            )
+
+            #expect(exitCode == 0)
+            #expect(errors.isEmpty)
+            #expect(output == ["ripgrep \(RipgrepCLI.version)"])
+        }
     }
 
     @Test("prints detected PCRE2 version")

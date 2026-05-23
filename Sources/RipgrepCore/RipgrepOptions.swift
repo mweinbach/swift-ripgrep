@@ -260,7 +260,7 @@ public enum RipgrepArgumentParser {
             switch argument {
             case "-h", "--help":
                 return .help
-            case "--version":
+            case "-V", "--version":
                 return .version
             case "--pcre2-version":
                 return .pcre2Version
@@ -285,6 +285,8 @@ public enum RipgrepArgumentParser {
                 options.smartCase = false
             case "-F", "--fixed-strings":
                 options.fixedStrings = true
+            case "--no-fixed-strings":
+                options.fixedStrings = false
             case "--engine":
                 guard index < arguments.count else {
                     return .error("error: The argument '--engine <ENGINE>' requires a value")
@@ -424,9 +426,9 @@ public enum RipgrepArgumentParser {
                 options.wordRegexp = true
             case "-x", "--line-regexp":
                 options.lineRegexp = true
-            case "--no-unicode":
+            case "--no-unicode", "--no-pcre2-unicode":
                 options.noUnicode = true
-            case "--unicode":
+            case "--unicode", "--pcre2-unicode":
                 options.noUnicode = false
             case "-U", "--multiline":
                 options.multiline = true
@@ -444,6 +446,8 @@ public enum RipgrepArgumentParser {
                 options.crlf = false
             case "-v", "--invert-match":
                 options.invertMatch = true
+            case "--no-invert-match":
+                options.invertMatch = false
             case "--stop-on-nonmatch":
                 options.stopOnNonmatch = true
                 options.multiline = false
@@ -582,6 +586,8 @@ public enum RipgrepArgumentParser {
                 options.noLineNumber = true
             case "--column":
                 options.column = true
+            case "--no-column":
+                options.column = false
             case "--heading":
                 options.heading = true
             case "--no-heading":
@@ -843,7 +849,7 @@ public enum RipgrepArgumentParser {
                 applyUnrestricted(to: &options)
                 applyUnrestricted(to: &options)
                 applyUnrestricted(to: &options)
-            case "--passthru":
+            case "--passthru", "--passthrough":
                 options.passthru = true
                 options.beforeContext = 0
                 options.afterContext = 0
@@ -1056,6 +1062,7 @@ public enum RipgrepArgumentParser {
           -S, --smart-case           Search case insensitively if the pattern is lowercase
           -s, --case-sensitive       Search case sensitively
           -F, --fixed-strings        Treat the pattern as a literal string
+              --no-fixed-strings     Treat the pattern as a regular expression
               --engine ENGINE        Use regex engine: default, pcre2 or auto
           -P, --pcre2                Enable PCRE2-style regex matching
               --dfa-size-limit NUM   Set the regex DFA size limit
@@ -1068,6 +1075,7 @@ public enum RipgrepArgumentParser {
           -w, --word-regexp          Only show matches surrounded by word boundaries
           -x, --line-regexp          Only show matches spanning an entire line
               --no-unicode           Disable Unicode mode
+              --pcre2-unicode        Enable Unicode mode for PCRE2 compatibility
           -U, --multiline            Enable matching across line terminators
               --multiline-dotall     Make '.' match line terminators in multiline mode
               --crlf                 Treat CRLF as a line terminator for anchors
@@ -1086,6 +1094,7 @@ public enum RipgrepArgumentParser {
           -n, --line-number          Show line numbers
           -N, --no-line-number       Suppress line numbers
               --column               Show the first match column
+              --no-column            Suppress column numbers
           -b, --byte-offset          Show the 0-based byte offset
           -p, --pretty               Alias for colors, headings and line numbers
               --color WHEN           Use color: never, auto, always or ansi
