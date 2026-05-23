@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import RipgrepCore
 
-@Suite("Ripgrep searcher")
+@Suite("Ripgrep searcher", .serialized)
 struct RipgrepSearcherTests {
     @Test("finds matching lines recursively")
     func findsMatchingLinesRecursively() throws {
@@ -2171,6 +2171,28 @@ struct RipgrepSearcherTests {
 
         #expect(exitCode == 0)
         #expect(output == ["a.json", "a.txt"])
+        #expect(errors.isEmpty)
+    }
+
+    @Test("searches default directory when stdin is not readable")
+    func searchesDefaultDirectoryWhenStdinIsNotReadable() throws {
+        let root = try TemporaryDirectory()
+        try root.write("\n", to: "test")
+
+        let originalDirectory = FileManager.default.currentDirectoryPath
+        defer { FileManager.default.changeCurrentDirectoryPath(originalDirectory) }
+        #expect(FileManager.default.changeCurrentDirectoryPath(root.url.path))
+
+        var output: [String] = []
+        var errors: [String] = []
+        let exitCode = RipgrepCLI.run(
+            arguments: ["x?", "--crlf", "--color", "always"],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+
+        #expect(exitCode == 0)
+        #expect(output == ["\u{1B}[0m\u{1B}[35mtest\u{1B}[0m:\r"])
         #expect(errors.isEmpty)
     }
 

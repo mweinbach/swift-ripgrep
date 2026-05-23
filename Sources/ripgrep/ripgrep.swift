@@ -15,16 +15,21 @@ struct RipgrepCommand {
     static func main() {
         let exitCode = RipgrepCLI.run(
             arguments: Array(CommandLine.arguments.dropFirst()),
-            standardInputIsTerminal: standardInputIsTerminal()
+            standardInputIsReadable: standardInputIsReadable()
         )
         exit(exitCode)
     }
 
-    private static func standardInputIsTerminal() -> Bool {
+    private static func standardInputIsReadable() -> Bool {
         #if canImport(Darwin) || canImport(Glibc) || canImport(Musl)
-        return isatty(STDIN_FILENO) != 0
+        var statBuffer = stat()
+        guard fstat(STDIN_FILENO, &statBuffer) == 0 else {
+            return false
+        }
+        let mode = statBuffer.st_mode & S_IFMT
+        return mode == S_IFIFO || mode == S_IFREG
         #else
-        return true
+        return false
         #endif
     }
 }
