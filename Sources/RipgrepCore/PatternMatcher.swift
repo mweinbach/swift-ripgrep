@@ -84,7 +84,7 @@ public struct PatternMatcher {
             ] : []
         }
 
-        return filtered
+        return Self.dropAdjacentEmptyMatches(afterNonEmpty: filtered)
             .sorted { lhs, rhs in
                 if lhs.range.lowerBound == rhs.range.lowerBound {
                     return lhs.range.upperBound < rhs.range.upperBound
@@ -101,6 +101,28 @@ public struct PatternMatcher {
                     replacement: candidate.replacement
                 )
             }
+    }
+
+    private static func dropAdjacentEmptyMatches(
+        afterNonEmpty candidates: [(range: Range<String.Index>, replacement: String?)]
+    ) -> [(range: Range<String.Index>, replacement: String?)] {
+        let sorted = candidates.sorted { lhs, rhs in
+            if lhs.range.lowerBound == rhs.range.lowerBound {
+                return lhs.range.upperBound < rhs.range.upperBound
+            }
+            return lhs.range.lowerBound < rhs.range.lowerBound
+        }
+        var output: [(range: Range<String.Index>, replacement: String?)] = []
+        for candidate in sorted {
+            if candidate.range.isEmpty,
+               let previous = output.last,
+               !previous.range.isEmpty,
+               previous.range.upperBound == candidate.range.lowerBound {
+                continue
+            }
+            output.append(candidate)
+        }
+        return output
     }
 
     private static func regexPattern(for pattern: String, options: RipgrepOptions) -> String {

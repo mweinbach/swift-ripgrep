@@ -1041,6 +1041,15 @@ struct RipgrepSearcherTests {
         #expect(try run(["--replace", "$word:${digits}$missing", #"(?P<word>[a-z]+)(?P<digits>\d+)"#, root.path("replace.txt")]) == [
             "abc:123 def:456",
         ])
+        try root.write("a\n\n", to: "empty-match.txt")
+        #expect(try run(["-o", #".*"#, root.path("empty-match.txt")]) == [
+            "a",
+            "",
+        ])
+        #expect(try run(["--replace", "${0}f", #".*"#, root.path("empty-match.txt")]) == [
+            "af",
+            "f",
+        ])
         #expect(try run(["--replace", "${}_${bad-name}_${1}", #"([a-z]+)\d+"#, root.path("replace.txt")]) == [
             "${}_${bad-name}_abc ${}_${bad-name}_def",
         ])
