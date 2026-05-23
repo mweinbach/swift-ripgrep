@@ -1034,6 +1034,31 @@ struct RipgrepSearcherTests {
             "6:other",
             "7-seven",
         ])
+
+        let multiRoot = try TemporaryDirectory()
+        try multiRoot.write("needle\nafter\n", to: "a.txt")
+        try multiRoot.write("needle\nafter\n", to: "b.txt")
+        #expect(try run(["--sort", "path", "-n", "-A1", "needle", multiRoot.url.path]) == [
+            "\(multiRoot.path("a.txt")):1:needle",
+            "\(multiRoot.path("a.txt"))-2-after",
+            "--",
+            "\(multiRoot.path("b.txt")):1:needle",
+            "\(multiRoot.path("b.txt"))-2-after",
+        ])
+        #expect(try run([
+            "--sort",
+            "path",
+            "-n",
+            "-A1",
+            "--no-context-separator",
+            "needle",
+            multiRoot.url.path,
+        ]) == [
+            "\(multiRoot.path("a.txt")):1:needle",
+            "\(multiRoot.path("a.txt"))-2-after",
+            "\(multiRoot.path("b.txt")):1:needle",
+            "\(multiRoot.path("b.txt"))-2-after",
+        ])
         #expect(try run([
             "-n",
             "-A1",

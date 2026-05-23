@@ -55,7 +55,7 @@ public struct StandardPrinter {
                 }
             }
             if options.passthru || options.beforeContext > 0 || options.afterContext > 0 {
-                return results.files.flatMap { contextLines(for: $0, showPath: showPath(for: results)) }
+                return contextLines(for: results, showPath: showPath(for: results))
             }
             if options.multiline, options.replacement == nil {
                 return results.files.flatMap { multilineMatchLines(for: $0, showPath: showPath(for: results)) }
@@ -333,6 +333,25 @@ public struct StandardPrinter {
                 output.append(formatContextLine(line, fileURL: result.fileURL, showPath: showPath))
             }
             previous = lineNumber
+        }
+        return output
+    }
+
+    private func contextLines(for results: SearchResults, showPath: Bool) -> [String] {
+        let shouldSeparateFiles = !options.passthru
+            && (options.beforeContext > 0 || options.afterContext > 0)
+        var output: [String] = []
+        for result in results.files {
+            let lines = contextLines(for: result, showPath: showPath)
+            guard !lines.isEmpty else {
+                continue
+            }
+            if shouldSeparateFiles,
+               !output.isEmpty,
+               let contextSeparator = options.contextSeparator {
+                output.append(contextSeparator)
+            }
+            output.append(contentsOf: lines)
         }
         return output
     }
