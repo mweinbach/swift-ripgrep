@@ -255,6 +255,7 @@ struct RipgrepSearcherTests {
             "gamma",
         ])
         #expect(try runAllowingNoMatch(["-vf", root.path("empty-pattern"), root.path("words.txt")]) == [])
+        #expect(try runAllowingNoMatch(["-f", "/dev/null", root.path("words.txt")]) == [])
 
         try root.write("alpha.*\n", to: "literal-patterns")
         try root.write("alpha.*\nalphaX\n", to: "literal.txt")

@@ -1354,13 +1354,29 @@ public enum RipgrepArgumentParser {
 
     private static func readPatterns(from path: String) -> PatternFileResult {
         do {
-            let contents = try String(contentsOf: URL(fileURLWithPath: path), encoding: .utf8)
+            let handle = try FileHandle(forReadingFrom: URL(fileURLWithPath: path))
+            defer { try? handle.close() }
+            let data = handle.readDataToEndOfFile()
+            let contents = String(decoding: data, as: UTF8.self)
             return .patterns(RipgrepOptions.patterns(fromPatternFileContents: contents))
-        } catch CocoaError.fileReadNoSuchFile {
+        } catch let error as NSError where isNoSuchFile(error) {
             return .error("\(path): No such file or directory (os error 2)")
         } catch {
             return .error("error: failed to read pattern file '\(path)': \(error)")
         }
+    }
+
+    private static func isNoSuchFile(_ error: NSError) -> Bool {
+        if error.domain == NSCocoaErrorDomain, error.code == CocoaError.fileReadNoSuchFile.rawValue {
+            return true
+        }
+        if error.domain == NSPOSIXErrorDomain, error.code == Int(ENOENT) {
+            return true
+        }
+        if let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError {
+            return isNoSuchFile(underlying)
+        }
+        return false
     }
 
     private static func isShortFlagCluster(_ argument: String) -> Bool {
