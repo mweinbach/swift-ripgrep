@@ -401,23 +401,25 @@ struct RipgrepSearcherTests {
 
         var output: [String] = []
         var errors: [String] = []
-        let exitCode = RipgrepCLI.run(
+        var exitCode = RipgrepCLI.run(
             arguments: ["-m0", "needle", root.path("many.txt")],
             stdout: { output.append($0) },
             stderr: { errors.append($0) }
         )
-        #expect(exitCode == 2)
+        #expect(exitCode == 1)
         #expect(output.isEmpty)
-        #expect(errors == ["rg: error: invalid max count '0'"])
+        #expect(errors.isEmpty)
 
+        output = []
         errors = []
-        let longExitCode = RipgrepCLI.run(
+        exitCode = RipgrepCLI.run(
             arguments: ["--max-count=0", "needle", root.path("many.txt")],
             stdout: { output.append($0) },
             stderr: { errors.append($0) }
         )
-        #expect(longExitCode == 2)
-        #expect(errors == ["rg: error: invalid max count '0'"])
+        #expect(exitCode == 1)
+        #expect(output.isEmpty)
+        #expect(errors.isEmpty)
     }
 
     @Test("counts matching lines and individual matches")
