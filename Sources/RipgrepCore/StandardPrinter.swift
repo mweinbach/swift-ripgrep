@@ -56,6 +56,9 @@ public struct StandardPrinter {
             if options.passthru || options.beforeContext > 0 || options.afterContext > 0 {
                 return results.files.flatMap { contextLines(for: $0, showPath: showPath(for: results)) }
             }
+            if options.multiline, options.replacement == nil {
+                return results.files.flatMap { multilineMatchLines(for: $0, showPath: showPath(for: results)) }
+            }
             return results.files.flatMap { result in
                 if let binaryLine = formatBinaryMatch(result, showPath: showPath(for: results)) {
                     return [binaryLine]
@@ -178,6 +181,8 @@ public struct StandardPrinter {
                 lines = result.matches.flatMap { formatOnlyMatching($0, showPath: false) }
             } else if options.passthru || options.beforeContext > 0 || options.afterContext > 0 {
                 lines = contextLines(for: result, showPath: false)
+            } else if options.multiline, options.replacement == nil {
+                lines = multilineMatchLines(for: result, showPath: false)
             } else {
                 lines = result.matches.flatMap { formatSearchMatch($0, showPath: false) }
             }
@@ -194,15 +199,17 @@ public struct StandardPrinter {
     }
 
     private func contextLines(for result: SearchFileResult, showPath: Bool) -> [String] {
-        let matchesByLine = Dictionary(uniqueKeysWithValues: result.matches.map { ($0.lineNumber, $0) })
+        let matchedLineNumbers = multilineMatchedLineNumbers(for: result)
+        let startMatchesByLine = firstMatchesByLine(for: result)
         let selectedLineNumbers: [Int]
         if options.passthru {
             selectedLineNumbers = result.lines.map(\.lineNumber)
         } else {
             let lineCount = result.lines.count
             let selected = result.matches.reduce(into: Set<Int>()) { lineNumbers, match in
-                let lower = max(1, match.lineNumber - options.beforeContext)
-                let upper = min(lineCount, match.lineNumber + options.afterContext)
+                let matchLineNumbers = multilineLineNumbers(for: match)
+                let lower = max(1, (matchLineNumbers.first ?? match.lineNumber) - options.beforeContext)
+                let upper = min(lineCount, (matchLineNumbers.last ?? match.lineNumber) + options.afterContext)
                 for lineNumber in lower...upper {
                     lineNumbers.insert(lineNumber)
                 }
@@ -221,14 +228,60 @@ public struct StandardPrinter {
             guard let line = result.lines.first(where: { $0.lineNumber == lineNumber }) else {
                 continue
             }
-            if let match = matchesByLine[lineNumber] {
-                output.append(format(match, showPath: showPath))
+            if matchedLineNumbers.contains(lineNumber) {
+                output.append(formatMatchedLine(
+                    line,
+                    fileURL: result.fileURL,
+                    showPath: showPath,
+                    match: startMatchesByLine[lineNumber]
+                ))
             } else {
                 output.append(formatContextLine(line, fileURL: result.fileURL, showPath: showPath))
             }
             previous = lineNumber
         }
         return output
+    }
+
+    private func multilineMatchLines(for result: SearchFileResult, showPath: Bool) -> [String] {
+        let matchedLineNumbers = multilineMatchedLineNumbers(for: result)
+        let startMatchesByLine = firstMatchesByLine(for: result)
+        return result.lines.compactMap { line in
+            guard matchedLineNumbers.contains(line.lineNumber) else {
+                return nil
+            }
+            return formatMatchedLine(
+                line,
+                fileURL: result.fileURL,
+                showPath: showPath,
+                match: startMatchesByLine[line.lineNumber]
+            )
+        }
+    }
+
+    private func multilineMatchedLineNumbers(for result: SearchFileResult) -> Set<Int> {
+        guard options.multiline else {
+            return Set(result.matches.map(\.lineNumber))
+        }
+        return result.matches.reduce(into: Set<Int>()) { lineNumbers, match in
+            for lineNumber in multilineLineNumbers(for: match) {
+                lineNumbers.insert(lineNumber)
+            }
+        }
+    }
+
+    private func firstMatchesByLine(for result: SearchFileResult) -> [Int: SearchMatch] {
+        result.matches.reduce(into: [:]) { matchesByLine, match in
+            matchesByLine[match.lineNumber] = matchesByLine[match.lineNumber] ?? match
+        }
+    }
+
+    private func multilineLineNumbers(for match: SearchMatch) -> [Int] {
+        guard options.multiline else {
+            return [match.lineNumber]
+        }
+        let lineCount = splitRenderedLines(match.lineWithTerminator).count
+        return Array(match.lineNumber..<(match.lineNumber + max(1, lineCount)))
     }
 
     private func formatContextLine(_ line: SearchLine, fileURL: URL, showPath: Bool) -> String {
@@ -239,6 +292,22 @@ public struct StandardPrinter {
         }
 
         return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldContextSeparator))\(renderedLine(line.line, omittedKind: .context))\(outputTerminator(line.lineTerminator))"
+    }
+
+    private func formatMatchedLine(_ line: SearchLine, fileURL: URL, showPath: Bool, match: SearchMatch?) -> String {
+        var fields: [OutputField] = []
+        let path = showPath ? renderPath(for: fileURL, line: line.lineNumber, column: match?.column) : nil
+        if options.wantsLineNumber {
+            fields.append(OutputField("\(line.lineNumber)", colorTarget: .line))
+        }
+        if options.column, let column = match?.column {
+            fields.append(OutputField("\(column)", colorTarget: .column))
+        }
+        if options.byteOffset, let match {
+            fields.append(OutputField("\(match.absoluteOffset)", colorTarget: nil))
+        }
+
+        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(renderedLine(line.line))\(outputTerminator(line.lineTerminator))"
     }
 
     private func renderedLine(for match: SearchMatch) -> String {
