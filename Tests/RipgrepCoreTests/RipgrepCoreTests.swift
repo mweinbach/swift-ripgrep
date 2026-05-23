@@ -68,6 +68,27 @@ struct RipgrepSearcherTests {
         #expect(try run(["--files-without-match", "needle", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == ["two.txt"])
     }
 
+    @Test("prints NUL terminated paths and custom path separators")
+    func printsNullTerminatedPathsAndCustomPathSeparators() throws {
+        let root = try TemporaryDirectory()
+        try root.write("needle\n", to: "dir/one.txt")
+        try root.write("hay\n", to: "dir/two.txt")
+
+        #expect(try run(["-l", "--null", "needle", root.url.path]) == [
+            "\(root.path("dir/one.txt"))\0",
+        ])
+        #expect(Set(try run(["--files", "--null", root.url.path])) == Set([
+            "\(root.path("dir/one.txt"))\0",
+            "\(root.path("dir/two.txt"))\0",
+        ]))
+        #expect(try run(["--null", "needle", root.url.path]) == [
+            "\(root.path("dir/one.txt"))\0needle",
+        ])
+        #expect(try run(["-l", "--path-separator", #"\"#, "needle", root.url.path]) == [
+            root.path("dir/one.txt").replacingOccurrences(of: "/", with: #"\"#),
+        ])
+    }
+
     @Test("limits matching lines per file")
     func limitsMatchingLinesPerFile() throws {
         let root = try TemporaryDirectory()

@@ -60,7 +60,7 @@ public struct StandardPrinter {
                     ? result.matches.reduce(0) { $0 + $1.matchCount }
                     : result.matches.count + (result.hasBinaryMatch ? 1 : 0)
                 if showPath(for: results) {
-                    return "\(displayPath(for: result.fileURL)):\(count)"
+                    return "\(displayPath(for: result.fileURL))\(pathFieldSeparator())\(count)"
                 }
                 return "\(count)"
             }
@@ -68,30 +68,28 @@ public struct StandardPrinter {
             return results.files.filter(\.hasMatch).map { result in
                 let count = result.matches.reduce(0) { $0 + $1.matchCount } + (result.hasBinaryMatch ? 1 : 0)
                 if showPath(for: results) {
-                    return "\(displayPath(for: result.fileURL)):\(count)"
+                    return "\(displayPath(for: result.fileURL))\(pathFieldSeparator())\(count)"
                 }
                 return "\(count)"
             }
         case .filesWithMatches:
             return results.files
                 .filter(\.hasMatch)
-                .map { displayPath(for: $0.fileURL) }
+                .map { "\(displayPath(for: $0.fileURL))\(pathTerminator())" }
         case .filesWithoutMatch:
             return results.files
                 .filter { !$0.hasMatch }
-                .map { displayPath(for: $0.fileURL) }
+                .map { "\(displayPath(for: $0.fileURL))\(pathTerminator())" }
         }
     }
 
     public func paths(_ urls: [URL]) -> [String] {
-        urls.map { displayPath(for: $0) }
+        urls.map { "\(displayPath(for: $0))\(pathTerminator())" }
     }
 
     private func format(_ match: SearchMatch, showPath: Bool) -> String {
         var fields: [String] = []
-        if showPath {
-            fields.append(displayPath(for: match.fileURL))
-        }
+        let path = showPath ? displayPath(for: match.fileURL) : nil
         if options.wantsLineNumber {
             fields.append("\(match.lineNumber)")
         }
@@ -102,10 +100,7 @@ public struct StandardPrinter {
             fields.append("\(match.absoluteOffset)")
         }
 
-        if fields.isEmpty {
-            return renderedLine(for: match)
-        }
-        return "\(fields.joined(separator: ":")):\(renderedLine(for: match))"
+        return "\(prefix(path: path, fields: fields, fieldSeparator: ":"))\(renderedLine(for: match))"
     }
 
     private func formatSearchMatch(_ match: SearchMatch, showPath: Bool) -> [String] {
@@ -115,17 +110,12 @@ public struct StandardPrinter {
 
         return splitRenderedLines(match.lineWithTerminator).enumerated().map { offset, line in
             var fields: [String] = []
-            if showPath {
-                fields.append(displayPath(for: match.fileURL))
-            }
+            let path = showPath ? displayPath(for: match.fileURL) : nil
             if options.wantsLineNumber {
                 fields.append("\(match.lineNumber + offset)")
             }
             let rendered = renderedLine(line)
-            if fields.isEmpty {
-                return rendered
-            }
-            return "\(fields.joined(separator: ":")):\(rendered)"
+            return "\(prefix(path: path, fields: fields, fieldSeparator: ":"))\(rendered)"
         }
     }
 
@@ -135,7 +125,7 @@ public struct StandardPrinter {
                 let text = options.onlyMatching
                     ? (span.replacement ?? span.text)
                     : renderedLine(match.line)
-                return "\(displayPath(for: match.fileURL)):\(match.lineNumber):\(span.startColumn):\(text)\(outputTerminator(match.lineTerminator))"
+                return "\(displayPath(for: match.fileURL))\(pathFieldSeparator())\(match.lineNumber):\(span.startColumn):\(text)\(outputTerminator(match.lineTerminator))"
             }
         }
     }
@@ -146,7 +136,7 @@ public struct StandardPrinter {
         }
         let message = #"binary file matches (found "\0" byte around offset \#(offset))"#
         if showPath {
-            return "\(displayPath(for: result.fileURL)): \(message)"
+            return "\(displayPath(for: result.fileURL))\(pathFieldSeparator()) \(message)"
         }
         return message
     }
@@ -154,9 +144,7 @@ public struct StandardPrinter {
     private func formatOnlyMatching(_ match: SearchMatch, showPath: Bool) -> [String] {
         match.spans.map { span in
             var fields: [String] = []
-            if showPath {
-                fields.append(displayPath(for: match.fileURL))
-            }
+            let path = showPath ? displayPath(for: match.fileURL) : nil
             if options.wantsLineNumber {
                 fields.append("\(match.lineNumber)")
             }
@@ -167,10 +155,7 @@ public struct StandardPrinter {
                 fields.append("\(match.absoluteOffset + span.startByte)")
             }
             let text = "\(span.replacement ?? span.text)\(outputTerminator(match.lineTerminator))"
-            if fields.isEmpty {
-                return text
-            }
-            return "\(fields.joined(separator: ":")):\(text)"
+            return "\(prefix(path: path, fields: fields, fieldSeparator: ":"))\(text)"
         }
     }
 
@@ -239,17 +224,12 @@ public struct StandardPrinter {
 
     private func formatContextLine(_ line: SearchLine, fileURL: URL, showPath: Bool) -> String {
         var fields: [String] = []
-        if showPath {
-            fields.append(displayPath(for: fileURL))
-        }
+        let path = showPath ? displayPath(for: fileURL) : nil
         if options.wantsLineNumber {
             fields.append("\(line.lineNumber)")
         }
 
-        if fields.isEmpty {
-            return "\(renderedLine(line.line))\(outputTerminator(line.lineTerminator))"
-        }
-        return "\(fields.joined(separator: "-"))-\(renderedLine(line.line))\(outputTerminator(line.lineTerminator))"
+        return "\(prefix(path: path, fields: fields, fieldSeparator: "-"))\(renderedLine(line.line))\(outputTerminator(line.lineTerminator))"
     }
 
     private func renderedLine(for match: SearchMatch) -> String {
@@ -274,6 +254,27 @@ public struct StandardPrinter {
 
     private func outputTerminator(_ terminator: String) -> String {
         options.nullData ? terminator : ""
+    }
+
+    private func pathTerminator() -> String {
+        options.nullPathTerminator ? "\0" : ""
+    }
+
+    private func pathFieldSeparator() -> String {
+        options.nullPathTerminator ? "\0" : ":"
+    }
+
+    private func prefix(path: String?, fields: [String], fieldSeparator: String) -> String {
+        var prefix = ""
+        if let path {
+            prefix += path
+            prefix += options.nullPathTerminator ? "\0" : fieldSeparator
+        }
+        if !fields.isEmpty {
+            prefix += fields.joined(separator: fieldSeparator)
+            prefix += fieldSeparator
+        }
+        return prefix
     }
 
     private func limitedLine(_ line: String) -> String {
@@ -336,10 +337,17 @@ public struct StandardPrinter {
         let prefix = currentDirectory.hasSuffix("/") ? currentDirectory : "\(currentDirectory)/"
 
         if path.hasPrefix(prefix) {
-            return String(path.dropFirst(prefix.count))
+            return applyPathSeparator(String(path.dropFirst(prefix.count)))
         }
 
-        return path
+        return applyPathSeparator(path)
+    }
+
+    private func applyPathSeparator(_ path: String) -> String {
+        guard let pathSeparator = options.pathSeparator else {
+            return path
+        }
+        return String(path.map { $0 == "/" ? pathSeparator : $0 })
     }
 
     private func statsLines(for results: SearchResults, bytesPrinted: Int) -> [String] {

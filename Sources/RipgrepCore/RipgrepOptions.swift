@@ -75,6 +75,8 @@ public struct RipgrepOptions: Equatable {
     public var heading: Bool?
     public var trim = false
     public var vimgrep = false
+    public var nullPathTerminator = false
+    public var pathSeparator: Character?
     public var withFilename: Bool?
     public var hidden = false
     public var noIgnore = false
@@ -296,6 +298,23 @@ public enum RipgrepArgumentParser {
                 options.trim = false
             case "--vimgrep":
                 options.vimgrep = true
+            case "-0", "--null":
+                options.nullPathTerminator = true
+            case "--path-separator":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--path-separator <SEPARATOR>' requires a value")
+                }
+                guard let separator = parsePathSeparator(arguments[index]) else {
+                    return .error("error: path separator must be a single character")
+                }
+                options.pathSeparator = separator
+                index += 1
+            case let value where value.hasPrefix("--path-separator="):
+                let raw = String(value.dropFirst("--path-separator=".count))
+                guard let separator = parsePathSeparator(raw) else {
+                    return .error("error: path separator must be a single character")
+                }
+                options.pathSeparator = separator
             case "--sort":
                 guard index < arguments.count else {
                     return .error("error: The argument '--sort <SORTBY>' requires a value")
@@ -688,6 +707,8 @@ public enum RipgrepArgumentParser {
               --heading              Group matches by file
               --trim                 Trim leading ASCII whitespace from printed lines
               --vimgrep              Print vim-compatible file:line:column matches
+          -0, --null                 Print NUL after file paths
+              --path-separator SEP   Set the path separator for printed paths
               --sort SORTBY          Sort results by path, modified, accessed or created
               --sortr SORTBY         Sort results in reverse order
           -H, --with-filename        Show file names
@@ -774,6 +795,22 @@ public enum RipgrepArgumentParser {
         default:
             return nil
         }
+    }
+
+    private static func parsePathSeparator(_ raw: String) -> Character? {
+        let value: String
+        switch raw {
+        case #"\"#, #"\\"#:
+            value = #"\"#
+        case #"\0"#, #"\x00"#, #"\\0"#, #"\\x00"#:
+            value = "\0"
+        default:
+            value = raw
+        }
+        guard value.count == 1 else {
+            return nil
+        }
+        return value.first
     }
 
     private static func parseSort(_ raw: String, reverse: Bool) -> SortMode? {
