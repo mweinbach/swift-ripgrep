@@ -27,6 +27,9 @@ public struct PatternMatcher {
                 }
                 do {
                     var regexOptions: NSRegularExpression.Options = options.effectiveIgnoreCase ? [.caseInsensitive] : []
+                    if options.multiline {
+                        regexOptions.insert(.anchorsMatchLines)
+                    }
                     if options.multiline && options.multilineDotall {
                         regexOptions.insert(.dotMatchesLineSeparators)
                     }
