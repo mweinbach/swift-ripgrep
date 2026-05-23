@@ -1689,8 +1689,8 @@ struct RipgrepSearcherTests {
         try root.write("secret\n", to: ".hidden.txt")
 
         #expect(try run(["--files", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == ["visible.txt"])
-        #expect(try run(["--files", "--hidden", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == ["visible.txt", ".hidden.txt"])
-        #expect(pathBasenames(try run(["--hidden", "e", root.url.path])) == ["visible.txt", ".hidden.txt"])
+        #expect(try run(["--files", "--hidden", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == [".hidden.txt", "visible.txt"])
+        #expect(pathBasenames(try run(["--hidden", "e", root.url.path])) == [".hidden.txt", "visible.txt"])
 
         let whitelisted = try TemporaryDirectory()
         try whitelisted.createDirectory("subdir")

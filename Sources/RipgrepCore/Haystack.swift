@@ -302,11 +302,6 @@ public struct FileWalker {
     private func defaultWalkOrder(_ lhs: URL, _ rhs: URL) -> Bool {
         let lhsName = lhs.lastPathComponent
         let rhsName = rhs.lastPathComponent
-        let lhsHidden = lhsName.hasPrefix(".")
-        let rhsHidden = rhsName.hasPrefix(".")
-        if lhsHidden != rhsHidden {
-            return !lhsHidden
-        }
         return lhsName.localizedStandardCompare(rhsName) == .orderedAscending
     }
 
