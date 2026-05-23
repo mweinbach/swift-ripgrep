@@ -176,6 +176,7 @@ public struct RipgrepSearcher {
         var searchLines: [SearchLine] = []
         var absoluteOffset = 0
         let maxCount = options.maxCount ?? Int.max
+        var hasMatched = false
 
         for (offset, splitLine) in lines.enumerated() {
             let line = splitLine.text
@@ -195,9 +196,13 @@ public struct RipgrepSearcher {
             let spans = matcher.spans(in: line)
             guard !spans.isEmpty else {
                 absoluteOffset += splitLine.text.utf8.count + splitLine.terminator.utf8.count
+                if options.stopOnNonmatch && hasMatched {
+                    break
+                }
                 continue
             }
 
+            hasMatched = true
             matches.append(SearchMatch(
                 fileURL: fileURL,
                 lineNumber: lineNumber,

@@ -59,6 +59,7 @@ public struct RipgrepOptions: Equatable {
     public var multilineDotall = false
     public var crlf = false
     public var invertMatch = false
+    public var stopOnNonmatch = false
     public var onlyMatching = false
     public var replacement: String?
     public var json = false
@@ -219,6 +220,7 @@ public enum RipgrepArgumentParser {
                 options.lineRegexp = true
             case "-U", "--multiline":
                 options.multiline = true
+                options.stopOnNonmatch = false
             case "--no-multiline":
                 options.multiline = false
             case "--multiline-dotall":
@@ -232,6 +234,9 @@ public enum RipgrepArgumentParser {
                 options.crlf = false
             case "-v", "--invert-match":
                 options.invertMatch = true
+            case "--stop-on-nonmatch":
+                options.stopOnNonmatch = true
+                options.multiline = false
             case "-o", "--only-matching":
                 options.onlyMatching = true
             case "-r", "--replace":
@@ -741,6 +746,7 @@ public enum RipgrepArgumentParser {
               --multiline-dotall     Make '.' match line terminators in multiline mode
               --crlf                 Treat CRLF as a line terminator for anchors
           -v, --invert-match         Show non-matching lines
+              --stop-on-nonmatch     Stop after a non-match following a match
           -o, --only-matching        Print only the matched text
           -r, --replace TEXT         Replace matches with the given text
               --json                 Show search results in JSON Lines format

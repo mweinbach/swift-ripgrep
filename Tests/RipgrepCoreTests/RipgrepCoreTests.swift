@@ -388,6 +388,37 @@ struct RipgrepSearcherTests {
         ])
     }
 
+    @Test("stops after first nonmatch following matches")
+    func stopsAfterFirstNonmatchFollowingMatches() throws {
+        let root = try TemporaryDirectory()
+        try root.write("hay\nmatch1\nmatch2\nhay\nmatch3\n", to: "stop.txt")
+
+        #expect(try run(["-n", "--stop-on-nonmatch", "match", root.path("stop.txt")]) == [
+            "2:match1",
+            "3:match2",
+        ])
+        #expect(try run(["-n", "--stop-on-nonmatch", "-A1", "match", root.path("stop.txt")]) == [
+            "2:match1",
+            "3:match2",
+            "4-hay",
+        ])
+        #expect(try run(["-n", "--stop-on-nonmatch", "--passthru", "match", root.path("stop.txt")]) == [
+            "1-hay",
+            "2:match1",
+            "3:match2",
+            "4-hay",
+        ])
+        #expect(try run(["-n", "--stop-on-nonmatch", "-U", "match", root.path("stop.txt")]) == [
+            "2:match1",
+            "3:match2",
+            "5:match3",
+        ])
+        #expect(try run(["-n", "-U", "--stop-on-nonmatch", "match", root.path("stop.txt")]) == [
+            "2:match1",
+            "3:match2",
+        ])
+    }
+
     @Test("prints only matching text and replacements")
     func printsOnlyMatchingAndReplacements() throws {
         let root = try TemporaryDirectory()
