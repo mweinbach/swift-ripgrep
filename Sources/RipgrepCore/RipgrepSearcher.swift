@@ -48,9 +48,7 @@ public struct RipgrepSearcher {
             files.append(searchContents(input, fileURL: URL(fileURLWithPath: "-"), matcher: matcher, options: options))
         }
 
-        files.sort { lhs, rhs in
-            lhs.fileURL.path < rhs.fileURL.path
-        }
+        files = sorted(files, options: options)
 
         let matchedFiles = files.filter(\.hasMatch)
         let summary = SearchSummary(
@@ -63,6 +61,50 @@ public struct RipgrepSearcher {
         )
 
         return SearchResults(files: files, summary: summary)
+    }
+
+    private func sorted(_ files: [SearchFileResult], options: RipgrepOptions) -> [SearchFileResult] {
+        guard let sortMode = options.sortMode else {
+            return files.sorted { $0.fileURL.path < $1.fileURL.path }
+        }
+        return files.sorted { lhs, rhs in
+            let order = compare(lhs.fileURL, rhs.fileURL, by: sortMode.kind)
+            if sortMode.reverse {
+                return order == .orderedDescending
+            }
+            return order == .orderedAscending
+        }
+    }
+
+    private func compare(_ lhs: URL, _ rhs: URL, by kind: SortKind) -> ComparisonResult {
+        switch kind {
+        case .path:
+            return comparePaths(lhs, rhs)
+        case .modified:
+            return compareDates(lhs, rhs, key: .contentModificationDateKey)
+        case .accessed:
+            return compareDates(lhs, rhs, key: .contentAccessDateKey)
+        case .created:
+            return compareDates(lhs, rhs, key: .creationDateKey)
+        }
+    }
+
+    private func compareDates(_ lhs: URL, _ rhs: URL, key: URLResourceKey) -> ComparisonResult {
+        let lhsDate = (try? lhs.resourceValues(forKeys: [key]).allValues[key] as? Date) ?? .distantPast
+        let rhsDate = (try? rhs.resourceValues(forKeys: [key]).allValues[key] as? Date) ?? .distantPast
+        if lhsDate == rhsDate {
+            return comparePaths(lhs, rhs)
+        }
+        return lhsDate < rhsDate ? .orderedAscending : .orderedDescending
+    }
+
+    private func comparePaths(_ lhs: URL, _ rhs: URL) -> ComparisonResult {
+        let lhsPath = lhs.path
+        let rhsPath = rhs.path
+        if lhsPath == rhsPath {
+            return .orderedSame
+        }
+        return lhsPath < rhsPath ? .orderedAscending : .orderedDescending
     }
 
     private func searchFile(

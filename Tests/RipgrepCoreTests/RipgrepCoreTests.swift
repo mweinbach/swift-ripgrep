@@ -79,6 +79,54 @@ struct RipgrepSearcherTests {
         #expect(try run(["-m1", "-c", "needle", root.path("many.txt")]) == ["1"])
     }
 
+    @Test("prints byte offsets for lines and only matches")
+    func printsByteOffsets() throws {
+        let root = try TemporaryDirectory()
+        try root.write("xx needle yy\nneedle\n", to: "offsets.txt")
+
+        #expect(try run(["-n", "--byte-offset", "needle", root.path("offsets.txt")]) == [
+            "1:0:xx needle yy",
+            "2:13:needle",
+        ])
+        #expect(try run(["-n", "-o", "--byte-offset", "needle", root.path("offsets.txt")]) == [
+            "1:3:needle",
+            "2:13:needle",
+        ])
+        #expect(try run(["--column", "--byte-offset", "needle", root.path("offsets.txt")]) == [
+            "1:4:0:xx needle yy",
+            "2:1:13:needle",
+        ])
+    }
+
+    @Test("limits traversal depth")
+    func limitsTraversalDepth() throws {
+        let root = try TemporaryDirectory()
+        try root.write("needle\n", to: "root.txt")
+        try root.write("needle\n", to: "sub/one.txt")
+        try root.write("needle\n", to: "sub/deeper/two.txt")
+
+        #expect(try runAllowingNoMatch(["--max-depth", "0", "needle", root.url.path]) == [])
+        #expect(pathBasenames(try run(["--max-depth", "1", "needle", root.url.path])) == ["root.txt"])
+        #expect(pathBasenames(try run(["-d2", "needle", root.url.path])) == ["root.txt", "one.txt"])
+    }
+
+    @Test("sorts files by requested criteria")
+    func sortsFilesByRequestedCriteria() throws {
+        let root = try TemporaryDirectory()
+        try root.write("needle\n", to: "b.txt")
+        try root.write("needle\n", to: "a.txt")
+
+        let older = Date(timeIntervalSince1970: 1_000)
+        let newer = Date(timeIntervalSince1970: 2_000)
+        try root.setModificationDate(newer, for: "a.txt")
+        try root.setModificationDate(older, for: "b.txt")
+
+        #expect(pathBasenames(try run(["--sort", "path", "needle", root.url.path])) == ["a.txt", "b.txt"])
+        #expect(pathBasenames(try run(["--sortr", "path", "needle", root.url.path])) == ["b.txt", "a.txt"])
+        #expect(pathBasenames(try run(["--sort", "modified", "needle", root.url.path])) == ["b.txt", "a.txt"])
+        #expect(pathBasenames(try run(["--sort-files", "--files", root.url.path])) == ["a.txt", "b.txt"])
+    }
+
     @Test("prints aggregate stats")
     func printsAggregateStats() throws {
         let root = try TemporaryDirectory()
@@ -405,5 +453,12 @@ private final class TemporaryDirectory {
 
     func path(_ relativePath: String) -> String {
         url.appendingPathComponent(relativePath, isDirectory: false).path
+    }
+
+    func setModificationDate(_ date: Date, for relativePath: String) throws {
+        try FileManager.default.setAttributes(
+            [.modificationDate: date],
+            ofItemAtPath: path(relativePath)
+        )
     }
 }

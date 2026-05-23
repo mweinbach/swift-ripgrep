@@ -19,6 +19,23 @@ public enum BinaryMode: Equatable {
     case asText
 }
 
+public enum SortKind: Equatable {
+    case path
+    case modified
+    case accessed
+    case created
+}
+
+public struct SortMode: Equatable {
+    public let kind: SortKind
+    public let reverse: Bool
+
+    public init(kind: SortKind, reverse: Bool) {
+        self.kind = kind
+        self.reverse = reverse
+    }
+}
+
 public struct RipgrepOptions: Equatable {
     public var mode: SearchMode = .search
     public var printMode: PrintMode = .matchingLines
@@ -36,9 +53,12 @@ public struct RipgrepOptions: Equatable {
     public var json = false
     public var stats = false
     public var maxCount: Int?
+    public var maxDepth: Int?
+    public var sortMode: SortMode?
     public var lineNumber = false
     public var noLineNumber = false
     public var column = false
+    public var byteOffset = false
     public var withFilename: Bool?
     public var hidden = false
     public var noIgnore = false
@@ -154,6 +174,10 @@ public enum RipgrepArgumentParser {
                 options.replacement = String(value.dropFirst("--replace=".count))
             case "-n", "--line-number":
                 options.lineNumber = true
+            case "-b", "--byte-offset":
+                options.byteOffset = true
+            case "--no-byte-offset":
+                options.byteOffset = false
             case "--json":
                 options.json = true
             case "--no-json":
@@ -166,6 +190,56 @@ public enum RipgrepArgumentParser {
                 options.noLineNumber = true
             case "--column":
                 options.column = true
+            case "--sort":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--sort <SORTBY>' requires a value")
+                }
+                if arguments[index] == "none" {
+                    options.sortMode = nil
+                } else {
+                    guard let sort = parseSort(arguments[index], reverse: false) else {
+                        return .error("error: choice '\(arguments[index])' is unrecognized")
+                    }
+                    options.sortMode = sort
+                }
+                index += 1
+            case let value where value.hasPrefix("--sort="):
+                let raw = String(value.dropFirst("--sort=".count))
+                if raw == "none" {
+                    options.sortMode = nil
+                } else {
+                    guard let sort = parseSort(raw, reverse: false) else {
+                        return .error("error: choice '\(raw)' is unrecognized")
+                    }
+                    options.sortMode = sort
+                }
+            case "--sortr":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--sortr <SORTBY>' requires a value")
+                }
+                if arguments[index] == "none" {
+                    options.sortMode = nil
+                } else {
+                    guard let sort = parseSort(arguments[index], reverse: true) else {
+                        return .error("error: choice '\(arguments[index])' is unrecognized")
+                    }
+                    options.sortMode = sort
+                }
+                index += 1
+            case let value where value.hasPrefix("--sortr="):
+                let raw = String(value.dropFirst("--sortr=".count))
+                if raw == "none" {
+                    options.sortMode = nil
+                } else {
+                    guard let sort = parseSort(raw, reverse: true) else {
+                        return .error("error: choice '\(raw)' is unrecognized")
+                    }
+                    options.sortMode = sort
+                }
+            case "--sort-files":
+                options.sortMode = SortMode(kind: .path, reverse: false)
+            case "--no-sort-files":
+                options.sortMode = nil
             case "-H", "--with-filename":
                 options.withFilename = true
             case "-I", "--no-filename":
@@ -263,6 +337,27 @@ public enum RipgrepArgumentParser {
                     return .error("error: invalid max count '\(raw)'")
                 }
                 options.maxCount = count
+            case "-d", "--max-depth":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--max-depth <NUM>' requires a value")
+                }
+                guard let depth = parseNonNegativeInt(arguments[index]) else {
+                    return .error("error: invalid max depth '\(arguments[index])'")
+                }
+                options.maxDepth = depth
+                index += 1
+            case let value where value.hasPrefix("--max-depth="):
+                let raw = String(value.dropFirst("--max-depth=".count))
+                guard let depth = parseNonNegativeInt(raw) else {
+                    return .error("error: invalid max depth '\(raw)'")
+                }
+                options.maxDepth = depth
+            case let value where value.hasPrefix("-d") && value.count > 2:
+                let raw = String(value.dropFirst(2))
+                guard let depth = parseNonNegativeInt(raw) else {
+                    return .error("error: invalid max depth '\(raw)'")
+                }
+                options.maxDepth = depth
             case "-A", "--after-context":
                 guard index < arguments.count else {
                     return .error("error: The argument '--after-context <NUM>' requires a value")
@@ -410,9 +505,13 @@ public enum RipgrepArgumentParser {
               --json                 Show search results in JSON Lines format
               --stats                Print statistics about the search
           -m, --max-count NUM        Limit matching lines per file
+          -d, --max-depth NUM        Descend at most NUM directory levels
           -n, --line-number          Show line numbers
           -N, --no-line-number       Suppress line numbers
               --column               Show the first match column
+          -b, --byte-offset          Show the 0-based byte offset
+              --sort SORTBY          Sort results by path, modified, accessed or created
+              --sortr SORTBY         Sort results in reverse order
           -H, --with-filename        Show file names
           -I, --no-filename          Suppress file names
           -c, --count                Show match counts per file
@@ -454,6 +553,21 @@ public enum RipgrepArgumentParser {
 
     private static func parseContextCount(_ raw: String, flag: String) -> Int? {
         parseNonNegativeInt(raw)
+    }
+
+    private static func parseSort(_ raw: String, reverse: Bool) -> SortMode? {
+        switch raw {
+        case "path":
+            return SortMode(kind: .path, reverse: reverse)
+        case "modified":
+            return SortMode(kind: .modified, reverse: reverse)
+        case "accessed":
+            return SortMode(kind: .accessed, reverse: reverse)
+        case "created":
+            return SortMode(kind: .created, reverse: reverse)
+        default:
+            return nil
+        }
     }
 
     private static func parseNonNegativeInt(_ raw: String) -> Int? {

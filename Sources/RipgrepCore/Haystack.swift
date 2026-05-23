@@ -35,6 +35,7 @@ public struct FileWalker {
             haystacks.append(contentsOf: try walk(
                 root.standardizedFileURL,
                 isExplicit: true,
+                depth: 0,
                 rootBase: rootBase,
                 ignoreStack: baseIgnoreStack,
                 overrides: overrides,
@@ -43,12 +44,13 @@ public struct FileWalker {
             ))
         }
 
-        return haystacks.sorted { $0.url.path < $1.url.path }
+        return sorted(haystacks, options: options)
     }
 
     private func walk(
         _ url: URL,
         isExplicit: Bool,
+        depth: Int,
         rootBase: URL,
         ignoreStack: IgnoreStack,
         overrides: GlobMatcher,
@@ -99,6 +101,9 @@ public struct FileWalker {
         guard resolvedValues.isDirectory == true else {
             return []
         }
+        if let maxDepth = options.maxDepth, depth >= maxDepth {
+            return []
+        }
 
         var directoryIgnoreStack = ignoreStack
         if !options.noIgnore {
@@ -124,6 +129,7 @@ public struct FileWalker {
             haystacks.append(contentsOf: try walk(
                 child,
                 isExplicit: false,
+                depth: depth + 1,
                 rootBase: rootBase,
                 ignoreStack: directoryIgnoreStack,
                 overrides: overrides,
@@ -132,6 +138,62 @@ public struct FileWalker {
             ))
         }
         return haystacks
+    }
+
+    private func sorted(_ haystacks: [Haystack], options: RipgrepOptions) -> [Haystack] {
+        guard let sortMode = options.sortMode else {
+            return haystacks.sorted { $0.url.path < $1.url.path }
+        }
+        return haystacks.sorted { lhs, rhs in
+            let order = compare(lhs.url, rhs.url, by: sortMode.kind)
+            if sortMode.reverse {
+                return order == .orderedDescending
+            }
+            return order == .orderedAscending
+        }
+    }
+
+    private func compare(_ lhs: URL, _ rhs: URL, by kind: SortKind) -> ComparisonResult {
+        switch kind {
+        case .path:
+            return comparePaths(lhs, rhs)
+        case .modified:
+            return compareDates(
+                lhs,
+                rhs,
+                key: .contentModificationDateKey
+            )
+        case .accessed:
+            return compareDates(
+                lhs,
+                rhs,
+                key: .contentAccessDateKey
+            )
+        case .created:
+            return compareDates(
+                lhs,
+                rhs,
+                key: .creationDateKey
+            )
+        }
+    }
+
+    private func compareDates(_ lhs: URL, _ rhs: URL, key: URLResourceKey) -> ComparisonResult {
+        let lhsDate = (try? lhs.resourceValues(forKeys: [key]).allValues[key] as? Date) ?? .distantPast
+        let rhsDate = (try? rhs.resourceValues(forKeys: [key]).allValues[key] as? Date) ?? .distantPast
+        if lhsDate == rhsDate {
+            return comparePaths(lhs, rhs)
+        }
+        return lhsDate < rhsDate ? .orderedAscending : .orderedDescending
+    }
+
+    private func comparePaths(_ lhs: URL, _ rhs: URL) -> ComparisonResult {
+        let lhsPath = lhs.path
+        let rhsPath = rhs.path
+        if lhsPath == rhsPath {
+            return .orderedSame
+        }
+        return lhsPath < rhsPath ? .orderedAscending : .orderedDescending
     }
 
     private func isHidden(_ url: URL) -> Bool {

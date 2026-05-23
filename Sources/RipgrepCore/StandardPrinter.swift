@@ -82,6 +82,9 @@ public struct StandardPrinter {
         if options.column, let column = match.column {
             fields.append("\(column)")
         }
+        if options.byteOffset {
+            fields.append("\(match.absoluteOffset)")
+        }
 
         if fields.isEmpty {
             return renderedLine(for: match)
@@ -111,6 +114,9 @@ public struct StandardPrinter {
             }
             if options.column {
                 fields.append("\(span.startColumn)")
+            }
+            if options.byteOffset {
+                fields.append("\(match.absoluteOffset + span.startByte)")
             }
             let text = span.replacement ?? span.text
             if fields.isEmpty {
