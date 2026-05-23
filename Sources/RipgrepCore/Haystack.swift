@@ -22,6 +22,11 @@ public struct FileWalkResults: Equatable {
     }
 }
 
+private struct LoadedIgnoreMatcher {
+    let matcher: GlobMatcher
+    let messages: [String]
+}
+
 public struct FileWalker {
     private let fileManager: FileManager
     private let environment: [String: String]
@@ -53,10 +58,12 @@ public struct FileWalker {
         var baseIgnoreStack = IgnoreStack()
         if !options.noIgnoreFiles {
             for ignoreFile in options.ignoreFiles {
-                baseIgnoreStack.append(loadMatcher(
+                appendLoadedMatcher(
                     from: ignoreFile,
-                    caseInsensitive: options.ignoreFileCaseInsensitive
-                ))
+                    to: &baseIgnoreStack,
+                    messages: &messages,
+                    options: options
+                )
             }
         }
         let overrideEntries = options.globPatterns.map { pattern in
@@ -78,8 +85,8 @@ public struct FileWalker {
             }
             let rootBase = rootBase(for: root.standardizedFileURL)
             var rootIgnoreStack = baseIgnoreStack
-            appendGlobalIgnoreFile(to: &rootIgnoreStack, rootBase: rootBase, options: options)
-            appendParentIgnoreFiles(to: &rootIgnoreStack, rootBase: rootBase, options: options)
+            appendGlobalIgnoreFile(to: &rootIgnoreStack, rootBase: rootBase, messages: &messages, options: options)
+            appendParentIgnoreFiles(to: &rootIgnoreStack, rootBase: rootBase, messages: &messages, options: options)
             let rootVolume = options.oneFileSystem ? volumeIdentifier(for: root.standardizedFileURL) : nil
             haystacks.append(contentsOf: try walk(
                 root.standardizedFileURL,
@@ -87,6 +94,7 @@ public struct FileWalker {
                 depth: 0,
                 rootBase: rootBase,
                 rootVolume: rootVolume,
+                messages: &messages,
                 diagnostics: &diagnostics,
                 ignoreStack: rootIgnoreStack,
                 overrides: overrides,
@@ -108,6 +116,7 @@ public struct FileWalker {
         depth: Int,
         rootBase: URL,
         rootVolume: String?,
+        messages: inout [String],
         diagnostics: inout [String],
         ignoreStack: IgnoreStack,
         overrides: GlobMatcher,
@@ -187,7 +196,7 @@ public struct FileWalker {
 
         var directoryIgnoreStack = ignoreStack
         if !options.noIgnore {
-            appendIgnoreFiles(in: resolvedURL, to: &directoryIgnoreStack, options: options)
+            appendIgnoreFiles(in: resolvedURL, to: &directoryIgnoreStack, messages: &messages, options: options)
         }
 
         let children = try fileManager.contentsOfDirectory(
@@ -210,6 +219,7 @@ public struct FileWalker {
                 depth: depth + 1,
                 rootBase: rootBase,
                 rootVolume: rootVolume,
+                messages: &messages,
                 diagnostics: &diagnostics,
                 ignoreStack: directoryIgnoreStack,
                 overrides: overrides,
@@ -304,6 +314,7 @@ public struct FileWalker {
     private func appendParentIgnoreFiles(
         to ignoreStack: inout IgnoreStack,
         rootBase: URL,
+        messages: inout [String],
         options: RipgrepOptions
     ) {
         guard !options.noIgnore, !options.noIgnoreParent else {
@@ -314,13 +325,14 @@ public struct FileWalker {
         let parentPaths = ancestorPaths(of: rootPath)
         for parentPath in parentPaths {
             let parentURL = URL(fileURLWithPath: parentPath, isDirectory: true)
-            appendIgnoreFiles(in: parentURL, to: &ignoreStack, options: options)
+            appendIgnoreFiles(in: parentURL, to: &ignoreStack, messages: &messages, options: options)
         }
     }
 
     private func appendGlobalIgnoreFile(
         to ignoreStack: inout IgnoreStack,
         rootBase: URL,
+        messages: inout [String],
         options: RipgrepOptions
     ) {
         guard !options.noIgnore,
@@ -330,10 +342,12 @@ public struct FileWalker {
               let globalIgnoreFile = globalGitIgnoreFile() else {
             return
         }
-        ignoreStack.append(loadMatcher(
+        appendLoadedMatcher(
             from: globalIgnoreFile,
-            caseInsensitive: options.ignoreFileCaseInsensitive
-        ))
+            to: &ignoreStack,
+            messages: &messages,
+            options: options
+        )
     }
 
     private func ancestorPaths(of path: String) -> [String] {
@@ -378,14 +392,75 @@ public struct FileWalker {
         return url.lastPathComponent
     }
 
-    private func loadMatcher(from fileURL: URL, caseInsensitive: Bool = false) -> GlobMatcher {
-        guard let contents = try? String(contentsOf: fileURL, encoding: .utf8) else {
-            return GlobMatcher(patterns: [])
+    private func appendLoadedMatcher(
+        from fileURL: URL,
+        to ignoreStack: inout IgnoreStack,
+        messages: inout [String],
+        options: RipgrepOptions
+    ) {
+        let loaded = loadMatcher(from: fileURL, caseInsensitive: options.ignoreFileCaseInsensitive)
+        ignoreStack.append(loaded.matcher)
+        if !options.noIgnoreMessages {
+            messages.append(contentsOf: loaded.messages)
         }
-        return GlobMatcher(
-            patterns: contents.components(separatedBy: .newlines),
+    }
+
+    private func loadMatcher(from fileURL: URL, caseInsensitive: Bool = false) -> LoadedIgnoreMatcher {
+        guard let contents = try? String(contentsOf: fileURL, encoding: .utf8) else {
+            return LoadedIgnoreMatcher(matcher: GlobMatcher(patterns: []), messages: [])
+        }
+        let parsed = parseIgnorePatterns(contents, fileURL: fileURL)
+        return LoadedIgnoreMatcher(matcher: GlobMatcher(
+            patterns: parsed.patterns,
             caseInsensitive: caseInsensitive
-        )
+        ), messages: parsed.messages)
+    }
+
+    private func parseIgnorePatterns(_ contents: String, fileURL: URL) -> (patterns: [String], messages: [String]) {
+        var patterns: [String] = []
+        var messages: [String] = []
+        for (offset, rawLine) in contents.components(separatedBy: .newlines).enumerated() {
+            let trimmed = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else {
+                patterns.append(rawLine)
+                continue
+            }
+            if hasUnclosedCharacterClass(trimmed) {
+                messages.append("\(fileURL.path): line \(offset + 1): invalid ignore glob '\(trimmed)': unclosed character class")
+                continue
+            }
+            patterns.append(rawLine)
+        }
+        return (patterns, messages)
+    }
+
+    private func hasUnclosedCharacterClass(_ pattern: String) -> Bool {
+        var escaped = false
+        var index = pattern.startIndex
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                escaped = false
+            } else if character == "\\" {
+                escaped = true
+            } else if character == "[" {
+                var cursor = pattern.index(after: index)
+                var foundClose = false
+                while cursor < pattern.endIndex {
+                    if pattern[cursor] == "]" {
+                        foundClose = true
+                        break
+                    }
+                    cursor = pattern.index(after: cursor)
+                }
+                if !foundClose {
+                    return true
+                }
+                index = cursor
+            }
+            index = pattern.index(after: index)
+        }
+        return false
     }
 
     private func globalGitIgnoreFile() -> URL? {
@@ -474,32 +549,41 @@ public struct FileWalker {
     private func appendIgnoreFiles(
         in directoryURL: URL,
         to ignoreStack: inout IgnoreStack,
+        messages: inout [String],
         options: RipgrepOptions
     ) {
         if !options.noIgnoreVCS && (options.noRequireGit || isInGitRepository(directoryURL)) {
-            ignoreStack.append(loadMatcher(
+            appendLoadedMatcher(
                 from: directoryURL.appendingPathComponent(".gitignore"),
-                caseInsensitive: options.ignoreFileCaseInsensitive
-            ))
+                to: &ignoreStack,
+                messages: &messages,
+                options: options
+            )
         }
         if !options.noIgnoreExclude,
            !options.noIgnoreVCS,
            (options.noRequireGit || isInGitRepository(directoryURL)),
            fileManager.fileExists(atPath: directoryURL.appendingPathComponent(".git").path) {
-            ignoreStack.append(loadMatcher(
+            appendLoadedMatcher(
                 from: directoryURL.appendingPathComponent(".git/info/exclude"),
-                caseInsensitive: options.ignoreFileCaseInsensitive
-            ))
+                to: &ignoreStack,
+                messages: &messages,
+                options: options
+            )
         }
         if !options.noIgnoreDot {
-            ignoreStack.append(loadMatcher(
+            appendLoadedMatcher(
                 from: directoryURL.appendingPathComponent(".ignore"),
-                caseInsensitive: options.ignoreFileCaseInsensitive
-            ))
-            ignoreStack.append(loadMatcher(
+                to: &ignoreStack,
+                messages: &messages,
+                options: options
+            )
+            appendLoadedMatcher(
                 from: directoryURL.appendingPathComponent(".rgignore"),
-                caseInsensitive: options.ignoreFileCaseInsensitive
-            ))
+                to: &ignoreStack,
+                messages: &messages,
+                options: options
+            )
         }
     }
 }

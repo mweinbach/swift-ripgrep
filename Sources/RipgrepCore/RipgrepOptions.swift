@@ -174,6 +174,7 @@ public struct RipgrepOptions: Equatable {
     public var noIgnoreExclude = false
     public var noIgnoreFiles = false
     public var noIgnoreGlobal = false
+    public var noIgnoreMessages = false
     public var noIgnoreParent = false
     public var noIgnoreVCS = false
     public var noRequireGit = false
@@ -700,6 +701,10 @@ public enum RipgrepArgumentParser {
                 options.noIgnoreGlobal = true
             case "--ignore-global":
                 options.noIgnoreGlobal = false
+            case "--no-ignore-messages":
+                options.noIgnoreMessages = true
+            case "--ignore-messages":
+                options.noIgnoreMessages = false
             case "--no-ignore-parent":
                 options.noIgnoreParent = true
             case "--ignore-parent":
@@ -1122,6 +1127,7 @@ public enum RipgrepArgumentParser {
               --no-ignore-exclude    Do not respect .git/info/exclude
               --no-ignore-files      Do not respect --ignore-file arguments
               --no-ignore-global     Do not respect global git ignore files
+              --no-ignore-messages   Suppress ignore file parse messages
               --no-ignore-parent     Do not respect ignore files in parent directories
               --no-ignore-vcs        Do not respect VCS ignore files
               --no-require-git       Use VCS ignore files outside repositories

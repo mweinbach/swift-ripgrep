@@ -1047,6 +1047,48 @@ struct RipgrepSearcherTests {
         #expect(pathBasenames(try run(["--no-require-git", "needle", outsideGit.url.path])) == ["keep.txt"])
     }
 
+    @Test("honors ignore parse message switches")
+    func honorsIgnoreParseMessageSwitches() throws {
+        let root = try TemporaryDirectory()
+        try root.write("needle\n", to: "keep.txt")
+        try root.write("[broken\n", to: ".ignore")
+
+        var output: [String] = []
+        var errors: [String] = []
+        var exitCode = RipgrepCLI.run(
+            arguments: ["needle", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output == [root.path("keep.txt") + ":needle"])
+        #expect(errors.count == 1)
+        #expect(errors.first?.contains(".ignore: line 1") == true)
+        #expect(errors.first?.contains("unclosed character class") == true)
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--no-ignore-messages", "needle", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(output == [root.path("keep.txt") + ":needle"])
+        #expect(errors.isEmpty)
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--no-ignore-messages", "--ignore-messages", "needle", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output == [root.path("keep.txt") + ":needle"])
+        #expect(errors.count == 1)
+    }
+
     @Test("honors parent ignore files and unrestricted levels")
     func honorsParentIgnoreFilesAndUnrestrictedLevels() throws {
         let parent = try TemporaryDirectory()
