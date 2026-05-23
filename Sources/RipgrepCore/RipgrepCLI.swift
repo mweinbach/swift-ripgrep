@@ -28,8 +28,11 @@ public enum RipgrepCLI {
         standardInputIsReadable: Bool = false
     ) -> Int32 {
         switch RipgrepArgumentParser.parse(arguments, environment: environment) {
-        case .help:
-            emitStdout(usage(), stdout: stdout)
+        case .shortHelp:
+            emitStdoutVerbatim(helpOutput(named: "rg.help.short"), stdout: stdout)
+            return 0
+        case .longHelp:
+            emitStdoutVerbatim(helpOutput(named: "rg.help.long"), stdout: stdout)
             return 0
         case .shortVersion:
             emitStdout("ripgrep \(version) (rev \(revision))", stdout: stdout)
@@ -265,6 +268,10 @@ public enum RipgrepCLI {
         RipgrepArgumentParser.usage(version: version)
     }
 
+    private static func helpOutput(named resourceName: String) -> String {
+        generatedAsset(named: resourceName) ?? usage()
+    }
+
     private static var longVersionOutput: String {
         """
         ripgrep \(version) (rev \(revision))
@@ -339,6 +346,10 @@ public enum RipgrepCLI {
         case .completePowerShell:
             resourceName = "_rg.ps1"
         }
+        return generatedAsset(named: resourceName)
+    }
+
+    private static func generatedAsset(named resourceName: String) -> String? {
         guard let url = Bundle.module.url(forResource: resourceName, withExtension: nil) else {
             return nil
         }

@@ -265,7 +265,8 @@ public struct RipgrepOptions: Equatable {
 
 public enum CLIParseResult: Equatable {
     case run(RipgrepOptions)
-    case help
+    case shortHelp
+    case longHelp
     case shortVersion
     case longVersion
     case pcre2Version
@@ -301,8 +302,10 @@ public enum RipgrepArgumentParser {
             index += 1
 
             switch argument {
-            case "-h", "--help":
-                return .help
+            case "-h":
+                return .shortHelp
+            case "--help":
+                return .longHelp
             case "-V":
                 return .shortVersion
             case "--version":

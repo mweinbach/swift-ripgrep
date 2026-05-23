@@ -3192,20 +3192,34 @@ struct RipgrepSearcherTests {
     @Test("prints help")
     func printsHelp() {
         var output: [String] = []
+        var exitCode = RipgrepCLI.run(
+            arguments: ["-h"],
+            stdout: { output.append($0) }
+        )
 
-        let exitCode = RipgrepCLI.run(
+        #expect(exitCode == 0)
+        #expect(output.count == 1)
+        #expect(output[0].contains("ripgrep 15.1.0 (rev 4519153e5e)"))
+        #expect(output[0].contains("Use -h for short descriptions and --help for more details."))
+        #expect(output[0].contains("-i, --ignore-case"))
+        #expect(!output[0].contains("This flag searches case insensitively."))
+
+        output = []
+        exitCode = RipgrepCLI.run(
             arguments: ["--help"],
             stdout: { output.append($0) }
         )
 
         #expect(exitCode == 0)
-        #expect(output.first?.contains("USAGE:") == true)
-        #expect(output.first?.contains("--files") == true)
-        #expect(output.first?.contains("--maxdepth") == true)
-        #expect(output.first?.contains("--no-json") == true)
-        #expect(output.first?.contains("--no-ignore-vcs") == true)
-        #expect(output.first?.contains("--passthrough") == true)
-        #expect(output.first?.contains("--no-search-zip") == true)
+        #expect(output.count == 1)
+        #expect(output[0].contains("ripgrep 15.1.0 (rev 4519153e5e)"))
+        #expect(output[0].contains("--files"))
+        #expect(output[0].contains("--maxdepth"))
+        #expect(output[0].contains("--no-json"))
+        #expect(output[0].contains("--no-ignore-vcs"))
+        #expect(output[0].contains("--passthrough"))
+        #expect(output[0].contains("--no-search-zip"))
+        #expect(output[0].contains("When this flag is provided, all patterns will be searched case"))
     }
 
     @Test("reports unrecognized flags like ripgrep")
