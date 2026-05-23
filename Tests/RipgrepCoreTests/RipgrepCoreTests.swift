@@ -68,6 +68,29 @@ struct RipgrepSearcherTests {
         #expect(try run(["--files", "--hidden", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == [".hidden.txt", "visible.txt"])
     }
 
+    @Test("honors ignore files and no ignore")
+    func honorsIgnoreFilesAndNoIgnore() throws {
+        let root = try TemporaryDirectory()
+        try root.write("needle\n", to: "keep.txt")
+        try root.write("needle\n", to: "skip.log")
+        try root.write("*.log\n", to: ".gitignore")
+
+        #expect(pathBasenames(try run(["needle", root.url.path])) == ["keep.txt"])
+        #expect(pathBasenames(try run(["--no-ignore", "needle", root.url.path])) == ["keep.txt", "skip.log"])
+    }
+
+    @Test("honors custom ignore file and override globs")
+    func honorsCustomIgnoreFileAndOverrideGlobs() throws {
+        let root = try TemporaryDirectory()
+        try root.write("needle\n", to: "keep.swift")
+        try root.write("needle\n", to: "skip.txt")
+        try root.write("skip.txt\n", to: "ignore.txt")
+
+        #expect(pathBasenames(try run(["--ignore-file", root.path("ignore.txt"), "needle", root.url.path])) == ["keep.swift"])
+        #expect(pathBasenames(try run(["-g", "*.swift", "needle", root.url.path])) == ["keep.swift"])
+        #expect(pathBasenames(try run(["-g", "!skip.txt", "needle", root.url.path])) == ["keep.swift"])
+    }
+
     @Test("searches provided stdin")
     func searchesProvidedStdin() throws {
         var output: [String] = []
@@ -124,6 +147,13 @@ struct RipgrepSearcherTests {
         #expect(errors.isEmpty)
         #expect(exitCode == (output.isEmpty ? 1 : 0))
         return output
+    }
+
+    private func pathBasenames(_ lines: [String]) -> [String] {
+        lines.map { line in
+            let path = line.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? line
+            return URL(fileURLWithPath: path).lastPathComponent
+        }
     }
 }
 

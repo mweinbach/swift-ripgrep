@@ -28,6 +28,9 @@ public struct RipgrepOptions: Equatable {
     public var column = false
     public var withFilename: Bool?
     public var hidden = false
+    public var noIgnore = false
+    public var ignoreFiles: [URL] = []
+    public var globPatterns: [String] = []
     public var followSymlinks = false
     public var quiet = false
     public var useStdin = false
@@ -95,6 +98,24 @@ public enum RipgrepArgumentParser {
                 options.withFilename = false
             case "--hidden":
                 options.hidden = true
+            case "--no-ignore":
+                options.noIgnore = true
+            case "--ignore-file":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--ignore-file <PATH>' requires a value")
+                }
+                options.ignoreFiles.append(URL(fileURLWithPath: arguments[index]))
+                index += 1
+            case let value where value.hasPrefix("--ignore-file="):
+                options.ignoreFiles.append(URL(fileURLWithPath: String(value.dropFirst("--ignore-file=".count))))
+            case "-g", "--glob":
+                guard index < arguments.count else {
+                    return .error("error: The argument '--glob <GLOB>' requires a value")
+                }
+                options.globPatterns.append(arguments[index])
+                index += 1
+            case let value where value.hasPrefix("--glob="):
+                options.globPatterns.append(String(value.dropFirst("--glob=".count)))
             case "-L", "--follow":
                 options.followSymlinks = true
             case "-q", "--quiet":
@@ -158,10 +179,13 @@ public enum RipgrepArgumentParser {
           -H, --with-filename        Show file names
           -I, --no-filename          Suppress file names
           -c, --count                Show match counts per file
-          -l, --files-with-matches   Show only paths with matches
+              -l, --files-with-matches   Show only paths with matches
               --files-without-match  Show only paths without matches
               --files                Print files that would be searched
               --hidden               Search hidden files and directories
+              --no-ignore            Do not respect ignore files
+              --ignore-file PATH     Add a custom ignore file
+          -g, --glob GLOB            Include or exclude paths with an override glob
           -L, --follow               Follow symbolic links
           -q, --quiet                Do not print matches
           -h, --help                 Print help
