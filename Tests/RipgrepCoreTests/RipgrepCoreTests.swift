@@ -332,6 +332,12 @@ struct RipgrepSearcherTests {
             "needle",
             "needle",
         ])
+
+        try root.write("needle\nthis context line is very long\n", to: "context-columns.txt")
+        #expect(try run(["-M", "20", "-A1", "needle", root.path("context-columns.txt")]) == [
+            "needle",
+            "[Omitted long context line]",
+        ])
     }
 
     @Test("prints byte offsets for lines and only matches")

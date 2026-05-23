@@ -238,7 +238,7 @@ public struct StandardPrinter {
             fields.append(OutputField("\(line.lineNumber)", colorTarget: .line))
         }
 
-        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldContextSeparator))\(renderedLine(line.line))\(outputTerminator(line.lineTerminator))"
+        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldContextSeparator))\(renderedLine(line.line, omittedKind: .context))\(outputTerminator(line.lineTerminator))"
     }
 
     private func renderedLine(for match: SearchMatch) -> String {
@@ -256,9 +256,9 @@ public struct StandardPrinter {
         return "\(renderedLine(line))\(outputTerminator(match.lineTerminator))"
     }
 
-    private func renderedLine(_ line: String) -> String {
+    private func renderedLine(_ line: String, omittedKind: OmittedLineKind = .matching) -> String {
         let trimmed = options.trim ? line.trimmingASCIIWhitespacePrefix() : line
-        return limitedLine(trimmed)
+        return limitedLine(trimmed, omittedKind: omittedKind)
     }
 
     private func renderedLine(_ line: String, spans: [MatchSpan]) -> String {
@@ -307,12 +307,12 @@ public struct StandardPrinter {
         return hyperlinks.label(text, for: url, line: line, column: column)
     }
 
-    private func limitedLine(_ line: String) -> String {
+    private func limitedLine(_ line: String, omittedKind: OmittedLineKind) -> String {
         guard let maxColumns = options.maxColumns, line.utf8.count >= maxColumns else {
             return line
         }
         guard options.maxColumnsPreview else {
-            return "[Omitted long matching line]"
+            return omittedKind.message
         }
         return "\(line.prefixBytes(maxColumns)) [... omitted end of long line]"
     }
@@ -437,6 +437,20 @@ private struct OutputField {
     init(_ text: String, colorTarget: ColorTarget?) {
         self.text = text
         self.colorTarget = colorTarget
+    }
+}
+
+private enum OmittedLineKind {
+    case matching
+    case context
+
+    var message: String {
+        switch self {
+        case .matching:
+            return "[Omitted long matching line]"
+        case .context:
+            return "[Omitted long context line]"
+        }
     }
 }
 
