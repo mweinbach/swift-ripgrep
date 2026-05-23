@@ -37,7 +37,10 @@ public struct StandardPrinter {
         case .matchingLines:
             if options.vimgrep {
                 return results.files.flatMap { result in
-                    formatVimgrep(result, showPath: options.withFilename != false)
+                    if let binaryLine = formatBinaryMatch(result, showPath: options.withFilename != false) {
+                        return [binaryLine]
+                    }
+                    return formatVimgrep(result, showPath: options.withFilename != false)
                 }
             }
             if options.heading == true {
@@ -242,6 +245,11 @@ public struct StandardPrinter {
     private func headingLines(for results: SearchResults) -> [String] {
         var output: [String] = []
         for result in results.files {
+            if result.matches.isEmpty,
+               let binaryLine = formatBinaryMatch(result, showPath: showPath(for: results)) {
+                output.append(binaryLine)
+                continue
+            }
             let lines: [String]
             if let binaryLine = formatBinaryMatch(result, showPath: false) {
                 lines = [binaryLine]

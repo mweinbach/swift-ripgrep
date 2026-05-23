@@ -1343,8 +1343,8 @@ struct RipgrepSearcherTests {
 
         let binaryOutput = try run(["--json", "-n", "needle", root.path("binary.txt")])
         let binaryMessages = try binaryOutput.map(jsonObject)
-        #expect(binaryMessages.map { $0["type"] as? String } == ["begin", "match", "end", "summary"])
-        let binaryEnd = binaryMessages[2]["data"] as? [String: Any]
+        #expect(binaryMessages.map { $0["type"] as? String } == ["begin", "end", "summary"])
+        let binaryEnd = binaryMessages[1]["data"] as? [String: Any]
         #expect(binaryEnd?["binary_offset"] as? Int == 7)
 
         let binaryOnlyOutput = try run(["--json", "-n", "tail", root.path("binary.txt")])
@@ -2056,28 +2056,24 @@ struct RipgrepSearcherTests {
         try root.write(Data("needle\0tail\n".utf8), to: "bin.dat")
         try root.write(Data("needle\n\0tail\n".utf8), to: "before-nul.dat")
 
-        #expect(try run(["-n", "needle", root.url.path]) == [
-            "\(root.path("before-nul.dat")):1:needle",
-            #"\#(root.path("before-nul.dat")): WARNING: stopped searching binary file after match (found "\0" byte around offset 7)"#,
-        ])
+        #expect(try runAllowingNoMatch(["-n", "needle", root.url.path]) == [])
         #expect(try runAllowingNoMatch(["tail", root.url.path]) == [])
         #expect(try run(["needle", root.path("bin.dat")]) == [
             #"binary file matches (found "\0" byte around offset 6)"#,
         ])
         #expect(try run(["-n", "needle", root.path("before-nul.dat")]) == [
-            "1:needle",
             #"binary file matches (found "\0" byte around offset 7)"#,
         ])
         #expect(try run(["-n", "tail", root.path("before-nul.dat")]) == [
             #"binary file matches (found "\0" byte around offset 7)"#,
         ])
         #expect(try run(["-c", "needle", root.path("before-nul.dat")]) == ["1"])
-        #expect(pathBasenames(try run(["--binary", "needle", root.url.path])) == ["before-nul.dat", "before-nul.dat", "bin.dat"])
+        #expect(pathBasenames(try run(["--sort=path", "--binary", "needle", root.url.path])) == ["before-nul.dat", "bin.dat"])
 
         let countRoot = try TemporaryDirectory()
         try countRoot.write(Data("cat here\npadding\n\0".utf8), to: "file1.txt")
         try countRoot.write("cat here\n", to: "file2.txt")
-        #expect(pathBasenames(try run(["--sort=path", "-l", "cat", countRoot.url.path])) == ["file1.txt", "file2.txt"])
+        #expect(pathBasenames(try run(["--sort=path", "-l", "cat", countRoot.url.path])) == ["file2.txt"])
         #expect(countBasenames(try run(["--sort=path", "-c", "cat", countRoot.url.path])) == ["file2.txt:1"])
         #expect(countBasenames(try run(["--sort=path", "-c", "cat", countRoot.url.path, "--binary"])) == [
             "file1.txt:1",
@@ -2105,7 +2101,6 @@ struct RipgrepSearcherTests {
         )
         #expect(stdinExitCode == 0)
         #expect(stdinOutput == [
-            "1:needle",
             #"binary file matches (found "\0" byte around offset 7)"#,
         ])
 
@@ -2198,6 +2193,24 @@ struct RipgrepSearcherTests {
         #expect(exitCode == 0)
         #expect(output.isEmpty)
         #expect(errors == ["rg: \(missingPath): No such file or directory (os error 2)"])
+
+        let relativeRoot = try TemporaryDirectory()
+        try relativeRoot.write("needle\n", to: "ok.txt")
+        let originalDirectory = FileManager.default.currentDirectoryPath
+        defer { FileManager.default.changeCurrentDirectoryPath(originalDirectory) }
+        #expect(FileManager.default.changeCurrentDirectoryPath(relativeRoot.url.path))
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["-l", "needle", "ok.txt", "missing.txt"],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+
+        #expect(exitCode == 2)
+        #expect(output == ["ok.txt"])
+        #expect(errors == ["rg: missing.txt: No such file or directory (os error 2)"])
     }
 
     @Test("prints help")

@@ -23,6 +23,8 @@ private struct MultilineSpanCandidate {
 }
 
 public struct RipgrepSearcher {
+    private static let binaryDetectionBufferSize = 64 * 1024
+
     private let fileManager: FileManager
     private let environment: [String: String]
 
@@ -184,7 +186,13 @@ public struct RipgrepSearcher {
         if let binaryByteOffset, options.binaryMode != .asText {
             let contents = decode(data, options: options)
             let result = searchContents(contents, fileURL: fileURL, matcher: matcher, options: options)
-            let printableMatches = matchesBeforeBinary(result.matches, binaryByteOffset: binaryByteOffset)
+            let binaryDetectedBeforeSearch = binaryByteOffset < Self.binaryDetectionBufferSize
+            let printableMatches = binaryDetectedBeforeSearch
+                ? []
+                : matchesBeforeBinary(result.matches, binaryByteOffset: binaryByteOffset)
+            if options.binaryMode == .automatic && !haystack.isExplicit && binaryDetectedBeforeSearch {
+                return FileSearchOutcome(result: SearchFileResult(fileURL: fileURL, matches: [], searched: false))
+            }
             if options.binaryMode == .automatic && !haystack.isExplicit && printableMatches.isEmpty {
                 return FileSearchOutcome(result: SearchFileResult(fileURL: fileURL, matches: [], searched: false))
             }
@@ -223,9 +231,12 @@ public struct RipgrepSearcher {
               let binaryByteOffset = data.firstIndex(of: 0) else {
             return result
         }
+        let binaryDetectedBeforeSearch = binaryByteOffset < Self.binaryDetectionBufferSize
         return SearchFileResult(
             fileURL: fileURL,
-            matches: matchesBeforeBinary(result.matches, binaryByteOffset: binaryByteOffset),
+            matches: binaryDetectedBeforeSearch
+                ? []
+                : matchesBeforeBinary(result.matches, binaryByteOffset: binaryByteOffset),
             lines: result.lines,
             binaryByteOffset: binaryByteOffset,
             hasBinaryMatch: result.hasMatch,

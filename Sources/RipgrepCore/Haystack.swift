@@ -82,9 +82,10 @@ public struct FileWalker {
         var typeRegistry = FileTypeRegistry()
         typeRegistry.apply(options.typeChanges)
 
-        for root in options.effectiveRoots {
+        for (offset, root) in options.effectiveRoots.enumerated() {
             guard fileManager.fileExists(atPath: root.path) else {
-                messages.append("\(root.path): No such file or directory (os error 2)")
+                let displayPath = rootDisplayPath(at: offset, root: root, options: options)
+                messages.append("\(displayPath): No such file or directory (os error 2)")
                 continue
             }
             let rootBase = rootBase(for: root.standardizedFileURL)
@@ -114,6 +115,14 @@ public struct FileWalker {
             diagnostics: diagnostics,
             filtered: filtered
         )
+    }
+
+    private func rootDisplayPath(at offset: Int, root: URL, options: RipgrepOptions) -> String {
+        guard offset < options.rootPathArguments.count,
+              !options.rootPathArguments[offset].isEmpty else {
+            return root.path
+        }
+        return options.rootPathArguments[offset]
     }
 
     private func walk(
