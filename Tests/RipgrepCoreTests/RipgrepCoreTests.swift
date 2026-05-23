@@ -922,6 +922,17 @@ struct RipgrepSearcherTests {
         #expect(Set(pathBasenames(try run(["-d2", "needle", root.url.path]))) == Set(["root.txt", "one.txt"]))
         #expect(Set(pathBasenames(try run(["--maxdepth", "2", "needle", root.url.path]))) == Set(["root.txt", "one.txt"]))
         #expect(Set(pathBasenames(try run(["--maxdepth=2", "needle", root.url.path]))) == Set(["root.txt", "one.txt"]))
+
+        var output: [String] = []
+        var errors: [String] = []
+        let exitCode = RipgrepCLI.run(
+            arguments: ["--maxdepth", "nope", "needle", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["rg: error parsing flag --maxdepth: value is not a valid number: invalid digit found in string"])
     }
 
     @Test("sorts files by requested criteria")
@@ -939,6 +950,28 @@ struct RipgrepSearcherTests {
         #expect(pathBasenames(try run(["--sortr", "path", "needle", root.url.path])) == ["b.txt", "a.txt"])
         #expect(pathBasenames(try run(["--sort", "modified", "needle", root.url.path])) == ["b.txt", "a.txt"])
         #expect(pathBasenames(try run(["--sort-files", "--files", root.url.path])) == ["a.txt", "b.txt"])
+
+        var output: [String] = []
+        var errors: [String] = []
+        var exitCode = RipgrepCLI.run(
+            arguments: ["--sort", "bogus", "needle", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["rg: error parsing flag --sort: choice 'bogus' is unrecognized"])
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--sortr", "bogus", "needle", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["rg: error parsing flag --sortr: choice 'bogus' is unrecognized"])
     }
 
     @Test("prints aggregate stats")

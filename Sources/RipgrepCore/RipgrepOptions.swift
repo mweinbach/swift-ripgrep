@@ -741,7 +741,7 @@ public enum RipgrepArgumentParser {
                     options.sortMode = nil
                 } else {
                     guard let sort = parseSort(arguments[index], reverse: false) else {
-                        return .error("error: choice '\(arguments[index])' is unrecognized")
+                        return .error(unrecognizedChoice(flag: "--sort", value: arguments[index]))
                     }
                     options.sortMode = sort
                 }
@@ -752,7 +752,7 @@ public enum RipgrepArgumentParser {
                     options.sortMode = nil
                 } else {
                     guard let sort = parseSort(raw, reverse: false) else {
-                        return .error("error: choice '\(raw)' is unrecognized")
+                        return .error(unrecognizedChoice(flag: "--sort", value: raw))
                     }
                     options.sortMode = sort
                 }
@@ -764,7 +764,7 @@ public enum RipgrepArgumentParser {
                     options.sortMode = nil
                 } else {
                     guard let sort = parseSort(arguments[index], reverse: true) else {
-                        return .error("error: choice '\(arguments[index])' is unrecognized")
+                        return .error(unrecognizedChoice(flag: "--sortr", value: arguments[index]))
                     }
                     options.sortMode = sort
                 }
@@ -775,7 +775,7 @@ public enum RipgrepArgumentParser {
                     options.sortMode = nil
                 } else {
                     guard let sort = parseSort(raw, reverse: true) else {
-                        return .error("error: choice '\(raw)' is unrecognized")
+                        return .error(unrecognizedChoice(flag: "--sortr", value: raw))
                     }
                     options.sortMode = sort
                 }
@@ -1027,26 +1027,26 @@ public enum RipgrepArgumentParser {
                     return .error("error: The argument '--max-depth <NUM>' requires a value")
                 }
                 guard let depth = parseNonNegativeInt(arguments[index]) else {
-                    return .error("error: invalid max depth '\(arguments[index])'")
+                    return .error(invalidNumber(flag: argument))
                 }
                 options.maxDepth = depth
                 index += 1
             case let value where value.hasPrefix("--max-depth="):
                 let raw = String(value.dropFirst("--max-depth=".count))
                 guard let depth = parseNonNegativeInt(raw) else {
-                    return .error("error: invalid max depth '\(raw)'")
+                    return .error(invalidNumber(flag: "--max-depth"))
                 }
                 options.maxDepth = depth
             case let value where value.hasPrefix("--maxdepth="):
                 let raw = String(value.dropFirst("--maxdepth=".count))
                 guard let depth = parseNonNegativeInt(raw) else {
-                    return .error("error: invalid max depth '\(raw)'")
+                    return .error(invalidNumber(flag: "--maxdepth"))
                 }
                 options.maxDepth = depth
             case let value where value.hasPrefix("-d") && value.count > 2:
                 let raw = String(value.dropFirst(2))
                 guard let depth = parseNonNegativeInt(raw) else {
-                    return .error("error: invalid max depth '\(raw)'")
+                    return .error(invalidNumber(flag: "-d"))
                 }
                 options.maxDepth = depth
             case "-A", "--after-context":
