@@ -98,6 +98,7 @@ public struct FileWalker {
             let rootVolume = options.oneFileSystem ? volumeIdentifier(for: root.standardizedFileURL) : nil
             haystacks.append(contentsOf: try walk(
                 root.standardizedFileURL,
+                physicalURL: nil,
                 isExplicit: true,
                 depth: 0,
                 rootBase: rootBase,
@@ -137,6 +138,7 @@ public struct FileWalker {
 
     private func walk(
         _ url: URL,
+        physicalURL: URL?,
         isExplicit: Bool,
         depth: Int,
         rootBase: URL,
@@ -149,6 +151,7 @@ public struct FileWalker {
         typeRegistry: FileTypeRegistry,
         options: RipgrepOptions
     ) throws -> [Haystack] {
+        let metadataURL = physicalURL ?? url
         let values = try url.resourceValues(forKeys: [
             .isDirectoryKey,
             .isRegularFileKey,
@@ -193,7 +196,7 @@ public struct FileWalker {
 
         let resolvedURL = values.isSymbolicLink == true && options.followSymlinks
             ? url.resolvingSymlinksInPath()
-            : url
+            : metadataURL
         let resolvedValues = try resolvedURL.resourceValues(forKeys: [
             .isDirectoryKey,
             .isRegularFileKey,
@@ -251,11 +254,10 @@ public struct FileWalker {
 
         var haystacks: [Haystack] = []
         for child in children {
-            let childURL = resolvedURL == url
-                ? child
-                : url.appendingPathComponent(child.lastPathComponent)
+            let childURL = url.appendingPathComponent(child.lastPathComponent)
             haystacks.append(contentsOf: try walk(
                 childURL,
+                physicalURL: child,
                 isExplicit: false,
                 depth: depth + 1,
                 rootBase: rootBase,

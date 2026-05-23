@@ -2047,17 +2047,24 @@ struct RipgrepSearcherTests {
     func honorsSymlinkAndOneFileSystemTraversalToggles() throws {
         let root = try TemporaryDirectory()
         try root.createDirectory("real")
+        try root.createDirectory("real/nested")
         try root.write("needle\n", to: "real/file.txt")
+        try root.write("needle\n", to: "real/nested/deep.txt")
         try FileManager.default.createSymbolicLink(
             at: root.url.appendingPathComponent("link"),
             withDestinationURL: root.url.appendingPathComponent("real")
         )
 
-        #expect(pathBasenames(try run(["needle", root.url.path])) == ["file.txt"])
-        #expect(Set(try run(["--follow", "needle", root.url.path]).map { URL(fileURLWithPath: String($0.split(separator: ":", maxSplits: 1)[0])).deletingLastPathComponent().lastPathComponent }) == Set(["link", "real"]))
-        #expect(pathBasenames(try run(["--follow", "--no-follow", "needle", root.url.path])) == ["file.txt"])
-        #expect(pathBasenames(try run(["--one-file-system", "needle", root.url.path])) == ["file.txt"])
-        #expect(pathBasenames(try run(["--one-file-system", "--no-one-file-system", "needle", root.url.path])) == ["file.txt"])
+        #expect(pathBasenames(try run(["--sort", "path", "needle", root.url.path])) == ["file.txt", "deep.txt"])
+        #expect(try run(["--follow", "--sort", "path", "needle", root.url.path]) == [
+            "\(root.path("link/file.txt")):needle",
+            "\(root.path("link/nested/deep.txt")):needle",
+            "\(root.path("real/file.txt")):needle",
+            "\(root.path("real/nested/deep.txt")):needle",
+        ])
+        #expect(pathBasenames(try run(["--follow", "--no-follow", "--sort", "path", "needle", root.url.path])) == ["file.txt", "deep.txt"])
+        #expect(pathBasenames(try run(["--one-file-system", "--sort", "path", "needle", root.url.path])) == ["file.txt", "deep.txt"])
+        #expect(pathBasenames(try run(["--one-file-system", "--no-one-file-system", "--sort", "path", "needle", root.url.path])) == ["file.txt", "deep.txt"])
     }
 
     @Test("honors ignore files and no ignore")
