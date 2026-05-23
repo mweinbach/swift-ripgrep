@@ -96,6 +96,36 @@ struct RipgrepSearcherTests {
         #expect(errors == ["error: invalid thread count 'many'"])
     }
 
+    @Test("enforces regex size limit")
+    func enforcesRegexSizeLimit() throws {
+        let root = try TemporaryDirectory()
+        try root.write("needle\n", to: "limit.txt")
+
+        var output: [String] = []
+        var errors: [String] = []
+        var exitCode = RipgrepCLI.run(
+            arguments: ["--regex-size-limit=0", "needle", root.path("limit.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors.first?.contains("compiled regex exceeds size limit of 0") == true)
+
+        #expect(try run(["--regex-size-limit=1K", "needle", root.path("limit.txt")]) == ["needle"])
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--regex-size-limit=4", "-e", "abc", "-e", "def", root.path("limit.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors.first?.contains("compiled regex exceeds size limit of 4") == true)
+    }
+
     @Test("honors no unicode regex and literal semantics")
     func honorsNoUnicodeSemantics() throws {
         let root = try TemporaryDirectory()

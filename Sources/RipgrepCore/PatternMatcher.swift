@@ -11,6 +11,7 @@ public struct PatternMatcher {
         }
 
         self.options = options
+        var compiledRegexSourceBytes = 0
         self.patterns = try patternSources.map { pattern in
             if options.fixedStrings {
                 return .literal(options.effectiveIgnoreCase ? Self.foldedCase(pattern, options: options) : pattern)
@@ -19,6 +20,11 @@ public struct PatternMatcher {
                     throw RipgrepError.invalidRegex("\(unsupported) is not supported by the default regex engine; use --pcre2 or --engine=auto")
                 }
                 let source = Self.regexPattern(for: pattern, options: options)
+                compiledRegexSourceBytes += source.utf8.count
+                if let regexSizeLimit = options.regexSizeLimit,
+                   UInt64(compiledRegexSourceBytes) > regexSizeLimit {
+                    throw RipgrepError.invalidRegex("compiled regex exceeds size limit of \(regexSizeLimit)")
+                }
                 do {
                     var regexOptions: NSRegularExpression.Options = options.effectiveIgnoreCase ? [.caseInsensitive] : []
                     if options.multiline && options.multilineDotall {
