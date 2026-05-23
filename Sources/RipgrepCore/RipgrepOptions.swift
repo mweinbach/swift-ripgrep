@@ -471,7 +471,6 @@ public enum RipgrepArgumentParser {
                 options.byteOffset = false
             case "--json":
                 options.json = true
-                options.colorMode = .never
             case "--no-json":
                 options.json = false
             case "-p", "--pretty":

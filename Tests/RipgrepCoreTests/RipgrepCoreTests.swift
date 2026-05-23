@@ -903,10 +903,18 @@ struct RipgrepSearcherTests {
         let root = try TemporaryDirectory()
         try root.write("needle\n", to: "ordering.txt")
 
+        let reset = "\u{1B}[0m"
+        let redBold = "\u{1B}[1m\u{1B}[31m"
+
         #expect(try run(["--json", "-l", "needle", root.path("ordering.txt")]) == [root.path("ordering.txt")])
         let output = try run(["-l", "--json", "needle", root.path("ordering.txt")])
         let messages = try output.map(jsonObject)
         #expect(messages.first?["type"] as? String == "begin")
+        #expect(try run(["--json", "--files", "--no-json", root.url.path]) == [root.path("ordering.txt")])
+        #expect(try run(["--json", "-l", "--no-json", "needle", root.path("ordering.txt")]) == [root.path("ordering.txt")])
+        #expect(try run(["--color=always", "--json", "--no-json", "needle", root.path("ordering.txt")]) == [
+            "\(reset)\(redBold)needle\(reset)",
+        ])
     }
 
     @Test("lists files and honors hidden flag")
