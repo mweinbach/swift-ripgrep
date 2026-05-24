@@ -84,12 +84,14 @@ public struct FileTypeRegistry: Equatable, Sendable {
     private mutating func select(_ rawName: String) -> Bool {
         if rawName == "all" {
             selected = Set(definitionsByName.keys)
+            negated.removeAll()
             return true
         }
         guard let name = resolvedName(rawName) else {
             return false
         }
         selected.insert(name)
+        negated.remove(name)
         return true
     }
 

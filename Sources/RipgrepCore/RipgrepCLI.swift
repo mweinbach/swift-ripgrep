@@ -95,8 +95,13 @@ public enum RipgrepCLI {
                             stderr("rg: \(message)")
                         }
                     }
-                    if !walkResults.messages.isEmpty && !options.quiet {
-                        return 2
+                    if !walkResults.messages.isEmpty {
+                        if files.isEmpty {
+                            return 2
+                        }
+                        if !options.quiet {
+                            return 2
+                        }
                     }
                     return files.isEmpty ? 1 : 0
                 }

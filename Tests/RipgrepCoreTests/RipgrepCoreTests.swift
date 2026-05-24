@@ -3664,6 +3664,17 @@ struct RipgrepSearcherTests {
         output = []
         errors = []
         exitCode = RipgrepCLI.run(
+            arguments: ["--files", "--quiet", "missing"],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["rg: missing: IO error for operation on missing: No such file or directory (os error 2)"])
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
             arguments: ["--files", "--sort", "path", "-", root.path("visible.txt")],
             stdout: { output.append($0) },
             stderr: { errors.append($0) }
@@ -4453,8 +4464,16 @@ struct RipgrepSearcherTests {
         ])
         #expect(pathBasenames(try run(["-trust", "needle", root.url.path])) == ["main.rs"])
         #expect(Set(pathBasenames(try run(["-T", "rust", "needle", root.url.path]))) == Set(["README.md", "main.swift"]))
+        #expect(pathBasenames(try run(["--sort", "path", "-T", "rust", "-t", "rust", "needle", root.url.path])) == ["main.rs"])
+        #expect(pathBasenames(try run(["--sort", "path", "-T", "all", "-t", "rust", "needle", root.url.path])) == ["main.rs"])
         #expect(pathBasenames(try run(["--sort", "path", "-tall", "-Tmd", "needle", root.url.path])) == [
             ".hidden.swift",
+            "main.rs",
+            "main.swift",
+        ])
+        #expect(pathBasenames(try run(["--sort", "path", "-T", "rust", "-t", "all", "needle", root.url.path])) == [
+            ".hidden.swift",
+            "README.md",
             "main.rs",
             "main.swift",
         ])
