@@ -2264,8 +2264,23 @@ struct RipgrepSearcherTests {
             "\"X Y\"",
         ])
 
+        try root.write("--ignore-case --line-number\n", to: "ripgreprc")
         var output: [String] = []
         var errors: [String] = []
+        let sameLineConfigExitCode = RipgrepCLI.run(
+            arguments: ["needle", root.path("a.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) },
+            environment: environment
+        )
+        #expect(sameLineConfigExitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == [
+            "rg: unrecognized flag --ignore-case --line-number\n\nsimilar flags that are available: --no-line-number",
+        ])
+
+        output = []
+        errors = []
         let missingConfig = root.path("missing-ripgreprc")
         let missingExitCode = RipgrepCLI.run(
             arguments: ["Needle", root.path("a.txt")],

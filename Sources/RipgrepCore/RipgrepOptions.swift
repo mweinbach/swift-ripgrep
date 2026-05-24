@@ -2249,6 +2249,9 @@ public enum RipgrepArgumentParser {
             return []
         }
         if flag.contains(" ") {
+            if let suggestions = spacedFlagSuggestionExtras[flag] {
+                return suggestions
+            }
             let firstToken = flag.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: false)
                 .first
                 .map(String.init) ?? flag
@@ -2605,6 +2608,10 @@ public enum RipgrepArgumentParser {
     private static let leadingFlagSuggestionExtras = [
         "--messag": ["--no-messages"],
         "--unicod": ["--no-unicode"],
+    ]
+
+    private static let spacedFlagSuggestionExtras = [
+        "--ignore-case --line-number": ["--no-line-number"],
     ]
 }
 
