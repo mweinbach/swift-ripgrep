@@ -661,20 +661,20 @@ public enum RipgrepArgumentParser {
                     return .error(missingValue(flag: argument))
                 }
                 guard let columns = parseNonNegativeInt(arguments[index]) else {
-                    return .error("error: invalid max columns '\(arguments[index])'")
+                    return .error(invalidNumber(flag: argument))
                 }
                 options.maxColumns = columns == 0 ? nil : columns
                 index += 1
             case let value where value.hasPrefix("--max-columns="):
                 let raw = String(value.dropFirst("--max-columns=".count))
                 guard let columns = parseNonNegativeInt(raw) else {
-                    return .error("error: invalid max columns '\(raw)'")
+                    return .error(invalidNumber(flag: "--max-columns"))
                 }
                 options.maxColumns = columns == 0 ? nil : columns
             case let value where value.hasPrefix("-M") && value.count > 2:
                 let raw = String(value.dropFirst(2))
                 guard let columns = parseNonNegativeInt(raw) else {
-                    return .error("error: invalid max columns '\(raw)'")
+                    return .error(invalidNumber(flag: "-M"))
                 }
                 options.maxColumns = columns == 0 ? nil : columns
             case "--max-columns-preview":

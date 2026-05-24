@@ -3255,6 +3255,8 @@ struct RipgrepSearcherTests {
             (["--threads"], "rg: missing value for flag --threads: missing argument for option '--threads'"),
             (["-C"], "rg: missing value for flag -C: missing argument for option '-C'"),
             (["-C", "nope", "needle"], "rg: error parsing flag -C: value is not a valid number: invalid digit found in string"),
+            (["--max-columns", "nope", "needle"], "rg: error parsing flag --max-columns: value is not a valid number: invalid digit found in string"),
+            (["-M", "nope", "needle"], "rg: error parsing flag -M: value is not a valid number: invalid digit found in string"),
             (["--path-separator"], "rg: missing value for flag --path-separator: missing argument for option '--path-separator'"),
         ] {
             var output: [String] = []
