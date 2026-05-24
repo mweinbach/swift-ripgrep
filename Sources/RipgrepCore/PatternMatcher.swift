@@ -1392,7 +1392,7 @@ public struct PatternMatcher {
 
     private static func multilineLineEndPattern(for pattern: String) -> String {
         transformAnchors(in: pattern) { anchor in
-            anchor == "$" ? "(?<!\\r)(?=\\n|\\z)" : String(anchor)
+            anchor == "$" ? "(?=\\n|(?<!\\n)\\z)" : String(anchor)
         }
     }
 

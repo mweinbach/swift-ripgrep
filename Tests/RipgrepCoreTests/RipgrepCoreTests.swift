@@ -1502,6 +1502,17 @@ struct RipgrepSearcherTests {
         #expect(try run(["--count-matches", ".", root.path("plain-crlf.txt")]) == [
             "4",
         ])
+        #expect(try run(["-U", "$", root.path("plain-crlf.txt")]) == [
+            "a\r",
+            "b\r",
+        ])
+        #expect(try run(["-U", #"(?m)$"#, root.path("plain-crlf.txt")]) == [
+            "a\r",
+            "b\r",
+        ])
+        #expect(try run(["-U", "--count-matches", "$", root.path("plain-crlf.txt")]) == [
+            "2",
+        ])
         #expect(try run(["--crlf", "-n", "foo$", root.path("crlf.txt")]) == [
             "1:foo\r",
         ])
