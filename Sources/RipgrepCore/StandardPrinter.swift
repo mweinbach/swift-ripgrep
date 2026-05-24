@@ -651,11 +651,47 @@ public struct StandardPrinter {
         guard options.multiline else {
             return Set(result.matches.map(\.lineNumber))
         }
-        return result.matches.reduce(into: Set<Int>()) { lineNumbers, match in
+        var lineNumbers = result.matches.reduce(into: Set<Int>()) { lineNumbers, match in
             for lineNumber in multilineLineNumbers(for: match) {
                 lineNumbers.insert(lineNumber)
             }
         }
+        if shouldIncludeTrailingMultilineEndAnchorLine(result, matchedLineNumbers: lineNumbers),
+           let lastLineNumber = result.lines.last?.lineNumber {
+            lineNumbers.insert(lastLineNumber)
+        }
+        return lineNumbers
+    }
+
+    private func shouldIncludeTrailingMultilineEndAnchorLine(
+        _ result: SearchFileResult,
+        matchedLineNumbers: Set<Int>
+    ) -> Bool {
+        guard options.multiline,
+              options.replacement == nil,
+              options.effectivePatterns.contains(where: isBareMultilineLineEndPattern),
+              let lastLine = result.lines.last,
+              lastLine.lineTerminator.isEmpty,
+              !matchedLineNumbers.contains(lastLine.lineNumber) else {
+            return false
+        }
+        return lastLine.lineNumber == 1 || matchedLineNumbers.contains(lastLine.lineNumber - 1)
+    }
+
+    private func isBareMultilineLineEndPattern(_ pattern: String) -> Bool {
+        if pattern == "$" {
+            return true
+        }
+        guard pattern.hasPrefix("(?"),
+              pattern.hasSuffix(")"),
+              let colon = pattern.firstIndex(of: ":") else {
+            return false
+        }
+        let flagStart = pattern.index(pattern.startIndex, offsetBy: 2)
+        let flags = pattern[flagStart..<colon]
+        let bodyStart = pattern.index(after: colon)
+        let body = pattern[bodyStart..<pattern.index(before: pattern.endIndex)]
+        return flags.contains("m") && body == "$"
     }
 
     private func firstMatchesByLine(for result: SearchFileResult) -> [Int: SearchMatch] {

@@ -1549,6 +1549,29 @@ struct RipgrepSearcherTests {
         #expect(try run(["-U", "--count-matches", "$", root.path("plain-crlf.txt")]) == [
             "2",
         ])
+        #expect(try run(["-U", "--crlf", "--count-matches", "$", root.path("plain-crlf.txt")]) == [
+            "2\r",
+        ])
+        #expect(try run(["-U", "--crlf", "--count-matches", "^", root.path("plain-crlf.txt")]) == [
+            "2\r",
+        ])
+        #expect(try run(["-U", "--crlf", "--count-matches", "^|$", root.path("plain-crlf.txt")]) == [
+            "4\r",
+        ])
+        #expect(try run(["-U", "--crlf", "--count-matches", "$", root.path("crlf-no-final-newline.txt")]) == [
+            "1\r",
+        ])
+        #expect(try run(["-U", "--crlf", "-n", "$", root.path("crlf-no-final-newline.txt")]) == [
+            "1:foo\r",
+            "2:bar\r",
+        ])
+        #expect(try run(["-U", "--count-matches", "$", root.path("crlf-no-final-newline.txt")]) == [
+            "1",
+        ])
+        #expect(try run(["-U", "-n", "$", root.path("crlf-no-final-newline.txt")]) == [
+            "1:foo\r",
+            "2:bar",
+        ])
         #expect(try run(["--crlf", "-n", "foo$", root.path("crlf.txt")]) == [
             "1:foo\r",
         ])

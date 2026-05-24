@@ -1335,7 +1335,12 @@ public struct RipgrepSearcher {
                     rawLine: rawBlockText,
                     lineTerminator: "",
                     absoluteOffset: blockOffset,
-                    matchCount: adjustedSpans.count,
+                    matchCount: multilineMatchCount(
+                        for: group,
+                        contentEndOffset: absoluteOffset,
+                        lineCount: searchLines.count,
+                        options: options
+                    ),
                     spans: adjustedSpans
                 )
             }
@@ -1407,7 +1412,12 @@ public struct RipgrepSearcher {
                 rawLine: rawBlockText,
                 lineTerminator: lineTerminator,
                 absoluteOffset: blockOffset,
-                matchCount: adjustedSpans.count,
+                matchCount: multilineMatchCount(
+                    for: group,
+                    contentEndOffset: absoluteOffset,
+                    lineCount: searchLines.count,
+                    options: options
+                ),
                 spans: adjustedSpans
             )
         }
@@ -1418,6 +1428,39 @@ public struct RipgrepSearcher {
             lines: searchLines,
             bytesSearched: absoluteOffset
         )
+    }
+
+    private func multilineMatchCount(
+        for group: [MultilineSpanCandidate],
+        contentEndOffset: Int,
+        lineCount: Int,
+        options: RipgrepOptions
+    ) -> Int {
+        guard lineCount > 1,
+              options.effectivePatterns.contains(where: isBareMultilineLineEndPattern) else {
+            return group.count
+        }
+        return group.filter { candidate in
+            !(candidate.span.startByte == contentEndOffset
+                && candidate.span.endByte == contentEndOffset
+                && candidate.span.text.isEmpty)
+        }.count
+    }
+
+    private func isBareMultilineLineEndPattern(_ pattern: String) -> Bool {
+        if pattern == "$" {
+            return true
+        }
+        guard pattern.hasPrefix("(?"),
+              pattern.hasSuffix(")"),
+              let colon = pattern.firstIndex(of: ":") else {
+            return false
+        }
+        let flagStart = pattern.index(pattern.startIndex, offsetBy: 2)
+        let flags = pattern[flagStart..<colon]
+        let bodyStart = pattern.index(after: colon)
+        let body = pattern[bodyStart..<pattern.index(before: pattern.endIndex)]
+        return flags.contains("m") && body == "$"
     }
 
     private func rawDataForOutput(_ data: Data, options: RipgrepOptions, matcher: PatternMatcher) -> Data? {

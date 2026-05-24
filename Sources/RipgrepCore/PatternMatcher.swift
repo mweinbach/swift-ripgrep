@@ -52,7 +52,7 @@ public struct PatternMatcher {
                 let source = Self.regexPattern(for: pattern, options: options)
                 do {
                     var regexOptions: NSRegularExpression.Options = options.effectiveIgnoreCase && !options.noUnicode ? [.caseInsensitive] : []
-                    if options.multiline || (options.nullData && !options.crlf) {
+                    if (options.multiline && !options.crlf) || (options.nullData && !options.crlf) {
                         regexOptions.insert(.anchorsMatchLines)
                     }
                     if options.multiline && options.multilineDotall {
@@ -339,7 +339,9 @@ public struct PatternMatcher {
         if options.lineRegexp {
             source = "^(?:\(source))$"
         }
-        if options.crlf {
+        if options.crlf && options.multiline {
+            source = multilineCRLFAnchorPattern(for: source)
+        } else if options.crlf {
             source = crlfAnchorPattern(for: source)
         } else if inlineCRLF.enablesGlobalCRLF {
             source = inlineCRLFAnchorPattern(for: source)
@@ -1565,6 +1567,19 @@ public struct PatternMatcher {
                 return "(?:^|(?<=\\r))"
             case "$":
                 return "(?=\\r|(?<!\\r)$)"
+            default:
+                return String(anchor)
+            }
+        }
+    }
+
+    private static func multilineCRLFAnchorPattern(for pattern: String) -> String {
+        transformAnchors(in: pattern) { anchor in
+            switch anchor {
+            case "^":
+                return "(?:^|(?<=\\n))"
+            case "$":
+                return "(?=\\r\\n|(?<!\\r)\\n|(?<![\\r\\n])\\z)"
             default:
                 return String(anchor)
             }
