@@ -28,9 +28,6 @@ public struct PatternMatcher {
                 let literal = options.effectiveIgnoreCase ? Self.foldedCase(pattern, options: options) : pattern
                 return [.literal(usesByteSemantics ? Self.bytePattern(literal) : literal)]
             } else {
-                if options.engineMode == .pcre2 {
-                    throw RipgrepError.message("PCRE2 is not available in this build of ripgrep")
-                }
                 if !options.disablesBinaryDetection, Self.canMatchNUL(pattern) {
                     throw RipgrepError.message("""
                     pattern contains "\\0" but it is impossible to match
@@ -47,18 +44,33 @@ public struct PatternMatcher {
                    Self.canMatchLineTerminator(pattern, terminator: "\n") {
                     throw RipgrepError.message(Self.lineTerminatorPatternError(terminator: "\\n"))
                 }
-                if options.engineMode == .default, let unsupported = Self.defaultEngineUnsupportedFeature(in: pattern) {
-                    throw RipgrepError.message(Self.defaultRegexParseError(pattern: pattern, feature: unsupported))
+                if options.engineMode == .pcre2 {
+                    return [.pcre2(try PCRE2CompiledPattern(pattern: pattern, options: options))]
                 }
-                if options.engineMode == .automatic, let unsupported = Self.defaultEngineUnsupportedFeature(in: pattern) {
-                    throw RipgrepError.message(Self.automaticEngineUnavailableMessage(pattern: pattern, feature: unsupported))
+                if let unsupported = Self.defaultEngineUnsupportedFeature(in: pattern) {
+                    if options.engineMode == .default {
+                        throw RipgrepError.message(Self.defaultRegexParseError(pattern: pattern, feature: unsupported))
+                    }
+                    do {
+                        return [.pcre2(try PCRE2CompiledPattern(pattern: pattern, options: options))]
+                    } catch {
+                        throw RipgrepError.message(Self.automaticEngineUnavailableMessage(
+                            pattern: pattern,
+                            feature: unsupported,
+                            pcre2Error: String(describing: error)
+                        ))
+                    }
                 }
                 if let unicodeDiagnostic = Self.unicodeClassInNoUnicodeDiagnostic(
                     pattern,
                     unicodeEnabled: !options.noUnicode
                 ) {
                     let message = options.engineMode == .automatic
-                        ? Self.automaticEngineUnavailableMessage(pattern: pattern, feature: unicodeDiagnostic)
+                        ? Self.automaticEngineUnavailableMessage(
+                            pattern: pattern,
+                            feature: unicodeDiagnostic,
+                            pcre2Error: "Unicode not allowed here"
+                        )
                         : Self.defaultRegexParseError(pattern: pattern, feature: unicodeDiagnostic)
                     throw RipgrepError.message(message)
                 }
@@ -66,23 +78,32 @@ public struct PatternMatcher {
                     throw RipgrepError.message(parseError)
                 }
                 do {
-                    let sources = Self.regexPatterns(for: pattern, options: options)
-                    return try sources.map { source in
-                        var regexOptions: NSRegularExpression.Options = []
-                        if (options.multiline && !options.crlf) || (options.nullData && !options.crlf) {
-                            regexOptions.insert(.anchorsMatchLines)
-                        }
-                        if options.multiline && options.multilineDotall {
-                            regexOptions.insert(.dotMatchesLineSeparators)
-                        }
-                        return .regex(try NSRegularExpression(
-                            pattern: source,
-                            options: regexOptions
-                        ))
-                    }
+                    return try Self.defaultCompiledPatterns(for: pattern, options: options)
                 } catch let error as RipgrepError {
+                    if options.engineMode == .automatic {
+                        do {
+                            return [.pcre2(try PCRE2CompiledPattern(pattern: pattern, options: options))]
+                        } catch {
+                            throw RipgrepError.message(Self.automaticEngineUnavailableMessage(
+                                pattern: pattern,
+                                defaultError: String(describing: error),
+                                pcre2Error: String(describing: error)
+                            ))
+                        }
+                    }
                     throw error
                 } catch {
+                    if options.engineMode == .automatic {
+                        do {
+                            return [.pcre2(try PCRE2CompiledPattern(pattern: pattern, options: options))]
+                        } catch {
+                            throw RipgrepError.message(Self.automaticEngineUnavailableMessage(
+                                pattern: pattern,
+                                defaultError: error.localizedDescription,
+                                pcre2Error: String(describing: error)
+                            ))
+                        }
+                    }
                     throw RipgrepError.invalidRegex(error.localizedDescription)
                 }
             }
@@ -414,6 +435,10 @@ public struct PatternMatcher {
                     let replacement = replacement(for: match, in: line)
                     return (range, replacement)
                 })
+            case .pcre2(let regex):
+                candidates.append(contentsOf: regex.matches(in: line).map { match in
+                    (match.range, replacement(for: match, in: line))
+                })
             case .literal(let literal):
                 candidates.append(contentsOf: literalRanges(literal, in: line).map { range in
                     (range, replacement(for: range, in: line))
@@ -543,6 +568,65 @@ public struct PatternMatcher {
             return String(pattern[start..<pattern.index(before: pattern.endIndex)])
         }
         return nil
+    }
+
+    private static func defaultCompiledPatterns(for pattern: String, options: RipgrepOptions) throws -> [CompiledPattern] {
+        let sources = Self.regexPatterns(for: pattern, options: options)
+        return try sources.map { source in
+            try enforceRegexSizeLimit(source: source, options: options)
+            try enforceDFASizeLimit(source: source, options: options)
+            var regexOptions: NSRegularExpression.Options = []
+            if (options.multiline && !options.crlf) || (options.nullData && !options.crlf) {
+                regexOptions.insert(.anchorsMatchLines)
+            }
+            if options.multiline && options.multilineDotall {
+                regexOptions.insert(.dotMatchesLineSeparators)
+            }
+            return .regex(try NSRegularExpression(
+                pattern: source,
+                options: regexOptions
+            ))
+        }
+    }
+
+    private static func enforceRegexSizeLimit(source: String, options: RipgrepOptions) throws {
+        guard let limit = options.regexSizeLimit else {
+            return
+        }
+        let estimate = UInt64(source.utf8.count + regexSizeWeight(for: source))
+        if estimate > limit {
+            throw RipgrepError.message("compiled regex exceeds size limit of \(limit)")
+        }
+    }
+
+    private static func enforceDFASizeLimit(source: String, options: RipgrepOptions) throws {
+        guard let limit = options.dfaSizeLimit, limit > 0 else {
+            return
+        }
+        let estimate = UInt64(source.utf8.count + source.filter { "|[]{}()+*?".contains($0) }.count * 8)
+        if estimate > limit * 64 {
+            throw RipgrepError.message("dfa size limit exceeded")
+        }
+    }
+
+    private static func regexSizeWeight(for source: String) -> Int {
+        var weight = 1
+        var escaped = false
+        for character in source {
+            if escaped {
+                weight += character == "p" || character == "P" ? 16 : 2
+                escaped = false
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                continue
+            }
+            if "[]{}()+*?|".contains(character) {
+                weight += 8
+            }
+        }
+        return weight
     }
 
     private static func regexPatterns(for pattern: String, options: RipgrepOptions) -> [String] {
@@ -1715,9 +1799,24 @@ public struct PatternMatcher {
         return nil
     }
 
-    private static func automaticEngineUnavailableMessage(pattern: String, feature: UnsupportedRegexFeature) -> String {
-        let defaultError = defaultRegexParseError(pattern: pattern, feature: feature)
-        return """
+    private static func automaticEngineUnavailableMessage(
+        pattern: String,
+        feature: UnsupportedRegexFeature,
+        pcre2Error: String
+    ) -> String {
+        automaticEngineUnavailableMessage(
+            pattern: pattern,
+            defaultError: defaultRegexParseError(pattern: pattern, feature: feature),
+            pcre2Error: pcre2Error
+        )
+    }
+
+    private static func automaticEngineUnavailableMessage(
+        pattern _: String,
+        defaultError: String,
+        pcre2Error: String
+    ) -> String {
+        """
         regex could not be compiled with either the default regex engine or with PCRE2.
 
         default regex engine error:
@@ -1726,7 +1825,7 @@ public struct PatternMatcher {
         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
         PCRE2 regex engine error:
-        PCRE2 is not available in this build of ripgrep
+        \(pcre2Error)
         """
     }
 
@@ -2791,6 +2890,19 @@ public struct PatternMatcher {
         }
     }
 
+    private func replacement(for match: PCRE2Match, in line: String) -> String? {
+        guard let replacement = options.replacement else {
+            return nil
+        }
+        let ranges = match.captures.map { capture -> NSRange in
+            guard let capture else {
+                return NSRange(location: NSNotFound, length: 0)
+            }
+            return NSRange(capture, in: line)
+        }
+        return renderReplacement(replacement, line: line, ranges: ranges)
+    }
+
     private func renderReplacement(
         _ template: String,
         line: String,
@@ -3029,6 +3141,7 @@ private extension Character {
 private enum CompiledPattern {
     case emptyWordBoundary
     case regex(NSRegularExpression)
+    case pcre2(PCRE2CompiledPattern)
     case literal(String)
 }
 

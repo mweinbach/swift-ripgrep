@@ -41,8 +41,8 @@ public enum RipgrepCLI {
             emitStdoutVerbatim(longVersionOutput, stdout: stdout)
             return 0
         case .pcre2Version:
-            emitStdout("PCRE2 is not available in this build of ripgrep.", stdout: stdout)
-            return 1
+            emitStdout(PCRE2Backend.versionDescription, stdout: stdout)
+            return 0
         case .generate(let mode):
             emitStdoutVerbatim(generate(mode), stdout: stdout)
             return 0
@@ -369,11 +369,11 @@ public enum RipgrepCLI {
         """
         ripgrep \(version) (rev \(revision))
 
-        features:-pcre2
+        features:+pcre2
         simd(compile):+NEON
         simd(runtime):+NEON
 
-        PCRE2 is not available in this build of ripgrep.
+        \(PCRE2Backend.versionDescription)
 
         """
     }
