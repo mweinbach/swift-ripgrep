@@ -3361,6 +3361,15 @@ struct RipgrepSearcherTests {
             "alpha",
             "beta",
         ])
+        try root.write("line1\nline2\nline3\nline4\nline5\n", to: "stop-invert-positive-run.txt")
+        #expect(try run(["--stop-on-nonmatch", "-v", "[235]", root.path("stop-invert-positive-run.txt")]) == [
+            "line1",
+        ])
+        try root.write("line2\nalpha\nbeta\nline3\n", to: "stop-invert-leading-positive.txt")
+        #expect(try run(["--stop-on-nonmatch", "-v", "[235]", root.path("stop-invert-leading-positive.txt")]) == [
+            "alpha",
+            "beta",
+        ])
     }
 
     @Test("searches preprocessor output")
