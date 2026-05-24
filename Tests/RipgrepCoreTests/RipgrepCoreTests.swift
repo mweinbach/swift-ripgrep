@@ -345,7 +345,7 @@ struct RipgrepSearcherTests {
         let root = try TemporaryDirectory()
         try root.write("café\nπ\n_\n", to: "classes.txt")
         try root.write("éx\nxé\nx\n", to: "words.txt")
-        try root.write("Σ\nσ\n", to: "casefold.txt")
+        try root.write("Σ\nσ\nς\nStraße\nSTRASSE\nstrasse\n", to: "casefold.txt")
         try root.write("ABC\nabc\nδ\n", to: "ascii-case.txt")
         try root.write("abc ABC 123 _ é π\nword-word\nfoo bar\n", to: "posix-alpha.txt")
         try root.write("abc ABC\nbar\nfoo bar\néx xé\n123_\n", to: "inline-word-boundary.txt")
@@ -388,7 +388,12 @@ struct RipgrepSearcherTests {
             "6:",
             "7:",
         ])
-        #expect(try run(["-F", "-i", "σ", root.path("casefold.txt")]) == ["Σ", "σ"])
+        #expect(try run(["-F", "-i", "σ", root.path("casefold.txt")]) == ["Σ", "σ", "ς"])
+        #expect(try run(["-i", "σ", root.path("casefold.txt")]) == ["Σ", "σ", "ς"])
+        #expect(try run(["-i", "strasse", root.path("casefold.txt")]) == ["STRASSE", "strasse"])
+        #expect(try run(["-iw", "strasse", root.path("casefold.txt")]) == ["STRASSE", "strasse"])
+        #expect(try run(["-i", "straße", root.path("casefold.txt")]) == ["Straße"])
+        #expect(try run(["-i", "[a-z]+", root.path("ascii-case.txt")]) == ["ABC", "abc"])
         let noUnicodeFixedOutput = try runExecutableData([
             "--no-unicode",
             "-F",

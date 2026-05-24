@@ -66,10 +66,7 @@ public struct PatternMatcher {
                 do {
                     let sources = Self.regexPatterns(for: pattern, options: options)
                     return try sources.map { source in
-                        var regexOptions: NSRegularExpression.Options = options.effectiveIgnoreCase
-                            && !Self.regexUsesByteSemantics(pattern: pattern, options: options)
-                            ? [.caseInsensitive]
-                            : []
+                        var regexOptions: NSRegularExpression.Options = []
                         if (options.multiline && !options.crlf) || (options.nullData && !options.crlf) {
                             regexOptions.insert(.anchorsMatchLines)
                         }
@@ -1789,7 +1786,9 @@ public struct PatternMatcher {
                 return
             }
             if currentUnicodeEnabled {
-                output += chunk
+                output += caseInsensitive
+                    ? unicodeSimpleCaseInsensitivePattern(for: chunk)
+                    : chunk
             } else {
                 var transformed = asciiRegexPattern(for: chunk)
                 if caseInsensitive {
@@ -2109,6 +2108,63 @@ public struct PatternMatcher {
         return output
     }
 
+    private static func unicodeSimpleCaseInsensitivePattern(for pattern: String) -> String {
+        var output = ""
+        var escaped = false
+        var index = pattern.startIndex
+
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                output.append("\\")
+                output.append(character)
+                escaped = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "\\" {
+                if let escapeEnd = regexEscapeEnd(in: pattern, backslashAt: index) {
+                    output += pattern[index..<escapeEnd]
+                    index = escapeEnd
+                    continue
+                }
+                escaped = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "(",
+               let prefixEnd = regexSyntaxGroupPrefixEnd(in: pattern, openingAt: index) {
+                output += pattern[index..<prefixEnd]
+                index = prefixEnd
+                continue
+            }
+            if character == "[" {
+                guard let classEnd = characterClassEnd(in: pattern, openingAt: index) else {
+                    output.append(character)
+                    index = pattern.index(after: index)
+                    continue
+                }
+                let classStart = pattern.index(after: index)
+                let content = String(pattern[classStart..<classEnd])
+                output += "[\(unicodeSimpleCaseInsensitiveClass(content))]"
+                index = pattern.index(after: classEnd)
+                continue
+            }
+
+            let alternates = unicodeSimpleCaseAlternates(for: character)
+            if alternates.count > 1 {
+                output += "(?:\(alternates.map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|")))"
+            } else {
+                output.append(character)
+            }
+            index = pattern.index(after: index)
+        }
+        if escaped {
+            output.append("\\")
+        }
+        return output
+    }
+
     private static func regexEscapeEnd(in pattern: String, backslashAt backslash: String.Index) -> String.Index? {
         let marker = pattern.index(after: backslash)
         guard marker < pattern.endIndex else {
@@ -2273,6 +2329,36 @@ public struct PatternMatcher {
         return content + additions
     }
 
+    private static func unicodeSimpleCaseInsensitiveClass(_ content: String) -> String {
+        let characters = Array(content)
+        var additions = ""
+        var index = 0
+
+        while index < characters.count {
+            let character = characters[index]
+            if character == "\\" {
+                index += 2
+                continue
+            }
+            if index + 2 < characters.count,
+               characters[index + 1] == "-" {
+                let startAlternates = Array(unicodeSimpleCaseAlternates(for: character).dropFirst())
+                let endAlternates = Array(unicodeSimpleCaseAlternates(for: characters[index + 2]).dropFirst())
+                for (start, end) in zip(startAlternates, endAlternates) {
+                    additions += "\(escapedCharacterClassLiteral(start))-\(escapedCharacterClassLiteral(end))"
+                }
+                index += 3
+                continue
+            }
+            for alternate in unicodeSimpleCaseAlternates(for: character).dropFirst() {
+                additions += escapedCharacterClassLiteral(alternate)
+            }
+            index += 1
+        }
+
+        return content + additions
+    }
+
     private static func asciiCaseAlternate(for character: Character) -> Character? {
         guard character.unicodeScalars.count == 1,
               let value = character.unicodeScalars.first?.value else {
@@ -2285,6 +2371,43 @@ public struct PatternMatcher {
             return Character(scalar)
         }
         return nil
+    }
+
+    private static func unicodeSimpleCaseAlternates(for character: Character) -> [String] {
+        let original = String(character)
+        var alternates: [String] = []
+        func append(_ candidate: String) {
+            guard !candidate.isEmpty,
+                  candidate.count == 1,
+                  !alternates.contains(candidate) else {
+                return
+            }
+            alternates.append(candidate)
+        }
+
+        append(original)
+        append(original.lowercased())
+        append(original.uppercased())
+        append(original.capitalized)
+        if original == "Σ" || original == "σ" || original == "ς" {
+            append("Σ")
+            append("σ")
+            append("ς")
+        }
+        return alternates
+    }
+
+    private static func simpleCaseEqual(_ lhs: Character, _ rhs: Character) -> Bool {
+        unicodeSimpleCaseAlternates(for: lhs).contains(String(rhs))
+    }
+
+    private static func escapedCharacterClassLiteral(_ text: String) -> String {
+        switch text {
+        case "\\", "]", "-", "^":
+            return "\\\(text)"
+        default:
+            return text
+        }
     }
 
     private static func crlfAnchorPattern(for pattern: String) -> String {
@@ -2525,7 +2648,6 @@ public struct PatternMatcher {
     }
 
     private func literalRanges(_ literal: String, in line: String) -> [Range<String.Index>] {
-        let haystack = options.effectiveIgnoreCase ? Self.foldedCase(line, options: options) : line
         if literal.isEmpty {
             var ranges: [Range<String.Index>] = []
             var index = line.startIndex
@@ -2538,6 +2660,10 @@ public struct PatternMatcher {
             }
             return ranges
         }
+        if options.effectiveIgnoreCase {
+            return caseInsensitiveLiteralRanges(literal, in: line)
+        }
+        let haystack = line
         var cursor = haystack.startIndex
         var ranges: [Range<String.Index>] = []
 
@@ -2552,6 +2678,43 @@ public struct PatternMatcher {
         }
 
         return ranges
+    }
+
+    private func caseInsensitiveLiteralRanges(_ literal: String, in line: String) -> [Range<String.Index>] {
+        let literalCharacters = Array(literal)
+        var ranges: [Range<String.Index>] = []
+        var cursor = line.startIndex
+
+        while cursor < line.endIndex {
+            let lower = cursor
+            var upper = cursor
+            var matched = true
+
+            for literalCharacter in literalCharacters {
+                guard upper < line.endIndex,
+                      literalCharactersCaseEqual(literalCharacter, line[upper]) else {
+                    matched = false
+                    break
+                }
+                upper = line.index(after: upper)
+            }
+
+            if matched {
+                ranges.append(lower..<upper)
+                cursor = upper == cursor ? line.index(after: cursor) : upper
+            } else {
+                cursor = line.index(after: cursor)
+            }
+        }
+
+        return ranges
+    }
+
+    private func literalCharactersCaseEqual(_ lhs: Character, _ rhs: Character) -> Bool {
+        if options.noUnicode {
+            return String(lhs).asciiLowercased() == String(rhs).asciiLowercased()
+        }
+        return Self.simpleCaseEqual(lhs, rhs)
     }
 
     private func emptyWordBoundaryRanges(in line: String) -> [Range<String.Index>] {
