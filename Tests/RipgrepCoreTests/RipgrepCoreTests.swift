@@ -1810,6 +1810,21 @@ struct RipgrepSearcherTests {
             "\(root.path("zero-width.txt")):1:3:ab",
             "\(root.path("zero-width.txt")):3:3:cd",
         ])
+        #expect(try run(["-U", "--vimgrep", "^|$", root.path("zero-width.txt")]) == [
+            "\(root.path("zero-width.txt")):1:3:ab",
+            "\(root.path("zero-width.txt")):3:3:cd",
+        ])
+        try root.write("foo\nbar\nfoo bar\n", to: "line-anchor-counts.txt")
+        #expect(try run(["-U", "--vimgrep", "^|$", root.path("line-anchor-counts.txt")]) == [
+            "\(root.path("line-anchor-counts.txt")):1:4:foo",
+            "\(root.path("line-anchor-counts.txt")):2:4:bar",
+            "\(root.path("line-anchor-counts.txt")):3:8:foo bar",
+        ])
+        #expect(try run(["-U", "--vimgrep", "^|foo|$", root.path("line-anchor-counts.txt")]) == [
+            "\(root.path("line-anchor-counts.txt")):1:4:foo",
+            "\(root.path("line-anchor-counts.txt")):2:4:bar",
+            "\(root.path("line-anchor-counts.txt")):3:8:foo bar",
+        ])
         try root.write("abcde\nx\nfoo bar\n", to: "line-end-columns.txt")
         #expect(try run(["-U", "-n", "--column", "$", root.path("line-end-columns.txt")]) == [
             "1:6:abcde",
@@ -1829,6 +1844,11 @@ struct RipgrepSearcherTests {
         #expect(try run(["-U", "--count-matches", "$", root.path("zero-width.txt")]) == ["3"])
         #expect(try run(["-U", "--count-matches", "(?:)", root.path("zero-width.txt")]) == ["7"])
         #expect(try run(["-U", "--count-matches", "x?", root.path("zero-width.txt")]) == ["7"])
+        #expect(try run(["-U", "--count", "$", root.path("line-anchor-counts.txt")]) == ["3"])
+        #expect(try run(["-U", "--count", "^", root.path("line-anchor-counts.txt")]) == ["3"])
+        #expect(try run(["-U", "--count", "^|$", root.path("line-anchor-counts.txt")]) == ["6"])
+        #expect(try run(["-U", "--count", "foo|$", root.path("line-anchor-counts.txt")]) == ["4"])
+        #expect(try run(["-U", "--count", "^|foo", root.path("line-anchor-counts.txt")]) == ["3"])
         let jsonLineStartOutput = try run(["-U", "--json", "^", root.path("zero-width.txt")])
         let jsonLineStartMessages = try jsonLineStartOutput.map(jsonObject)
         #expect(jsonLineStartMessages.map { $0["type"] as? String } == ["begin", "match", "end", "summary"])

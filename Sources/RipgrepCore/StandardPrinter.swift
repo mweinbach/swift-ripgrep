@@ -90,6 +90,8 @@ public struct StandardPrinter {
             return countResults(for: results).map { result in
                 let count = options.onlyMatching
                     ? onlyMatchingCount(for: result)
+                    : options.multiline && options.effectivePatterns.contains(where: containsLineEndAnchor)
+                        ? countMatchesCount(for: result)
                     : result.matches.isEmpty && result.hasBinaryMatch ? 1 : result.matches.count + result.supplementalMatchedLines
                 return countLine(count, fileURL: result.fileURL, showPath: showPath(for: results))
             }
@@ -587,10 +589,26 @@ public struct StandardPrinter {
               !options.fixedStrings else {
             return false
         }
-        if options.effectivePatterns.contains(where: containsLineStartAnchor) {
+        if options.effectivePatterns.contains(where: containsLineStartAnchor),
+           (!options.effectivePatterns.contains(where: containsLineEndAnchor)
+            || isMultilineLineStartSpan(span, in: match)) {
             return true
         }
         return match.line.isEmpty && options.effectivePatterns.contains(where: containsLineEndAnchor)
+    }
+
+    private func isMultilineLineStartSpan(_ span: MatchSpan, in match: SearchMatch) -> Bool {
+        guard span.startByte == span.endByte else {
+            return false
+        }
+        if span.startByte == 0 {
+            return true
+        }
+        let bytes = Array(match.lineWithTerminator.utf8)
+        guard span.startByte <= bytes.count else {
+            return false
+        }
+        return bytes[span.startByte - 1] == UInt8(ascii: "\n")
     }
 
     private func containsLineAnchor(_ pattern: String) -> Bool {
