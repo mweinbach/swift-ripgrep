@@ -1294,6 +1294,24 @@ struct RipgrepSearcherTests {
         #expect(jsonLines?["bytes"] == "//4AYg==")
         #expect(jsonSubmatches?.first?["start"] as? Int == 2)
         #expect(jsonSubmatches?.first?["end"] as? Int == 3)
+        let encodingNoneUTF8BOMJSONOutput = try run(["--json", "--encoding", "none", "needle", root.path("bom8.txt")])
+        let encodingNoneUTF8BOMJSONMatch = try encodingNoneUTF8BOMJSONOutput.map(jsonObject)
+            .first { $0["type"] as? String == "match" }?["data"] as? [String: Any]
+        let encodingNoneUTF8BOMJSONSubmatches = encodingNoneUTF8BOMJSONMatch?["submatches"] as? [[String: Any]]
+        let utf8BOM = String(UnicodeScalar(0xFEFF)!)
+        let encodingNoneUTF8BOMJSONLineText = #""lines":{"text":""# + utf8BOM + #"needle\n"}"#
+        #expect(encodingNoneUTF8BOMJSONOutput.contains { $0.contains(encodingNoneUTF8BOMJSONLineText) })
+        #expect((encodingNoneUTF8BOMJSONSubmatches?.first?["match"] as? [String: String])?["text"] == "needle")
+        #expect(encodingNoneUTF8BOMJSONSubmatches?.first?["start"] as? Int == 3)
+        #expect(encodingNoneUTF8BOMJSONSubmatches?.first?["end"] as? Int == 9)
+        let encodingNoneInvalidDotJSONOutput = try run(["--json", "--encoding", "none", ".", root.path("invalid-utf8.txt")])
+        let encodingNoneInvalidDotJSONMatches = try encodingNoneInvalidDotJSONOutput.map(jsonObject)
+            .compactMap { object -> [String: Any]? in
+                guard object["type"] as? String == "match" else { return nil }
+                return object["data"] as? [String: Any]
+            }
+        let encodingNoneInvalidDotFirstSubmatches = encodingNoneInvalidDotJSONMatches.first?["submatches"] as? [[String: Any]]
+        #expect((encodingNoneInvalidDotFirstSubmatches?.first?["match"] as? [String: String])?["text"] == "é")
         let automaticJsonOutput = try run(["--json", "-a", "foo", root.path("invalid-utf8.txt")])
         let automaticJsonMatch = try automaticJsonOutput.map(jsonObject)
             .first { $0["type"] as? String == "match" }?["data"] as? [String: Any]

@@ -167,15 +167,17 @@ public struct JSONPrinter {
     }
 
     private func matchMessage(_ match: SearchMatch, path: String) -> JSONValue {
-        .object([
+        let rawText = match.rawLine.map { $0 + match.lineTerminator }
+        return .object([
             ("type", .string("match")),
             ("data", lineData(
                 path: path,
                 text: match.lineWithTerminator,
-                rawText: match.rawLine.map { $0 + match.lineTerminator },
+                rawText: rawText,
                 lineNumber: match.lineNumber,
                 absoluteOffset: match.absoluteOffset,
-                submatches: options.invertMatch ? [] : match.spans
+                submatches: options.invertMatch ? [] : match.spans,
+                rawSubmatchText: rawText
             )),
         ])
     }
@@ -200,21 +202,25 @@ public struct JSONPrinter {
         rawText: String? = nil,
         lineNumber: Int,
         absoluteOffset: Int,
-        submatches: [MatchSpan]
+        submatches: [MatchSpan],
+        rawSubmatchText: String? = nil
     ) -> JSONValue {
         .object([
             ("path", dataObject(path)),
             ("lines", dataObject(rawText ?? text, rawWhenEncodingDisabled: rawText != nil || options.encodingMode == .disabled)),
             ("line_number", options.noLineNumber ? .null : .int(lineNumber)),
             ("absolute_offset", .int(absoluteOffset)),
-            ("submatches", .array(submatches.map(submatchObject))),
+            ("submatches", .array(submatches.map { submatchObject($0, rawText: rawSubmatchText) })),
         ])
     }
 
-    private func submatchObject(_ span: MatchSpan) -> JSONValue {
+    private func submatchObject(_ span: MatchSpan, rawText: String?) -> JSONValue {
         let rawByteLength = span.endByte - span.startByte
+        let matchData = rawText.flatMap {
+            rawByteSlice(in: $0, start: span.startByte, end: span.endByte)
+        }
         var fields: [(String, JSONValue)] = [
-            ("match", dataObject(
+            ("match", matchData.map(dataObject) ?? dataObject(
                 span.text,
                 rawWhenEncodingDisabled: options.encodingMode == .disabled || rawByteLength != span.text.utf8.count
             )),
@@ -270,13 +276,28 @@ public struct JSONPrinter {
 
     private func dataObject(_ text: String, rawWhenEncodingDisabled: Bool = false) -> JSONValue {
         if rawWhenEncodingDisabled {
-            let data = text.rawByteData()
-            if let decoded = String(data: data, encoding: .utf8) {
-                return .object([("text", .string(decoded))])
-            }
-            return .object([("bytes", .string(data.base64EncodedString()))])
+            return dataObject(text.rawByteData())
         }
         return .object([("text", .string(text))])
+    }
+
+    private func dataObject(_ data: Data) -> JSONValue {
+        if isValidUTF8(data) {
+            return .object([("text", .string(String(decoding: data, as: UTF8.self)))])
+        }
+        return .object([("bytes", .string(data.base64EncodedString()))])
+    }
+
+    private func rawByteSlice(in text: String, start: Int, end: Int) -> Data? {
+        let data = text.rawByteData()
+        guard start >= 0, end >= start, end <= data.count else {
+            return nil
+        }
+        return data.subdata(in: start..<end)
+    }
+
+    private func isValidUTF8(_ data: Data) -> Bool {
+        String(data: data, encoding: .utf8) != nil
     }
 
     private func displayPath(for url: URL) -> String {
