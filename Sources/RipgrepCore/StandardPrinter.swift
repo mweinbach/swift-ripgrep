@@ -1328,7 +1328,7 @@ public struct StandardPrinter {
         guard options.maxColumnsPreview else {
             return omittedKind.message
         }
-        return "\(line.prefixBytes(maxColumns)) [... omitted end of long line]"
+        return "\(line.prefixColumns(maxColumns)) [... omitted end of long line]"
     }
 
     private func limitedReplacementLine(_ line: String, originalLine: String, match: SearchMatch) -> String? {
@@ -1378,9 +1378,9 @@ public struct StandardPrinter {
 
     private func previewLineSuffix(_ line: String, maxColumns: Int, remainingMatches: Int?) -> String {
         guard let remainingMatches else {
-            return "\(line.prefixBytes(maxColumns)) [... omitted end of long line]"
+            return "\(line.prefixColumns(maxColumns)) [... omitted end of long line]"
         }
-        return "\(line.prefixBytes(maxColumns)) [... \(remainingMatches) more \(remainingMatches == 1 ? "match" : "matches")]"
+        return "\(line.prefixColumns(maxColumns)) [... \(remainingMatches) more \(remainingMatches == 1 ? "match" : "matches")]"
     }
 
     private func replacementStartOffsets(for match: SearchMatch) -> [Int] {
@@ -1575,19 +1575,18 @@ private extension String {
         return String(self[firstNonWhitespace...])
     }
 
-    func prefixBytes(_ byteCount: Int) -> String {
-        guard byteCount > 0 else {
+    func prefixColumns(_ columnCount: Int) -> String {
+        guard columnCount > 0 else {
             return ""
         }
         var output = ""
-        var bytes = 0
+        var columns = 0
         for character in self {
-            let width = String(character).utf8.count
-            guard bytes + width <= byteCount else {
+            guard columns < columnCount else {
                 break
             }
             output.append(character)
-            bytes += width
+            columns += 1
         }
         return output
     }

@@ -1239,6 +1239,29 @@ struct RipgrepSearcherTests {
             )
         })
         #expect(textOutput == Data([0x32, 0x3A, 0xFF, 0x66, 0x6F, 0x6F, 0x0A]))
+        try root.write("cafe\nCAFÉ\ncafé\n", to: "valid-utf8.txt")
+        let validUTF8TextOutput = try runExecutableData([
+            "-a",
+            "[a-z]+",
+            root.path("valid-utf8.txt"),
+        ], fixture: {})
+        #expect(validUTF8TextOutput == Data("cafe\ncafé\n".utf8))
+        let validUTF8NullDataOutput = try runExecutableData([
+            "--null-data",
+            "[a-z]+",
+            root.path("valid-utf8.txt"),
+        ], fixture: {})
+        #expect(validUTF8NullDataOutput == Data("cafe\nCAFÉ\ncafé\n\0".utf8))
+        let validUTF8MaxColumnsOutput = try runExecutableData([
+            "--max-columns",
+            "4",
+            "--max-columns-preview",
+            "[[:word:]]+",
+            root.path("valid-utf8.txt"),
+        ], fixture: {})
+        #expect(validUTF8MaxColumnsOutput == Data(
+            "cafe [... omitted end of long line]\nCAFÉ [... omitted end of long line]\ncafé [... omitted end of long line]\n".utf8
+        ))
         try root.write(Data([
             0x63, 0x61, 0x66, 0xE9, 0x0A,
             0x6E, 0x65, 0x65, 0x64, 0x6C, 0x65, 0x20, 0x63, 0x61, 0x66, 0xE9, 0x0A,
