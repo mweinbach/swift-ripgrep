@@ -923,6 +923,22 @@ struct RipgrepSearcherTests {
         #expect(jsonLines?["bytes"] == "//4AYg==")
         #expect(jsonSubmatches?.first?["start"] as? Int == 2)
         #expect(jsonSubmatches?.first?["end"] as? Int == 3)
+        let automaticJsonOutput = try run(["--json", "-a", "foo", root.path("invalid-utf8.txt")])
+        let automaticJsonMatch = try automaticJsonOutput.map(jsonObject)
+            .first { $0["type"] as? String == "match" }?["data"] as? [String: Any]
+        let automaticJsonLines = automaticJsonMatch?["lines"] as? [String: String]
+        let automaticJsonSubmatches = automaticJsonMatch?["submatches"] as? [[String: Any]]
+        #expect(automaticJsonLines?["bytes"] == "/2Zvbwo=")
+        #expect(automaticJsonSubmatches?.first?["start"] as? Int == 1)
+        #expect(automaticJsonSubmatches?.first?["end"] as? Int == 4)
+        let automaticBinaryJsonOutput = try run(["--json", "foo", root.path("invalid-utf8.txt")])
+        let automaticBinaryJsonMatch = try automaticBinaryJsonOutput.map(jsonObject)
+            .first { $0["type"] as? String == "match" }?["data"] as? [String: Any]
+        let automaticBinaryJsonLines = automaticBinaryJsonMatch?["lines"] as? [String: String]
+        let automaticBinaryJsonSubmatches = automaticBinaryJsonMatch?["submatches"] as? [[String: Any]]
+        #expect(automaticBinaryJsonLines?["bytes"] == "/2Zvbwo=")
+        #expect(automaticBinaryJsonSubmatches?.first?["start"] as? Int == 1)
+        #expect(automaticBinaryJsonSubmatches?.first?["end"] as? Int == 4)
         #expect(try run(["-n", "-Esjis", "Шерлок Холмс", root.path("sjis.txt")]) == ["1:Шерлок Холмс"])
         #expect(try run(["-n", "-Eeuc-jp", "Шерлок Холмс", root.path("eucjp.txt")]) == ["1:Шерлок Холмс"])
 

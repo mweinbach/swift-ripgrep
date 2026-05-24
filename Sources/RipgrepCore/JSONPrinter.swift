@@ -201,7 +201,7 @@ public struct JSONPrinter {
     }
 
     private func dataObject(_ text: String, rawWhenEncodingDisabled: Bool = false) -> JSONValue {
-        if rawWhenEncodingDisabled, options.encodingMode == .disabled {
+        if rawWhenEncodingDisabled {
             let data = text.rawByteData()
             if String(data: data, encoding: .utf8) == nil {
                 return .object([("bytes", .string(data.base64EncodedString()))])

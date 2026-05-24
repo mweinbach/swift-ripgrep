@@ -1146,7 +1146,7 @@ public struct RipgrepSearcher {
     }
 
     private func rawDataForOutput(_ data: Data, options: RipgrepOptions) -> Data? {
-        options.emitsRawBytes ? data : nil
+        options.emitsRawBytes || (options.json && options.encodingMode == .automatic) ? data : nil
     }
 
     private func adjustedSpans(
@@ -1154,7 +1154,7 @@ public struct RipgrepSearcher {
         rawLine: String?,
         options: RipgrepOptions
     ) -> [MatchSpan] {
-        guard options.emitsRawBytes,
+        guard preservesRawOffsets(options: options),
               let rawLine,
               let rawMap = rawLineMap(for: rawLine) else {
             return spans
@@ -1221,6 +1221,10 @@ public struct RipgrepSearcher {
             decodedToRawByteOffsets: decodedToRaw,
             invalidDecodedRanges: invalidRanges
         )
+    }
+
+    private func preservesRawOffsets(options: RipgrepOptions) -> Bool {
+        options.emitsRawBytes || (options.json && options.encodingMode == .automatic)
     }
 
     private func validUTF8SequenceLength(in bytes: [UInt8], at offset: Int) -> Int? {
