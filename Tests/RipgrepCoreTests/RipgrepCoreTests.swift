@@ -2840,6 +2840,33 @@ struct RipgrepSearcherTests {
         #expect(pathBasenames(try run(["--one-file-system", "--sort", "path", "needle", root.url.path])) == ["file.txt", "deep.txt"])
         #expect(pathBasenames(try run(["--one-file-system", "--no-one-file-system", "--sort", "path", "needle", root.url.path])) == ["file.txt", "deep.txt"])
 
+        let ignoredSymlinkRoot = try TemporaryDirectory()
+        try ignoredSymlinkRoot.createDirectory("real/nested")
+        try ignoredSymlinkRoot.write("needle\n", to: "real/main.swift")
+        try ignoredSymlinkRoot.write("needle\n", to: "real/nested/deep.swift")
+        try ignoredSymlinkRoot.write("nested/\n", to: "real/.ignore")
+        try FileManager.default.createSymbolicLink(
+            at: ignoredSymlinkRoot.url.appendingPathComponent("link"),
+            withDestinationURL: ignoredSymlinkRoot.url.appendingPathComponent("real")
+        )
+        #expect(try run(["needle", ignoredSymlinkRoot.path("link")]) == [
+            "\(ignoredSymlinkRoot.path("link/main.swift")):needle",
+        ])
+        #expect(try run(["--no-ignore", "needle", ignoredSymlinkRoot.path("link")]) == [
+            "\(ignoredSymlinkRoot.path("link/main.swift")):needle",
+            "\(ignoredSymlinkRoot.path("link/nested/deep.swift")):needle",
+        ])
+        #expect(try run(["--follow", "--sort", "path", "needle", ignoredSymlinkRoot.url.path]) == [
+            "\(ignoredSymlinkRoot.path("link/main.swift")):needle",
+            "\(ignoredSymlinkRoot.path("real/main.swift")):needle",
+        ])
+        #expect(try run(["--no-ignore", "--follow", "--sort", "path", "needle", ignoredSymlinkRoot.url.path]) == [
+            "\(ignoredSymlinkRoot.path("link/main.swift")):needle",
+            "\(ignoredSymlinkRoot.path("link/nested/deep.swift")):needle",
+            "\(ignoredSymlinkRoot.path("real/main.swift")):needle",
+            "\(ignoredSymlinkRoot.path("real/nested/deep.swift")):needle",
+        ])
+
         try root.write("*.log\n", to: ".ignore")
         try root.createDirectory("logreal")
         try root.write("needle\n", to: "logreal/skip.log")

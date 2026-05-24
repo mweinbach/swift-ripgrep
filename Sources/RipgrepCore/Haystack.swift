@@ -269,6 +269,7 @@ public struct FileWalker {
         if !options.noIgnore {
             appendIgnoreFiles(
                 in: resolvedURL,
+                logicalDirectory: url,
                 to: &directoryIgnoreStack,
                 warnings: &warnings,
                 rootBase: rootBase,
@@ -395,6 +396,9 @@ public struct FileWalker {
 
     private func rootBase(for root: URL) -> URL {
         if (try? root.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+            return root
+        }
+        if (try? root.resolvingSymlinksInPath().resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
             return root
         }
         return root.deletingLastPathComponent()
@@ -953,17 +957,20 @@ public struct FileWalker {
 
     private func appendIgnoreFiles(
         in directoryURL: URL,
+        logicalDirectory: URL? = nil,
         to ignoreStack: inout IgnoreStack,
         warnings: inout [String],
         rootBase: URL,
         options: RipgrepOptions
     ) {
+        let scopeDirectory = logicalDirectory ?? directoryURL
         if !options.noIgnoreVCS && (options.noRequireGit || isInGitRepository(directoryURL)) {
             appendLoadedMatcher(
                 from: directoryURL.appendingPathComponent(".gitignore"),
                 to: &ignoreStack,
                 warnings: &warnings,
                 rootBase: rootBase,
+                scopeDirectory: scopeDirectory,
                 options: options
             )
         }
@@ -976,7 +983,7 @@ public struct FileWalker {
                 to: &ignoreStack,
                 warnings: &warnings,
                 rootBase: rootBase,
-                scopeDirectory: directoryURL,
+                scopeDirectory: scopeDirectory,
                 options: options
             )
         }
@@ -986,6 +993,7 @@ public struct FileWalker {
                 to: &ignoreStack,
                 warnings: &warnings,
                 rootBase: rootBase,
+                scopeDirectory: scopeDirectory,
                 options: options
             )
             appendLoadedMatcher(
@@ -993,6 +1001,7 @@ public struct FileWalker {
                 to: &ignoreStack,
                 warnings: &warnings,
                 rootBase: rootBase,
+                scopeDirectory: scopeDirectory,
                 options: options
             )
         }
