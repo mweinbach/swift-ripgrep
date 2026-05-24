@@ -3507,6 +3507,15 @@ struct RipgrepSearcherTests {
 
         output = []
         exitCode = RipgrepCLI.run(
+            arguments: ["-nh"],
+            stdout: { output.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(output.count == 1)
+        #expect(output[0].contains("Use -h for short descriptions and --help for more details."))
+
+        output = []
+        exitCode = RipgrepCLI.run(
             arguments: ["--help"],
             stdout: { output.append($0) }
         )
@@ -3549,6 +3558,8 @@ struct RipgrepSearcherTests {
                 ["--no-max-filesize"],
                 "rg: unrecognized flag --no-max-filesize\n\nsimilar flags that are available: --max-filesize"
             ),
+            (["-inZ"], "rg: unrecognized flag -Z"),
+            (["-hZ"], "rg: unrecognized flag -Z"),
         ] {
             var output: [String] = []
             var errors: [String] = []
@@ -3601,6 +3612,17 @@ struct RipgrepSearcherTests {
         var errors: [String] = []
         var exitCode = RipgrepCLI.run(
             arguments: ["-V"],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(errors.isEmpty)
+        #expect(output == ["ripgrep 15.1.0 (rev 4519153e5e)"])
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["-nV"],
             stdout: { output.append($0) },
             stderr: { errors.append($0) }
         )

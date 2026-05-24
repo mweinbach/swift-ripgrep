@@ -571,7 +571,12 @@ public enum RipgrepArgumentParser {
                 options.replacement = String(value.dropFirst("--replace=".count))
             case let value where value.hasPrefix("-r") && value.count > 2:
                 options.replacement = String(value.dropFirst(2))
+            case let value where invalidShortFlag(inCluster: value) != nil:
+                return .error(unrecognizedFlag("-\(invalidShortFlag(inCluster: value)!)"))
             case let value where isShortFlagCluster(value):
+                if let result = shortClusterControlResult(value) {
+                    return result
+                }
                 if let message = applyShortFlagCluster(
                     value,
                     options: &options,
@@ -1460,7 +1465,7 @@ public enum RipgrepArgumentParser {
             return false
         }
         let flags = argument.dropFirst()
-        let standaloneFlags = Set("iSsFPwxUvonbpNHILzaqcl")
+        let standaloneFlags = Set("iSsFPwxUvonbpNHILzaqclhV")
         for (offset, flag) in flags.enumerated() {
             if flag == "f" {
                 return offset == flags.count - 1
@@ -1470,6 +1475,40 @@ public enum RipgrepArgumentParser {
             }
         }
         return true
+    }
+
+    private static func invalidShortFlag(inCluster argument: String) -> Character? {
+        guard argument.hasPrefix("-"), !argument.hasPrefix("--"), argument.count > 2 else {
+            return nil
+        }
+        let flags = argument.dropFirst()
+        guard let first = flags.first, !Set("efgEdABCmMjTtu").contains(first) else {
+            return nil
+        }
+        let standaloneFlags = Set("iSsFPwxUvonbpNHILzaqclhV")
+        for flag in flags {
+            if flag == "f" {
+                return nil
+            }
+            if !standaloneFlags.contains(flag) {
+                return flag
+            }
+        }
+        return nil
+    }
+
+    private static func shortClusterControlResult(_ argument: String) -> CLIParseResult? {
+        for flag in argument.dropFirst() {
+            switch flag {
+            case "h":
+                return .shortHelp
+            case "V":
+                return .shortVersion
+            default:
+                continue
+            }
+        }
+        return nil
     }
 
     private static func applyShortFlagCluster(
