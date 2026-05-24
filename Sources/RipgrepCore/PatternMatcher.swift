@@ -555,7 +555,7 @@ public struct PatternMatcher {
         if options.wordRegexp {
             source = wordRegexpPattern(for: source, usesByteSemantics: options.noUnicode)
         }
-        if options.lineRegexp {
+        if options.lineRegexp && !options.multiline {
             source = "^(?:\(source))$"
         }
         if options.crlf && options.multiline {
@@ -2869,21 +2869,20 @@ public struct PatternMatcher {
             return range.lowerBound == lineStartIndex(in: line) && range.upperBound == lineEndIndex(in: line)
         }
         let startsLine = range.lowerBound == line.startIndex
-            || line[line.index(before: range.lowerBound)] == "\n"
+            || isMultilineLineTerminator(line[line.index(before: range.lowerBound)])
         let endsLine: Bool
         if range.upperBound == line.endIndex {
             endsLine = true
-        } else if line[range.upperBound] == "\n" {
-            endsLine = true
-        } else if options.crlf,
-                  line[range.upperBound] == "\r",
-                  line.index(after: range.upperBound) < line.endIndex,
-                  line[line.index(after: range.upperBound)] == "\n" {
+        } else if isMultilineLineTerminator(line[range.upperBound]) {
             endsLine = true
         } else {
             endsLine = false
         }
         return startsLine && endsLine
+    }
+
+    private func isMultilineLineTerminator(_ character: Character) -> Bool {
+        character == "\n" || (options.crlf && (character == "\r" || character == "\r\n"))
     }
 
     private func indexRange(for span: MatchSpan, in line: String) -> Range<String.Index>? {
