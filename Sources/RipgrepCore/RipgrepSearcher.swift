@@ -292,6 +292,7 @@ public struct RipgrepSearcher {
                 stoppedBinaryAfterMatch: options.binaryMode == .automatic && !haystack.isExplicit,
                 bytesSearched: suppressedBinaryBytesSearched(
                     dataCount: data.count,
+                    searchedMatches: result.matches,
                     visibleMatches: visibleMatches,
                     options: options
                 ),
@@ -578,6 +579,7 @@ public struct RipgrepSearcher {
 
     private func suppressedBinaryBytesSearched(
         dataCount: Int,
+        searchedMatches: [SearchMatch],
         visibleMatches: [SearchMatch],
         options: RipgrepOptions
     ) -> Int {
@@ -586,7 +588,7 @@ public struct RipgrepSearcher {
         }
         guard options.printMode == .matchingLines,
               !options.json,
-              let firstMatch = visibleMatches.first else {
+              let firstMatch = (visibleMatches.first ?? searchedMatches.first) else {
             return dataCount
         }
         return firstMatch.absoluteOffset + firstMatch.lineWithTerminator.utf8.count

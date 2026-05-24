@@ -3666,6 +3666,11 @@ struct RipgrepSearcherTests {
         #expect(postNulStats.contains("1 matched lines"))
         #expect(postNulStats.contains("26 bytes searched"))
 
+        try countRoot.write(Data("abc\0needle\nneedle2\0tail\n".utf8), to: "post-nul.txt")
+        let explicitPostNulStats = try run(["--stats", "needle", countRoot.path("post-nul.txt")])
+        #expect(explicitPostNulStats.contains("1 matches"))
+        #expect(explicitPostNulStats.contains("11 bytes searched"))
+
         var quietBinaryStatsOutput: [String] = []
         let quietBinaryStatsExitCode = RipgrepCLI.run(
             arguments: ["-q", "--stats", "cat", countRoot.path("file1.txt")],
