@@ -91,31 +91,73 @@ public struct PatternMatcher {
         }
 
         var escaped = false
+        var inClass = false
+        var classNegated = false
+        var classContentStarted = false
+        var escapeStart: String.Index?
         var index = pattern.startIndex
         while index < pattern.endIndex {
             let character = pattern[index]
             if escaped {
+                let escapeEnd = escapeStart.flatMap { regexEscapeEnd(in: pattern, backslashAt: $0) }
+                let matchesNUL: Bool
                 if character == "0" {
+                    matchesNUL = true
+                } else if character == "x" {
+                    let next = pattern.index(after: index)
+                    let remainder = pattern[next...].lowercased()
+                    matchesNUL = remainder.hasPrefix("00") || bracedHexEscapeValue(in: remainder) == 0
+                } else if character == "u" {
+                    let next = pattern.index(after: index)
+                    let remainder = pattern[next...].lowercased()
+                    matchesNUL = remainder.hasPrefix("0000") || bracedHexEscapeValue(in: remainder) == 0
+                } else {
+                    matchesNUL = false
+                }
+                if matchesNUL && (!inClass || !classNegated) {
                     return true
                 }
-                if character == "x" {
-                    let next = pattern.index(after: index)
-                    if pattern[next...].hasPrefix("00") || pattern[next...].hasPrefix("{0}") {
-                        return true
-                    }
-                }
-                if character == "u" {
-                    let next = pattern.index(after: index)
-                    if pattern[next...].hasPrefix("0000") || pattern[next...].hasPrefix("{0}") {
-                        return true
-                    }
+                if inClass {
+                    classContentStarted = true
                 }
                 escaped = false
+                escapeStart = nil
+                index = escapeEnd ?? pattern.index(after: index)
+                continue
+            }
+            if inClass {
+                if character == "^", classNegated, !classContentStarted {
+                    index = pattern.index(after: index)
+                    continue
+                }
+                if character == "]", classContentStarted {
+                    inClass = false
+                    classNegated = false
+                    classContentStarted = false
+                    index = pattern.index(after: index)
+                    continue
+                }
+                if character == "\\" {
+                    escaped = true
+                    escapeStart = index
+                    index = pattern.index(after: index)
+                    continue
+                }
+                classContentStarted = true
                 index = pattern.index(after: index)
                 continue
             }
             if character == "\\" {
                 escaped = true
+                escapeStart = index
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "[" {
+                let next = pattern.index(after: index)
+                inClass = true
+                classNegated = next < pattern.endIndex && pattern[next] == "^"
+                classContentStarted = false
             }
             index = pattern.index(after: index)
         }

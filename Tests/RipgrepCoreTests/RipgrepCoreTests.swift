@@ -4901,6 +4901,9 @@ struct RipgrepSearcherTests {
         #expect(try run(["needle", root.path("bin.dat")]) == [
             #"binary file matches (found "\0" byte around offset 6)"#,
         ])
+        #expect(try run([#"[^\x00]"#, root.path("bin.dat")]) == [
+            #"binary file matches (found "\0" byte around offset 6)"#,
+        ])
         #expect(try run(["-U", "tail", root.path("bin.dat")]) == [
             #"binary file matches (found "\0" byte around offset 6)"#,
         ])
