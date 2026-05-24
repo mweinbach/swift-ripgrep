@@ -1149,6 +1149,14 @@ public struct RipgrepSearcher {
 
         let spans = matcher.spans(in: matchingContents)
         let limitedSpans = Array(spans.prefix(options.maxCount ?? Int.max))
+        let candidateSpans = options.onlyMatching
+            ? multilineOnlyMatchingCandidateSpans(
+                spans: spans,
+                limitedSpans: limitedSpans,
+                lineStartOffsets: lineStartOffsets,
+                maxCount: options.maxCount
+            )
+            : limitedSpans
         if options.replacement != nil, !options.onlyMatching {
             let candidates = limitedSpans.compactMap { span -> MultilineSpanCandidate? in
                 guard let startLineIndex = lineIndex(containingByteOffset: span.startByte, lineStartOffsets: lineStartOffsets),
@@ -1212,7 +1220,7 @@ public struct RipgrepSearcher {
             )
         }
 
-        let candidates = limitedSpans.compactMap { span -> MultilineSpanCandidate? in
+        let candidates = candidateSpans.compactMap { span -> MultilineSpanCandidate? in
             guard let startLineIndex = lineIndex(containingByteOffset: span.startByte, lineStartOffsets: lineStartOffsets),
                   let endLineIndex = endLineIndex(for: span, lineStartOffsets: lineStartOffsets) else {
                 return nil
@@ -1453,6 +1461,26 @@ public struct RipgrepSearcher {
             }
         }
         return text
+    }
+
+    private func multilineOnlyMatchingCandidateSpans(
+        spans: [MatchSpan],
+        limitedSpans: [MatchSpan],
+        lineStartOffsets: [Int],
+        maxCount: Int?
+    ) -> [MatchSpan] {
+        guard maxCount != nil else {
+            return spans
+        }
+        let selectedLines = Set(limitedSpans.compactMap {
+            lineIndex(containingByteOffset: $0.startByte, lineStartOffsets: lineStartOffsets)
+        })
+        return spans.filter { span in
+            guard let startLineIndex = lineIndex(containingByteOffset: span.startByte, lineStartOffsets: lineStartOffsets) else {
+                return false
+            }
+            return selectedLines.contains(startLineIndex)
+        }
     }
 
     private func multilineReplacementRawBlockText(

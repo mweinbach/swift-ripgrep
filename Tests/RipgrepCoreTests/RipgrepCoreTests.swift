@@ -1257,6 +1257,18 @@ struct RipgrepSearcherTests {
             root.path("multiline-utf8.txt"),
         ], fixture: {})
         #expect(noUnicodeMultilineDotAllOutput == noUnicodeMultilineDotOutput)
+        let noUnicodeMultilineMaxCountOutput = try runExecutableData([
+            "-U",
+            "--no-unicode",
+            "-m1",
+            "-o",
+            "(?s).",
+            root.path("multiline-utf8.txt"),
+        ], fixture: {})
+        #expect(noUnicodeMultilineMaxCountOutput == Data([
+            0xC3, 0x0A,
+            0xA9, 0x0A,
+        ]))
         #expect(try run(["-U", "-r?", "-n", #"\n"#, root.path("multi.txt")]) == [
             "1:foo?bar?baz?",
         ])
