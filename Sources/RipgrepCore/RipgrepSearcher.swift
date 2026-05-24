@@ -332,6 +332,16 @@ public struct RipgrepSearcher {
             if shouldDropSuppressedBinaryContextMatches(hasBinaryMatch: hasBinaryMatch, options: options) {
                 displayMatches = []
             }
+            let suppressBinaryMatchDetails = options.binaryMode == .automatic
+                && options.printMode == .matchingLines
+                && !options.json
+                && !(options.quiet && options.stats)
+                && options.replacement != nil
+                && hasBinaryMatch
+                && binaryDetectedBeforeSearch
+            if suppressBinaryMatchDetails {
+                displayMatches = []
+            }
             let displayLines: [SearchLine]
             if options.json {
                 displayLines = jsonBinaryDisplayLines(result.lines, lineNumberShifts: lineNumberShifts, options: options)
@@ -364,8 +374,8 @@ public struct RipgrepSearcher {
                     visibleMatches: visibleMatches,
                     options: options
                 ),
-                supplementalMatchedLines: result.supplementalMatchedLines,
-                supplementalMatches: result.supplementalMatches
+                supplementalMatchedLines: suppressBinaryMatchDetails ? 0 : result.supplementalMatchedLines,
+                supplementalMatches: suppressBinaryMatchDetails ? 0 : result.supplementalMatches
             ))
         }
 
@@ -854,6 +864,9 @@ public struct RipgrepSearcher {
         if options.effectivePatterns.contains(where: containsLineEndAnchor) {
             return visibleMatches.contains { $0.absoluteOffset == 0 }
         }
+        if options.multiline {
+            return !visibleMatches.isEmpty
+        }
         return visibleMatches.contains { match in
             match.absoluteOffset + byteCount(match.lineWithTerminator, options: options) <= binaryByteOffset
         }
@@ -918,6 +931,16 @@ public struct RipgrepSearcher {
         }
         if visibleMatches.isEmpty, options.beforeContext > 0 {
             return 0
+        }
+        if options.multiline,
+           options.binaryMode == .automatic,
+           let span = firstMatch.spans.first {
+            let spanStart = firstMatch.absoluteOffset + span.startByte
+            let spanEnd = firstMatch.absoluteOffset + span.endByte
+            if spanStart < binaryByteOffset, spanEnd > binaryByteOffset {
+                return binaryByteOffset
+            }
+            return min(dataCount, spanEnd + 1)
         }
         return firstMatch.absoluteOffset + firstMatch.lineWithTerminator.utf8.count
     }
@@ -1215,7 +1238,7 @@ public struct RipgrepSearcher {
         let shouldSplitBinaryNUL = splitBinaryNUL && !options.disablesBinaryDetection
         if options.multiline && !options.invertMatch {
             let shouldSplitMultilineBinaryNUL = shouldSplitBinaryNUL
-                && options.printMode == .countMatches
+                && (options.printMode == .count || options.printMode == .countMatches)
                 && !options.effectivePatterns.contains(where: containsLineAnchor)
                 && !options.effectivePatterns.contains(where: containsNULPattern)
                 && !options.effectivePatterns.contains(where: containsLineTerminatorOutsideCharacterClass)
@@ -2263,7 +2286,12 @@ public struct RipgrepSearcher {
             )
             : limitedSpans
         if options.replacement != nil, !options.onlyMatching {
-            let candidates = limitedSpans.compactMap { span -> MultilineSpanCandidate? in
+            let replacementSpans = multilineReplacementCandidateSpans(
+                spans: spans,
+                lineStartOffsets: lineStartOffsets,
+                maxCount: options.maxCount
+            )
+            let candidates = replacementSpans.compactMap { span -> MultilineSpanCandidate? in
                 guard let startLineIndex = lineIndex(containingByteOffset: span.startByte, lineStartOffsets: lineStartOffsets),
                       let endLineIndex = endLineIndex(for: span, lineStartOffsets: lineStartOffsets) else {
                     return nil
@@ -2333,8 +2361,18 @@ public struct RipgrepSearcher {
                 bytesSearched: multilineBytesSearched(
                     lines: searchLinesWithPositiveSpans,
                     matches: matches,
-                    limitedSpans: limitedSpans,
+                    limitedSpans: replacementSpans,
                     totalBytes: absoluteOffset,
+                    options: options
+                ),
+                supplementalMatchedLines: supplementalMatchedLineCount(
+                    lines: searchLinesWithPositiveSpans,
+                    matches: matches,
+                    options: options
+                ),
+                supplementalMatches: supplementalMatchCount(
+                    lines: searchLinesWithPositiveSpans,
+                    matches: matches,
                     options: options
                 )
             )
@@ -2840,6 +2878,32 @@ public struct RipgrepSearcher {
         let selectedLines = Set(limitedSpans.compactMap {
             lineIndex(containingByteOffset: $0.startByte, lineStartOffsets: lineStartOffsets)
         })
+        return spans.filter { span in
+            guard let startLineIndex = lineIndex(containingByteOffset: span.startByte, lineStartOffsets: lineStartOffsets) else {
+                return false
+            }
+            return selectedLines.contains(startLineIndex)
+        }
+    }
+
+    private func multilineReplacementCandidateSpans(
+        spans: [MatchSpan],
+        lineStartOffsets: [Int],
+        maxCount: Int?
+    ) -> [MatchSpan] {
+        guard let maxCount else {
+            return spans
+        }
+        var selectedLines = Set<Int>()
+        for span in spans {
+            guard let startLineIndex = lineIndex(containingByteOffset: span.startByte, lineStartOffsets: lineStartOffsets) else {
+                continue
+            }
+            selectedLines.insert(startLineIndex)
+            if selectedLines.count == maxCount {
+                break
+            }
+        }
         return spans.filter { span in
             guard let startLineIndex = lineIndex(containingByteOffset: span.startByte, lineStartOffsets: lineStartOffsets) else {
                 return false

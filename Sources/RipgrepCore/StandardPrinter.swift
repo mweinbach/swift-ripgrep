@@ -1082,6 +1082,11 @@ public struct StandardPrinter {
             } else if replacementContinuationLineNumbers.contains(lineNumber) {
                 previous = lineNumber
                 continue
+            } else if options.replacement != nil,
+                      !options.passthru,
+                      !options.invertMatch,
+                      let positiveMatch = positiveMatch(for: line, fileURL: result.fileURL) {
+                output.append(contentsOf: formatSearchMatch(positiveMatch, showPath: showPath))
             } else if matchedLineNumbers.contains(lineNumber)
                         || (!options.passthru && !options.invertMatch && !line.positiveSpans.isEmpty) {
                 output.append(formatMatchedLine(

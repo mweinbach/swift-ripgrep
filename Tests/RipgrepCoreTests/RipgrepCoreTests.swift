@@ -2215,6 +2215,52 @@ struct RipgrepSearcherTests {
         #expect(jsonMultilineMaxStats?["matched_lines"] as? Int == 2)
         #expect(jsonMultilineMaxStats?["matches"] as? Int == 2)
 
+        try root.write("needle tail\nneedle again\n", to: "multi-replace-max.txt")
+        #expect(try run(["-U", "-m1", "--replace", "X", "[a-z]+", root.path("multi-replace-max.txt")]) == [
+            "X X",
+        ])
+        try root.write("before\nneedle\nafter\n", to: "multi-replace-context-max.txt")
+        #expect(try run([
+            "-U",
+            "-m1",
+            "-A1",
+            "--replace",
+            "<$0>",
+            "[a-z]+",
+            root.path("multi-replace-context-max.txt"),
+        ]) == [
+            "<before>",
+            "<needle>",
+        ])
+        let jsonMultilineReplaceMaxOutput = try run([
+            "-U",
+            "--json",
+            "-m1",
+            "--replace",
+            "X",
+            "[a-z]+",
+            root.path("multi-replace-max.txt"),
+        ])
+        let jsonMultilineReplaceMaxMessages = try jsonMultilineReplaceMaxOutput.map(jsonObject)
+        let jsonMultilineReplaceMaxMatch = jsonMultilineReplaceMaxMessages[1]["data"] as? [String: Any]
+        let jsonMultilineReplaceMaxSubmatches = jsonMultilineReplaceMaxMatch?["submatches"] as? [[String: Any]]
+        #expect(jsonMultilineReplaceMaxSubmatches?.compactMap { ($0["replacement"] as? [String: String])?["text"] } == ["X", "X"])
+        let jsonMultilineReplaceContextOutput = try run([
+            "-U",
+            "--json",
+            "-m1",
+            "-A1",
+            "--replace",
+            "<$0>",
+            "[a-z]+",
+            root.path("multi-replace-context-max.txt"),
+        ])
+        let jsonMultilineReplaceContextMessages = try jsonMultilineReplaceContextOutput.map(jsonObject)
+        let jsonMultilineReplaceContextEnd = jsonMultilineReplaceContextMessages[3]["data"] as? [String: Any]
+        let jsonMultilineReplaceContextStats = jsonMultilineReplaceContextEnd?["stats"] as? [String: Any]
+        #expect(jsonMultilineReplaceContextStats?["matched_lines"] as? Int == 2)
+        #expect(jsonMultilineReplaceContextStats?["matches"] as? Int == 2)
+
         let jsonMultilineMaxNoContextOutput = try run([
             "-U",
             "--json",
@@ -5555,6 +5601,24 @@ struct RipgrepSearcherTests {
         ])
         #expect(try runAllowingNoMatch(["-v", "[a-z]+", root.path("nul-anchors.dat")]) == [])
         #expect(try runAllowingNoMatch(["--text", "^needle", root.path("nul-anchors.dat")]) == [])
+        #expect(try run(["-U", "-B1", "[a-z]+", root.path("nul-anchors.dat")]) == [
+            #"binary file matches (found "\0" byte around offset 3)"#,
+        ])
+        #expect(try run(["-U", "--passthru", "[a-z]+", root.path("nul-anchors.dat")]) == [
+            #"binary file matches (found "\0" byte around offset 3)"#,
+        ])
+        #expect(try run(["-U", "--count", "[a-z]+", root.path("nul-anchors.dat")]) == ["3"])
+        let multilineBinaryReplacementStats = try run([
+            "--stats",
+            "-U",
+            "--replace",
+            "X",
+            "[a-z]+",
+            root.path("nul-anchors.dat"),
+        ])
+        #expect(multilineBinaryReplacementStats.contains("1 matches"))
+        #expect(multilineBinaryReplacementStats.contains("1 matched lines"))
+        #expect(multilineBinaryReplacementStats.contains("4 bytes searched"))
         #expect(try run(["-c", "needle", root.path("before-nul.dat")]) == ["1"])
         #expect(pathBasenames(try run(["--sort=path", "--binary", "needle", root.url.path])) == [
             "before-nul.dat",
