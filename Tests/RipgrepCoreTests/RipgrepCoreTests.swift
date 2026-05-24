@@ -908,6 +908,40 @@ struct RipgrepSearcherTests {
         let lfRecordSummaryStats = lfRecordSummary?["stats"] as? [String: Any]
         #expect(lfRecordStats?["matched_lines"] as? Int == 1)
         #expect(lfRecordSummaryStats?["matched_lines"] as? Int == 1)
+
+        try root.write(Data([0x61, 0x00, 0x62, 0x00, 0x63]), to: "binary-nul.txt")
+        #expect(try run(["--count-matches", "$", root.path("binary-nul.txt")]) == [
+            "3",
+        ])
+        #expect(try run(["--count-matches", #"\b"#, root.path("binary-nul.txt")]) == [
+            "5",
+        ])
+        let binaryAnchorOutput = try run(["--json", "$", root.path("binary-nul.txt")])
+        let binaryAnchorMessages = try binaryAnchorOutput.map(jsonObject)
+        let binaryAnchorMatches = binaryAnchorMessages.compactMap { object -> [String: Any]? in
+            guard object["type"] as? String == "match" else { return nil }
+            return object["data"] as? [String: Any]
+        }
+        #expect(binaryAnchorMatches.count == 3)
+        let binaryAnchorSubmatches = binaryAnchorMatches.compactMap { $0["submatches"] as? [[String: Any]] }
+        #expect(binaryAnchorSubmatches.map(\.count) == [1, 1, 0])
+        let binaryAnchorEnd = binaryAnchorMessages.first { $0["type"] as? String == "end" }?["data"] as? [String: Any]
+        let binaryAnchorStats = binaryAnchorEnd?["stats"] as? [String: Any]
+        #expect(binaryAnchorStats?["matched_lines"] as? Int == 3)
+        #expect(binaryAnchorStats?["matches"] as? Int == 2)
+
+        let binaryBoundaryOutput = try run(["--json", #"\b"#, root.path("binary-nul.txt")])
+        let binaryBoundaryMessages = try binaryBoundaryOutput.map(jsonObject)
+        let binaryBoundaryMatches = binaryBoundaryMessages.compactMap { object -> [String: Any]? in
+            guard object["type"] as? String == "match" else { return nil }
+            return object["data"] as? [String: Any]
+        }
+        let binaryBoundarySubmatches = binaryBoundaryMatches.compactMap { $0["submatches"] as? [[String: Any]] }
+        #expect(binaryBoundarySubmatches.map(\.count) == [2, 2, 1])
+        let binaryBoundaryEnd = binaryBoundaryMessages.first { $0["type"] as? String == "end" }?["data"] as? [String: Any]
+        let binaryBoundaryStats = binaryBoundaryEnd?["stats"] as? [String: Any]
+        #expect(binaryBoundaryStats?["matched_lines"] as? Int == 3)
+        #expect(binaryBoundaryStats?["matches"] as? Int == 5)
     }
 
     @Test("decodes BOM and explicit encodings")

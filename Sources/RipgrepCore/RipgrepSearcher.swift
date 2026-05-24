@@ -876,16 +876,22 @@ public struct RipgrepSearcher {
             let lineByteCount = matchingRawLines?[safe: offset].map {
                 $0.text.unicodeScalars.count + $0.terminator.unicodeScalars.count
             } ?? byteCount(splitLine.text, options: options) + byteCount(splitLine.terminator, options: options)
-            let positiveSpans = nullDataLineAnchorSpans(
-                adjustedSpans(
-                    matcher.positiveSpans(in: lineForMatching),
-                    rawLine: rawLineForSpanAdjustment,
+            let positiveSpans = syntheticBinarySplitSpans(
+                nullDataLineAnchorSpans(
+                    adjustedSpans(
+                        matcher.positiveSpans(in: lineForMatching),
+                        rawLine: rawLineForSpanAdjustment,
+                        options: options
+                    ),
+                    line: line,
+                    absoluteOffset: absoluteOffset,
                     options: options
                 ),
-                line: line,
-                absoluteOffset: absoluteOffset,
+                line: matchingRawLine ?? lineForMatching,
+                terminator: splitLine.terminator,
+                splitBinaryNUL: shouldSplitBinaryNUL,
                 options: options
-            )
+            ).spans
             guard matches.count < maxCount else {
                 searchLines.append(SearchLine(
                     lineNumber: lineNumber,
@@ -899,7 +905,7 @@ public struct RipgrepSearcher {
                 continue
             }
 
-            let spans = nullDataLineAnchorSpans(
+            let rawSpans = nullDataLineAnchorSpans(
                 adjustedSpans(
                     matcher.spans(in: lineForMatching),
                     rawLine: rawLineForSpanAdjustment,
@@ -909,6 +915,14 @@ public struct RipgrepSearcher {
                 absoluteOffset: absoluteOffset,
                 options: options
             )
+            let syntheticAdjusted = syntheticBinarySplitSpans(
+                rawSpans,
+                line: matchingRawLine ?? lineForMatching,
+                terminator: splitLine.terminator,
+                splitBinaryNUL: shouldSplitBinaryNUL,
+                options: options
+            )
+            let spans = syntheticAdjusted.spans
             searchLines.append(SearchLine(
                 lineNumber: lineNumber,
                 line: line,
@@ -919,8 +933,8 @@ public struct RipgrepSearcher {
             ))
             let positiveMatched = options.invertMatch && options.stopOnNonmatch
                 ? !positiveSpans.isEmpty
-                : !spans.isEmpty
-            guard !spans.isEmpty else {
+                : (!spans.isEmpty || syntheticAdjusted.preserveMatchedLine)
+            guard !spans.isEmpty || syntheticAdjusted.preserveMatchedLine else {
                 absoluteOffset += lineByteCount
                 if options.stopOnNonmatch && !options.invertMatch && hasMatched {
                     break
@@ -1021,8 +1035,37 @@ public struct RipgrepSearcher {
         return output
     }
 
+    private func syntheticBinarySplitSpans(
+        _ spans: [MatchSpan],
+        line: String,
+        terminator: String,
+        splitBinaryNUL: Bool,
+        options: RipgrepOptions
+    ) -> (spans: [MatchSpan], preserveMatchedLine: Bool) {
+        guard splitBinaryNUL,
+              terminator.isEmpty,
+              !line.isEmpty,
+              !spans.isEmpty else {
+            return (spans, false)
+        }
+        if options.printMode == .countMatches,
+           !options.json,
+           options.effectivePatterns.contains(where: containsLineEndAnchor) {
+            return (spans, false)
+        }
+        let lineEnd = byteCount(line, options: options)
+        let filtered = spans.filter {
+            !($0.startByte == lineEnd && $0.endByte == lineEnd && $0.text.isEmpty)
+        }
+        return (filtered, filtered.isEmpty && !spans.isEmpty)
+    }
+
     private func containsLineStartAnchor(_ pattern: String) -> Bool {
         containsAnchor("^", in: pattern)
+    }
+
+    private func containsLineEndAnchor(_ pattern: String) -> Bool {
+        containsAnchor("$", in: pattern)
     }
 
     private func containsLineAnchor(_ pattern: String) -> Bool {
