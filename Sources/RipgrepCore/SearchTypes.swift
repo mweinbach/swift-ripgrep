@@ -99,6 +99,7 @@ public struct SearchFileResult: Equatable, Sendable {
     public let binaryByteOffset: Int?
     public let hasBinaryMatch: Bool
     public let stoppedBinaryAfterMatch: Bool
+    public let shouldPrintMatchesBeforeBinary: Bool
     public let bytesSearched: Int
     public let searched: Bool
     public let supplementalMatchedLines: Int
@@ -111,6 +112,7 @@ public struct SearchFileResult: Equatable, Sendable {
         binaryByteOffset: Int? = nil,
         hasBinaryMatch: Bool = false,
         stoppedBinaryAfterMatch: Bool = false,
+        shouldPrintMatchesBeforeBinary: Bool = false,
         bytesSearched: Int = 0,
         searched: Bool = true,
         supplementalMatchedLines: Int = 0,
@@ -122,6 +124,7 @@ public struct SearchFileResult: Equatable, Sendable {
         self.binaryByteOffset = binaryByteOffset
         self.hasBinaryMatch = hasBinaryMatch
         self.stoppedBinaryAfterMatch = stoppedBinaryAfterMatch
+        self.shouldPrintMatchesBeforeBinary = shouldPrintMatchesBeforeBinary
         self.bytesSearched = bytesSearched
         self.searched = searched
         self.supplementalMatchedLines = supplementalMatchedLines

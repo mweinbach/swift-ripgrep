@@ -3393,6 +3393,24 @@ struct RipgrepSearcherTests {
         #expect(try run(["--pre", root.path("pre-binary.sh"), "needle", root.path("doc.md")]) == [
             #"binary file matches (found "\0" byte around offset 7)"#,
         ])
+        try root.write("""
+        #!/bin/sh
+        printf 'preprocessed match before binary data padding line\\n'
+        cat "$1"
+        """, to: "pre-binary-preface.sh")
+        try root.makeExecutable("pre-binary-preface.sh")
+        try root.write(Data("needle utf16\n".utf16LittleEndianBytes), to: "utf16le.bin")
+        #expect(try run(["--pre", root.path("pre-binary-preface.sh"), ".", root.path("utf16le.bin")]) == [
+            "preprocessed match before binary data padding line",
+            #"binary file matches (found "\0" byte around offset 52)"#,
+        ])
+        #expect(try run(["--pre", root.path("pre-binary-preface.sh"), "--count", ".", root.path("utf16le.bin")]) == [
+            "13",
+        ])
+        let preBinaryJSONOutput = try run(["--json", "--pre", root.path("pre-binary-preface.sh"), ".", root.path("utf16le.bin")])
+        let preBinaryJSONMessages = try preBinaryJSONOutput.map(jsonObject)
+        let preBinaryJSONMatches = preBinaryJSONMessages.filter { $0["type"] as? String == "match" }
+        #expect(preBinaryJSONMatches.count == 13)
         #expect(try run(["--pre", script, "--pre", "", "needle", root.path("plain.txt")]) == [
             "needle",
         ])

@@ -1007,7 +1007,8 @@ public struct RipgrepSearcher {
                 rawDataForMatching: rawDataForMatching(data, options: options, matcher: matcher),
                 fileURL: fileURL,
                 matcher: matcher,
-                options: options
+                options: options,
+                splitBinaryNUL: true
             )
             let searchedResult = SearchFileResult(
                 fileURL: result.fileURL,
@@ -1019,6 +1020,7 @@ public struct RipgrepSearcher {
             return FileSearchOutcome(result: binaryAdjustedPreprocessedResult(
                 searchedResult,
                 data: data,
+                originalBinaryByteOffset: originalData.firstIndex(of: 0),
                 options: options,
                 isExplicit: haystack.isExplicit
             ))
@@ -1033,6 +1035,7 @@ public struct RipgrepSearcher {
     private func binaryAdjustedPreprocessedResult(
         _ result: SearchFileResult,
         data: Data,
+        originalBinaryByteOffset: Int?,
         options: RipgrepOptions,
         isExplicit: Bool
     ) -> SearchFileResult {
@@ -1075,6 +1078,7 @@ public struct RipgrepSearcher {
             binaryByteOffset: binaryByteOffset,
             hasBinaryMatch: hasBinaryMatch,
             stoppedBinaryAfterMatch: options.binaryMode == .automatic && !isExplicit,
+            shouldPrintMatchesBeforeBinary: originalBinaryByteOffset != nil && !displayMatches.isEmpty,
             bytesSearched: suppressedBinaryBytesSearched(
                 dataCount: data.count,
                 binaryByteOffset: binaryByteOffset,
