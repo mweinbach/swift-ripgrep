@@ -1488,7 +1488,15 @@ public struct RipgrepSearcher {
             return spans
         }
         let lineEnd = byteCount(line, options: options)
-        return spans.compactMap { span in
+        let lineStartOnlySpans = options.effectivePatterns.contains(where: containsLineStartAnchor)
+            && !options.effectivePatterns.contains(where: containsLineEndAnchor)
+            ? spans.filter {
+                !($0.text.isEmpty
+                    && $0.startByte == lineEnd
+                    && $0.endByte == lineEnd)
+            }
+            : spans
+        return lineStartOnlySpans.compactMap { span in
             guard span.endByte == lineEnd,
                   span.startByte < span.endByte,
                   span.text.hasSuffix("\r") else {
@@ -1830,7 +1838,7 @@ public struct RipgrepSearcher {
             let flagStart = pattern.index(pattern.startIndex, offsetBy: 2)
             let flags = pattern[flagStart..<close]
             let rest = pattern[pattern.index(after: close)...]
-            if flags.contains("R"), rest == "^" || rest == "$" {
+            if flags.contains("R"), rest == "$" {
                 return true
             }
         }
@@ -1843,7 +1851,7 @@ public struct RipgrepSearcher {
         let flags = pattern[flagStart..<colon]
         let bodyStart = pattern.index(after: colon)
         let body = pattern[bodyStart..<pattern.index(before: pattern.endIndex)]
-        return flags.contains("R") && (body == "^" || body == "$")
+        return flags.contains("R") && body == "$"
     }
 
     private func isMultilineBinaryBoundaryPattern(_ pattern: String) -> Bool {

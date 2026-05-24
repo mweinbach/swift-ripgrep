@@ -2483,6 +2483,13 @@ struct RipgrepSearcherTests {
             "3\r",
         ])
         try root.write("foo\r\nbar\r\n\r\n", to: "crlf-empty.txt")
+        let onlyMatchingStartAnchors = try runExecutableData(["--crlf", "-o", "^", root.path("crlf-empty.txt")]) {}
+        #expect(onlyMatchingStartAnchors == Data([13, 10, 13, 10, 13, 10]))
+        #expect(try run(["--crlf", "-n", "-o", "^", root.path("crlf-empty.txt")]) == [
+            "1:\r",
+            "2:\r",
+            "3:\r",
+        ])
         let onlyMatchingEndAnchors = try runExecutableData(["--crlf", "-o", "$", root.path("crlf-empty.txt")]) {}
         #expect(onlyMatchingEndAnchors == Data([13, 10, 13, 10, 13, 10]))
         #expect(try run(["--crlf", "--count-matches", "$", root.path("crlf-empty.txt")]) == [
