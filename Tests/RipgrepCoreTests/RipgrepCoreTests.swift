@@ -3541,6 +3541,14 @@ struct RipgrepSearcherTests {
                 ["--files-with-match"],
                 "rg: unrecognized flag --files-with-match\n\nsimilar flags that are available: --files-with-matches, --files-without-match"
             ),
+            (
+                ["--no-color"],
+                "rg: unrecognized flag --no-color\n\nsimilar flags that are available: --color, --colors, --no-column"
+            ),
+            (
+                ["--no-max-filesize"],
+                "rg: unrecognized flag --no-max-filesize\n\nsimilar flags that are available: --max-filesize"
+            ),
         ] {
             var output: [String] = []
             var errors: [String] = []

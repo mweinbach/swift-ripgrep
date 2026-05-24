@@ -615,8 +615,6 @@ public enum RipgrepArgumentParser {
                     return .error(unrecognizedChoice(flag: "--color", value: raw))
                 }
                 options.colorMode = mode
-            case "--no-color":
-                options.colorMode = .never
             case "--colors":
                 guard index < arguments.count else {
                     return .error(missingValue(flag: "--colors"))
@@ -2166,6 +2164,20 @@ public enum RipgrepArgumentParser {
                 return !remainder.hasPrefix("\"")
             }
         }
+        if flag.hasPrefix("--no-") {
+            var suggestions: [String] = []
+            let positiveFlag = "--" + flag.dropFirst("--no-".count)
+            if knownLongFlags.contains(positiveFlag) {
+                suggestions.append(String(positiveFlag))
+            }
+            suggestions.append(contentsOf: negativeFlagSuggestionExtras[flag] ?? [])
+            suggestions.append(contentsOf: knownLongFlags.filter { knownFlag in
+                flag == knownFlag
+                    || knownFlag.hasPrefix(flag)
+                    || commonPrefixLength(flag, knownFlag) >= 9
+            })
+            return suggestions.uniqued()
+        }
         if flag.hasPrefix("--ignore-") {
             return primaryIgnoreFlagSuggestions.filter { knownFlag in
                 knownFlag.hasPrefix(flag) || commonPrefixLength(flag, knownFlag) >= 8
@@ -2318,6 +2330,20 @@ public enum RipgrepArgumentParser {
         "--ignore-dot",
         "--ignore-vcs",
     ]
+
+    private static let negativeFlagSuggestionExtras = [
+        "--no-color": ["--colors", "--no-column"],
+        "--no-count": ["--max-count"],
+        "--no-files": ["--no-filename", "--sort-files", "--no-sort-files"],
+        "--no-regexp": ["--line-regexp", "--word-regexp"],
+    ]
+}
+
+private extension Array where Element: Hashable {
+    func uniqued() -> [Element] {
+        var seen: Set<Element> = []
+        return filter { seen.insert($0).inserted }
+    }
 }
 
 private enum PatternFileResult {
