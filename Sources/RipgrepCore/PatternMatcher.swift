@@ -424,6 +424,9 @@ public struct PatternMatcher {
             let range = line.endIndex..<line.endIndex
             candidates.append((range, replacement(for: range, in: line)))
         }
+        if shouldSuppressBareWordBoundaryPattern {
+            return []
+        }
 
         return candidates.filter { candidate in
             !shouldDropBareCRLineEndWordBoundary(candidate.range, in: line)
@@ -431,6 +434,12 @@ public struct PatternMatcher {
                 && (!options.lineRegexp || isLineRegexpBounded(candidate.range, in: line))
                 && !shouldDropTrailingMultilineEmptySpan(candidate.range, in: line)
         }
+    }
+
+    private var shouldSuppressBareWordBoundaryPattern: Bool {
+        options.wordRegexp
+            && !patternSources.isEmpty
+            && patternSources.allSatisfy { $0 == "\\b" }
     }
 
     private func shouldDropBareCRLineEndWordBoundary(_ range: Range<String.Index>, in line: String) -> Bool {
