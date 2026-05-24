@@ -98,7 +98,7 @@ public struct JSONPrinter {
                 rawText: match.rawLine.map { $0 + match.lineTerminator },
                 lineNumber: match.lineNumber,
                 absoluteOffset: match.absoluteOffset,
-                submatches: match.spans
+                submatches: options.invertMatch ? [] : match.spans
             )),
         ])
     }
@@ -147,7 +147,7 @@ public struct JSONPrinter {
     }
 
     private func fileStatsObject(for result: SearchFileResult, bytesPrinted: Int) -> JSONValue {
-        let matchCount = result.matches.reduce(0) { $0 + $1.matchCount }
+        let matchCount = options.invertMatch ? 0 : result.matches.reduce(0) { $0 + $1.matchCount }
         return .object([
             ("elapsed", fileElapsedObject()),
             ("searches", .int(result.searched ? 1 : 0)),

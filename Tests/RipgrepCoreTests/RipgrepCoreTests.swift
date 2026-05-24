@@ -1337,6 +1337,10 @@ struct RipgrepSearcherTests {
         #expect(filesWithoutMatchOutput.contains(root.path("other.txt")))
         #expect(filesWithoutMatchOutput.contains("2 matches"))
         #expect(filesWithoutMatchOutput.contains("0 bytes printed"))
+
+        let invertedOutput = try run(["--stats", "-v", "needle", root.path("stats.txt")])
+        #expect(invertedOutput.contains("0 matches"))
+        #expect(invertedOutput.contains("1 matched lines"))
     }
 
     @Test("loads arguments from RIPGREP_CONFIG_PATH")
@@ -2138,6 +2142,19 @@ struct RipgrepSearcherTests {
         let summary = messages[5]["data"] as? [String: Any]
         let summaryStats = summary?["stats"] as? [String: Any]
         #expect(summaryStats?["bytes_printed"] as? Int == stats?["bytes_printed"] as? Int)
+
+        let invertedOutput = try run(["--json", "-v", "needle", root.path("json.txt")])
+        let invertedMessages = try invertedOutput.map(jsonObject)
+        let invertedMatch = invertedMessages.first { $0["type"] as? String == "match" }?["data"] as? [String: Any]
+        let invertedSubmatches = invertedMatch?["submatches"] as? [[String: Any]]
+        let invertedEnd = invertedMessages.first { $0["type"] as? String == "end" }?["data"] as? [String: Any]
+        let invertedStats = invertedEnd?["stats"] as? [String: Any]
+        let invertedSummary = invertedMessages.first { $0["type"] as? String == "summary" }?["data"] as? [String: Any]
+        let invertedSummaryStats = invertedSummary?["stats"] as? [String: Any]
+        #expect(invertedSubmatches?.isEmpty == true)
+        #expect(invertedStats?["matched_lines"] as? Int == 2)
+        #expect(invertedStats?["matches"] as? Int == 0)
+        #expect(invertedSummaryStats?["matches"] as? Int == 0)
 
         let binaryOutput = try run(["--json", "-n", "needle", root.path("binary.txt")])
         let binaryMessages = try binaryOutput.map(jsonObject)

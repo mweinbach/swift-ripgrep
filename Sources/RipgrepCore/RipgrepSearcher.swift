@@ -134,6 +134,9 @@ public struct RipgrepSearcher {
                 return total + (matchedLines == 0 && file.hasBinaryMatch ? 1 : matchedLines)
             },
             totalMatches: matchedFiles.reduce(0) { total, file in
+                if options.invertMatch {
+                    return total
+                }
                 let matchCount = file.matches.reduce(0) { $0 + $1.matchCount }
                 return total + (matchCount == 0 && file.hasBinaryMatch ? 1 : matchCount)
             }
