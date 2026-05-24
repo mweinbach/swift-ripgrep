@@ -369,7 +369,7 @@ public struct RipgrepSearcher {
         }
         return matches.flatMap { match -> [SearchMatch] in
             let lineNumber = match.lineNumber + (lineNumberShifts[match.lineNumber] ?? 0)
-            guard let nulIndex = match.line.firstIndex(of: "\0") else {
+            guard match.line.contains("\0") else {
                 guard lineNumber != match.lineNumber else {
                     return [match]
                 }
@@ -385,58 +385,7 @@ public struct RipgrepSearcher {
                     spans: match.spans
                 )]
             }
-            let prefixLine = String(match.line[..<nulIndex])
-            let contentStart = match.line.index(after: nulIndex)
-            let suffixLine = String(match.line[contentStart...])
-            let prefixBytes = byteCount(prefixLine, options: options)
-            let prefixWithNULBytes = prefixBytes + byteCount("\0", options: options)
-            let rawPieces = jsonBinaryRawLinePieces(match.rawLine)
-
-            let prefixSpans = match.spans.filter { $0.endByte <= prefixBytes }
-            let suffixSpans = match.spans.compactMap { span -> MatchSpan? in
-                guard span.startByte >= prefixWithNULBytes else {
-                    return nil
-                }
-                let startByte = span.startByte - prefixWithNULBytes
-                let endByte = span.endByte - prefixWithNULBytes
-                return MatchSpan(
-                    startColumn: column(in: suffixLine, byteOffset: startByte, options: options),
-                    endColumn: column(in: suffixLine, byteOffset: endByte, options: options),
-                    startByte: startByte,
-                    endByte: endByte,
-                    text: span.text,
-                    replacement: span.replacement
-                )
-            }
-
-            var displayMatches: [SearchMatch] = []
-            if !prefixSpans.isEmpty {
-                displayMatches.append(SearchMatch(
-                    fileURL: match.fileURL,
-                    lineNumber: lineNumber,
-                    column: options.column ? prefixSpans.first?.startColumn : nil,
-                    line: prefixLine,
-                    rawLine: rawPieces?.prefix,
-                    lineTerminator: "\n",
-                    absoluteOffset: match.absoluteOffset,
-                    matchCount: prefixSpans.count,
-                    spans: prefixSpans
-                ))
-            }
-            if !suffixSpans.isEmpty {
-                displayMatches.append(SearchMatch(
-                    fileURL: match.fileURL,
-                    lineNumber: lineNumber + 1,
-                    column: options.column ? suffixSpans.first?.startColumn : nil,
-                    line: suffixLine,
-                    rawLine: rawPieces?.suffix,
-                    lineTerminator: match.lineTerminator,
-                    absoluteOffset: match.absoluteOffset + prefixWithNULBytes,
-                    matchCount: suffixSpans.count,
-                    spans: suffixSpans
-                ))
-            }
-            return displayMatches
+            return jsonBinaryDisplayPieces(for: match, startingLineNumber: lineNumber, options: options)
         }
     }
 
@@ -450,7 +399,7 @@ public struct RipgrepSearcher {
         }
         return lines.flatMap { line -> [SearchLine] in
             let lineNumber = line.lineNumber + (lineNumberShifts[line.lineNumber] ?? 0)
-            guard let nulIndex = line.line.firstIndex(of: "\0") else {
+            guard line.line.contains("\0") else {
                 guard lineNumber != line.lineNumber else {
                     return [line]
                 }
@@ -463,46 +412,7 @@ public struct RipgrepSearcher {
                     positiveSpans: line.positiveSpans
                 )]
             }
-            let prefixLine = String(line.line[..<nulIndex])
-            let contentStart = line.line.index(after: nulIndex)
-            let suffixLine = String(line.line[contentStart...])
-            let prefixBytes = byteCount(prefixLine, options: options)
-            let prefixWithNULBytes = byteCount(prefixLine, options: options) + byteCount("\0", options: options)
-            let rawPieces = jsonBinaryRawLinePieces(line.rawLine)
-            let prefixPositiveSpans = line.positiveSpans.filter { $0.endByte <= prefixBytes }
-            let suffixPositiveSpans = line.positiveSpans.compactMap { span -> MatchSpan? in
-                guard span.startByte >= prefixWithNULBytes else {
-                    return nil
-                }
-                let startByte = span.startByte - prefixWithNULBytes
-                let endByte = span.endByte - prefixWithNULBytes
-                return MatchSpan(
-                    startColumn: column(in: suffixLine, byteOffset: startByte, options: options),
-                    endColumn: column(in: suffixLine, byteOffset: endByte, options: options),
-                    startByte: startByte,
-                    endByte: endByte,
-                    text: span.text,
-                    replacement: span.replacement
-                )
-            }
-            return [
-                SearchLine(
-                    lineNumber: lineNumber,
-                    line: prefixLine,
-                    rawLine: rawPieces?.prefix,
-                    lineTerminator: "\n",
-                    absoluteOffset: line.absoluteOffset,
-                    positiveSpans: prefixPositiveSpans
-                ),
-                SearchLine(
-                    lineNumber: lineNumber + 1,
-                    line: suffixLine,
-                    rawLine: rawPieces?.suffix,
-                    lineTerminator: line.lineTerminator,
-                    absoluteOffset: line.absoluteOffset + prefixWithNULBytes,
-                    positiveSpans: suffixPositiveSpans
-                )
-            ]
+            return jsonBinaryDisplayPieces(for: line, startingLineNumber: lineNumber, options: options)
         }
     }
 
@@ -514,9 +424,7 @@ public struct RipgrepSearcher {
         var shift = 0
         for line in lines.sorted(by: { $0.lineNumber < $1.lineNumber }) {
             shifts[line.lineNumber] = shift
-            if line.line.contains("\0") {
-                shift += 1
-            }
+            shift += line.line.unicodeScalars.filter { $0 == "\0" }.count
         }
         return shifts
     }
@@ -526,14 +434,147 @@ public struct RipgrepSearcher {
             && (!options.multiline || !options.effectivePatterns.contains(where: isMultilineBinaryBoundaryPattern))
     }
 
-    private func jsonBinaryRawLinePieces(_ rawLine: String?) -> (prefix: String, suffix: String)? {
-        guard let rawLine,
-              let rawNulIndex = rawLine.firstIndex(of: "\0") else {
-            return nil
+    private func jsonBinaryDisplayPieces(
+        for match: SearchMatch,
+        startingLineNumber: Int,
+        options: RipgrepOptions
+    ) -> [SearchMatch] {
+        jsonBinaryDisplaySegments(
+            text: match.line,
+            rawText: match.rawLine,
+            lineTerminator: match.lineTerminator,
+            absoluteOffset: match.absoluteOffset,
+            startingLineNumber: startingLineNumber,
+            spans: match.spans,
+            options: options
+        ).compactMap { segment in
+            guard !segment.spans.isEmpty else {
+                return nil
+            }
+            return SearchMatch(
+                fileURL: match.fileURL,
+                lineNumber: segment.lineNumber,
+                column: options.column ? segment.spans.first?.startColumn : nil,
+                line: segment.text,
+                rawLine: segment.rawText,
+                lineTerminator: segment.terminator,
+                absoluteOffset: segment.absoluteOffset,
+                matchCount: segment.spans.count,
+                spans: segment.spans
+            )
         }
-        let prefix = String(rawLine[..<rawNulIndex])
-        let suffix = String(rawLine[rawLine.index(after: rawNulIndex)...])
-        return (prefix, suffix)
+    }
+
+    private func jsonBinaryDisplayPieces(
+        for line: SearchLine,
+        startingLineNumber: Int,
+        options: RipgrepOptions
+    ) -> [SearchLine] {
+        jsonBinaryDisplaySegments(
+            text: line.line,
+            rawText: line.rawLine,
+            lineTerminator: line.lineTerminator,
+            absoluteOffset: line.absoluteOffset,
+            startingLineNumber: startingLineNumber,
+            spans: line.positiveSpans,
+            options: options
+        ).map { segment in
+            SearchLine(
+                lineNumber: segment.lineNumber,
+                line: segment.text,
+                rawLine: segment.rawText,
+                lineTerminator: segment.terminator,
+                absoluteOffset: segment.absoluteOffset,
+                positiveSpans: segment.spans
+            )
+        }
+    }
+
+    private struct JSONBinaryDisplaySegment {
+        let lineNumber: Int
+        let text: String
+        let rawText: String?
+        let terminator: String
+        let absoluteOffset: Int
+        let spans: [MatchSpan]
+    }
+
+    private func jsonBinaryDisplaySegments(
+        text: String,
+        rawText: String?,
+        lineTerminator: String,
+        absoluteOffset: Int,
+        startingLineNumber: Int,
+        spans: [MatchSpan],
+        options: RipgrepOptions
+    ) -> [JSONBinaryDisplaySegment] {
+        let rawSegments = rawText.map(splitJSONBinaryRawSegments)
+        var output: [JSONBinaryDisplaySegment] = []
+        var segmentStart = text.startIndex
+        var segmentStartByte = 0
+        var lineNumber = startingLineNumber
+        var rawSegmentIndex = 0
+
+        func appendSegment(end: String.Index, terminator: String) {
+            let segmentText = String(text[segmentStart..<end])
+            let segmentEndByte = segmentStartByte + byteCount(segmentText, options: options)
+            let segmentSpans = spans.compactMap { span -> MatchSpan? in
+                guard span.startByte >= segmentStartByte,
+                      span.endByte <= segmentEndByte else {
+                    return nil
+                }
+                let startByte = span.startByte - segmentStartByte
+                let endByte = span.endByte - segmentStartByte
+                return MatchSpan(
+                    startColumn: column(in: segmentText, byteOffset: startByte, options: options),
+                    endColumn: column(in: segmentText, byteOffset: endByte, options: options),
+                    startByte: startByte,
+                    endByte: endByte,
+                    text: span.text,
+                    replacement: span.replacement
+                )
+            }
+            output.append(JSONBinaryDisplaySegment(
+                lineNumber: lineNumber,
+                text: segmentText,
+                rawText: rawSegments?[safe: rawSegmentIndex],
+                terminator: terminator,
+                absoluteOffset: absoluteOffset + segmentStartByte,
+                spans: segmentSpans
+            ))
+            rawSegmentIndex += 1
+        }
+
+        var index = text.startIndex
+        while index < text.endIndex {
+            if text[index] == "\0" {
+                appendSegment(end: index, terminator: "\n")
+                let segmentText = String(text[segmentStart..<index])
+                segmentStartByte += byteCount(segmentText, options: options) + byteCount("\0", options: options)
+                segmentStart = text.index(after: index)
+                lineNumber += 1
+            }
+            index = text.index(after: index)
+        }
+        if segmentStart < text.endIndex || !lastScalar(in: text, equals: "\0") {
+            appendSegment(end: text.endIndex, terminator: lineTerminator)
+        }
+        return output
+    }
+
+    private func splitJSONBinaryRawSegments(_ rawText: String) -> [String] {
+        var segments: [String] = []
+        var start = rawText.startIndex
+        var index = rawText.startIndex
+        while index < rawText.endIndex {
+            if rawText[index] == "\0" {
+                segments.append(String(rawText[start..<index]))
+                start = rawText.index(after: index)
+            }
+            index = rawText.index(after: index)
+        }
+        segments.append(String(rawText[start..<rawText.endIndex]))
+        return segments
     }
 
     private func searchStdin(

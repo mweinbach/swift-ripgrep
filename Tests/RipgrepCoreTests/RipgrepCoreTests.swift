@@ -5143,6 +5143,29 @@ struct RipgrepSearcherTests {
         #expect(multilineBinaryJSONSecondSubmatches?.first?["start"] as? Int == 5)
         #expect(multilineBinaryJSONSecondSubmatches?.first?["end"] as? Int == 11)
 
+        try root.write(Data("needle\0tail\0needle tail\0".utf8), to: "binary-multiline-records.dat")
+        let multilineBinaryRecordsJSONOutput = try run(["-U", "--json", "needle", root.path("binary-multiline-records.dat")])
+        let multilineBinaryRecordsJSONMessages = try multilineBinaryRecordsJSONOutput.map(jsonObject)
+        let multilineBinaryRecordsJSONMatches = multilineBinaryRecordsJSONMessages.compactMap { message -> [String: Any]? in
+            guard message["type"] as? String == "match" else { return nil }
+            return message["data"] as? [String: Any]
+        }
+        #expect(multilineBinaryRecordsJSONMatches.map { $0["line_number"] as? Int } == [1, 3])
+        #expect(multilineBinaryRecordsJSONMatches.compactMap { ($0["lines"] as? [String: String])?["text"] } == [
+            "needle\n",
+            "needle tail\n",
+        ])
+        let multilineBinaryRecordsContextOutput = try run(["-U", "--json", "-A1", "needle", root.path("binary-multiline-records.dat")])
+        let multilineBinaryRecordsContextMessages = try multilineBinaryRecordsContextOutput.map(jsonObject)
+        #expect(multilineBinaryRecordsContextMessages.compactMap { $0["type"] as? String } == [
+            "begin",
+            "match",
+            "context",
+            "match",
+            "end",
+            "summary",
+        ])
+
         let multilineBinaryAnchorJSONOutput = try run(["-U", "--json", "^", root.path("binary-multiline-json.dat")])
         let multilineBinaryAnchorJSONMessages = try multilineBinaryAnchorJSONOutput.map(jsonObject)
         let multilineBinaryAnchorEnd = multilineBinaryAnchorJSONMessages.first { $0["type"] as? String == "end" }?["data"] as? [String: Any]
