@@ -89,7 +89,7 @@ public struct RipgrepSearcher {
         var files = searchedHaystacks.map(\.result)
 
         if options.useStdin {
-            let stdinData = stdin.map { Data($0.utf8) } ?? FileHandle.standardInput.readDataToEndOfFile()
+            let stdinData = stdin.map { Data($0.utf8) } ?? ((try? HaystackReader.readStandardInput()) ?? Data())
             let stdinResults = stdinSearchResults(
                 stdinData,
                 matcher: matcher,
@@ -279,8 +279,15 @@ public struct RipgrepSearcher {
         options: RipgrepOptions
     ) -> FileSearchOutcome {
         let fileURL = haystack.url
-        guard let data = try? Data(contentsOf: fileURL) else {
-            return FileSearchOutcome(result: SearchFileResult(fileURL: fileURL, matches: [], searched: false))
+        let data: Data
+        do {
+            data = try HaystackReader.read(haystack, options: options)
+        } catch {
+            let message = options.mmapMode == .always ? String(describing: error) : nil
+            return FileSearchOutcome(
+                result: SearchFileResult(fileURL: fileURL, matches: [], searched: false),
+                message: message
+            )
         }
 
         if shouldPreprocess(haystack, options: options) {

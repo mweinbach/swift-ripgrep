@@ -203,23 +203,23 @@ Owner: pair-agent-D. Touches: new
 `Sources/RipgrepCore/RipgrepSearcher.swift` (`searchFile` body and the stdin
 path — leave the per-file loop alone for 2B).
 
-- [ ] Add a `HaystackReader` (or equivalent) abstraction with two read paths:
+- [x] Add a `HaystackReader` (or equivalent) abstraction with two read paths:
       1. mmap via Darwin `mmap`/`munmap` for regular files — choose mmap when
          the file is at least ~16 KiB *and* `options.mmapMode != .never` *and*
          the file is a regular file (`stat.st_mode & S_IFREG`).
       2. Chunked buffered read via `FileHandle.read(upToCount:)` (8–64 KiB
          chunks) otherwise. Honour `options.mmapMode == .always` by forcing
          mmap and surfacing a useful error if mmap fails.
-- [ ] Replace the `Data(contentsOf: fileURL)` whole-file read at
+- [x] Replace the `Data(contentsOf: fileURL)` whole-file read at
       `RipgrepSearcher.swift` line ~282 with `HaystackReader.read(haystack,
       options:)`. Behaviour for downstream code (binary detection, decode,
       `searchContents(...)`) must be identical for already-passing tests.
-- [ ] Stream stdin the same way — replace
+- [x] Stream stdin the same way — replace
       `FileHandle.standardInput.readDataToEndOfFile()` at line ~92 with a
       chunked reader. Stdin always uses the buffered path.
-- [ ] Honour `--max-filesize` before the mmap/buffered branch (skip oversized
+- [x] Honour `--max-filesize` before the mmap/buffered branch (skip oversized
       files cleanly the same way the current code does).
-- [ ] Tests: add a small `HaystackReaderTests.swift` covering large vs small
+- [x] Tests: add a small `HaystackReaderTests.swift` covering large vs small
       files, `--mmap`/`--no-mmap` forced paths, mmap-fallback when the OS
       rejects mmap (use `/dev/null` or an anonymous pipe), and chunk-boundary
       determinism for multiline patterns. Existing tests must remain green.
