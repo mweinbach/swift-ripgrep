@@ -852,6 +852,12 @@ struct RipgrepSearcherTests {
         #expect(try run(["--null-data", "needle", root.path("lf.txt")]) == [
             "needle\nunterminated\n\0",
         ])
+        #expect(try run(["--null-data", #"needle\nunterminated"#, root.path("lf.txt")]) == [
+            "needle\nunterminated\n\0",
+        ])
+        #expect(try run(["--null-data", #"^$"#, root.path("lf.txt")]) == [
+            "needle\nunterminated\n\0",
+        ])
 
         let output = try run(["--json", "--null-data", "needle", root.path("nul.txt")])
         let messages = try output.map(jsonObject)
@@ -1279,6 +1285,7 @@ struct RipgrepSearcherTests {
         let root = try TemporaryDirectory()
         try root.write("foo\r\nbar\rquux\nbaz\r\n", to: "crlf.txt")
         try root.write("\n", to: "lf-empty.txt")
+        try root.write("first\nlast", to: "lf-no-final-newline.txt")
 
         #expect(try runAllowingNoMatch(["-n", "foo$", root.path("crlf.txt")]) == [])
         #expect(try run(["--crlf", "-n", "foo$", root.path("crlf.txt")]) == [
@@ -1286,6 +1293,20 @@ struct RipgrepSearcherTests {
         ])
         #expect(try run(["--crlf", "-n", "bar$", root.path("crlf.txt")]) == [
             "2:bar\rquux",
+        ])
+        #expect(try runAllowingNoMatch(["-U", "bar$", root.path("crlf.txt")]) == [])
+        #expect(try runAllowingNoMatch(["-U", "baz$", root.path("crlf.txt")]) == [])
+        #expect(try runAllowingNoMatch(["-U", "--multiline-dotall", "foo.bar", root.path("crlf.txt")]) == [])
+        #expect(try run(["-U", "--crlf", "baz$", root.path("crlf.txt")]) == [
+            "baz\r",
+        ])
+        #expect(try run(["-U", #"(?s)foo.*bar"#, root.path("crlf.txt")]) == [
+            "foo\r",
+            "bar\rquux",
+        ])
+        #expect(try run(["-U", "-o", #"(?s)foo.*bar"#, root.path("crlf.txt")]) == [
+            "foo\r",
+            "bar",
         ])
         #expect(try run(["--crlf", "-n", "^quux", root.path("crlf.txt")]) == [
             "2:bar\rquux",
@@ -1315,6 +1336,8 @@ struct RipgrepSearcherTests {
         #expect(try run(["x?", "--crlf", "--color=always", root.path("lf-empty.txt")]) == [
             "\r",
         ])
+        let lfOutput = try runExecutableData(["--crlf", "last$", root.path("lf-no-final-newline.txt")]) {}
+        #expect(lfOutput == Data("last\r\n".utf8))
     }
 
     @Test("limits traversal depth")
@@ -3606,6 +3629,16 @@ struct RipgrepSearcherTests {
         #expect(try run(["needle", root.path("bin.dat")]) == [
             #"binary file matches (found "\0" byte around offset 6)"#,
         ])
+        #expect(try run(["-U", "tail", root.path("bin.dat")]) == [
+            #"binary file matches (found "\0" byte around offset 6)"#,
+        ])
+        #expect(try runAllowingNoMatch(["-U", "needle.tail", root.path("bin.dat")]) == [])
+        #expect(try run(["-U", "--multiline-dotall", "needle.tail", root.path("bin.dat")]) == [
+            #"binary file matches (found "\0" byte around offset 6)"#,
+        ])
+        #expect(try run(["-U", #"(?s)needle.*tail"#, root.path("bin.dat")]) == [
+            #"binary file matches (found "\0" byte around offset 6)"#,
+        ])
         #expect(try run(["-n", "needle", root.path("before-nul.dat")]) == [
             #"binary file matches (found "\0" byte around offset 7)"#,
         ])
@@ -3701,6 +3734,14 @@ struct RipgrepSearcherTests {
         let passthruPostNulEnd = passthruPostNulMessages.first { $0["type"] as? String == "end" }?["data"] as? [String: Any]
         let passthruPostNulJSONStats = passthruPostNulEnd?["stats"] as? [String: Any]
         #expect(passthruPostNulJSONStats?["bytes_searched"] as? Int == 24)
+        let jsonNoMatchBinary = runWithExitCode(
+            ["-U", "--json", "^bar", countRoot.path("post-nul.txt")],
+            expectedExitCode: 1
+        )
+        let jsonNoMatchMessages = try jsonNoMatchBinary.map(jsonObject)
+        let jsonNoMatchSummary = jsonNoMatchMessages.first { $0["type"] as? String == "summary" }?["data"] as? [String: Any]
+        let jsonNoMatchStats = jsonNoMatchSummary?["stats"] as? [String: Any]
+        #expect(jsonNoMatchStats?["bytes_searched"] as? Int == 3)
         let beforeContextPostNulStats = runWithExitCode(
             ["--stats", "-B1", "needle", countRoot.path("post-nul.txt")],
             expectedExitCode: 1

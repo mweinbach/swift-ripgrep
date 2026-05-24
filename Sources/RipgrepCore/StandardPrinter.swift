@@ -62,7 +62,16 @@ public struct StandardPrinter {
                 }
             }
             if options.multiline, options.replacement == nil {
-                return results.files.flatMap { multilineMatchLines(for: $0, showPath: showPath(for: results)) }
+                return results.files.flatMap { result in
+                    let matchLines = multilineMatchLines(for: result, showPath: showPath(for: results))
+                    if let binaryLine = formatBinaryMatch(result, showPath: showPath(for: results)) {
+                        if let offset = result.binaryByteOffset, offset < 64 * 1024 {
+                            return [binaryLine]
+                        }
+                        return matchLines + [binaryLine]
+                    }
+                    return matchLines
+                }
             }
             return results.files.flatMap { result in
                 let matchLines = result.matches.flatMap { formatSearchMatch($0, showPath: showPath(for: results)) }
@@ -139,7 +148,7 @@ public struct StandardPrinter {
     }
 
     private func formatSearchMatch(_ match: SearchMatch, showPath: Bool) -> [String] {
-        guard options.multiline, match.line.contains("\n") || match.line.contains("\0") else {
+        guard options.multiline, containsRenderedLineTerminator(match.line) else {
             return [format(match, showPath: showPath)]
         }
 
@@ -308,7 +317,7 @@ public struct StandardPrinter {
             if shouldSuppressMultilineEmptyOnlyMatch(span) {
                 return [String]()
             }
-            if options.multiline, span.text.contains("\n") || span.text.contains("\0") {
+            if options.multiline, containsRenderedLineTerminator(span.text) {
                 return formatOnlyMatchingMultiline(span, in: match, showPath: showPath)
             }
             let replacementStartByte = replacementOffsets[index]
@@ -814,8 +823,7 @@ public struct StandardPrinter {
             return "\0"
         }
         if options.crlf,
-           (colors.isEnabled || crlfMatchTerminator),
-           terminator == "\n",
+           (terminator.isEmpty || colors.isEnabled || crlfMatchTerminator),
            line?.hasSuffix("\r") != true {
             return "\r"
         }
@@ -958,21 +966,25 @@ public struct StandardPrinter {
     }
 
     private func splitRenderedLines(_ text: String) -> [String] {
-        let terminator: Character = text.contains("\0") ? "\0" : "\n"
+        let terminator: UnicodeScalar = text.contains("\0") ? "\0" : "\n"
         var lines: [String] = []
-        var current = ""
-        for character in text {
-            if character == terminator {
-                lines.append(current)
-                current = ""
+        var current = String.UnicodeScalarView()
+        for scalar in text.unicodeScalars {
+            if scalar == terminator {
+                lines.append(String(current))
+                current.removeAll(keepingCapacity: true)
             } else {
-                current.append(character)
+                current.append(scalar)
             }
         }
-        if !current.isEmpty || text.last != terminator {
-            lines.append(current)
+        if !current.isEmpty || text.unicodeScalars.last != terminator {
+            lines.append(String(current))
         }
         return lines
+    }
+
+    private func containsRenderedLineTerminator(_ text: String) -> Bool {
+        text.unicodeScalars.contains("\n") || text.unicodeScalars.contains("\0")
     }
 
     private func firstRenderedLine(_ text: String) -> String {
@@ -982,13 +994,13 @@ public struct StandardPrinter {
     private func lineOffset(in text: String, beforeByteOffset byteOffset: Int) -> Int {
         var bytes = 0
         var lines = 0
-        let terminator: Character = text.contains("\0") ? "\0" : "\n"
-        for character in text {
+        let terminator: UnicodeScalar = text.contains("\0") ? "\0" : "\n"
+        for scalar in text.unicodeScalars {
             guard bytes < byteOffset else {
                 break
             }
-            bytes += String(character).utf8.count
-            if character == terminator {
+            bytes += String(scalar).utf8.count
+            if scalar == terminator {
                 lines += 1
             }
         }

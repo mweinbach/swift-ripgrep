@@ -26,7 +26,9 @@ public struct PatternMatcher {
                     binary detection is enabled and matching a NUL byte is impossible.
                     """)
                 }
-                if !options.multiline, Self.canMatchLineTerminator(pattern) {
+                if !options.multiline,
+                   !(options.nullData && !options.crlf),
+                   Self.canMatchLineTerminator(pattern) {
                     throw RipgrepError.message("""
                     the literal "\\n" is not allowed in a regex
 
@@ -301,6 +303,8 @@ public struct PatternMatcher {
     private static func regexPattern(for pattern: String, options: RipgrepOptions) -> String {
         var source = foundationNamedCapturePattern(for: pattern)
         source = foundationAnyClassPattern(for: source)
+        source = scalarDotAllWildcardPattern(for: source, options: options)
+        source = binaryWildcardPattern(for: source, options: options)
         source = foundationUnicodePropertyShorthandPattern(for: source)
         source = foundationScalarEscapePattern(for: source)
         source = asciiPOSIXClasses(for: source)
@@ -327,8 +331,10 @@ public struct PatternMatcher {
         }
         if options.crlf {
             source = crlfAnchorPattern(for: source)
+        } else if options.multiline {
+            source = multilineLineEndPattern(for: source)
         } else if options.nullData && !options.multiline {
-            source = nullDataLineEndPattern(for: source)
+            source = nullDataAnchorPattern(for: source)
         } else if !options.multiline && !options.nullData {
             source = strictLineEndPattern(for: source)
         }
@@ -419,6 +425,143 @@ public struct PatternMatcher {
             output.append("\\")
         }
         return output
+    }
+
+    private static func binaryWildcardPattern(for pattern: String, options: RipgrepOptions) -> String {
+        guard options.binaryMode != .asText,
+              !options.multilineDotall,
+              !hasInlineDotAllOption(pattern) else {
+            return pattern
+        }
+        var output = ""
+        var escaped = false
+        var inClass = false
+
+        for character in pattern {
+            if escaped {
+                output.append("\\")
+                output.append(character)
+                escaped = false
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                continue
+            }
+            if character == "[" {
+                inClass = true
+                output.append(character)
+                continue
+            }
+            if character == "]" {
+                inClass = false
+                output.append(character)
+                continue
+            }
+            if !inClass, character == "." {
+                output += "(?!\\x{0})."
+                continue
+            }
+            output.append(character)
+        }
+        if escaped {
+            output.append("\\")
+        }
+        return output
+    }
+
+    private static func scalarDotAllWildcardPattern(for pattern: String, options: RipgrepOptions) -> String {
+        guard options.multilineDotall || hasInlineDotAllOption(pattern) else {
+            return pattern
+        }
+        return transformWildcards(in: pattern, replacement: "[\\s\\S]")
+    }
+
+    private static func transformWildcards(in pattern: String, replacement: String) -> String {
+        var output = ""
+        var escaped = false
+        var inClass = false
+
+        for character in pattern {
+            if escaped {
+                output.append("\\")
+                output.append(character)
+                escaped = false
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                continue
+            }
+            if character == "[" {
+                inClass = true
+                output.append(character)
+                continue
+            }
+            if character == "]" {
+                inClass = false
+                output.append(character)
+                continue
+            }
+            if !inClass, character == "." {
+                output += replacement
+                continue
+            }
+            output.append(character)
+        }
+        if escaped {
+            output.append("\\")
+        }
+        return output
+    }
+
+    private static func hasInlineDotAllOption(_ pattern: String) -> Bool {
+        var escaped = false
+        var inClass = false
+        var index = pattern.startIndex
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                escaped = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "[" {
+                inClass = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "]" {
+                inClass = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if !inClass, pattern[index...].hasPrefix("(?") {
+                var optionIndex = pattern.index(index, offsetBy: 2)
+                var enablesDotAll = false
+                var disabling = false
+                while optionIndex < pattern.endIndex {
+                    let option = pattern[optionIndex]
+                    if option == ")" || option == ":" {
+                        return enablesDotAll
+                    }
+                    if option == "-" {
+                        disabling = true
+                    } else if option == "s" {
+                        enablesDotAll = !disabling
+                    }
+                    optionIndex = pattern.index(after: optionIndex)
+                }
+                return false
+            }
+            index = pattern.index(after: index)
+        }
+        return false
     }
 
     private static func foundationUnicodePropertyShorthandPattern(for pattern: String) -> String {
@@ -1102,9 +1245,22 @@ public struct PatternMatcher {
         }
     }
 
-    private static func nullDataLineEndPattern(for pattern: String) -> String {
+    private static func multilineLineEndPattern(for pattern: String) -> String {
         transformAnchors(in: pattern) { anchor in
-            anchor == "$" ? "(?=\\n|\\z)" : String(anchor)
+            anchor == "$" ? "(?<!\\r)(?=\\n|\\z)" : String(anchor)
+        }
+    }
+
+    private static func nullDataAnchorPattern(for pattern: String) -> String {
+        transformAnchors(in: pattern) { anchor in
+            switch anchor {
+            case "^":
+                return "(?:^|(?<=\\n))"
+            case "$":
+                return "(?=\\n|\\z)"
+            default:
+                return String(anchor)
+            }
         }
     }
 
