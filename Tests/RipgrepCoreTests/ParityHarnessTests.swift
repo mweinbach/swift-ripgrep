@@ -84,6 +84,7 @@ private func parityCases() -> [ParityCase] {
         + jsonParityCases()
         + miscParityCases()
         + featureParityCases()
+        + regressionParityCases()
 }
 
 private func existingParityCases() -> [ParityCase] {
@@ -179,6 +180,78 @@ private func binaryParityCases() -> [ParityCase] {
         ParityCase(name: "binary::matching_files_inconsistent_with_count_count", fixture: matchingFilesInconsistentFixture, arguments: ["--sort=path", "-c", "cat"]),
         ParityCase(name: "binary::matching_files_inconsistent_with_count_binary", fixture: matchingFilesInconsistentFixture, arguments: ["--sort=path", "-c", "cat", "--binary"]),
         ParityCase(name: "binary::matching_files_inconsistent_with_count_text", fixture: matchingFilesInconsistentFixture, arguments: ["--sort=path", "-c", "cat", "--text"]),
+    ]
+}
+
+private func regressionParityCases() -> [ParityCase] {
+    let sherlockFixture: (URL) throws -> Void = { dir in try write(SHERLOCK, to: "sherlock", in: dir) }
+    let r156Text = """
+#parse('widgets/foo_bar_macros.vm')
+#parse ( 'widgets/mobile/foo_bar_macros.vm' )
+#parse ("widgets/foobarhiddenformfields.vm")
+#parse ( "widgets/foo_bar_legal.vm" )
+#include( 'widgets/foo_bar_tips.vm' )
+#include('widgets/mobile/foo_bar_macros.vm')
+#include ("widgets/mobile/foo_bar_resetpw.vm")
+#parse('widgets/foo-bar-macros.vm')
+#parse ( 'widgets/mobile/foo-bar-macros.vm' )
+#parse ("widgets/foo-bar-hiddenformfields.vm")
+#parse ( "widgets/foo-bar-legal.vm" )
+#include( 'widgets/foo-bar-tips.vm' )
+#include('widgets/mobile/foo-bar-macros.vm')
+#include ("widgets/mobile/foo-bar-resetpw.vm")
+"""
+    return [
+        ParityCase(name: "regression::r16", fixture: { dir in try createDirectory(".git", in: dir); try write("ghi/", to: ".gitignore", in: dir); try write("xyz", to: "ghi/toplevel.txt", in: dir); try write("xyz", to: "def/ghi/subdir.txt", in: dir) }, arguments: ["xyz"]),
+        ParityCase(name: "regression::r25", fixture: { dir in try createDirectory(".git", in: dir); try write("/llvm/", to: ".gitignore", in: dir); try write("test", to: "src/llvm/foo", in: dir) }, arguments: ["test"]),
+        ParityCase(name: "regression::r30", fixture: { dir in try write("vendor/**\n!vendor/manifest", to: ".gitignore", in: dir); try write("test", to: "vendor/manifest", in: dir) }, arguments: ["test"]),
+        ParityCase(name: "regression::r49", fixture: { dir in try write("foo/bar", to: ".gitignore", in: dir); try write("test", to: "test/foo/bar/baz", in: dir) }, arguments: ["xyz"]),
+        ParityCase(name: "regression::r50", fixture: { dir in try write("XXX/YYY/", to: ".gitignore", in: dir); try write("test", to: "abc/def/XXX/YYY/bar", in: dir); try write("test", to: "ghi/XXX/YYY/bar", in: dir) }, arguments: ["xyz"]),
+        ParityCase(name: "regression::r64", fixture: { dir in try write("", to: "dir/abc", in: dir); try write("", to: "foo/abc", in: dir) }, arguments: ["--files", "foo"]),
+        ParityCase(name: "regression::r65", fixture: { dir in try createDirectory(".git", in: dir); try write("a/", to: ".gitignore", in: dir); try write("xyz", to: "a/foo", in: dir); try write("xyz", to: "a/bar", in: dir) }, arguments: ["xyz"]),
+        ParityCase(name: "regression::r67", fixture: { dir in try createDirectory(".git", in: dir); try write("/*\n!/dir", to: ".gitignore", in: dir); try write("test", to: "foo/bar", in: dir); try write("test", to: "dir/bar", in: dir) }, arguments: ["test"]),
+        ParityCase(name: "regression::r87", fixture: { dir in try createDirectory(".git", in: dir); try write("foo\n**no-vcs**", to: ".gitignore", in: dir); try write("test", to: "foo", in: dir) }, arguments: ["test"]),
+        ParityCase(name: "regression::r90", fixture: { dir in try createDirectory(".git", in: dir); try write("!.foo", to: ".gitignore", in: dir); try write("test", to: ".foo", in: dir) }, arguments: ["test"]),
+        ParityCase(name: "regression::r93", fixture: { dir in try write("192.168.1.1", to: "foo", in: dir) }, arguments: ["(\\d{1,3}\\.){3}\\d{1,3}"]),
+        ParityCase(name: "regression::r99", fixture: { dir in try write("test", to: "foo1", in: dir); try write("zzz", to: "foo2", in: dir); try write("test", to: "bar", in: dir) }, arguments: ["-j1", "--heading", "test"]),
+        ParityCase(name: "regression::r105_part1", fixture: { dir in try write("zztest", to: "foo", in: dir) }, arguments: ["--vimgrep", "test"]),
+        ParityCase(name: "regression::r105_part2", fixture: { dir in try write("zztest", to: "foo", in: dir) }, arguments: ["--column", "test"]),
+        ParityCase(name: "regression::r127", fixture: { dir in try createDirectory(".git", in: dir); try write("foo/sherlock\n", to: ".gitignore", in: dir); try write(SHERLOCK, to: "foo/sherlock", in: dir); try write(SHERLOCK, to: "foo/watson", in: dir) }, arguments: ["Sherlock"]),
+        ParityCase(name: "regression::r128", fixture: { dir in try write(Data([0x30,0x31,0x32,0x33,0x34,0x35,0x36,0x37,0x0b,0x0a,0x0b,0x0a,0x0b,0x0a,0x0b,0x0a,0x78]), to: "foo", in: dir) }, arguments: ["-n", "x"]),
+        ParityCase(name: "regression::r156", fixture: { dir in try write(r156Text, to: "testcase.txt", in: dir) }, arguments: ["-N", "#(?:parse|include)\\s*\\(\\s*(?:\"|')[./A-Za-z_-]+(?:\"|')", "testcase.txt"]),
+        ParityCase(name: "regression::r184", fixture: { dir in try write(".*", to: ".gitignore", in: dir); try write("test", to: "foo/bar/baz", in: dir) }, arguments: ["test"]),
+        ParityCase(name: "regression::r199", fixture: { dir in try write("tEsT", to: "foo", in: dir) }, arguments: ["--smart-case", "\\btest\\b"]),
+        ParityCase(name: "regression::r206", fixture: { dir in try write("test", to: "foo/bar.txt", in: dir) }, arguments: ["test", "-g", "*.txt"]),
+        ParityCase(name: "regression::r228", fixture: { dir in try createDirectory("foo", in: dir) }, arguments: ["--ignore-file", "foo", "test"]),
+        ParityCase(name: "regression::r229", fixture: { dir in try write("economie", to: "foo", in: dir) }, arguments: ["-S", "[E]conomie"]),
+        ParityCase(name: "regression::r251", fixture: { dir in try write("привет\nПривет\nПрИвЕт", to: "foo", in: dir) }, arguments: ["-i", "привет"]),
+        ParityCase(name: "regression::r270", fixture: { dir in try write("-test", to: "foo", in: dir) }, arguments: ["-e", "-test"]),
+        ParityCase(name: "regression::r279", fixture: { dir in try write("test", to: "foo", in: dir) }, arguments: ["-q", "test"]),
+        ParityCase(name: "regression::r391", fixture: { dir in try createDirectory(".git", in: dir); try write("", to: "lock", in: dir); try write("", to: "bar.py", in: dir); try write("", to: ".git/packed-refs", in: dir); try write("", to: ".git/description", in: dir) }, arguments: ["--no-ignore", "--hidden", "--follow", "--files", "--glob", "!{.git,node_modules,plugged}/**", "--glob", "*.{js,json,php,md,styl,scss,sass,pug,html,config,py,cpp,c,go,hs}"]),
+        ParityCase(name: "regression::r405", fixture: { dir in try write("test", to: "foo/bar/file1.txt", in: dir); try write("test", to: "bar/foo/file2.txt", in: dir) }, arguments: ["-g", "!/foo/**", "test"]),
+        ParityCase(name: "regression::r451_only_matching_as_in_issue", fixture: { dir in try write("1 2 3\n", to: "digits.txt", in: dir) }, arguments: ["--only-matching", "[0-9]+", "digits.txt"]),
+        ParityCase(name: "regression::r451_only_matching", fixture: { dir in try write("1 2 3\n123\n", to: "digits.txt", in: dir) }, arguments: ["--only-matching", "--column", "[0-9]", "digits.txt"]),
+        ParityCase(name: "regression::r483_matching_no_stdout", fixture: { dir in try write("", to: "file.py", in: dir) }, arguments: ["--quiet", "--files", "--glob", "*.py"]),
+        ParityCase(name: "regression::r483_non_matching_exit_code", fixture: { dir in try write("", to: "file.rs", in: dir) }, arguments: ["--quiet", "--files", "--glob", "*.py"]),
+        ParityCase(name: "regression::r493", fixture: { dir in try write("peshwaship 're seminomata", to: "input.txt", in: dir) }, arguments: ["-o", "\\b 're \\b", "input.txt"]),
+        ParityCase(name: "regression::r506_word_not_parenthesized", fixture: { dir in try write("min minimum amin\nmax maximum amax", to: "wb.txt", in: dir) }, arguments: ["-w", "-o", "min|max", "wb.txt"]),
+        ParityCase(name: "regression::r553_switch_once", fixture: sherlockFixture, arguments: ["-i", "sherlock"]),
+        ParityCase(name: "regression::r553_switch_twice", fixture: sherlockFixture, arguments: ["-i", "-i", "sherlock"]),
+        ParityCase(name: "regression::r553_flag_c1", fixture: sherlockFixture, arguments: ["-C", "1", "world|attached", "sherlock"]),
+        ParityCase(name: "regression::r553_flag_c0", fixture: sherlockFixture, arguments: ["-C", "0", "world|attached", "sherlock"]),
+        ParityCase(name: "regression::r568_leading_hyphen_e", fixture: { dir in try write("foo bar -baz\n", to: "file", in: dir) }, arguments: ["-e-baz", "-e", "-baz", "file"]),
+        ParityCase(name: "regression::r568_leading_hyphen_rni", fixture: { dir in try write("foo bar -baz\n", to: "file", in: dir) }, arguments: ["-rni", "bar", "file"]),
+        ParityCase(name: "regression::r568_leading_hyphen_replacement", fixture: { dir in try write("foo bar -baz\n", to: "file", in: dir) }, arguments: ["-r", "-n", "-i", "bar", "file"]),
+        ParityCase(name: "regression::r693_context_in_contextless_mode", fixture: { dir in try write("xyz\n", to: "foo", in: dir); try write("xyz\n", to: "bar", in: dir) }, arguments: ["-C1", "-c", "--sort-files", "xyz"]),
+        ParityCase(name: "regression::r807", fixture: { dir in try createDirectory(".git", in: dir); try write(".a/b", to: ".gitignore", in: dir); try write("test", to: ".a/b/file", in: dir); try write("test", to: ".a/c/file", in: dir) }, arguments: ["--hidden", "test"]),
+        ParityCase(name: "regression::r829_original", fixture: { dir in try write("/a/b", to: ".ignore", in: dir); try write("Sample text", to: "a/b/test.txt", in: dir) }, arguments: ["Sample"]),
+        ParityCase(name: "regression::r829_2731_root", fixture: { dir in try write("build/\n!/some_dir/build/", to: ".ignore", in: dir); try write("string", to: "some_dir/build/foo", in: dir) }, arguments: ["-l", "string"]),
+        ParityCase(name: "regression::r900", fixture: { dir in try write(SHERLOCK, to: "sherlock", in: dir); try write("", to: "pat", in: dir) }, arguments: ["-fpat", "sherlock"]),
+        ParityCase(name: "regression::r1064", fixture: { dir in try write("abc", to: "input", in: dir) }, arguments: ["a(.*c)"]),
+        ParityCase(name: "regression::r1098", fixture: { dir in try createDirectory(".git", in: dir); try write("a**b", to: ".gitignore", in: dir); try write("test", to: "afoob", in: dir) }, arguments: ["test"]),
+        ParityCase(name: "regression::r1130_files_with_matches", fixture: { dir in try write("test", to: "foo", in: dir) }, arguments: ["--files-with-matches", "test", "foo"]),
+        ParityCase(name: "regression::r1130_files_without_match", fixture: { dir in try write("test", to: "foo", in: dir) }, arguments: ["--files-without-match", "nada", "foo"]),
+        ParityCase(name: "regression::r1159_invalid_flag", fixture: { _ in }, arguments: ["--wat"]),
     ]
 }
 
