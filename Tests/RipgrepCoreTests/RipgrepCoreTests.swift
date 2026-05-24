@@ -1321,6 +1321,9 @@ struct RipgrepSearcherTests {
             [#"foo\x{0000A}bar"#, root.path("multi.txt")],
             [#"foo\u{A}bar"#, root.path("multi.txt")],
             [#"foo\u{0000A}bar"#, root.path("multi.txt")],
+            [#"[\n]"#, root.path("multi.txt")],
+            [#"[\x0A]"#, root.path("multi.txt")],
+            [#"[\u{A}]"#, root.path("multi.txt")],
         ] {
             var output: [String] = []
             var errors: [String] = []
@@ -1333,6 +1336,26 @@ struct RipgrepSearcherTests {
             #expect(output.isEmpty)
             #expect(errors == [multilineDisabledError])
         }
+        #expect(try run(["-n", #"[^a]+"#, root.path("multi.txt")]) == [
+            "1:foo",
+            "2:bar",
+            "3:baz",
+        ])
+        #expect(try run(["-n", #"[^\n]+"#, root.path("multi.txt")]) == [
+            "1:foo",
+            "2:bar",
+            "3:baz",
+        ])
+        #expect(try run(["-n", #"[^\x0A]+"#, root.path("multi.txt")]) == [
+            "1:foo",
+            "2:bar",
+            "3:baz",
+        ])
+        #expect(try run(["-n", #"[^\u{A}]+"#, root.path("multi.txt")]) == [
+            "1:foo",
+            "2:bar",
+            "3:baz",
+        ])
         #expect(try runAllowingNoMatch(["-F", #"foo\nbar"#, root.path("multi.txt")]) == [])
         try root.write("ab\n\ncd\n", to: "zero-width.txt")
         for pattern in ["^", "$", "(?:^)", "(?m:$)"] {

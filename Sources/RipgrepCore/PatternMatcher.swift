@@ -107,44 +107,96 @@ public struct PatternMatcher {
     }
 
     private static func canMatchLineTerminator(_ pattern: String) -> Bool {
-        if pattern.contains("\n") {
-            return true
-        }
-
         var escaped = false
+        var inClass = false
+        var classNegated = false
+        var classContentStarted = false
+        var classHasLineTerminator = false
+        var classHasOther = false
+        var escapeStart: String.Index?
         var index = pattern.startIndex
         while index < pattern.endIndex {
             let character = pattern[index]
             if escaped {
+                let escapeEnd = escapeStart.flatMap { regexEscapeEnd(in: pattern, backslashAt: $0) }
+                let matchesLineTerminator: Bool
                 if character == "n" {
+                    matchesLineTerminator = true
+                } else if character == "x" {
+                    let next = pattern.index(after: index)
+                    let remainder = pattern[next...].lowercased()
+                    matchesLineTerminator = remainder.hasPrefix("0a")
+                        || bracedHexEscapeValue(in: remainder) == 0x0A
+                } else if character == "u" {
+                    let next = pattern.index(after: index)
+                    let remainder = pattern[next...].lowercased()
+                    matchesLineTerminator = remainder.hasPrefix("000a")
+                        || bracedHexEscapeValue(in: remainder) == 0x0A
+                } else {
+                    matchesLineTerminator = false
+                }
+                if inClass {
+                    classContentStarted = true
+                    if matchesLineTerminator {
+                        classHasLineTerminator = true
+                    } else {
+                        classHasOther = true
+                    }
+                } else if matchesLineTerminator {
                     return true
                 }
-                if character == "x" {
-                    let next = pattern.index(after: index)
-                    let remainder = pattern[next...].lowercased()
-                    if remainder.hasPrefix("0a") {
-                        return true
-                    }
-                    if bracedHexEscapeValue(in: remainder) == 0x0A {
-                        return true
-                    }
-                }
-                if character == "u" {
-                    let next = pattern.index(after: index)
-                    let remainder = pattern[next...].lowercased()
-                    if remainder.hasPrefix("000a")
-                        || bracedHexEscapeValue(in: remainder) == 0x0A {
-                        return true
-                    }
-                }
                 escaped = false
-                index = pattern.index(after: index)
+                escapeStart = nil
+                index = escapeEnd ?? pattern.index(after: index)
                 continue
+            }
+            if character == "\n" && !inClass {
+                return true
             }
             if character == "\\" {
                 escaped = true
+                escapeStart = index
+                index = pattern.index(after: index)
+                continue
+            }
+            if inClass {
+                if character == "^", classNegated, !classContentStarted {
+                    index = pattern.index(after: index)
+                    continue
+                }
+                if character == "]", classContentStarted {
+                    if !classNegated && classHasLineTerminator && !classHasOther {
+                        return true
+                    }
+                    inClass = false
+                    classNegated = false
+                    classContentStarted = false
+                    classHasLineTerminator = false
+                    classHasOther = false
+                    index = pattern.index(after: index)
+                    continue
+                }
+                classContentStarted = true
+                if character == "\n" {
+                    classHasLineTerminator = true
+                } else {
+                    classHasOther = true
+                }
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "[" {
+                let next = pattern.index(after: index)
+                inClass = true
+                classNegated = next < pattern.endIndex && pattern[next] == "^"
+                classContentStarted = false
+                classHasLineTerminator = false
+                classHasOther = false
             }
             index = pattern.index(after: index)
+        }
+        if inClass, !classNegated, classHasLineTerminator, !classHasOther {
+            return true
         }
         return false
     }
