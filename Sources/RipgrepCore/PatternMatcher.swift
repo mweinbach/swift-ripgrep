@@ -584,6 +584,9 @@ public struct PatternMatcher {
     }
 
     private static func defaultRegexParseErrorIfRecognized(_ pattern: String) -> String? {
+        if let diagnostic = unrecognizedEscapeDiagnostic(pattern) {
+            return defaultRegexParseError(pattern: pattern, feature: diagnostic)
+        }
         if let diagnostic = unclosedOrInvalidClassDiagnostic(pattern) {
             return defaultRegexParseError(pattern: pattern, feature: diagnostic)
         }
@@ -592,6 +595,28 @@ public struct PatternMatcher {
         }
         if let diagnostic = unopenedGroupDiagnostic(pattern) {
             return defaultRegexParseError(pattern: pattern, feature: diagnostic)
+        }
+        return nil
+    }
+
+    private static func unrecognizedEscapeDiagnostic(_ pattern: String) -> UnsupportedRegexFeature? {
+        var escaped = false
+        var index = pattern.startIndex
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                if character == "q" {
+                    return UnsupportedRegexFeature(
+                        byteOffset: pattern[..<pattern.index(before: index)].utf8.count,
+                        caretLength: 2,
+                        message: "unrecognized escape sequence"
+                    )
+                }
+                escaped = false
+            } else if character == "\\" {
+                escaped = true
+            }
+            index = pattern.index(after: index)
         }
         return nil
     }

@@ -136,6 +136,22 @@ struct RipgrepSearcherTests {
         output = []
         errors = []
         exitCode = RipgrepCLI.run(
+            arguments: [#"\q"#, root.path("engine.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["""
+        rg: regex parse error:
+            (?:\\q)
+               ^^
+        error: unrecognized escape sequence
+        """])
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
             arguments: ["a{", root.path("engine.txt")],
             stdout: { output.append($0) },
             stderr: { errors.append($0) }
