@@ -37,6 +37,18 @@ struct RipgrepSearcherTests {
         #expect(try run(["-x", "abc", root.path("patterns.txt")]) == ["abc"])
         #expect(try run(["-w", "-x", "abc", root.path("patterns.txt")]) == ["abc"])
         #expect(try run(["-x", "-w", "abc", root.path("patterns.txt")]) == ["abc.123", "abc", "abc def"])
+        try root.write("abc abc123 123 abc_def x-y foo.bar foo/bar\nempty:\n", to: "word-edges.txt")
+        #expect(try run(["-wo", #"\D+"#, root.path("word-edges.txt")]) == [
+            "abc",
+            "abc_def x-y foo.bar foo/bar",
+            "empty:",
+        ])
+        #expect(try runAllowingNoMatch(["-wo", #"\W+"#, root.path("word-edges.txt")]) == [])
+        try root.write("é e\u{301} É π Δ δ привет Привет １２3\n", to: "unicode-word-edges.txt")
+        #expect(try run(["-wo", #"[[:^alpha:]]+"#, root.path("unicode-word-edges.txt")]) == [
+            "é",
+            "É π Δ δ привет Привет １２3",
+        ])
         #expect(try run(["-e", ")(", root.path("patterns.txt")]) == ["abc123", "abc.123", "abc", "abc def", "xabc"])
         try root.write("abc\n\n", to: "empty-literal.txt")
         #expect(try run(["-F", "", root.path("empty-literal.txt")]) == ["abc", ""])

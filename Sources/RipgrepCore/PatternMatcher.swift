@@ -534,6 +534,9 @@ public struct PatternMatcher {
         if options.noUnicode || hasInlineNoUnicode {
             source = byteRegexLiteralPattern(for: source)
         }
+        if options.wordRegexp {
+            source = wordRegexpPattern(for: source, options: options)
+        }
         if options.lineRegexp {
             source = "^(?:\(source))$"
         }
@@ -551,6 +554,13 @@ public struct PatternMatcher {
             source = strictLineEndPattern(for: source)
         }
         return source
+    }
+
+    private static func wordRegexpPattern(for source: String, options: RipgrepOptions) -> String {
+        let wordClass = options.noUnicode || hasInlineNoUnicodeOption(source)
+            ? "0-9A-Za-z_"
+            : "\\p{L}\\p{M}\\p{N}_"
+        return "(?<![\(wordClass)])(?:\(source))(?![\(wordClass)])"
     }
 
     private static func topLevelAlternatives(in pattern: String) -> [String] {
@@ -2286,7 +2296,25 @@ public struct PatternMatcher {
     private func isWordBounded(_ range: Range<String.Index>, in line: String) -> Bool {
         let before = range.lowerBound == line.startIndex ? nil : line[line.index(before: range.lowerBound)]
         let after = range.upperBound == line.endIndex ? nil : line[range.upperBound]
-        return !isWordCharacter(before) && !isWordCharacter(after)
+        if range.isEmpty {
+            return !isWordCharacter(before) && !isWordCharacter(after)
+        }
+
+        let matched = line[range]
+        guard matched.contains(where: { isWordCharacter($0) }) else {
+            return false
+        }
+        if let first = matched.first,
+           isWordCharacter(first),
+           isWordCharacter(before) {
+            return false
+        }
+        if let last = matched.last,
+           isWordCharacter(last),
+           isWordCharacter(after) {
+            return false
+        }
+        return true
     }
 
     private func isWordCharacter(_ character: Character?) -> Bool {
@@ -2297,7 +2325,9 @@ public struct PatternMatcher {
             return character.isASCIIWordCharacter
         }
         return character.unicodeScalars.allSatisfy {
-            CharacterSet.alphanumerics.contains($0) || $0 == "_"
+            CharacterSet.alphanumerics.contains($0)
+                || CharacterSet.nonBaseCharacters.contains($0)
+                || $0 == "_"
         }
     }
 }
