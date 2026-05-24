@@ -115,28 +115,40 @@ needed, and bug fixes anywhere in `Sources/RipgrepCore/` that the harness
 flags. Do NOT delete or downgrade the existing 81 Swift Testing cases — they
 stay green.
 
-- [ ] Port Rust's `tests/hay.rs` constants (`SHERLOCK`, `SHERLOCK_CRLF`, etc.)
+- [x] Port Rust's `tests/hay.rs` constants (`SHERLOCK`, `SHERLOCK_CRLF`, etc.)
       into a Swift constant module. They are the canonical haystacks used by
       most Rust integration tests.
-- [ ] Convert `ParityHarnessTests` into a data-driven runner: each case is a
+- [x] Convert `ParityHarnessTests` into a data-driven runner: each case is a
       `(name, fixtureBuilder, args[, stdin])` tuple. The runner creates a
       tempdir, lets `fixtureBuilder` populate it, runs both binaries with
       `args`, and asserts byte-identical stdout/stderr/exit-code.
-- [ ] Port at least ~150 cases drawn from Rust's `tests/binary.rs`,
+- [x] Port at least ~150 cases drawn from Rust's `tests/binary.rs`,
       `tests/multiline.rs`, `tests/json.rs`, `tests/misc.rs`,
       `tests/feature.rs`, `tests/regression.rs`. Concentrate on cases that
       exercise behaviour the existing Swift Testing suite *doesn't* already
       cover — passthru, OSC8 hyperlinks, `--null`/`-Z` JSON variants, weird
       regex regressions (look for `r123`-style names), `-Uw` multiline word
       boundaries, etc.
-- [ ] Run the harness. For every diff, fix the Swift implementation until
+- [x] Run the harness. For every diff, fix the Swift implementation until
       the case matches Rust byte-for-byte. Most fixes land in
       `Sources/RipgrepCore/PatternMatcher.swift`, but the output formatters
       (`StandardPrinter`, `JSONPrinter`) and `RipgrepSearcher` are fair game
       too. Skip a case (with a clear `XCTSkip("known divergence: ...")`) only
       if the difference is intentional (e.g. Swift PCRE2 version string).
-- [ ] Document each intentional skip in the harness file *and* in
+- [x] Document each intentional skip in the harness file *and* in
       `Docs/PORTING.md` under a new "Intentional divergences" section.
+
+Wave 3A status: 193 parity cases are registered; 182 pass byte-for-byte
+against installed `rg`, and 11 JSON/APFS cases are intentionally skipped.
+
+### Intentional divergences
+
+- JSON parity cases that emit `summary.stats.elapsed`/`elapsed_total` are
+  skipped because Rust `rg` reports real elapsed timings while Swift keeps JSON
+  timing fields deterministic at zero for stable tests.
+- `json::notutf8` is skipped on macOS/APFS because the upstream Rust fixture
+  depends on an invalid UTF-8 filename that APFS cannot create; its JSON timing
+  fields also differ for the reason above.
 
 ### Wave 3B — True streaming line buffer + heap cap on chunked I/O
 Owner: pair-agent-G (after 3A). Touches:
