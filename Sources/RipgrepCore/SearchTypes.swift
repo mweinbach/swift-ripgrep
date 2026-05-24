@@ -101,6 +101,8 @@ public struct SearchFileResult: Equatable, Sendable {
     public let stoppedBinaryAfterMatch: Bool
     public let bytesSearched: Int
     public let searched: Bool
+    public let supplementalMatchedLines: Int
+    public let supplementalMatches: Int
 
     public init(
         fileURL: URL,
@@ -110,7 +112,9 @@ public struct SearchFileResult: Equatable, Sendable {
         hasBinaryMatch: Bool = false,
         stoppedBinaryAfterMatch: Bool = false,
         bytesSearched: Int = 0,
-        searched: Bool = true
+        searched: Bool = true,
+        supplementalMatchedLines: Int = 0,
+        supplementalMatches: Int = 0
     ) {
         self.fileURL = fileURL
         self.matches = matches
@@ -120,6 +124,8 @@ public struct SearchFileResult: Equatable, Sendable {
         self.stoppedBinaryAfterMatch = stoppedBinaryAfterMatch
         self.bytesSearched = bytesSearched
         self.searched = searched
+        self.supplementalMatchedLines = supplementalMatchedLines
+        self.supplementalMatches = supplementalMatches
     }
 
     public var hasMatch: Bool {

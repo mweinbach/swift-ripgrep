@@ -85,6 +85,19 @@ public struct JSONPrinter {
             guard let line = result.lines.first(where: { $0.lineNumber == lineNumber }) else {
                 return nil
             }
+            if !options.passthru, !options.invertMatch, !line.positiveSpans.isEmpty {
+                return matchMessage(SearchMatch(
+                    fileURL: result.fileURL,
+                    lineNumber: line.lineNumber,
+                    column: options.column ? line.positiveSpans.first?.startColumn : nil,
+                    line: line.line,
+                    rawLine: line.rawLine,
+                    lineTerminator: line.lineTerminator,
+                    absoluteOffset: line.absoluteOffset,
+                    matchCount: line.positiveSpans.count,
+                    spans: line.positiveSpans
+                ), path: path)
+            }
             return contextMessage(line, path: path)
         }
     }
@@ -147,14 +160,14 @@ public struct JSONPrinter {
     }
 
     private func fileStatsObject(for result: SearchFileResult, bytesPrinted: Int) -> JSONValue {
-        let matchCount = options.invertMatch ? 0 : result.matches.reduce(0) { $0 + $1.matchCount }
+        let matchCount = options.invertMatch ? 0 : result.matches.reduce(0) { $0 + $1.matchCount } + result.supplementalMatches
         return .object([
             ("elapsed", fileElapsedObject()),
             ("searches", .int(result.searched ? 1 : 0)),
             ("searches_with_match", .int(result.hasMatch ? 1 : 0)),
             ("bytes_searched", .int(result.bytesSearched)),
             ("bytes_printed", .int(bytesPrinted)),
-            ("matched_lines", .int(result.matches.reduce(0) { $0 + MatchedLineCounter.count($1, options: options) })),
+            ("matched_lines", .int(result.matches.reduce(0) { $0 + MatchedLineCounter.count($1, options: options) } + result.supplementalMatchedLines)),
             ("matches", .int(matchCount == 0 && result.hasBinaryMatch ? 1 : matchCount)),
         ])
     }

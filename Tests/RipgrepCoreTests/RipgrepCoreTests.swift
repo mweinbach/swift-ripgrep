@@ -1325,6 +1325,18 @@ struct RipgrepSearcherTests {
         #expect(limitedOutput.contains("2 matches"))
         #expect(limitedOutput.contains("10 bytes searched"))
 
+        let contextRoot = try TemporaryDirectory()
+        try contextRoot.write("pre\nneedle one\nctx\nneedle two\npost\n", to: "max-context-stats.txt")
+        let limitedContextOutput = try run(["--stats", "-m1", "-A2", "needle", contextRoot.path("max-context-stats.txt")])
+        #expect(limitedContextOutput.contains("2 matches"))
+        #expect(limitedContextOutput.contains("2 matched lines"))
+        #expect(limitedContextOutput.contains("30 bytes searched"))
+
+        let passthruOutput = try run(["--stats", "-m1", "--passthru", "needle", contextRoot.path("max-context-stats.txt")])
+        #expect(passthruOutput.contains("1 matches"))
+        #expect(passthruOutput.contains("1 matched lines"))
+        #expect(passthruOutput.contains("35 bytes searched"))
+
         let countOutput = try run(["--sort", "path", "--stats", "--count", "needle", root.url.path])
         #expect(countOutput.contains("\(root.path("stats.txt")):2"))
         #expect(countOutput.contains("2 matches"))
@@ -2165,6 +2177,41 @@ struct RipgrepSearcherTests {
         let summary = messages[5]["data"] as? [String: Any]
         let summaryStats = summary?["stats"] as? [String: Any]
         #expect(summaryStats?["bytes_printed"] as? Int == stats?["bytes_printed"] as? Int)
+
+        try root.write("pre\nneedle one\nctx\nneedle two\npost\n", to: "max-context-json.txt")
+        let maxContextOutput = try run(["--json", "-m1", "-A2", "needle", root.path("max-context-json.txt")])
+        let maxContextMessages = try maxContextOutput.map(jsonObject)
+        #expect(maxContextMessages.map { $0["type"] as? String } == [
+            "begin",
+            "match",
+            "context",
+            "match",
+            "end",
+            "summary",
+        ])
+        let maxContextEnd = maxContextMessages[4]["data"] as? [String: Any]
+        let maxContextStats = maxContextEnd?["stats"] as? [String: Any]
+        #expect(maxContextStats?["bytes_searched"] as? Int == 30)
+        #expect(maxContextStats?["matched_lines"] as? Int == 2)
+        #expect(maxContextStats?["matches"] as? Int == 2)
+
+        let passthruJSONOutput = try run(["--json", "-m1", "--passthru", "needle", root.path("max-context-json.txt")])
+        let passthruJSONMessages = try passthruJSONOutput.map(jsonObject)
+        #expect(passthruJSONMessages.map { $0["type"] as? String } == [
+            "begin",
+            "context",
+            "match",
+            "context",
+            "context",
+            "context",
+            "end",
+            "summary",
+        ])
+        let passthruJSONEnd = passthruJSONMessages[6]["data"] as? [String: Any]
+        let passthruJSONStats = passthruJSONEnd?["stats"] as? [String: Any]
+        #expect(passthruJSONStats?["bytes_searched"] as? Int == 35)
+        #expect(passthruJSONStats?["matched_lines"] as? Int == 1)
+        #expect(passthruJSONStats?["matches"] as? Int == 1)
 
         let invertedOutput = try run(["--json", "-v", "needle", root.path("json.txt")])
         let invertedMessages = try invertedOutput.map(jsonObject)

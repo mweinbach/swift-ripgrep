@@ -131,14 +131,14 @@ public struct RipgrepSearcher {
             filesWithMatches: matchedFiles.count,
             matchedLines: matchedFiles.reduce(0) { total, file in
                 let matchedLines = file.matches.reduce(0) { $0 + MatchedLineCounter.count($1, options: options) }
-                return total + (matchedLines == 0 && file.hasBinaryMatch ? 1 : matchedLines)
+                return total + (matchedLines == 0 && file.hasBinaryMatch ? 1 : matchedLines) + file.supplementalMatchedLines
             },
             totalMatches: matchedFiles.reduce(0) { total, file in
                 if options.invertMatch {
                     return total
                 }
                 let matchCount = file.matches.reduce(0) { $0 + $1.matchCount }
-                return total + (matchCount == 0 && file.hasBinaryMatch ? 1 : matchCount)
+                return total + (matchCount == 0 && file.hasBinaryMatch ? 1 : matchCount) + file.supplementalMatches
             }
         )
 
@@ -298,7 +298,9 @@ public struct RipgrepSearcher {
             matches: result.matches,
             lines: result.lines,
             bytesSearched: result.bytesSearched,
-            searched: result.searched
+            searched: result.searched,
+            supplementalMatchedLines: result.supplementalMatchedLines,
+            supplementalMatches: result.supplementalMatches
         ))
     }
 
@@ -726,8 +728,95 @@ public struct RipgrepSearcher {
             fileURL: fileURL,
             matches: matches,
             lines: searchLines,
-            bytesSearched: bytesSearchedThroughMaxCount ?? absoluteOffset
+            bytesSearched: bytesSearched(
+                lines: searchLines,
+                matches: matches,
+                bytesSearchedThroughMaxCount: bytesSearchedThroughMaxCount,
+                totalBytes: absoluteOffset,
+                options: options
+            ),
+            supplementalMatchedLines: supplementalMatchedLineCount(
+                lines: searchLines,
+                matches: matches,
+                options: options
+            ),
+            supplementalMatches: supplementalMatchCount(
+                lines: searchLines,
+                matches: matches,
+                options: options
+            )
         )
+    }
+
+    private func bytesSearched(
+        lines: [SearchLine],
+        matches: [SearchMatch],
+        bytesSearchedThroughMaxCount: Int?,
+        totalBytes: Int,
+        options: RipgrepOptions
+    ) -> Int {
+        if options.passthru {
+            return totalBytes
+        }
+        guard options.beforeContext > 0 || options.afterContext > 0 else {
+            return bytesSearchedThroughMaxCount ?? totalBytes
+        }
+        let selected = selectedContextLineNumbers(lineCount: lines.count, matches: matches, options: options)
+        guard let lastLineNumber = selected.max(),
+              let line = lines.first(where: { $0.lineNumber == lastLineNumber }) else {
+            return bytesSearchedThroughMaxCount ?? totalBytes
+        }
+        return line.absoluteOffset + byteCount(line.line, options: options) + byteCount(line.lineTerminator, options: options)
+    }
+
+    private func supplementalMatchedLineCount(
+        lines: [SearchLine],
+        matches: [SearchMatch],
+        options: RipgrepOptions
+    ) -> Int {
+        supplementalMatchingContextLines(lines: lines, matches: matches, options: options).count
+    }
+
+    private func supplementalMatchCount(
+        lines: [SearchLine],
+        matches: [SearchMatch],
+        options: RipgrepOptions
+    ) -> Int {
+        supplementalMatchingContextLines(lines: lines, matches: matches, options: options)
+            .reduce(0) { $0 + $1.positiveSpans.count }
+    }
+
+    private func supplementalMatchingContextLines(
+        lines: [SearchLine],
+        matches: [SearchMatch],
+        options: RipgrepOptions
+    ) -> [SearchLine] {
+        guard !options.passthru,
+              !options.invertMatch,
+              options.beforeContext > 0 || options.afterContext > 0 else {
+            return []
+        }
+        let matchedLineNumbers = Set(matches.map(\.lineNumber))
+        let selected = selectedContextLineNumbers(lineCount: lines.count, matches: matches, options: options)
+        return lines.filter {
+            selected.contains($0.lineNumber)
+                && !matchedLineNumbers.contains($0.lineNumber)
+                && !$0.positiveSpans.isEmpty
+        }
+    }
+
+    private func selectedContextLineNumbers(
+        lineCount: Int,
+        matches: [SearchMatch],
+        options: RipgrepOptions
+    ) -> Set<Int> {
+        matches.reduce(into: Set<Int>()) { lineNumbers, match in
+            let lower = max(1, match.lineNumber - options.beforeContext)
+            let upper = min(lineCount, match.lineNumber + options.afterContext)
+            for lineNumber in lower...upper {
+                lineNumbers.insert(lineNumber)
+            }
+        }
     }
 
     private func searchMultilineContents(
