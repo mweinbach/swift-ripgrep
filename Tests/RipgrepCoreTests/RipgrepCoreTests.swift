@@ -3585,6 +3585,18 @@ struct RipgrepSearcherTests {
 
         output = []
         exitCode = RipgrepCLI.run(
+            arguments: ["--json", "needle"],
+            stdout: { output.append($0) },
+            stdin: "needle\n"
+        )
+        #expect(exitCode == 0)
+        let jsonMessages = try output.map(jsonObject)
+        let beginData = jsonMessages[0]["data"] as? [String: Any]
+        let beginPath = beginData?["path"] as? [String: String]
+        #expect(beginPath?["text"] == "<stdin>")
+
+        output = []
+        exitCode = RipgrepCLI.run(
             arguments: ["-c", "needle", "-"],
             stdout: { output.append($0) },
             stdin: "pre\nneedle before\n\0binary needle after\n"

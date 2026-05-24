@@ -15,7 +15,7 @@ struct OutputPathFormatter {
     }
 
     func displayPath(for url: URL) -> String {
-        if url.path == "-" || url.path == "<stdin>" {
+        if isStdinSentinel(url) {
             return "<stdin>"
         }
 
@@ -35,6 +35,13 @@ struct OutputPathFormatter {
         }
 
         return applyPathSeparator(path)
+    }
+
+    private func isStdinSentinel(_ url: URL) -> Bool {
+        let path = url.standardizedFileURL.path
+        return path == "-"
+            || path == "<stdin>"
+            || (url.lastPathComponent == "<stdin>" && !FileManager.default.fileExists(atPath: path))
     }
 
     private func displayPathFromRootArgument(for path: String) -> String? {
