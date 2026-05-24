@@ -939,13 +939,16 @@ public struct RipgrepSearcher {
         if options.passthru {
             return totalBytes
         }
+        guard let bytesSearchedThroughMaxCount else {
+            return totalBytes
+        }
         guard options.beforeContext > 0 || options.afterContext > 0 else {
-            return bytesSearchedThroughMaxCount ?? totalBytes
+            return bytesSearchedThroughMaxCount
         }
         let selected = selectedContextLineNumbers(lineCount: lines.count, matches: matches, options: options)
         guard let lastLineNumber = selected.max(),
               let line = lines.first(where: { $0.lineNumber == lastLineNumber }) else {
-            return bytesSearchedThroughMaxCount ?? totalBytes
+            return bytesSearchedThroughMaxCount
         }
         return line.absoluteOffset + byteCount(line.line, options: options) + byteCount(line.lineTerminator, options: options)
     }

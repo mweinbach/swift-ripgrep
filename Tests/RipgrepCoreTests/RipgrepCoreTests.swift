@@ -2376,6 +2376,13 @@ struct RipgrepSearcherTests {
         let summaryStats = summary?["stats"] as? [String: Any]
         #expect(summaryStats?["bytes_printed"] as? Int == stats?["bytes_printed"] as? Int)
 
+        try root.write("alpha needle\nneedle beta\nzzz\n", to: "context-bytes-json.txt")
+        let contextBytesOutput = try run(["--json", "-B1", "needle", root.path("context-bytes-json.txt")])
+        let contextBytesMessages = try contextBytesOutput.map(jsonObject)
+        let contextBytesEnd = contextBytesMessages[4]["data"] as? [String: Any]
+        let contextBytesStats = contextBytesEnd?["stats"] as? [String: Any]
+        #expect(contextBytesStats?["bytes_searched"] as? Int == "alpha needle\nneedle beta\nzzz\n".utf8.count)
+
         try root.write("pre\nneedle one\nctx\nneedle two\npost\n", to: "max-context-json.txt")
         let maxContextOutput = try run(["--json", "-m1", "-A2", "needle", root.path("max-context-json.txt")])
         let maxContextMessages = try maxContextOutput.map(jsonObject)
