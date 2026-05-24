@@ -90,6 +90,18 @@ struct RipgrepSearcherTests {
         #expect(try run(["-o", #"\x{E9}"#, root.path("scalars.txt")]) == ["é"])
         #expect(try run(["-o", #"\u{03C0}"#, root.path("scalars.txt")]) == ["π"])
         #expect(try run(["-o", #"\x{2E}"#, root.path("scalars.txt")]) == ["."])
+        try root.write("a é z-9_\na\u{0B}b\n", to: "posix.txt")
+        #expect(try run(["-o", #"[[:word:]]+"#, root.path("posix.txt")]) == ["a", "z", "9_", "a", "b"])
+        #expect(try run(["-o", #"[[:^word:]]+"#, root.path("posix.txt")]) == [" é ", "-", "\u{0B}"])
+        #expect(try run(["-o", #"[a[:^word:]]+"#, root.path("posix.txt")]) == ["a é ", "-", "a\u{0B}"])
+        let noUnicodeNegatedWord = try runExecutableData([
+            "--no-unicode",
+            "-o",
+            #"[[:^word:]]+"#,
+            root.path("posix.txt"),
+        ]) {}
+        #expect(noUnicodeNegatedWord == Data(" é \n-\n\u{0B}\n".utf8))
+        #expect(try run(["-o", #"[[:space:]]+"#, root.path("posix.txt")]) == [" ", " ", "\u{0B}"])
     }
 
     @Test("honors regex engine flag ordering")

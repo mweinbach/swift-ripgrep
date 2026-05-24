@@ -473,6 +473,7 @@ public struct PatternMatcher {
         source = binaryWildcardPattern(for: source, options: options)
         source = foundationUnicodePropertyShorthandPattern(for: source)
         source = foundationScalarEscapePattern(for: source)
+        source = negatedASCIIPosixClasses(for: source)
         source = asciiPOSIXClasses(for: source)
         if source == ")(" {
             source = ""
@@ -1469,6 +1470,141 @@ public struct PatternMatcher {
     private static let asciiNotWordBoundaryPattern =
         "(?:(?<=[0-9A-Za-z_])(?=[0-9A-Za-z_])|(?<![0-9A-Za-z_])(?![0-9A-Za-z_]))"
 
+    private static let asciiPOSIXClassRanges = [
+        "alnum": "0-9A-Za-z",
+        "alpha": "A-Za-z",
+        "blank": " \\t",
+        "digit": "0-9",
+        "lower": "a-z",
+        "space": " \\t\\r\\n\\u000B\\f",
+        "upper": "A-Z",
+        "word": "0-9A-Za-z_",
+        "xdigit": "0-9A-Fa-f",
+    ]
+
+    private static func negatedASCIIPosixClasses(for pattern: String) -> String {
+        var output = ""
+        var escaped = false
+        var index = pattern.startIndex
+
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                output.append(character)
+                escaped = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "\\" {
+                output.append(character)
+                escaped = true
+                index = pattern.index(after: index)
+                continue
+            }
+            guard character == "[",
+                  let close = characterClassClose(in: pattern, openingAt: index) else {
+                output.append(character)
+                index = pattern.index(after: index)
+                continue
+            }
+
+            let contentStart = pattern.index(after: index)
+            let content = String(pattern[contentStart..<close])
+            if let replacement = negatedASCIIPosixClassReplacement(forClassContent: content) {
+                output += replacement
+            } else {
+                output.append(contentsOf: pattern[index...close])
+            }
+            index = pattern.index(after: close)
+        }
+
+        if escaped {
+            output.append("\\")
+        }
+        return output
+    }
+
+    private static func characterClassClose(in pattern: String, openingAt opening: String.Index) -> String.Index? {
+        var escaped = false
+        var index = pattern.index(after: opening)
+        var contentStarted = false
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                escaped = false
+                contentStarted = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                contentStarted = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "[", pattern[index...].hasPrefix("[:"),
+               let posixClose = posixClassClose(in: pattern, openingAt: index) {
+                contentStarted = true
+                index = pattern.index(after: posixClose)
+                continue
+            }
+            if character == "]", contentStarted {
+                return index
+            }
+            contentStarted = true
+            index = pattern.index(after: index)
+        }
+        return nil
+    }
+
+    private static func posixClassClose(in pattern: String, openingAt opening: String.Index) -> String.Index? {
+        var index = pattern.index(after: opening)
+        while index < pattern.endIndex {
+            if pattern[index] == "]",
+               index > pattern.startIndex,
+               pattern[pattern.index(before: index)] == ":" {
+                return index
+            }
+            index = pattern.index(after: index)
+        }
+        return nil
+    }
+
+    private static func negatedASCIIPosixClassReplacement(forClassContent content: String) -> String? {
+        guard !content.hasPrefix("^") else {
+            return nil
+        }
+
+        var positiveContent = ""
+        var negatedRanges: [String] = []
+        var index = content.startIndex
+        while index < content.endIndex {
+            if content[index...].hasPrefix("[:^"),
+               let close = content[index...].firstIndex(of: "]") {
+                let nameStart = content.index(index, offsetBy: 3)
+                let nameEnd = content.index(before: close)
+                let name = String(content[nameStart..<nameEnd])
+                if let range = asciiPOSIXClassRanges[name] {
+                    negatedRanges.append(range)
+                    index = content.index(after: close)
+                    continue
+                }
+            }
+            positiveContent.append(content[index])
+            index = content.index(after: index)
+        }
+
+        guard !negatedRanges.isEmpty else {
+            return nil
+        }
+
+        var alternatives = negatedRanges.map { "[^\($0)]" }
+        if !positiveContent.isEmpty {
+            alternatives.insert("[\(positiveContent)]", at: 0)
+        }
+        return "(?:\(alternatives.joined(separator: "|")))"
+    }
+
     private static func asciiPOSIXClasses(for pattern: String) -> String {
         var output = ""
         var escaped = false
@@ -1514,17 +1650,9 @@ public struct PatternMatcher {
         at index: String.Index,
         in pattern: String
     ) -> (value: String, end: String.Index)? {
-        let replacements = [
-            "[:alnum:]": "0-9A-Za-z",
-            "[:alpha:]": "A-Za-z",
-            "[:blank:]": " \\t",
-            "[:digit:]": "0-9",
-            "[:lower:]": "a-z",
-            "[:space:]": " \\t\\r\\n\\f",
-            "[:upper:]": "A-Z",
-            "[:word:]": "0-9A-Za-z_",
-            "[:xdigit:]": "0-9A-Fa-f",
-        ]
+        let replacements = asciiPOSIXClassRanges.reduce(into: [String: String]()) { result, entry in
+            result["[:\(entry.key):]"] = entry.value
+        }
         for (token, value) in replacements where pattern[index...].hasPrefix(token) {
             return (value, pattern.index(index, offsetBy: token.count))
         }
