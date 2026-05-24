@@ -3335,6 +3335,33 @@ struct RipgrepSearcherTests {
             "<stdin>:1:needle",
             "\(root.path("file.txt")):1:needle",
         ])
+
+        output = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["-c", "needle", "-"],
+            stdout: { output.append($0) },
+            stdin: "pre\nneedle before\n\0binary needle after\n"
+        )
+        #expect(exitCode == 0)
+        #expect(output == ["2"])
+
+        output = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--json", "needle", "-"],
+            stdout: { output.append($0) },
+            stdin: "pre\nneedle before\n\0binary needle after\n"
+        )
+        #expect(exitCode == 0)
+        let stdinJsonMessages = try output.map(jsonObject)
+        let stdinJsonMatches = stdinJsonMessages.compactMap { message -> [String: Any]? in
+            guard message["type"] as? String == "match" else { return nil }
+            return message["data"] as? [String: Any]
+        }
+        #expect(stdinJsonMatches.count == 2)
+        let stdinJsonSecondLines = stdinJsonMatches[1]["lines"] as? [String: String]
+        let stdinJsonSecondSubmatches = stdinJsonMatches[1]["submatches"] as? [[String: Any]]
+        #expect(stdinJsonSecondLines?["text"] == "binary needle after\n")
+        #expect(stdinJsonSecondSubmatches?.first?["start"] as? Int == 7)
     }
 
     @Test("searches piped stdin for implicit default path")

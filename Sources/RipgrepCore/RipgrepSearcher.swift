@@ -361,11 +361,18 @@ public struct RipgrepSearcher {
             return result
         }
         let binaryDetectedBeforeSearch = binaryByteOffset < Self.binaryDetectionBufferSize
+        let visibleMatches = binaryDetectedBeforeSearch
+            ? []
+            : matchesBeforeBinary(result.matches, binaryByteOffset: binaryByteOffset)
+        let emittedMatches = shouldEmitSuppressedBinaryMatches(options, isExplicit: true)
+            ? result.matches
+            : visibleMatches
+        let displayMatches = options.json
+            ? jsonBinaryDisplayMatches(emittedMatches, options: options)
+            : emittedMatches
         return SearchFileResult(
             fileURL: fileURL,
-            matches: binaryDetectedBeforeSearch
-                ? []
-                : matchesBeforeBinary(result.matches, binaryByteOffset: binaryByteOffset),
+            matches: displayMatches,
             lines: result.lines,
             binaryByteOffset: binaryByteOffset,
             hasBinaryMatch: result.hasMatch,
