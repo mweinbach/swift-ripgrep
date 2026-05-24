@@ -5164,6 +5164,53 @@ struct RipgrepSearcherTests {
 
         output = []
         exitCode = RipgrepCLI.run(
+            arguments: ["-H", "-n", "needle", root.path("file.txt"), "-"],
+            stdout: { output.append($0) },
+            stdin: "needle\n"
+        )
+        #expect(exitCode == 0)
+        #expect(output == [
+            "\(root.path("file.txt")):1:needle",
+            "<stdin>:1:needle",
+        ])
+
+        output = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["-H", "needle", root.path("file.txt"), "-", root.path("file.txt")],
+            stdout: { output.append($0) },
+            stdin: "needle\n"
+        )
+        #expect(exitCode == 0)
+        #expect(output == [
+            "\(root.path("file.txt")):needle",
+            "<stdin>:needle",
+            "\(root.path("file.txt")):needle",
+        ])
+
+        output = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--files-without-match", "nomatch", "-", root.path("file.txt"), "-"],
+            stdout: { output.append($0) },
+            stdin: "needle\n"
+        )
+        #expect(exitCode == 0)
+        #expect(output == [
+            "<stdin>",
+            "\(root.path("file.txt"))",
+            "<stdin>",
+        ])
+
+        output = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--files-without-match", "needle", "-", root.path("file.txt"), "-"],
+            stdout: { output.append($0) },
+            stdin: "needle\n"
+        )
+        #expect(exitCode == 0)
+        #expect(output == ["<stdin>"])
+
+        output = []
+        exitCode = RipgrepCLI.run(
             arguments: ["--sort", "path", "-H", "needle", "-", root.path("file.txt")],
             stdout: { output.append($0) },
             stdin: "needle stdin\n"
@@ -5182,8 +5229,8 @@ struct RipgrepSearcherTests {
         )
         #expect(exitCode == 0)
         #expect(output == [
-            "\(root.path("file.txt")):needle",
             "<stdin>:needle stdin",
+            "\(root.path("file.txt")):needle",
         ])
 
         output = []

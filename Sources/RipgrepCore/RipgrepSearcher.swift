@@ -90,37 +90,46 @@ public struct RipgrepSearcher {
 
         if options.useStdin {
             let stdinData = stdin.map { Data($0.utf8) } ?? FileHandle.standardInput.readDataToEndOfFile()
-            let stdinResult = searchStdin(stdinData, matcher: matcher, options: options)
-            if let dashIndex = firstStdinRootIndex(in: options),
-               preservesExplicitStdinPosition(options: options) {
+            let stdinResults = stdinSearchResults(
+                stdinData,
+                matcher: matcher,
+                options: options
+            )
+            if preservesExplicitStdinPosition(options: options) {
                 var ordered: [SearchFileResult] = []
                 var insertedStdin = false
-                var emittedHaystackIDs = Set<String>()
-                for (offset, root) in options.roots.enumerated() {
-                    if offset == dashIndex {
-                        ordered.append(stdinResult)
-                        insertedStdin = true
-                        continue
-                    }
-                    let rootPath = root.standardizedFileURL.path
-                    for searched in searchedHaystacks where isRootMatch(searched.url, root: root) {
-                        let identifier = searched.url.standardizedFileURL.path
-                        guard !emittedHaystackIDs.contains(identifier) else {
-                            continue
-                        }
-                        ordered.append(searched.result)
-                        emittedHaystackIDs.insert(identifier)
-                    }
+                var stdinIndex = 0
+                var consumedHaystackIndices = Set<Int>()
+                for rootPath in options.rootPathArguments {
                     if rootPath == "-" || rootPath == "<stdin>" {
+                        if stdinIndex < stdinResults.count {
+                            ordered.append(stdinResults[stdinIndex])
+                            stdinIndex += 1
+                            insertedStdin = true
+                        }
                         continue
+                    }
+                    let root = URL(fileURLWithPath: rootPath).standardizedFileURL
+                    let matchingIndices = searchedHaystacks.indices.filter { index in
+                        !consumedHaystackIndices.contains(index)
+                            && isRootMatch(searchedHaystacks[index].url, root: root)
+                    }
+                    let indicesToAppend = isDirectory(root)
+                        ? matchingIndices
+                        : Array(matchingIndices.prefix(1))
+                    for index in indicesToAppend {
+                        ordered.append(searchedHaystacks[index].result)
+                        consumedHaystackIndices.insert(index)
                     }
                 }
                 if !insertedStdin {
-                    ordered.append(stdinResult)
+                    ordered.append(stdinResults[0])
                 }
                 files = ordered
+            } else if shouldSearchStdinFirst(options: options) {
+                files = [stdinResults[0]] + files + stdinResults.dropFirst()
             } else {
-                files.append(stdinResult)
+                files.append(contentsOf: stdinResults)
             }
         }
         files = sorted(files, options: options)
@@ -159,11 +168,21 @@ public struct RipgrepSearcher {
         return sortMode.kind == .path && !sortMode.reverse
     }
 
+    private func shouldSearchStdinFirst(options: RipgrepOptions) -> Bool {
+        guard let sortMode = options.sortMode else {
+            return true
+        }
+        return sortMode.kind == .path && sortMode.reverse
+    }
+
     private func sorted(_ files: [SearchFileResult], options: RipgrepOptions) -> [SearchFileResult] {
         guard let sortMode = options.sortMode else {
             return files
         }
         if sortMode.kind == .path && !sortMode.reverse {
+            return files
+        }
+        if sortMode.kind == .path && sortMode.reverse && files.contains(where: { $0.fileURL.lastPathComponent == "<stdin>" }) {
             return files
         }
         return files.sorted { lhs, rhs in
@@ -175,8 +194,15 @@ public struct RipgrepSearcher {
         }
     }
 
-    private func firstStdinRootIndex(in options: RipgrepOptions) -> Int? {
-        options.rootPathArguments.firstIndex(of: "-")
+    private func stdinSearchResults(
+        _ data: Data,
+        matcher: PatternMatcher,
+        options: RipgrepOptions
+    ) -> [SearchFileResult] {
+        let count = max(1, options.rootPathArguments.filter { $0 == "-" }.count)
+        return (0..<count).map { index in
+            searchStdin(index == 0 ? data : Data(), matcher: matcher, options: options)
+        }
     }
 
     private func isRootMatch(_ url: URL, root: URL) -> Bool {
@@ -187,6 +213,11 @@ public struct RipgrepSearcher {
         }
         let prefix = rootPath.hasSuffix("/") ? rootPath : "\(rootPath)/"
         return path.hasPrefix(prefix)
+    }
+
+    private func isDirectory(_ url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        return fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
     }
 
     private func compare(_ lhs: URL, _ rhs: URL, by kind: SortKind) -> ComparisonResult {
