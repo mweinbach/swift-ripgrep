@@ -945,6 +945,9 @@ public struct StandardPrinter {
     }
 
     private func replacementStartOffsetsByIndex(for match: SearchMatch) -> [Int] {
+        guard options.replacement != nil else {
+            return match.spans.map(\.startByte)
+        }
         var delta = 0
         var offsets = Array(repeating: 0, count: match.spans.count)
         let indexedSpans = match.spans.enumerated().sorted { lhs, rhs in

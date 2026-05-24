@@ -1093,6 +1093,16 @@ struct RipgrepSearcherTests {
             root.path("utf8-byte-regex.txt"),
         ], fixture: {})
         #expect(noUnicodeDotOutput == Data([0xC3, 0x0A, 0xA9, 0x0A]))
+        let noUnicodeByteOffsetDotOutput = try runExecutableData([
+            "--no-unicode",
+            "-bo",
+            ".",
+            root.path("utf8-byte-regex.txt"),
+        ], fixture: {})
+        #expect(noUnicodeByteOffsetDotOutput == Data([
+            0x30, 0x3A, 0xC3, 0x0A,
+            0x31, 0x3A, 0xA9, 0x0A,
+        ]))
         let byteRegexJsonOutput = try run(["--json", #"(?-u)\xFF"#, root.path("byte-regex.txt")])
         let byteRegexJsonMatch = try byteRegexJsonOutput.map(jsonObject)
             .first { $0["type"] as? String == "match" }?["data"] as? [String: Any]
