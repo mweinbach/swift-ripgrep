@@ -224,6 +224,10 @@ public enum RipgrepCLI {
 
     private static func filesModePathsWithStdin(_ files: [URL], options: RipgrepOptions) -> [URL] {
         let stdinURL = URL(fileURLWithPath: "<stdin>")
+        if let sortMode = options.sortMode,
+           sortMode.kind != .path || sortMode.reverse {
+            return files + [stdinURL]
+        }
         guard let dashIndex = options.rootPathArguments.firstIndex(of: "-") else {
             return files + [stdinURL]
         }

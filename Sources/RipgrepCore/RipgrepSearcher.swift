@@ -92,7 +92,7 @@ public struct RipgrepSearcher {
             let stdinData = stdin.map { Data($0.utf8) } ?? FileHandle.standardInput.readDataToEndOfFile()
             let stdinResult = searchStdin(stdinData, matcher: matcher, options: options)
             if let dashIndex = firstStdinRootIndex(in: options),
-               options.sortMode == nil {
+               preservesExplicitStdinPosition(options: options) {
                 var ordered: [SearchFileResult] = []
                 var insertedStdin = false
                 var emittedHaystackIDs = Set<String>()
@@ -149,6 +149,13 @@ public struct RipgrepSearcher {
             diagnostics: diagnostics,
             filtered: walkResults.filtered
         )
+    }
+
+    private func preservesExplicitStdinPosition(options: RipgrepOptions) -> Bool {
+        guard let sortMode = options.sortMode else {
+            return true
+        }
+        return sortMode.kind == .path && !sortMode.reverse
     }
 
     private func sorted(_ files: [SearchFileResult], options: RipgrepOptions) -> [SearchFileResult] {

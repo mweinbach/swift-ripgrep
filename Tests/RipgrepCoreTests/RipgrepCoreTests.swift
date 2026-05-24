@@ -2548,6 +2548,20 @@ struct RipgrepSearcherTests {
             root.path("visible.txt"),
         ])
         #expect(errors.isEmpty)
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--files", "--sortr", "path", "-", root.path("visible.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(output == [
+            root.path("visible.txt"),
+            "<stdin>",
+        ])
+        #expect(errors.isEmpty)
     }
 
     @Test("preserves explicit current directory path prefixes")
@@ -3617,6 +3631,30 @@ struct RipgrepSearcherTests {
         #expect(output == [
             "<stdin>:1:needle",
             "\(root.path("file.txt")):1:needle",
+        ])
+
+        output = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--sort", "path", "-H", "needle", "-", root.path("file.txt")],
+            stdout: { output.append($0) },
+            stdin: "needle stdin\n"
+        )
+        #expect(exitCode == 0)
+        #expect(output == [
+            "<stdin>:needle stdin",
+            "\(root.path("file.txt")):needle",
+        ])
+
+        output = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--sortr", "path", "-H", "needle", "-", root.path("file.txt")],
+            stdout: { output.append($0) },
+            stdin: "needle stdin\n"
+        )
+        #expect(exitCode == 0)
+        #expect(output == [
+            "\(root.path("file.txt")):needle",
+            "<stdin>:needle stdin",
         ])
 
         output = []
