@@ -404,34 +404,12 @@ public struct StandardPrinter {
                       !options.passthru,
                       !options.invertMatch,
                       !options.multiline,
-                      !line.positiveSpans.isEmpty {
-                let positiveMatch = SearchMatch(
-                    fileURL: result.fileURL,
-                    lineNumber: line.lineNumber,
-                    column: options.column ? line.positiveSpans.first?.startColumn : nil,
-                    line: line.line,
-                    rawLine: line.rawLine,
-                    lineTerminator: line.lineTerminator,
-                    absoluteOffset: line.absoluteOffset,
-                    matchCount: line.positiveSpans.count,
-                    spans: line.positiveSpans
-                )
+                      let positiveMatch = positiveMatch(for: line, fileURL: result.fileURL) {
                 output.append(contentsOf: formatOnlyMatching(positiveMatch, showPath: showPath))
             } else if options.onlyMatching,
                       options.invertMatch,
                       !options.multiline,
-                      !line.positiveSpans.isEmpty {
-                let positiveMatch = SearchMatch(
-                    fileURL: result.fileURL,
-                    lineNumber: line.lineNumber,
-                    column: options.column ? line.positiveSpans.first?.startColumn : nil,
-                    line: line.line,
-                    rawLine: line.rawLine,
-                    lineTerminator: line.lineTerminator,
-                    absoluteOffset: line.absoluteOffset,
-                    matchCount: line.positiveSpans.count,
-                    spans: line.positiveSpans
-                )
+                      let positiveMatch = positiveMatch(for: line, fileURL: result.fileURL) {
                 output.append(contentsOf: formatOnlyMatching(
                     positiveMatch,
                     showPath: showPath,
@@ -449,7 +427,7 @@ public struct StandardPrinter {
                     line,
                     fileURL: result.fileURL,
                     showPath: showPath,
-                    match: startMatchesByLine[lineNumber]
+                    match: startMatchesByLine[lineNumber] ?? positiveMatch(for: line, fileURL: result.fileURL)
                 ))
             } else {
                 output.append(formatContextLine(line, fileURL: result.fileURL, showPath: showPath))
@@ -608,9 +586,29 @@ public struct StandardPrinter {
         if options.wantsLineNumber {
             fields.append(OutputField("\(line.lineNumber)", colorTarget: .line))
         }
+        if options.byteOffset {
+            fields.append(OutputField("\(line.absoluteOffset)", colorTarget: nil))
+        }
 
         let text = displayLine(for: line)
         return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldContextSeparator))\(renderedLine(text, omittedKind: .context))\(outputTerminator(line.lineTerminator, line: text))"
+    }
+
+    private func positiveMatch(for line: SearchLine, fileURL: URL) -> SearchMatch? {
+        guard !line.positiveSpans.isEmpty else {
+            return nil
+        }
+        return SearchMatch(
+            fileURL: fileURL,
+            lineNumber: line.lineNumber,
+            column: options.column ? line.positiveSpans.first?.startColumn : nil,
+            line: line.line,
+            rawLine: line.rawLine,
+            lineTerminator: line.lineTerminator,
+            absoluteOffset: line.absoluteOffset,
+            matchCount: line.positiveSpans.count,
+            spans: line.positiveSpans
+        )
     }
 
     private func formatVimgrepContextLine(_ line: SearchLine, fileURL: URL, showPath: Bool) -> String {

@@ -773,6 +773,22 @@ struct RipgrepSearcherTests {
             "1:4:0:xx needle yy",
             "2:1:13:needle",
         ])
+        #expect(try run(["-n", "--byte-offset", "-A1", "needle", root.path("offsets.txt")]) == [
+            "1:0:xx needle yy",
+            "2:13:needle",
+        ])
+
+        try root.write("pre\nneedle one\nctx\nneedle two\npost\n", to: "max-context-offsets.txt")
+        #expect(try run(["-n", "--byte-offset", "-m1", "-A2", "needle", root.path("max-context-offsets.txt")]) == [
+            "2:4:needle one",
+            "3-15-ctx",
+            "4:19:needle two",
+        ])
+        #expect(try run(["-n", "--byte-offset", "-m1", "-o", "-A2", "needle", root.path("max-context-offsets.txt")]) == [
+            "2:4:needle",
+            "3-15-ctx",
+            "4:19:needle",
+        ])
 
         try root.write("éabc\n", to: "unicode-offsets.txt")
         #expect(try run(["-o", "--column", "abc", root.path("unicode-offsets.txt")]) == [
