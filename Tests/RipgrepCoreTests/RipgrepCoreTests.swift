@@ -3794,6 +3794,11 @@ struct RipgrepSearcherTests {
         ])
         let vimgrepInvertRoot = try TemporaryDirectory()
         try vimgrepInvertRoot.write("before\nneedle\nafter\n", to: "vimgrep-invert.txt")
+        #expect(try run(["--vimgrep", "-v", "NEEDLE", vimgrepInvertRoot.path("vimgrep-invert.txt")]) == [
+            "\(vimgrepInvertRoot.path("vimgrep-invert.txt")):1:before",
+            "\(vimgrepInvertRoot.path("vimgrep-invert.txt")):2:needle",
+            "\(vimgrepInvertRoot.path("vimgrep-invert.txt")):3:after",
+        ])
         #expect(try run(["--vimgrep", "--passthru", "-v", "NEEDLE", vimgrepInvertRoot.path("vimgrep-invert.txt")]) == [
             "\(vimgrepInvertRoot.path("vimgrep-invert.txt")):1:before",
             "\(vimgrepInvertRoot.path("vimgrep-invert.txt")):2:needle",

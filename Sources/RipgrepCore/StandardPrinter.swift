@@ -239,6 +239,9 @@ public struct StandardPrinter {
     }
 
     private func formatVimgrep(_ match: SearchMatch, showPath: Bool) -> [String] {
+        if options.invertMatch {
+            return [formatVimgrepInverted(match, showPath: showPath)]
+        }
         if match.spans.isEmpty {
             return [formatVimgrepPreservedLine(match, showPath: showPath)]
         }
