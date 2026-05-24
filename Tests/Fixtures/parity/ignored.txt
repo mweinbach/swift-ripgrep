@@ -1,0 +1,2 @@
+ignored-only
+needle in ignored

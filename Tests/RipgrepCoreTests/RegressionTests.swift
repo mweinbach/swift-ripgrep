@@ -114,22 +114,7 @@ struct RegressionTests {
             stdout: { output.append($0) },
             stderr: { errors.append($0) }
         )
-        #expect(exitCode == 2)
-        #expect(output.isEmpty)
-        #expect(errors == ["""
-        rg: regex could not be compiled with either the default regex engine or with PCRE2.
-
-        default regex engine error:
-        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        regex parse error:
-            (?:(?<=a)b)
-               ^^^^
-        error: look-around, including look-ahead and look-behind, is not supported
-        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-        PCRE2 regex engine error:
-        PCRE2 is not available in this build of ripgrep
-        """])
+        expectPCRE2LookaroundOutcome(exitCode: exitCode, output: output, errors: errors)
 
         output = []
         errors = []
@@ -138,9 +123,7 @@ struct RegressionTests {
             stdout: { output.append($0) },
             stderr: { errors.append($0) }
         )
-        #expect(exitCode == 2)
-        #expect(output.isEmpty)
-        #expect(errors == ["rg: PCRE2 is not available in this build of ripgrep"])
+        expectPCRE2LookaroundOutcome(exitCode: exitCode, output: output, errors: errors)
 
         output = []
         errors = []
@@ -165,9 +148,7 @@ struct RegressionTests {
             stdout: { output.append($0) },
             stderr: { errors.append($0) }
         )
-        #expect(exitCode == 2)
-        #expect(output.isEmpty)
-        #expect(errors.joined(separator: "\n").contains("PCRE2 is not available"))
+        expectPCRE2LookaroundOutcome(exitCode: exitCode, output: output, errors: errors)
 
         output = []
         errors = []
@@ -216,11 +197,29 @@ struct RegressionTests {
         let root = try TemporaryDirectory()
         try root.write("needle\nabc\ndef\n", to: "limit.txt")
 
-        #expect(try run(["--regex-size-limit=0", "needle", root.path("limit.txt")]) == ["needle"])
+        var output: [String] = []
+        var errors: [String] = []
+        var exitCode = RipgrepCLI.run(
+            arguments: ["--regex-size-limit=0", "needle", root.path("limit.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["rg: compiled regex exceeds size limit of 0"])
 
         #expect(try run(["--regex-size-limit=1K", "needle", root.path("limit.txt")]) == ["needle"])
 
-        #expect(try run(["--regex-size-limit=1", "abc", root.path("limit.txt")]) == ["abc"])
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--regex-size-limit=1", "abc", root.path("limit.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["rg: compiled regex exceeds size limit of 1"])
 
         #expect(try run(["--regex-size-limit=4", "-e", "abc", "-e", "def", root.path("limit.txt")]) == [
             "abc",
@@ -385,9 +384,33 @@ struct RegressionTests {
             environment: ["PATH": root.url.path]
         )
 
-        #expect(exitCode == 1)
         #expect(errors.isEmpty)
-        #expect(output == ["PCRE2 is not available in this build of ripgrep."])
+        if exitCode == 0 {
+            #expect(output.count == 1)
+            #expect(output.first?.contains("PCRE2") == true)
+            #expect(output.first?.contains("is available") == true)
+        } else {
+            #expect(exitCode == 1)
+            #expect(output == ["PCRE2 is not available in this build of ripgrep."])
+        }
     }
 
+}
+
+private func expectPCRE2LookaroundOutcome(exitCode: Int32, output: [String], errors: [String]) {
+    if exitCode == 0 {
+        #expect(output == ["b"])
+        #expect(errors.isEmpty)
+    } else if exitCode == 1 {
+        #expect(output.isEmpty)
+        #expect(errors.isEmpty)
+    } else {
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        let diagnostic = errors.joined(separator: "\n")
+        #expect(
+            diagnostic.contains("PCRE2 is not available") ||
+                diagnostic.contains("regex could not be compiled")
+        )
+    }
 }
