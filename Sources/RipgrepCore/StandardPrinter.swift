@@ -1132,19 +1132,14 @@ public struct StandardPrinter {
         }
         let rendered = options.trim ? line.trimmingASCIIWhitespacePrefix() : line
         let trimOffset = line.utf8.count - rendered.utf8.count
-        if options.stats {
+        if options.stats || colors.isEnabled {
             guard options.maxColumnsPreview else {
                 return "[Omitted long line with \(match.matchCount) matches]"
             }
             let remainingMatches = match.spans.filter { $0.startByte >= trimOffset + maxColumns }.count
             return previewLineSuffix(rendered, maxColumns: maxColumns, remainingMatches: remainingMatches)
         }
-        guard colors.isEnabled,
-              options.maxColumnsPreview else {
-            return nil
-        }
-        let remainingMatches = match.spans.filter { $0.startByte >= trimOffset + maxColumns }.count
-        return previewLineSuffix(rendered, maxColumns: maxColumns, remainingMatches: remainingMatches)
+        return nil
     }
 
     private func limitedColumnMatchedLine(_ line: String, match: SearchMatch) -> String? {
@@ -1217,13 +1212,19 @@ public struct StandardPrinter {
     }
 
     private func renderedLine(_ line: String, spans: [MatchSpan]) -> String {
-        guard colors.isEnabled, options.maxColumns == nil, !spans.isEmpty else {
+        guard colors.isEnabled, !spans.isEmpty else {
             return renderedLine(line)
         }
         guard options.trim else {
+            if let maxColumns = options.maxColumns, line.utf8.count >= maxColumns {
+                return renderedLine(line)
+            }
             return colors.colorMatches(in: line, spans: spans)
         }
         let trimmed = line.trimmingASCIIWhitespacePrefix()
+        if let maxColumns = options.maxColumns, trimmed.utf8.count >= maxColumns {
+            return renderedLine(line)
+        }
         let trimOffset = line.utf8.count - trimmed.utf8.count
         let trimmedSpans = spans.compactMap { span -> MatchSpan? in
             guard span.endByte > trimOffset else {
