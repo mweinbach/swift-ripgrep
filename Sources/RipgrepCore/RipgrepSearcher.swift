@@ -1805,7 +1805,11 @@ public struct RipgrepSearcher {
                 }
                 return MultilineSpanCandidate(span: span, startLineIndex: startLineIndex, endLineIndex: endLineIndex)
             }
-            let grouped = groupedOverlappingLineSpans(candidates, splitSeparatedTrailingLineMatches: false)
+            let grouped = groupedOverlappingLineSpans(
+                candidates,
+                splitSeparatedTrailingLineMatches: false,
+                mergeAdjacentLineSpans: false
+            )
             let matches = grouped.compactMap { group -> SearchMatch? in
                 guard let first = group.first else {
                     return nil
@@ -1884,9 +1888,15 @@ public struct RipgrepSearcher {
         }
         let shouldGroupLineAnchors = shouldGroupMultilineJSONLineAnchorSpans(candidates, options: options)
         let shouldGroupNULPattern = shouldGroupMultilineJSONNULPatternSpans(candidates, options: options)
+        let shouldGroupAdjacentOnlyMatchingLineAnchors = options.onlyMatching
+            && options.effectivePatterns.contains(where: containsLineAnchor)
         let groups = shouldGroupLineAnchors || shouldGroupNULPattern
             ? [candidates]
-            : groupedOverlappingLineSpans(candidates, splitSeparatedTrailingLineMatches: true)
+            : groupedOverlappingLineSpans(
+                candidates,
+                splitSeparatedTrailingLineMatches: true,
+                mergeAdjacentLineSpans: shouldGroupAdjacentOnlyMatchingLineAnchors
+            )
         let matches = groups.compactMap { group -> SearchMatch? in
             guard let first = group.first else {
                 return nil
@@ -2399,7 +2409,8 @@ public struct RipgrepSearcher {
 
     private func groupedOverlappingLineSpans(
         _ candidates: [MultilineSpanCandidate],
-        splitSeparatedTrailingLineMatches: Bool
+        splitSeparatedTrailingLineMatches: Bool,
+        mergeAdjacentLineSpans: Bool
     ) -> [[MultilineSpanCandidate]] {
         var groups: [[MultilineSpanCandidate]] = []
         var current: [MultilineSpanCandidate] = []
@@ -2412,7 +2423,10 @@ public struct RipgrepSearcher {
             if let startLineIndex = currentStartLineIndex,
                let endLineIndex = currentEndLineIndex,
                let endByte = currentEndByte {
-                shouldStartNewGroup = candidate.startLineIndex > endLineIndex
+                let startsAfterCurrentGroup = candidate.startLineIndex > endLineIndex
+                let startsAdjacentLine = candidate.startLineIndex == endLineIndex + 1
+                shouldStartNewGroup = startsAfterCurrentGroup
+                    && !(mergeAdjacentLineSpans && startsAdjacentLine)
                     || (splitSeparatedTrailingLineMatches
                         && startLineIndex < endLineIndex
                         && candidate.startLineIndex == endLineIndex

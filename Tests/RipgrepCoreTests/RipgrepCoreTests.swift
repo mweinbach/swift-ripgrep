@@ -1674,6 +1674,10 @@ struct RipgrepSearcherTests {
             "3:9:8:ba",
             "3:11:10:z",
         ])
+        #expect(try run(["-U", "--column", "-n", "-o", "--byte-offset", "^ba", root.path("multi.txt")]) == [
+            "2:1:4:ba",
+            "3:5:8:ba",
+        ])
         #expect(try run(["-U", "-n", "-o", #"(?s).."#, root.path("zero-width.txt")]) == [
             "1:ab",
             "3:cd",

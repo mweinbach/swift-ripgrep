@@ -606,9 +606,14 @@ public struct StandardPrinter {
             let lineNumber = match.lineNumber
                 + lineOffset(in: match.lineWithTerminator, beforeByteOffset: chunkStartByte)
             var fields: [OutputField] = []
-            let column = multilineOnlyMatchingUsesSourceAbsoluteColumns
-                ? match.absoluteOffset + span.startByte + 1
-                : chunk.startByte == 0 ? span.startColumn : 1
+            let column: Int
+            if multilineOnlyMatchingUsesSourceAbsoluteColumns {
+                column = match.absoluteOffset + span.startByte + 1
+            } else if multilineOnlyMatchingUsesMatchRelativeColumns {
+                column = span.startByte + chunk.startByte + 1
+            } else {
+                column = chunk.startByte == 0 ? span.startColumn : 1
+            }
             let path = showPath ? renderPath(for: match.fileURL, line: lineNumber, column: column) : nil
             if options.wantsLineNumber {
                 fields.append(OutputField("\(lineNumber)", colorTarget: .line))
@@ -696,6 +701,9 @@ public struct StandardPrinter {
         if multilineOnlyMatchingUsesSourceAbsoluteColumns {
             return match.absoluteOffset + replacementStartByte + 1
         }
+        if multilineOnlyMatchingUsesMatchRelativeColumns {
+            return replacementStartByte + 1
+        }
         return span.startColumn
     }
 
@@ -703,8 +711,13 @@ public struct StandardPrinter {
         options.multiline
             && !options.fixedStrings
             && (options.multilineDotall
-                || options.effectivePatterns.contains(where: containsInlineDotAllOption)
-                || options.effectivePatterns.contains(where: containsLineAnchor))
+                || options.effectivePatterns.contains(where: containsInlineDotAllOption))
+    }
+
+    private var multilineOnlyMatchingUsesMatchRelativeColumns: Bool {
+        options.multiline
+            && !options.fixedStrings
+            && options.effectivePatterns.contains(where: containsLineAnchor)
     }
 
     private func containsInlineDotAllOption(_ pattern: String) -> Bool {
