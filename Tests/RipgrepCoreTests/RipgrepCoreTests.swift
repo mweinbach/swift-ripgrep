@@ -5230,6 +5230,21 @@ struct RipgrepSearcherTests {
         #expect(try runAllowingNoMatch(["--files", root.url.path]) == [])
     }
 
+    @Test("honors escaped leading comment and negation markers in globs")
+    func honorsEscapedLeadingCommentAndNegationMarkersInGlobs() throws {
+        let root = try TemporaryDirectory()
+        try root.write("\\#secret\n\\!bang\n", to: ".ignore")
+        try root.write("needle\n", to: "#secret")
+        try root.write("needle\n", to: "!bang")
+        try root.write("needle\n", to: "keep")
+
+        #expect(try run(["--sort", "path", "needle", root.url.path]) == [
+            "\(root.path("keep")):needle",
+        ])
+        #expect(pathBasenames(try run(["--sort", "path", "--files", "-g", "\\#secret", root.url.path])) == ["#secret"])
+        #expect(pathBasenames(try run(["--sort", "path", "--files", "-g", "\\!bang", root.url.path])) == ["!bang"])
+    }
+
     @Test("warns when filters leave nothing searched")
     func warnsWhenFiltersLeaveNothingSearched() throws {
         let root = try TemporaryDirectory()

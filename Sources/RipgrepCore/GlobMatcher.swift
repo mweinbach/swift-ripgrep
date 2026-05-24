@@ -91,8 +91,9 @@ public struct GlobMatcher: Equatable {
                 continue
             }
 
-            let isNegated = trimmed.hasPrefix("!")
-            let pattern = isNegated ? String(trimmed.dropFirst()) : trimmed
+            let normalized = Self.unescapeLeadingCommentOrNegation(trimmed)
+            let isNegated = !normalized.wasEscaped && normalized.pattern.hasPrefix("!")
+            let pattern = isNegated ? String(normalized.pattern.dropFirst()) : normalized.pattern
             let decision: Decision
             if overrideSemantics {
                 decision = isNegated ? .exclude : .include
@@ -117,6 +118,13 @@ public struct GlobMatcher: Equatable {
 
     public var isEmpty: Bool {
         rules.isEmpty
+    }
+
+    private static func unescapeLeadingCommentOrNegation(_ pattern: String) -> (pattern: String, wasEscaped: Bool) {
+        guard pattern.hasPrefix("\\#") || pattern.hasPrefix("\\!") else {
+            return (pattern, false)
+        }
+        return (String(pattern.dropFirst()), true)
     }
 
     public func allows(relativePath: String, isDirectory: Bool) -> Bool {
