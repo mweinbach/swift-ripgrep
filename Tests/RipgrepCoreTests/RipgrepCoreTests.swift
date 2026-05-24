@@ -4499,6 +4499,19 @@ struct RipgrepSearcherTests {
         #expect(output.isEmpty)
         #expect(errors == ["rg: invalid definition (format is type:glob, e.g., html:*.html)"])
 
+        for invalidTypeDefinition in ["foo:", ":*.foo", "foo:include:", "foo:include:nope", "foo:include:rust,"] {
+            output = []
+            errors = []
+            exitCode = RipgrepCLI.run(
+                arguments: ["--type-add", invalidTypeDefinition, "needle", root.url.path],
+                stdout: { output.append($0) },
+                stderr: { errors.append($0) }
+            )
+            #expect(exitCode == 2)
+            #expect(output.isEmpty)
+            #expect(errors == ["rg: invalid definition (format is type:glob, e.g., html:*.html)"])
+        }
+
         let typeList = try run(["--type-add", "foo:*.foo", "--type-list"])
         #expect(typeList.contains("foo: *.foo"))
         #expect(typeList.contains("rust: *.rs"))

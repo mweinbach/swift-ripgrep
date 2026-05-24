@@ -124,7 +124,8 @@ public struct FileTypeRegistry: Equatable, Sendable {
         let parts = spec.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false).map(String.init)
         guard parts.count >= 2, let name = validName(parts[0]) else { return false }
         if parts.count == 3, parts[1] == "include" {
-            let included = parts[2].split(separator: ",").map(String.init)
+            let included = parts[2].split(separator: ",", omittingEmptySubsequences: false).map(String.init)
+            guard !included.isEmpty else { return false }
             for includedName in included {
                 guard let canonical = resolvedName(includedName), let definition = definitionsByName[canonical] else {
                     return false
@@ -132,7 +133,9 @@ public struct FileTypeRegistry: Equatable, Sendable {
                 for glob in definition.globs { appendGlob(glob, to: name) }
             }
         } else {
-            appendGlob(parts.dropFirst().joined(separator: ":"), to: name)
+            let glob = parts.dropFirst().joined(separator: ":")
+            guard !glob.isEmpty else { return false }
+            appendGlob(glob, to: name)
         }
         return true
     }
@@ -169,7 +172,7 @@ public struct FileTypeRegistry: Equatable, Sendable {
     }
 
     private func validName(_ rawName: String) -> String? {
-        rawName.allSatisfy { $0.isLetter || $0.isNumber } ? rawName : nil
+        !rawName.isEmpty && rawName.allSatisfy { $0.isLetter || $0.isNumber } ? rawName : nil
     }
 
     private func matchingTypeNames(path: String) -> Set<String> {
