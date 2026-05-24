@@ -2073,6 +2073,7 @@ public enum RipgrepArgumentParser {
     }
 
     private static func parseNonNegativeInt(_ raw: String) -> Int? {
+        guard !raw.hasPrefix("-") else { return nil }
         guard let count = Int(raw), count >= 0 else { return nil }
         return count
     }
@@ -2205,6 +2206,9 @@ public enum RipgrepArgumentParser {
         default:
             multiplier = 1
             digits = Substring(raw)
+        }
+        guard !digits.isEmpty, digits.allSatisfy(\.isNumber) else {
+            return nil
         }
         guard let value = UInt64(digits) else {
             return nil
