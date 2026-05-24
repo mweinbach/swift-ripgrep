@@ -4306,6 +4306,8 @@ struct RipgrepSearcherTests {
         #expect(errors.contains { $0.contains("DEBUG|rg::flags::hiargs|") && $0.contains("number of paths given to search: 1") })
         #expect(errors.contains { $0.contains("DEBUG|rg::flags::hiargs|") && $0.contains("using 1 thread(s)") })
         #expect(errors.contains { $0.contains("DEBUG|grep_regex::config|") && $0.contains("assembling HIR from 1 fixed string literals") })
+        #expect(errors.contains { $0.contains("DEBUG|ignore::gitignore|") && $0.contains("opened gitignore file:") && $0.contains(".ignore") })
+        #expect(errors.contains { $0.contains("DEBUG|globset|") && $0.contains("built glob set; 0 literals, 0 basenames, 1 extensions") })
         #expect(errors.contains { $0.contains("DEBUG|swift-ripgrep::walk|") && $0.contains(".hidden.txt: hidden") })
         #expect(errors.contains { $0.contains("DEBUG|swift-ripgrep::walk|") && $0.contains("skip.log: ignore file") })
 

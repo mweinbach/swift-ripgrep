@@ -37,6 +37,7 @@ public struct FileWalkResults: Equatable {
 private struct LoadedIgnoreMatcher {
     let matcher: GlobMatcher
     let messages: [String]
+    let diagnostics: [String]
 }
 
 private struct DirectoryVisit {
@@ -114,6 +115,7 @@ public struct FileWalker {
                     to: &rootIgnoreStack,
                     rootBase: rootBase,
                     warnings: &ignoredWarnings,
+                    diagnostics: &diagnostics,
                     options: options
                 )
             } else {
@@ -121,17 +123,19 @@ public struct FileWalker {
                     to: &rootIgnoreStack,
                     rootBase: rootBase,
                     warnings: &warnings,
+                    diagnostics: &diagnostics,
                     options: options
                 )
             }
             reportedExplicitIgnoreFileWarnings = true
-            appendGlobalIgnoreFile(to: &rootIgnoreStack, rootBase: rootBase, warnings: &warnings, options: options)
-            appendParentIgnoreFiles(to: &rootIgnoreStack, rootBase: rootBase, warnings: &warnings, options: options)
+            appendGlobalIgnoreFile(to: &rootIgnoreStack, rootBase: rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
+            appendParentIgnoreFiles(to: &rootIgnoreStack, rootBase: rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
             appendLogicalParentIgnoreFiles(
                 for: root.standardizedFileURL,
                 rootBase: rootBase,
                 to: &rootIgnoreStack,
                 warnings: &warnings,
+                diagnostics: &diagnostics,
                 options: options
             )
             let rootVolume = options.oneFileSystem ? volumeIdentifier(for: root.standardizedFileURL) : nil
@@ -302,6 +306,7 @@ public struct FileWalker {
                 logicalDirectory: url,
                 to: &directoryIgnoreStack,
                 warnings: &warnings,
+                diagnostics: &diagnostics,
                 rootBase: rootBase,
                 options: options
             )
@@ -477,6 +482,7 @@ public struct FileWalker {
         rootBase: URL,
         to ignoreStack: inout IgnoreStack,
         warnings: inout [String],
+        diagnostics: inout [String],
         options: RipgrepOptions
     ) {
         guard (try? root.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true,
@@ -487,6 +493,7 @@ public struct FileWalker {
             in: rootBase,
             to: &ignoreStack,
             warnings: &warnings,
+            diagnostics: &diagnostics,
             rootBase: rootBase,
             options: options
         )
@@ -496,6 +503,7 @@ public struct FileWalker {
         to ignoreStack: inout IgnoreStack,
         rootBase: URL,
         warnings: inout [String],
+        diagnostics: inout [String],
         options: RipgrepOptions
     ) {
         guard !options.noIgnore, !options.noIgnoreParent else {
@@ -512,6 +520,7 @@ public struct FileWalker {
                 in: parentURL,
                 to: &ignoreStack,
                 warnings: &warnings,
+                diagnostics: &diagnostics,
                 rootBase: rootBase,
                 options: options
             )
@@ -520,6 +529,7 @@ public struct FileWalker {
                 gitBoundary: gitBoundary,
                 to: &ignoreStack,
                 warnings: &warnings,
+                diagnostics: &diagnostics,
                 rootBase: rootBase,
                 options: options
             )
@@ -530,6 +540,7 @@ public struct FileWalker {
         in parentURL: URL,
         to ignoreStack: inout IgnoreStack,
         warnings: inout [String],
+        diagnostics: inout [String],
         rootBase: URL,
         options: RipgrepOptions
     ) {
@@ -540,6 +551,7 @@ public struct FileWalker {
             from: parentURL.appendingPathComponent(".ignore"),
             to: &ignoreStack,
             warnings: &warnings,
+            diagnostics: &diagnostics,
             rootBase: rootBase,
             ignoreExplicitRootMatch: true,
             options: options
@@ -548,6 +560,7 @@ public struct FileWalker {
             from: parentURL.appendingPathComponent(".rgignore"),
             to: &ignoreStack,
             warnings: &warnings,
+            diagnostics: &diagnostics,
             rootBase: rootBase,
             ignoreExplicitRootMatch: true,
             options: options
@@ -559,6 +572,7 @@ public struct FileWalker {
         gitBoundary: URL?,
         to ignoreStack: inout IgnoreStack,
         warnings: inout [String],
+        diagnostics: inout [String],
         rootBase: URL,
         options: RipgrepOptions
     ) {
@@ -570,6 +584,7 @@ public struct FileWalker {
             from: parentURL.appendingPathComponent(".gitignore"),
             to: &ignoreStack,
             warnings: &warnings,
+            diagnostics: &diagnostics,
             rootBase: rootBase,
             ignoreExplicitRootMatch: true,
             options: options
@@ -580,6 +595,7 @@ public struct FileWalker {
                 from: excludeURL,
                 to: &ignoreStack,
                 warnings: &warnings,
+                diagnostics: &diagnostics,
                 rootBase: rootBase,
                 scopeDirectory: parentURL,
                 ignoreExplicitRootMatch: true,
@@ -686,6 +702,7 @@ public struct FileWalker {
         to ignoreStack: inout IgnoreStack,
         rootBase: URL,
         warnings: inout [String],
+        diagnostics: inout [String],
         options: RipgrepOptions
     ) {
         guard !options.noIgnore,
@@ -699,7 +716,9 @@ public struct FileWalker {
             from: globalIgnoreFile,
             to: &ignoreStack,
             warnings: &warnings,
+            diagnostics: &diagnostics,
             rootBase: nil,
+            emitDiagnostics: false,
             options: options
         )
     }
@@ -708,6 +727,7 @@ public struct FileWalker {
         to ignoreStack: inout IgnoreStack,
         rootBase: URL,
         warnings: inout [String],
+        diagnostics: inout [String],
         options: RipgrepOptions
     ) {
         guard !options.noIgnoreFiles else {
@@ -719,6 +739,7 @@ public struct FileWalker {
                 from: ignoreFile,
                 to: &ignoreStack,
                 warnings: &warnings,
+                diagnostics: &diagnostics,
                 rootBase: rootBase,
                 pathPrefix: pathPrefix,
                 slashPatternsMatchAnywhere: false,
@@ -819,6 +840,7 @@ public struct FileWalker {
         from fileURL: URL,
         to ignoreStack: inout IgnoreStack,
         warnings: inout [String],
+        diagnostics: inout [String],
         rootBase: URL?,
         scopeDirectory: URL? = nil,
         pathPrefix: String? = nil,
@@ -827,6 +849,7 @@ public struct FileWalker {
         displayPath: String? = nil,
         caseInsensitive: Bool? = nil,
         ignoreExplicitRootMatch: Bool = false,
+        emitDiagnostics: Bool = true,
         options: RipgrepOptions
     ) {
         let loaded = loadMatcher(
@@ -841,6 +864,9 @@ public struct FileWalker {
             ignoreExplicitRootMatch: ignoreExplicitRootMatch
         )
         ignoreStack.append(loaded.matcher)
+        if emitDiagnostics, options.loggingMode != .none {
+            diagnostics.append(contentsOf: loaded.diagnostics)
+        }
         if !options.noIgnoreMessages {
             warnings.append(contentsOf: loaded.messages)
         }
@@ -862,7 +888,7 @@ public struct FileWalker {
             contents = try String(contentsOf: fileURL, encoding: .utf8)
         } catch {
             let messages = reportLoadErrors ? [ignoreFileLoadMessage(for: fileURL, displayPath: displayPath)] : []
-            return LoadedIgnoreMatcher(matcher: GlobMatcher(patterns: []), messages: messages)
+            return LoadedIgnoreMatcher(matcher: GlobMatcher(patterns: []), messages: messages, diagnostics: [])
         }
         let parsed = parseIgnorePatterns(contents, fileURL: fileURL)
         let scope = pathPrefix.map { (stripBasePath: String?.none, pathPrefix: $0) }
@@ -876,13 +902,91 @@ public struct FileWalker {
                 caseInsensitive: caseInsensitive
             )
             : parsed.patterns
+        let diagnostics = ignoreLoadDiagnostics(
+            fileURL: fileURL,
+            displayPath: displayPath,
+            patterns: patterns
+        )
         return LoadedIgnoreMatcher(matcher: GlobMatcher(
             patterns: patterns,
             caseInsensitive: caseInsensitive,
             stripBasePath: scope.stripBasePath,
             pathPrefix: scope.pathPrefix,
             slashPatternsMatchAnywhere: matchSlashPatternsAnywhere
-        ), messages: parsed.messages)
+        ), messages: parsed.messages, diagnostics: diagnostics)
+    }
+
+    private func ignoreLoadDiagnostics(fileURL: URL, displayPath: String?, patterns: [String]) -> [String] {
+        let opened = "DEBUG|ignore::gitignore|crates/ignore/src/gitignore.rs:398: opened gitignore file: \(ignoreDiagnosticPath(fileURL, displayPath: displayPath))"
+        return [
+            opened,
+            "DEBUG|globset|crates/globset/src/lib.rs:515: built glob set; \(globsetSummary(for: patterns))",
+        ]
+    }
+
+    private func ignoreDiagnosticPath(_ fileURL: URL, displayPath: String?) -> String {
+        if let displayPath {
+            return displayPath
+        }
+        let path = fileURL.standardizedFileURL.path
+        let cwd = URL(fileURLWithPath: fileManager.currentDirectoryPath, isDirectory: true)
+            .standardizedFileURL
+            .path
+        let prefix = cwd.hasSuffix("/") ? cwd : "\(cwd)/"
+        if path.hasPrefix(prefix) {
+            return "./\(String(path.dropFirst(prefix.count)))"
+        }
+        return path
+    }
+
+    private func globsetSummary(for patterns: [String]) -> String {
+        let parsed = patterns.compactMap(globsetPatternSummary)
+        let literals = parsed.filter { $0 == .literal }.count
+        let basenames = parsed.filter { $0 == .basename }.count
+        let extensions = parsed.filter { $0 == .extension }.count
+        let prefixes = parsed.filter { $0 == .prefix }.count
+        let suffixes = parsed.filter { $0 == .suffix }.count
+        let regexes = parsed.filter { $0 == .regex }.count
+        return "\(literals) literals, \(basenames) basenames, \(extensions) extensions, \(prefixes) prefixes, \(suffixes) suffixes, 0 required extensions, \(regexes) regexes"
+    }
+
+    private enum GlobsetPatternKind {
+        case literal
+        case basename
+        case `extension`
+        case prefix
+        case suffix
+        case regex
+    }
+
+    private func globsetPatternSummary(_ rawPattern: String) -> GlobsetPatternKind? {
+        var pattern = rawPattern.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !pattern.isEmpty, !pattern.hasPrefix("#") else {
+            return nil
+        }
+        if pattern.hasPrefix("!") {
+            pattern.removeFirst()
+        }
+        if pattern.hasSuffix("/") {
+            pattern.removeLast()
+        }
+        if pattern.hasPrefix("/") {
+            pattern.removeFirst()
+        }
+        if pattern.hasPrefix("*."),
+           pattern.dropFirst(2).allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" }) {
+            return .extension
+        }
+        if !pattern.contains("*"), !pattern.contains("?"), !pattern.contains("["), !pattern.contains("{") {
+            return pattern.contains("/") ? .literal : .basename
+        }
+        if pattern.hasSuffix("*"), pattern.dropLast().allSatisfy({ $0 != "*" && $0 != "?" && $0 != "[" && $0 != "{" }) {
+            return .prefix
+        }
+        if pattern.hasPrefix("*"), pattern.dropFirst().allSatisfy({ $0 != "*" && $0 != "?" && $0 != "[" && $0 != "{" }) {
+            return .suffix
+        }
+        return .regex
     }
 
     private func patternsIgnoringExplicitRootMatch(
@@ -1032,15 +1136,37 @@ public struct FileWalker {
         logicalDirectory: URL? = nil,
         to ignoreStack: inout IgnoreStack,
         warnings: inout [String],
+        diagnostics: inout [String],
         rootBase: URL,
         options: RipgrepOptions
     ) {
         let scopeDirectory = logicalDirectory ?? directoryURL
+        if !options.noIgnoreDot {
+            appendLoadedMatcher(
+                from: directoryURL.appendingPathComponent(".ignore"),
+                to: &ignoreStack,
+                warnings: &warnings,
+                diagnostics: &diagnostics,
+                rootBase: rootBase,
+                scopeDirectory: scopeDirectory,
+                options: options
+            )
+            appendLoadedMatcher(
+                from: directoryURL.appendingPathComponent(".rgignore"),
+                to: &ignoreStack,
+                warnings: &warnings,
+                diagnostics: &diagnostics,
+                rootBase: rootBase,
+                scopeDirectory: scopeDirectory,
+                options: options
+            )
+        }
         if !options.noIgnoreVCS && (options.noRequireGit || isInGitRepository(directoryURL)) {
             appendLoadedMatcher(
                 from: directoryURL.appendingPathComponent(".gitignore"),
                 to: &ignoreStack,
                 warnings: &warnings,
+                diagnostics: &diagnostics,
                 rootBase: rootBase,
                 scopeDirectory: scopeDirectory,
                 options: options
@@ -1054,24 +1180,7 @@ public struct FileWalker {
                 from: excludeURL,
                 to: &ignoreStack,
                 warnings: &warnings,
-                rootBase: rootBase,
-                scopeDirectory: scopeDirectory,
-                options: options
-            )
-        }
-        if !options.noIgnoreDot {
-            appendLoadedMatcher(
-                from: directoryURL.appendingPathComponent(".ignore"),
-                to: &ignoreStack,
-                warnings: &warnings,
-                rootBase: rootBase,
-                scopeDirectory: scopeDirectory,
-                options: options
-            )
-            appendLoadedMatcher(
-                from: directoryURL.appendingPathComponent(".rgignore"),
-                to: &ignoreStack,
-                warnings: &warnings,
+                diagnostics: &diagnostics,
                 rootBase: rootBase,
                 scopeDirectory: scopeDirectory,
                 options: options
