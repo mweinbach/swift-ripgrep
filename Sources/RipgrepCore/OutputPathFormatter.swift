@@ -14,14 +14,14 @@ struct OutputPathFormatter {
             .path
     }
 
-    func displayPath(for url: URL) -> String {
+    func displayPath(for url: URL, applyingPathSeparator: Bool = true) -> String {
         if isStdinSentinel(url) {
             return "<stdin>"
         }
 
         let path = url.standardizedFileURL.path
         if let rootedPath = displayPathFromRootArgument(for: path) {
-            return applyPathSeparator(rootedPath)
+            return normalizedPath(rootedPath, applyingPathSeparator: applyingPathSeparator)
         }
 
         let prefix = currentDirectory.hasSuffix("/") ? currentDirectory : "\(currentDirectory)/"
@@ -31,10 +31,10 @@ struct OutputPathFormatter {
                !relativePath.hasPrefix("./") {
                 relativePath = "./\(relativePath)"
             }
-            return applyPathSeparator(relativePath)
+            return normalizedPath(relativePath, applyingPathSeparator: applyingPathSeparator)
         }
 
-        return applyPathSeparator(path)
+        return normalizedPath(path, applyingPathSeparator: applyingPathSeparator)
     }
 
     private func isStdinSentinel(_ url: URL) -> Bool {
@@ -92,9 +92,9 @@ struct OutputPathFormatter {
         return false
     }
 
-    private func applyPathSeparator(_ path: String) -> String {
+    private func normalizedPath(_ path: String, applyingPathSeparator: Bool) -> String {
         let normalizedPath = path.precomposedStringWithCanonicalMapping
-        guard let pathSeparator = options.pathSeparator else {
+        guard applyingPathSeparator, let pathSeparator = options.pathSeparator else {
             return normalizedPath
         }
         return String(normalizedPath.map { $0 == "/" ? pathSeparator : $0 })

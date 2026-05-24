@@ -4034,6 +4034,32 @@ struct RipgrepSearcherTests {
         let relativeBegin = relativeMessages[0]["data"] as? [String: Any]
         let relativePath = relativeBegin?["path"] as? [String: String]
         #expect(relativePath?["text"] == "json.txt")
+
+        var separatorOptions = relativeOptions
+        separatorOptions.pathSeparator = "|"
+        separatorOptions.rootPathArguments = ["."]
+        separatorOptions.roots = [root.url]
+        let nestedJSONURL = root.url.appendingPathComponent("nested/json.txt")
+        let separatorMatch = SearchMatch(
+            fileURL: nestedJSONURL,
+            lineNumber: 1,
+            column: nil,
+            line: "needle",
+            lineTerminator: "\n",
+            absoluteOffset: 0,
+            matchCount: 1,
+            spans: [MatchSpan(startColumn: 1, endColumn: 7, startByte: 0, endByte: 6, text: "needle")]
+        )
+        let separatorResult = SearchResults(
+            files: [SearchFileResult(fileURL: separatorMatch.fileURL, matches: [separatorMatch], bytesSearched: 7)],
+            summary: SearchSummary(filesSearched: 1, filesWithMatches: 1, matchedLines: 1, totalMatches: 1)
+        )
+        let separatorMessages = try JSONPrinter(options: separatorOptions, currentDirectory: root.url.path)
+            .lines(for: separatorResult)
+            .map(jsonObject)
+        let separatorBegin = separatorMessages[0]["data"] as? [String: Any]
+        let separatorPath = separatorBegin?["path"] as? [String: String]
+        #expect(separatorPath?["text"] == "./nested/json.txt")
     }
 
     @Test("prints JSON replacement fields")

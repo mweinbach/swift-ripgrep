@@ -360,7 +360,7 @@ public struct JSONPrinter {
     }
 
     private func displayPath(for url: URL) -> String {
-        pathFormatter.displayPath(for: url)
+        pathFormatter.displayPath(for: url, applyingPathSeparator: false)
     }
 
     private func jsonLine(_ object: JSONValue) -> String {
