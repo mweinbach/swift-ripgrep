@@ -2142,6 +2142,12 @@ struct RipgrepSearcherTests {
         #expect(try run(["--trim", "--color=always", "needle", root.path("a.txt")]) == [
             "alpha \(reset)\(redBold)needle\(reset) beta",
         ])
+        #expect(try run(["--vimgrep", "--color=always", "needle", root.path("a.txt")]) == [
+            "\(reset)\(magenta)\(root.path("a.txt"))\(reset):\(reset)\(green)1\(reset):\(reset)7\(reset):alpha \(reset)\(redBold)needle\(reset) beta",
+        ])
+        #expect(try run(["--vimgrep", "--color=always", "-o", "needle", root.path("a.txt")]) == [
+            "\(reset)\(magenta)\(root.path("a.txt"))\(reset):\(reset)\(green)1\(reset):\(reset)7\(reset):\(reset)\(redBold)needle\(reset)",
+        ])
         #expect(try run(["--pretty", "--color=never", "--sort=path", "needle", root.url.path]) == [
             "\(root.path("a.txt"))",
             "1:alpha needle beta",

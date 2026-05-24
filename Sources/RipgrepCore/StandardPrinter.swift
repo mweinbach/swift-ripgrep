@@ -167,9 +167,16 @@ public struct StandardPrinter {
         return match.spans.enumerated().map { index, span in
             let replacementStartByte = replacementOffsets[index]
             let lineText = replacementLine.map { renderedLine($0) } ?? vimgrepLineText(for: match)
-            let text = options.onlyMatching
+            let rawText = options.onlyMatching
                 ? (span.replacement ?? span.text)
                 : lineText
+            let text = coloredVimgrepText(
+                rawText,
+                span: span,
+                match: match,
+                replacementLine: replacementLine,
+                replacementStartByte: replacementStartByte
+            )
             let column = span.replacement == nil
                 ? span.startColumn
                 : column(in: replacementLine ?? match.line, byteOffset: replacementStartByte)
@@ -195,16 +202,51 @@ public struct StandardPrinter {
     private func vimgrepFields(lineNumber: Int, column: Int, byteOffset: Int?, text: String) -> [String] {
         var fields: [String] = []
         if !options.noLineNumber {
-            fields.append("\(lineNumber)")
+            fields.append(colors.apply(.line, to: "\(lineNumber)"))
         }
         if !options.noColumn {
-            fields.append("\(column)")
+            fields.append(colors.apply(.column, to: "\(column)"))
         }
         if let byteOffset {
-            fields.append("\(byteOffset)")
+            fields.append(colors.apply(.column, to: "\(byteOffset)"))
         }
         fields.append(text)
         return fields
+    }
+
+    private func coloredVimgrepText(
+        _ text: String,
+        span: MatchSpan,
+        match: SearchMatch,
+        replacementLine: String?,
+        replacementStartByte: Int
+    ) -> String {
+        guard colors.isEnabled else {
+            return text
+        }
+        if options.onlyMatching {
+            return colors.apply(.match, to: text)
+        }
+        if let replacement = span.replacement {
+            let replacementSpan = MatchSpan(
+                startColumn: span.startColumn,
+                endColumn: span.endColumn,
+                startByte: replacementStartByte,
+                endByte: replacementStartByte + replacement.utf8.count,
+                text: replacement
+            )
+            return colors.colorMatches(in: text, spans: [replacementSpan])
+        }
+        let sourceLine = options.nullData ? match.line : firstRenderedLine(match.line)
+        let textOffset = match.line.utf8.count - sourceLine.utf8.count
+        let coloredSpan = MatchSpan(
+            startColumn: span.startColumn,
+            endColumn: span.endColumn,
+            startByte: max(0, span.startByte - textOffset),
+            endByte: max(0, span.endByte - textOffset),
+            text: span.text
+        )
+        return colors.colorMatches(in: text, spans: [coloredSpan])
     }
 
     private func vimgrepLineText(for match: SearchMatch) -> String {
