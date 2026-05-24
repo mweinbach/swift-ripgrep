@@ -4699,6 +4699,19 @@ struct RipgrepSearcherTests {
             root.url.path,
         ])) == ["skip.txt", "nested.txt"])
 
+        let overrideDirectoryRoot = try TemporaryDirectory()
+        try overrideDirectoryRoot.createDirectory(".hidden")
+        try overrideDirectoryRoot.write("needle\n", to: ".hidden/child.txt")
+        try overrideDirectoryRoot.write("needle\n", to: ".hidden.txt")
+        #expect(try runAllowingNoMatch(["-g", ".hidden", "needle", overrideDirectoryRoot.url.path]) == [])
+        #expect(try runAllowingNoMatch(["--files", "-g", ".hidden", overrideDirectoryRoot.url.path]) == [])
+        #expect(pathBasenames(try run([
+            "-g",
+            ".hidden.txt",
+            "needle",
+            overrideDirectoryRoot.url.path,
+        ])) == [".hidden.txt"])
+
         let explicitScope = try TemporaryDirectory()
         try explicitScope.createDirectory("vendor/src")
         try explicitScope.createDirectory("keep")

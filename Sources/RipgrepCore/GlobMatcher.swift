@@ -39,6 +39,7 @@ public struct GlobMatcher: Equatable {
     private let slashPatternsMatchAnywhere: Bool
     private let stripBasePath: String?
     private let pathPrefix: String
+    private let overrideSemantics: Bool
 
     public init(
         patterns: [String],
@@ -89,6 +90,7 @@ public struct GlobMatcher: Equatable {
 
         self.rules = rules
         self.requirePositiveMatch = overrideSemantics && rules.contains { $0.decision == .include }
+        self.overrideSemantics = overrideSemantics
         self.slashPatternsMatchAnywhere = slashPatternsMatchAnywhere ?? !overrideSemantics
         self.stripBasePath = stripBasePath?.isEmpty == true ? nil : stripBasePath
         self.pathPrefix = pathPrefix
@@ -146,6 +148,12 @@ public struct GlobMatcher: Equatable {
             return matchesGlob(rule.pattern, relativePath, caseInsensitive: rule.caseInsensitive)
         }
         if rule.basenameOnly {
+            if overrideSemantics, rule.decision == .include {
+                guard let basename = pathComponents(relativePath).last else {
+                    return false
+                }
+                return matchesGlob(rule.pattern, basename, caseInsensitive: rule.caseInsensitive)
+            }
             return pathComponents(relativePath).contains { component in
                 matchesGlob(rule.pattern, component, caseInsensitive: rule.caseInsensitive)
             }
