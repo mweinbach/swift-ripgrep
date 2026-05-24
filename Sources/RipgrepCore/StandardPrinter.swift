@@ -1168,6 +1168,8 @@ public struct StandardPrinter {
                     spans: line.positiveSpans
                 )
                 output.append(contentsOf: formatVimgrep(positiveMatch, showPath: showPath))
+            } else if options.invertMatch, !line.positiveSpans.isEmpty {
+                output.append(contentsOf: formatVimgrepInvertedPositiveContextLine(line, fileURL: result.fileURL, showPath: showPath))
             } else {
                 output.append(formatVimgrepContextLine(line, fileURL: result.fileURL, showPath: showPath))
             }
@@ -1405,6 +1407,24 @@ public struct StandardPrinter {
 
         let text = displayLine(for: line)
         return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldContextSeparator))\(renderedLine(text, omittedKind: .context))\(outputTerminator(line.lineTerminator, line: text, forceCRLF: isColumnLimitedLine(text)))"
+    }
+
+    private func formatVimgrepInvertedPositiveContextLine(_ line: SearchLine, fileURL: URL, showPath: Bool) -> [String] {
+        line.positiveSpans.map { span in
+            var fields: [OutputField] = []
+            let path = showPath ? renderPath(for: fileURL, line: line.lineNumber, column: span.startColumn) : nil
+            if !options.noLineNumber {
+                fields.append(OutputField("\(line.lineNumber)", colorTarget: .line))
+            }
+            if !options.noColumn {
+                fields.append(OutputField("\(span.startColumn)", colorTarget: .column))
+            }
+            if options.byteOffset {
+                fields.append(OutputField("\(line.absoluteOffset + span.startByte)", colorTarget: .column))
+            }
+            let text = displayLine(for: line)
+            return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldContextSeparator))\(renderedLine(text, omittedKind: .context))\(outputTerminator(line.lineTerminator, line: text, forceCRLF: isColumnLimitedLine(text)))"
+        }
     }
 
     private func formatMatchedLine(_ line: SearchLine, fileURL: URL, showPath: Bool, match: SearchMatch?) -> String {

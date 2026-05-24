@@ -3804,6 +3804,16 @@ struct RipgrepSearcherTests {
             "\(vimgrepInvertRoot.path("vimgrep-invert.txt")):2:needle",
             "\(vimgrepInvertRoot.path("vimgrep-invert.txt")):3:after",
         ])
+        #expect(try run(["--vimgrep", "--passthru", "-v", "needle", vimgrepInvertRoot.path("vimgrep-invert.txt")]) == [
+            "\(vimgrepInvertRoot.path("vimgrep-invert.txt")):1:before",
+            "\(vimgrepInvertRoot.path("vimgrep-invert.txt"))-2-1-needle",
+            "\(vimgrepInvertRoot.path("vimgrep-invert.txt")):3:after",
+        ])
+        #expect(try run(["--vimgrep", "--passthru", "-b", "-v", "needle", vimgrepInvertRoot.path("vimgrep-invert.txt")]) == [
+            "\(vimgrepInvertRoot.path("vimgrep-invert.txt")):1:0:before",
+            "\(vimgrepInvertRoot.path("vimgrep-invert.txt"))-2-1-7-needle",
+            "\(vimgrepInvertRoot.path("vimgrep-invert.txt")):3:14:after",
+        ])
         try root.write("κόσμε target\n", to: "vimgrep-unicode-replace-column.txt")
         #expect(try run([
             "--vimgrep",
