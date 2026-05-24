@@ -50,6 +50,9 @@ public struct StandardPrinter {
             if options.heading == true {
                 return headingLines(for: results)
             }
+            if options.passthru || options.beforeContext > 0 || options.afterContext > 0 {
+                return contextLines(for: results, showPath: showPath(for: results))
+            }
             if options.onlyMatching {
                 return results.files.flatMap { result in
                     if let binaryLine = formatBinaryMatch(result, showPath: showPath(for: results)) {
@@ -57,9 +60,6 @@ public struct StandardPrinter {
                     }
                     return result.matches.flatMap { formatOnlyMatching($0, showPath: showPath(for: results)) }
                 }
-            }
-            if options.passthru || options.beforeContext > 0 || options.afterContext > 0 {
-                return contextLines(for: results, showPath: showPath(for: results))
             }
             if options.multiline, options.replacement == nil {
                 return results.files.flatMap { multilineMatchLines(for: $0, showPath: showPath(for: results)) }
@@ -338,10 +338,10 @@ public struct StandardPrinter {
             let lines: [String]
             if let binaryLine = formatBinaryMatch(result, showPath: false) {
                 lines = [binaryLine]
-            } else if options.onlyMatching {
-                lines = result.matches.flatMap { formatOnlyMatching($0, showPath: false) }
             } else if options.passthru || options.beforeContext > 0 || options.afterContext > 0 {
                 lines = contextLines(for: result, showPath: false)
+            } else if options.onlyMatching {
+                lines = result.matches.flatMap { formatOnlyMatching($0, showPath: false) }
             } else if options.multiline, options.replacement == nil {
                 lines = multilineMatchLines(for: result, showPath: false)
             } else {
@@ -364,6 +364,7 @@ public struct StandardPrinter {
     private func contextLines(for result: SearchFileResult, showPath: Bool) -> [String] {
         let matchedLineNumbers = multilineMatchedLineNumbers(for: result)
         let startMatchesByLine = firstMatchesByLine(for: result)
+        let matchesByLine = matchesGroupedByLine(for: result)
         let selectedLineNumbers: [Int]
         if options.passthru {
             selectedLineNumbers = result.lines.map(\.lineNumber)
@@ -391,7 +392,9 @@ public struct StandardPrinter {
             guard let line = result.lines.first(where: { $0.lineNumber == lineNumber }) else {
                 continue
             }
-            if let match = startMatchesByLine[lineNumber], shouldUseWholeMatchFormatter(match) {
+            if options.onlyMatching, let matches = matchesByLine[lineNumber] {
+                output.append(contentsOf: matches.flatMap { formatOnlyMatching($0, showPath: showPath) })
+            } else if let match = startMatchesByLine[lineNumber], shouldUseWholeMatchFormatter(match) {
                 output.append(format(match, showPath: showPath))
             } else if matchedLineNumbers.contains(lineNumber) {
                 output.append(formatMatchedLine(
@@ -501,6 +504,12 @@ public struct StandardPrinter {
     private func firstMatchesByLine(for result: SearchFileResult) -> [Int: SearchMatch] {
         result.matches.reduce(into: [:]) { matchesByLine, match in
             matchesByLine[match.lineNumber] = matchesByLine[match.lineNumber] ?? match
+        }
+    }
+
+    private func matchesGroupedByLine(for result: SearchFileResult) -> [Int: [SearchMatch]] {
+        result.matches.reduce(into: [:]) { matchesByLine, match in
+            matchesByLine[match.lineNumber, default: []].append(match)
         }
     }
 

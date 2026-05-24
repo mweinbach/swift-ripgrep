@@ -1513,6 +1513,29 @@ struct RipgrepSearcherTests {
             "6-other",
             "7-seven",
         ])
+
+        #expect(try run(["-n", "-o", "-C1", "match", root.path("context.txt")]) == [
+            "2-two",
+            "3:match",
+            "4-four",
+        ])
+        #expect(try run(["-n", "--passthru", "-o", "match", root.path("context.txt")]) == [
+            "1-one",
+            "2-two",
+            "3:match",
+            "4-four",
+            "5-five",
+            "6-other",
+            "7-seven",
+        ])
+
+        try root.write("before\ncat cat\nafter\n", to: "only-context.txt")
+        #expect(try run(["-n", "-o", "-C1", "cat", root.path("only-context.txt")]) == [
+            "1-before",
+            "2:cat",
+            "2:cat",
+            "3-after",
+        ])
     }
 
     @Test("stops after first nonmatch following matches")
