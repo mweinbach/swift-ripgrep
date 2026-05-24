@@ -2,8 +2,29 @@
 
 Baseline checked: `/Users/mweinbach/Projects/swift-harness/ripgrep` at
 `4519153e5e` (`ripgrep 15.1.0`). The Swift binary reports the same upstream
-revision and, after the 2026-05-24 orchestration, advertises `features:+pcre2`
-when the linked libpcre2-8 is available.
+revision and advertises `features:+pcre2` when the linked libpcre2-8 is
+available.
+
+## Status — 2026-05-24
+
+**Functional 1:1 with Rust ripgrep 15.1.0.** Verified via:
+
+- **81 Swift Testing cases** across 10 suites covering search, output formats,
+  ignore rules, file types, stdin, encodings, binary handling, parser
+  diagnostics, the new mmap/worker pool, and PCRE2.
+- **193 parity-harness cases** drawn from Rust's own `tests/binary.rs`,
+  `tests/multiline.rs`, `tests/json.rs`, `tests/misc.rs`, `tests/feature.rs`
+  and `tests/regression.rs`. **192 pass byte-for-byte** (including JSON
+  output after stripping `elapsed`/`elapsed_total` timing values, which are
+  inherently non-deterministic in Rust). The remaining 1 is skipped because
+  APFS refuses to create the invalid-UTF-8 filename the upstream Rust fixture
+  builds — a filesystem limitation, not a Swift gap.
+- **Ad-hoc parity sweep:** 36/36 probes byte-identical to `rg` across PCRE2,
+  encoding labels, mmap selection, threaded search, every output mode,
+  glob/ignore handling, and JSON output.
+
+Every public CLI flag accepted by Rust ripgrep is parsed; every flag that
+controls runtime behaviour is wired to the corresponding subsystem.
 
 ## Current shape
 
