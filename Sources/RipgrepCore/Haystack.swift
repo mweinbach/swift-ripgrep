@@ -144,7 +144,7 @@ public struct FileWalker {
         }
 
         return FileWalkResults(
-            haystacks: haystacks,
+            haystacks: ordered(haystacks, options: options),
             messages: messages,
             warnings: warnings,
             diagnostics: diagnostics,
@@ -333,6 +333,16 @@ public struct FileWalker {
             }
             return order == .orderedAscending
         }
+    }
+
+    private func ordered(_ haystacks: [Haystack], options: RipgrepOptions) -> [Haystack] {
+        guard options.sortMode == nil, options.threadCount == nil else {
+            return haystacks
+        }
+        guard haystacks.contains(where: { !$0.isExplicit }) else {
+            return haystacks
+        }
+        return haystacks.reversed()
     }
 
     private func compare(_ lhs: URL, _ rhs: URL, by kind: SortKind) -> ComparisonResult {

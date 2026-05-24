@@ -570,6 +570,16 @@ struct RipgrepSearcherTests {
             "none.txt:0",
         ])
 
+        let traversalRoot = try TemporaryDirectory()
+        try traversalRoot.write("needle\nneedle\n", to: "a.txt")
+        try traversalRoot.write("hay\n", to: "b.txt")
+        try traversalRoot.write("needle\n", to: "sub/c.txt")
+        #expect(countBasenames(try run(["-c", "--include-zero", "needle", traversalRoot.url.path])) == [
+            "a.txt:2",
+            "c.txt:1",
+            "b.txt:0",
+        ])
+
         var output: [String] = []
         let exitCode = RipgrepCLI.run(
             arguments: ["-c", "--include-zero", "absent", root.path("none.txt")],
@@ -1148,6 +1158,8 @@ struct RipgrepSearcherTests {
         try traversalRoot.write("needle\n", to: "b/two.txt")
         try traversalRoot.write("needle\n", to: "a/one.txt")
         try traversalRoot.write("needle\n", to: "A.txt")
+        #expect(pathBasenames(try run(["needle", traversalRoot.url.path])) == ["two.txt", "A.txt", "one.txt"])
+        #expect(pathBasenames(try run(["--threads", "0", "needle", traversalRoot.url.path])) == ["two.txt", "A.txt", "one.txt"])
         #expect(pathBasenames(try run(["--threads", "1", "needle", traversalRoot.url.path])) == ["one.txt", "A.txt", "two.txt"])
         #expect(pathBasenames(try run(["--threads", "1", "--sort", "none", "needle", traversalRoot.url.path])) == ["one.txt", "A.txt", "two.txt"])
         #expect(pathBasenames(try run(["--sort", "path", "needle", traversalRoot.url.path])) == ["A.txt", "one.txt", "two.txt"])

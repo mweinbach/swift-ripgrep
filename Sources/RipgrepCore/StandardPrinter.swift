@@ -105,16 +105,7 @@ public struct StandardPrinter {
     }
 
     private func countResults(for results: SearchResults) -> [SearchFileResult] {
-        let files = results.files.filter { countable($0) }
-        guard options.includeZero, options.sortMode == nil else {
-            return files
-        }
-        return files.sorted { lhs, rhs in
-            if lhs.hasMatch != rhs.hasMatch {
-                return !lhs.hasMatch
-            }
-            return false
-        }
+        results.files.filter { countable($0) }
     }
 
     private func countLine(_ count: Int, fileURL: URL, showPath: Bool) -> String {
