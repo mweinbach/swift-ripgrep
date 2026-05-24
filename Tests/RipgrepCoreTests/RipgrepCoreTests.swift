@@ -1452,6 +1452,39 @@ struct RipgrepSearcherTests {
             "3:",
             "3:",
         ])
+        #expect(try run(["-U", "-n", "-o", #"(?s).."#, root.path("multi.txt")]) == [
+            "1:fo",
+            "1:o",
+            "2:ba",
+            "2:r",
+            "3:ba",
+            "3:z",
+        ])
+        #expect(try run(["-U", "-n", "-o", "--byte-offset", #"(?s).."#, root.path("multi.txt")]) == [
+            "1:0:fo",
+            "1:2:o",
+            "2:4:ba",
+            "2:6:r",
+            "3:8:ba",
+            "3:10:z",
+        ])
+        #expect(try run(["-U", "--column", "-n", "-o", "--byte-offset", #"(?s).."#, root.path("multi.txt")]) == [
+            "1:1:0:fo",
+            "1:3:2:o",
+            "2:5:4:ba",
+            "2:7:6:r",
+            "3:9:8:ba",
+            "3:11:10:z",
+        ])
+        #expect(try run(["-U", "-n", "-o", #"(?s).."#, root.path("zero-width.txt")]) == [
+            "1:ab",
+            "3:cd",
+        ])
+        #expect(try run(["-U", "-n", "-o", "--byte-offset", #"(?s).+"#, root.path("multi.txt")]) == [
+            "1:0:foo",
+            "2:0:bar",
+            "3:0:baz",
+        ])
         #expect(try run(["-U", "-n", "-o", #"foo|$"#, root.path("multi.txt")]) == [
             "1:foo",
         ])

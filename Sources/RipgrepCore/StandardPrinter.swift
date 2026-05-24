@@ -449,12 +449,17 @@ public struct StandardPrinter {
             if shouldSuppressMultilineEmptyOnlyMatch(span) {
                 return [String]()
             }
-            if options.multiline, containsRenderedLineTerminator(span.text) {
+            if options.multiline, span.replacement != nil, containsRenderedLineTerminator(span.text) {
+                return formatOnlyMatchingReplacementMultiline(span, in: match, showPath: showPath)
+            }
+            if options.multiline,
+               span.replacement == nil,
+               containsRenderedLineTerminator(span.text) || containsRenderedLineTerminator(match.line) {
                 return formatOnlyMatchingMultiline(span, in: match, showPath: showPath)
             }
             let replacementStartByte = replacementOffsets[index]
             let column = span.replacement == nil
-                ? span.startColumn
+                ? onlyMatchingColumn(for: span, in: match, replacementStartByte: replacementStartByte)
                 : column(in: renderedText(for: match), byteOffset: replacementStartByte)
             var fields: [OutputField] = []
             let path = showPath ? renderPath(for: match.fileURL, line: match.lineNumber, column: column) : nil
@@ -567,6 +572,29 @@ public struct StandardPrinter {
     }
 
     private func formatOnlyMatchingMultiline(_ span: MatchSpan, in match: SearchMatch, showPath: Bool) -> [String] {
+        multilineOnlyMatchingChunks(for: span).map { chunk in
+            let chunkStartByte = span.startByte + chunk.startByte
+            let lineNumber = match.lineNumber
+                + lineOffset(in: match.lineWithTerminator, beforeByteOffset: chunkStartByte)
+            var fields: [OutputField] = []
+            let column = multilineOnlyMatchingUsesSourceAbsoluteColumns
+                ? match.absoluteOffset + span.startByte + 1
+                : chunk.startByte == 0 ? span.startColumn : 1
+            let path = showPath ? renderPath(for: match.fileURL, line: lineNumber, column: column) : nil
+            if options.wantsLineNumber {
+                fields.append(OutputField("\(lineNumber)", colorTarget: .line))
+            }
+            if options.column {
+                fields.append(OutputField("\(column)", colorTarget: .column))
+            }
+            if options.byteOffset {
+                fields.append(OutputField("\(match.absoluteOffset + span.startByte)", colorTarget: nil))
+            }
+            return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(colors.apply(.match, to: chunk.text))\(outputTerminator(match.lineTerminator, line: chunk.text, crlfMatchTerminator: true))"
+        }
+    }
+
+    private func formatOnlyMatchingReplacementMultiline(_ span: MatchSpan, in match: SearchMatch, showPath: Bool) -> [String] {
         let text = span.replacement ?? span.text
         let chunks = splitRenderedLines(text)
         let startLineOffset = lineOffset(in: match.lineWithTerminator, beforeByteOffset: span.startByte)
@@ -589,6 +617,114 @@ public struct StandardPrinter {
             runningByteOffset += chunk.utf8.count + 1
             return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(colors.apply(.match, to: chunk))\(outputTerminator(match.lineTerminator, line: chunk, crlfMatchTerminator: true))"
         }
+    }
+
+    private struct MultilineOnlyMatchingChunk {
+        let text: String
+        let startByte: Int
+    }
+
+    private func multilineOnlyMatchingChunks(for span: MatchSpan) -> [MultilineOnlyMatchingChunk] {
+        let text = span.replacement ?? span.text
+        let terminator: UnicodeScalar = text.contains("\0") ? "\0" : "\n"
+        var chunks: [MultilineOnlyMatchingChunk] = []
+        var current = String.UnicodeScalarView()
+        var currentStartByte = 0
+        var nextByte = 0
+
+        for scalar in text.unicodeScalars {
+            let scalarByteCount = String(scalar).utf8.count
+            if scalar == terminator {
+                if !current.isEmpty {
+                    chunks.append(MultilineOnlyMatchingChunk(
+                        text: String(current),
+                        startByte: currentStartByte
+                    ))
+                }
+                nextByte += scalarByteCount
+                currentStartByte = nextByte
+                current.removeAll(keepingCapacity: true)
+            } else {
+                current.append(scalar)
+                nextByte += scalarByteCount
+            }
+        }
+
+        if !current.isEmpty || text.unicodeScalars.last != terminator {
+            chunks.append(MultilineOnlyMatchingChunk(
+                text: String(current),
+                startByte: currentStartByte
+            ))
+        }
+        return chunks
+    }
+
+    private func onlyMatchingColumn(
+        for span: MatchSpan,
+        in match: SearchMatch,
+        replacementStartByte: Int
+    ) -> Int {
+        if multilineOnlyMatchingUsesSourceAbsoluteColumns {
+            return match.absoluteOffset + replacementStartByte + 1
+        }
+        return span.startColumn
+    }
+
+    private var multilineOnlyMatchingUsesSourceAbsoluteColumns: Bool {
+        options.multiline
+            && !options.fixedStrings
+            && (options.multilineDotall
+                || options.effectivePatterns.contains(where: containsInlineDotAllOption)
+                || options.effectivePatterns.contains(where: containsLineAnchor))
+    }
+
+    private func containsInlineDotAllOption(_ pattern: String) -> Bool {
+        var escaped = false
+        var inClass = false
+        var index = pattern.startIndex
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                escaped = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "[" {
+                inClass = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "]" {
+                inClass = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if !inClass, pattern[index...].hasPrefix("(?") {
+                var optionIndex = pattern.index(index, offsetBy: 2)
+                var enablesDotAll = false
+                var disabling = false
+                while optionIndex < pattern.endIndex {
+                    let option = pattern[optionIndex]
+                    if option == ")" || option == ":" {
+                        return enablesDotAll
+                    }
+                    if option == "-" {
+                        disabling = true
+                    } else if option == "s" {
+                        enablesDotAll = !disabling
+                    }
+                    optionIndex = pattern.index(after: optionIndex)
+                }
+                return false
+            }
+            index = pattern.index(after: index)
+        }
+        return false
     }
 
     private func headingLines(for results: SearchResults) -> [String] {
