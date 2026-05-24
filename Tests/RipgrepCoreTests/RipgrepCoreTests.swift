@@ -648,6 +648,19 @@ struct RipgrepSearcherTests {
             "[Omitted long matching line]",
             "[Omitted long matching line]",
         ])
+        try root.write("needle needle\n", to: "columns-stats.txt")
+        let longStatsOutput = try run(["--max-columns", "10", "--stats", "needle", root.path("columns-stats.txt")])
+        #expect(longStatsOutput.first == "[Omitted long line with 2 matches]")
+        #expect(longStatsOutput.contains("35 bytes printed"))
+        let longPreviewStatsOutput = try run([
+            "--max-columns", "10",
+            "--max-columns-preview",
+            "--stats",
+            "needle",
+            root.path("columns-stats.txt"),
+        ])
+        #expect(longPreviewStatsOutput.first == "needle nee [... 0 more matches]")
+        #expect(longPreviewStatsOutput.contains("32 bytes printed"))
         #expect(try run(["--max-columns", "12", "--max-columns-preview", "needle", root.path("columns.txt")]) == [
             "short needle [... omitted end of long line]",
             "verylong nee [... omitted end of long line]",

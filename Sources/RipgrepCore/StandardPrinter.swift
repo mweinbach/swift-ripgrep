@@ -737,14 +737,23 @@ public struct StandardPrinter {
     }
 
     private func limitedMatchedLine(_ line: String, match: SearchMatch) -> String? {
-        guard colors.isEnabled,
-              let maxColumns = options.maxColumns,
-              line.utf8.count >= maxColumns,
-              options.maxColumnsPreview else {
+        guard let maxColumns = options.maxColumns,
+              line.utf8.count >= maxColumns else {
             return nil
         }
         let rendered = options.trim ? line.trimmingASCIIWhitespacePrefix() : line
         let trimOffset = line.utf8.count - rendered.utf8.count
+        if options.stats {
+            guard options.maxColumnsPreview else {
+                return "[Omitted long line with \(match.matchCount) matches]"
+            }
+            let remainingMatches = match.spans.filter { $0.startByte >= trimOffset + maxColumns }.count
+            return previewLineSuffix(rendered, maxColumns: maxColumns, remainingMatches: remainingMatches)
+        }
+        guard colors.isEnabled,
+              options.maxColumnsPreview else {
+            return nil
+        }
         let remainingMatches = match.spans.filter { $0.startByte >= trimOffset + maxColumns }.count
         return previewLineSuffix(rendered, maxColumns: maxColumns, remainingMatches: remainingMatches)
     }
