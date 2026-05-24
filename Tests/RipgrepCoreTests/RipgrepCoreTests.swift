@@ -27,6 +27,7 @@ struct RipgrepSearcherTests {
     func supportsMatcherModes() throws {
         let root = try TemporaryDirectory()
         try root.write("abc123\nabc.123\nabc\nabc def\nxabc\n", to: "patterns.txt")
+        try root.write("é\nπ\n.\n", to: "scalars.txt")
 
         #expect(try run(["abc.123", root.path("patterns.txt")]) == ["abc.123"])
         #expect(try run(["-F", "abc.123", root.path("patterns.txt")]) == ["abc.123"])
@@ -74,6 +75,9 @@ struct RipgrepSearcherTests {
 
         #expect(try run(["-a", #"abc\x00?"#, root.path("patterns.txt")]) == ["abc123", "abc.123", "abc", "abc def", "xabc"])
         #expect(try runAllowingNoMatch(["-F", #"foo\x00?"#, root.path("patterns.txt")]) == [])
+        #expect(try run(["-o", #"\x{E9}"#, root.path("scalars.txt")]) == ["é"])
+        #expect(try run(["-o", #"\u{03C0}"#, root.path("scalars.txt")]) == ["π"])
+        #expect(try run(["-o", #"\x{2E}"#, root.path("scalars.txt")]) == ["."])
     }
 
     @Test("honors regex engine flag ordering")
@@ -291,6 +295,7 @@ struct RipgrepSearcherTests {
         try root.write("éx\nxé\nx\n", to: "words.txt")
         try root.write("Σ\nσ\n", to: "casefold.txt")
         try root.write("ABC\nabc\nδ\n", to: "ascii-case.txt")
+        try root.write("abc ABC 123 _ é π\nword-word\nfoo bar\n", to: "posix-alpha.txt")
         try root.write("\n##\n", to: "empty-word.txt")
 
         #expect(try run(["-o", #"\w+"#, root.path("classes.txt")]) == ["café", "π", "_"])
@@ -303,6 +308,7 @@ struct RipgrepSearcherTests {
         #expect(try run(["--no-unicode", "-F", "-i", "σ", root.path("casefold.txt")]) == ["σ"])
         #expect(try run(["--no-unicode", "-i", "abc", root.path("ascii-case.txt")]) == ["ABC", "abc"])
         #expect(try run(["--no-unicode", "-i", "[a-z]+", root.path("ascii-case.txt")]) == ["ABC", "abc"])
+        #expect(try run(["-o", "[[:alpha:]]+", root.path("posix-alpha.txt")]) == ["abc", "ABC", "word", "word", "foo", "bar"])
         #expect(try run(["--no-unicode", "-i", "[[:alpha:]]+", root.path("ascii-case.txt")]) == ["ABC", "abc"])
         #expect(try runAllowingNoMatch(["--no-unicode", "-i", "Δ", root.path("ascii-case.txt")]) == [])
         #expect(try run(["--no-unicode", "--unicode", "-o", #"\w+"#, root.path("classes.txt")]) == ["café", "π", "_"])

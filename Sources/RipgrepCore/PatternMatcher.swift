@@ -290,6 +290,8 @@ public struct PatternMatcher {
     private static func regexPattern(for pattern: String, options: RipgrepOptions) -> String {
         var source = foundationNamedCapturePattern(for: pattern)
         source = foundationAnyClassPattern(for: source)
+        source = foundationScalarEscapePattern(for: source)
+        source = asciiPOSIXClasses(for: source)
         if source == ")(" {
             source = ""
         }
@@ -298,7 +300,6 @@ public struct PatternMatcher {
             source = "(?:)"
         }
         if options.noUnicode {
-            source = asciiPOSIXClasses(for: source)
             source = asciiRegexPattern(for: source)
         }
         if options.noUnicode && options.effectiveIgnoreCase {
@@ -406,6 +407,58 @@ public struct PatternMatcher {
         return output
     }
 
+    private static func foundationScalarEscapePattern(for pattern: String) -> String {
+        var output = ""
+        var escaped = false
+        var index = pattern.startIndex
+
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                if character == "x" || character == "u",
+                   let escape = bracedScalarEscape(after: index, in: pattern) {
+                    output += NSRegularExpression.escapedPattern(for: String(escape.scalar))
+                    index = pattern.index(after: escape.end)
+                } else {
+                    output.append("\\")
+                    output.append(character)
+                    index = pattern.index(after: index)
+                }
+                escaped = false
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                index = pattern.index(after: index)
+                continue
+            }
+            output.append(character)
+            index = pattern.index(after: index)
+        }
+        if escaped {
+            output.append("\\")
+        }
+        return output
+    }
+
+    private static func bracedScalarEscape(
+        after index: String.Index,
+        in pattern: String
+    ) -> (scalar: UnicodeScalar, end: String.Index)? {
+        let brace = pattern.index(after: index)
+        guard brace < pattern.endIndex, pattern[brace] == "{",
+              let close = pattern[brace...].firstIndex(of: "}") else {
+            return nil
+        }
+        let digitsStart = pattern.index(after: brace)
+        guard digitsStart < close,
+              let value = UInt32(pattern[digitsStart..<close], radix: 16),
+              let scalar = UnicodeScalar(value) else {
+            return nil
+        }
+        return (scalar, close)
+    }
+
     private struct UnsupportedRegexFeature {
         let byteOffset: Int
         let caretLength: Int
@@ -491,8 +544,8 @@ public struct PatternMatcher {
         while index < pattern.endIndex {
             let character = pattern[index]
             if escaped {
-                if (character == "p" || character == "P"),
-                   let close = bracedUnicodeClassEnd(after: index, in: pattern) {
+                if (character == "p" || character == "P" || character == "x" || character == "u"),
+                   let close = bracedEscapeEnd(after: index, in: pattern) {
                     escaped = false
                     index = pattern.index(after: close)
                     continue
@@ -529,8 +582,8 @@ public struct PatternMatcher {
         while index < pattern.endIndex {
             let character = pattern[index]
             if escaped {
-                if (character == "p" || character == "P"),
-                   let close = bracedUnicodeClassEnd(after: index, in: pattern) {
+                if (character == "p" || character == "P" || character == "x" || character == "u"),
+                   let close = bracedEscapeEnd(after: index, in: pattern) {
                     escaped = false
                     index = pattern.index(after: close)
                     continue
@@ -566,12 +619,16 @@ public struct PatternMatcher {
         return nil
     }
 
-    private static func bracedUnicodeClassEnd(after index: String.Index, in pattern: String) -> String.Index? {
+    private static func bracedEscapeEnd(after index: String.Index, in pattern: String) -> String.Index? {
         let brace = pattern.index(after: index)
         guard brace < pattern.endIndex, pattern[brace] == "{" else {
             return nil
         }
         return pattern[brace...].firstIndex(of: "}")
+    }
+
+    private static func bracedUnicodeClassEnd(after index: String.Index, in pattern: String) -> String.Index? {
+        bracedEscapeEnd(after: index, in: pattern)
     }
 
     private static func unopenedGroupDiagnostic(_ pattern: String) -> UnsupportedRegexFeature? {
