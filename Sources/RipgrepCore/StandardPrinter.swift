@@ -255,6 +255,7 @@ public struct StandardPrinter {
                 rawText,
                 span: span,
                 match: match,
+                projection: projection,
                 replacementLine: replacementLine,
                 replacementStartByte: replacementStartByte
             )
@@ -378,6 +379,7 @@ public struct StandardPrinter {
         _ text: String,
         span: MatchSpan,
         match: SearchMatch,
+        projection: VimgrepSpanProjection?,
         replacementLine: String?,
         replacementStartByte: Int
     ) -> String {
@@ -397,7 +399,47 @@ public struct StandardPrinter {
             )
             return colors.colorMatches(in: text, spans: [replacementSpan])
         }
+        if let projection,
+           let maxColumns = options.maxColumns,
+           options.maxColumnsPreview {
+            let rendered = options.trim ? projection.line.trimmingASCIIWhitespacePrefix() : projection.line
+            if rendered.utf8.count >= maxColumns {
+                let trimOffset = projection.line.utf8.count - rendered.utf8.count
+                let previewStartByte = projection.lineStartByte + trimOffset + maxColumns
+                let lineEndByte = projection.lineStartByte + projection.line.utf8.count
+                let remainingMatches = match.spans.filter {
+                    $0.startByte >= previewStartByte && $0.startByte <= lineEndByte
+                }.count
+                return previewMatchedLineSuffix(
+                    rendered,
+                    maxColumns: maxColumns,
+                    remainingMatches: remainingMatches,
+                    spans: [span],
+                    lineStartByte: projection.lineStartByte,
+                    trimOffset: trimOffset
+                )
+            }
+        }
         let sourceLine = options.nullData ? match.line : firstRenderedLine(match.line)
+        if let maxColumns = options.maxColumns,
+           options.maxColumnsPreview {
+            let rendered = options.trim ? sourceLine.trimmingASCIIWhitespacePrefix() : sourceLine
+            if rendered.utf8.count >= maxColumns {
+                let trimOffset = sourceLine.utf8.count - rendered.utf8.count
+                let previewStartByte = trimOffset + maxColumns
+                let remainingMatches = match.spans.filter {
+                    $0.startByte >= previewStartByte && $0.startByte <= sourceLine.utf8.count
+                }.count
+                return previewMatchedLineSuffix(
+                    rendered,
+                    maxColumns: maxColumns,
+                    remainingMatches: remainingMatches,
+                    spans: [span],
+                    lineStartByte: 0,
+                    trimOffset: trimOffset
+                )
+            }
+        }
         let textOffset = match.line.utf8.count - sourceLine.utf8.count
         let coloredSpan = MatchSpan(
             startColumn: span.startColumn,
@@ -1186,7 +1228,14 @@ public struct StandardPrinter {
             let remainingMatches = match.spans.filter {
                 $0.startByte >= previewStartByte && $0.startByte <= lineEndByte
             }.count
-            return previewLineSuffix(rendered, maxColumns: maxColumns, remainingMatches: remainingMatches)
+            return previewMatchedLineSuffix(
+                rendered,
+                maxColumns: maxColumns,
+                remainingMatches: remainingMatches,
+                spans: match.spans,
+                lineStartByte: lineStartByte,
+                trimOffset: trimOffset
+            )
         }
         return nil
     }
@@ -1430,6 +1479,40 @@ public struct StandardPrinter {
             return "\(line.prefixColumns(maxColumns)) [... omitted end of long line]"
         }
         return "\(line.prefixColumns(maxColumns)) [... \(remainingMatches) more \(remainingMatches == 1 ? "match" : "matches")]"
+    }
+
+    private func previewMatchedLineSuffix(
+        _ line: String,
+        maxColumns: Int,
+        remainingMatches: Int,
+        spans: [MatchSpan],
+        lineStartByte: Int,
+        trimOffset: Int
+    ) -> String {
+        let prefix = line.prefixColumns(maxColumns)
+        guard colors.isEnabled, !prefix.isEmpty else {
+            return previewLineSuffix(line, maxColumns: maxColumns, remainingMatches: remainingMatches)
+        }
+        let prefixByteCount = prefix.utf8.count
+        let clippedSpans = spans.compactMap { span -> MatchSpan? in
+            let startByte = span.startByte - lineStartByte - trimOffset
+            let endByte = span.endByte - lineStartByte - trimOffset
+            let clippedStart = max(0, startByte)
+            let clippedEnd = min(prefixByteCount, endByte)
+            guard clippedEnd > clippedStart else {
+                return nil
+            }
+            return MatchSpan(
+                startColumn: span.startColumn,
+                endColumn: span.endColumn,
+                startByte: clippedStart,
+                endByte: clippedEnd,
+                text: span.text,
+                replacement: span.replacement
+            )
+        }
+        let coloredPrefix = colors.colorMatches(in: prefix, spans: clippedSpans)
+        return "\(coloredPrefix) [... \(remainingMatches) more \(remainingMatches == 1 ? "match" : "matches")]"
     }
 
     private func replacementStartOffsets(for match: SearchMatch) -> [Int] {

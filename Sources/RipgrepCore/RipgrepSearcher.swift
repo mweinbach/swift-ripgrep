@@ -2148,6 +2148,12 @@ public struct RipgrepSearcher {
                 bytesSearched: absoluteOffset
             )
         }
+        let standardLineEndColumn = multilineStandardLineEndColumn(
+            spans: spans,
+            lines: searchLines,
+            lineStartOffsets: lineStartOffsets,
+            options: options
+        )
         let positiveSpansByLine = multilinePositiveSpansByLine(
             spans: spans,
             lines: searchLines,
@@ -2223,7 +2229,7 @@ public struct RipgrepSearcher {
                 return SearchMatch(
                     fileURL: fileURL,
                     lineNumber: startLineIndex + 1,
-                    column: options.column ? adjustedSpans.first?.startColumn : nil,
+                    column: options.column ? standardLineEndColumn ?? adjustedSpans.first?.startColumn : nil,
                     line: blockText,
                     rawLine: rawBlockText,
                     lineTerminator: "",
@@ -2319,7 +2325,7 @@ public struct RipgrepSearcher {
             return SearchMatch(
                 fileURL: fileURL,
                 lineNumber: startLineIndex + 1,
-                column: options.column ? adjustedSpans.first?.startColumn : nil,
+                column: options.column ? standardLineEndColumn ?? adjustedSpans.first?.startColumn : nil,
                 line: blockText,
                 rawLine: rawBlockText,
                 lineTerminator: lineTerminator,
@@ -2355,6 +2361,30 @@ public struct RipgrepSearcher {
                 matches: matches,
                 options: options
             )
+        )
+    }
+
+    private func multilineStandardLineEndColumn(
+        spans: [MatchSpan],
+        lines: [SearchLine],
+        lineStartOffsets: [Int],
+        options: RipgrepOptions
+    ) -> Int? {
+        guard options.multiline,
+              options.column,
+              !options.vimgrep,
+              !options.onlyMatching,
+              options.effectivePatterns.contains(where: containsLineEndAnchor),
+              let firstSpan = spans.first,
+              let lineIndex = lineIndex(containingByteOffset: firstSpan.startByte, lineStartOffsets: lineStartOffsets),
+              lineIndex < lines.count else {
+            return nil
+        }
+        let line = lines[lineIndex]
+        return column(
+            in: line.lineWithTerminator,
+            byteOffset: firstSpan.startByte - line.absoluteOffset,
+            options: options
         )
     }
 

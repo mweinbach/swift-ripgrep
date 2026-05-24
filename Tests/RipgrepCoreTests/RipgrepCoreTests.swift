@@ -1810,6 +1810,22 @@ struct RipgrepSearcherTests {
             "\(root.path("zero-width.txt")):1:3:ab",
             "\(root.path("zero-width.txt")):3:3:cd",
         ])
+        try root.write("abcde\nx\nfoo bar\n", to: "line-end-columns.txt")
+        #expect(try run(["-U", "-n", "--column", "$", root.path("line-end-columns.txt")]) == [
+            "1:6:abcde",
+            "2:6:x",
+            "3:6:foo bar",
+        ])
+        #expect(try run(["-U", "-n", "--column", "-r", "X", "$", root.path("line-end-columns.txt")]) == [
+            "1:6:abcdeX",
+            "2:6:xX",
+            "3:6:foo barX",
+        ])
+        #expect(try run(["-U", "--vimgrep", "$", root.path("line-end-columns.txt")]) == [
+            "\(root.path("line-end-columns.txt")):1:6:abcde",
+            "\(root.path("line-end-columns.txt")):2:2:x",
+            "\(root.path("line-end-columns.txt")):3:8:foo bar",
+        ])
         #expect(try run(["-U", "--count-matches", "$", root.path("zero-width.txt")]) == ["3"])
         #expect(try run(["-U", "--count-matches", "(?:)", root.path("zero-width.txt")]) == ["7"])
         #expect(try run(["-U", "--count-matches", "x?", root.path("zero-width.txt")]) == ["7"])
@@ -2235,6 +2251,39 @@ struct RipgrepSearcherTests {
         ]) == [
             "1:1:01234567 [... 0 more matches]",
         ])
+        let redBold = "\u{1B}[1m\u{1B}[31m"
+        let reset = "\u{1B}[0m"
+        let coloredMultilineTrimPreview = try runExecutableData([
+            "-U",
+            "--trim",
+            "--max-columns-preview",
+            "-M8",
+            "--color=always",
+            "--colors=path:none",
+            "--no-filename",
+            #".*a\n?bc.*"#,
+            root.path("trim-columns.txt"),
+        ]) {}
+        #expect(coloredMultilineTrimPreview == Data(
+            "\(reset)\(redBold)01234567\(reset) [... 0 more matches]\n".utf8
+        ))
+        let coloredMultilineTrimVimgrepPreview = try runExecutableData([
+            "-U",
+            "--trim",
+            "--max-columns-preview",
+            "-M8",
+            "--vimgrep",
+            "--no-filename",
+            "--color=always",
+            "--colors=path:none",
+            "--colors=line:none",
+            "--colors=column:none",
+            #".*a\n?bc.*"#,
+            root.path("trim-columns.txt"),
+        ]) {}
+        #expect(coloredMultilineTrimVimgrepPreview == Data(
+            "\(reset)1\(reset):\(reset)1\(reset):\(reset)\(redBold)01234567\(reset) [... 0 more matches]\n".utf8
+        ))
 
         let output = try run(["--json", "-U", #"foo\nbar"#, root.path("multi.txt")])
         let messages = try output.map(jsonObject)
