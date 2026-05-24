@@ -523,7 +523,7 @@ public struct RipgrepSearcher {
 
     private func shouldSplitJSONBinaryDisplayLines(options: RipgrepOptions) -> Bool {
         options.json
-            && (!options.multiline || !options.effectivePatterns.allSatisfy(isBareMultilineLineAnchorPattern))
+            && (!options.multiline || !options.effectivePatterns.contains(where: isMultilineBinaryBoundaryPattern))
     }
 
     private func jsonBinaryRawLinePieces(_ rawLine: String?) -> (prefix: String, suffix: String)? {
@@ -579,7 +579,13 @@ public struct RipgrepSearcher {
             lines: displayLines,
             binaryByteOffset: binaryByteOffset,
             hasBinaryMatch: hasBinaryMatch,
-            bytesSearched: data.count,
+            bytesSearched: suppressedBinaryBytesSearched(
+                dataCount: data.count,
+                binaryByteOffset: binaryByteOffset,
+                searchedMatches: result.matches,
+                visibleMatches: visibleMatches,
+                options: options
+            ),
             supplementalMatchedLines: result.supplementalMatchedLines,
             supplementalMatches: result.supplementalMatches
         )
@@ -655,8 +661,7 @@ public struct RipgrepSearcher {
         }
         if options.json,
            options.multiline,
-           options.effectivePatterns.allSatisfy(isBareMultilineLineAnchorPattern)
-                || (searchedMatches.isEmpty && options.effectivePatterns.contains(where: isMultilineBinaryBoundaryPattern)) {
+           options.effectivePatterns.contains(where: isMultilineBinaryBoundaryPattern) {
             return binaryByteOffset
         }
         guard options.printMode == .matchingLines,
