@@ -166,7 +166,7 @@ public struct StandardPrinter {
         let replacementOffsets = replacementStartOffsetsByIndex(for: match)
         return match.spans.enumerated().map { index, span in
             let replacementStartByte = replacementOffsets[index]
-            let lineText = replacementLine.map { renderedLine($0) } ?? vimgrepLineText(for: match)
+            let lineText = replacementLine.map { vimgrepReplacementLineText($0, match: match) } ?? vimgrepLineText(for: match)
             let rawText = options.onlyMatching
                 ? (span.replacement ?? span.text)
                 : lineText
@@ -254,13 +254,29 @@ public struct StandardPrinter {
             return renderedLine(match.line)
         }
         let line = firstRenderedLine(match.line)
-        if let maxColumns = options.maxColumns,
-           options.maxColumnsPreview,
-           line.utf8.count >= maxColumns {
-            let rendered = options.trim ? line.trimmingASCIIWhitespacePrefix() : line
-            return previewLineSuffix(rendered, maxColumns: maxColumns, remainingMatches: 0)
+        guard let maxColumns = options.maxColumns, line.utf8.count >= maxColumns else {
+            return renderedLine(line)
         }
-        return renderedLine(line)
+        let rendered = options.trim ? line.trimmingASCIIWhitespacePrefix() : line
+        guard options.maxColumnsPreview else {
+            return "[Omitted long line with \(match.matchCount) matches]"
+        }
+        let trimOffset = line.utf8.count - rendered.utf8.count
+        let remainingMatches = match.spans.filter { $0.startByte >= trimOffset + maxColumns }.count
+        return previewLineSuffix(rendered, maxColumns: maxColumns, remainingMatches: remainingMatches)
+    }
+
+    private func vimgrepReplacementLineText(_ line: String, match: SearchMatch) -> String {
+        guard let maxColumns = options.maxColumns, line.utf8.count >= maxColumns else {
+            return renderedLine(line)
+        }
+        guard options.maxColumnsPreview else {
+            return "[Omitted long line with \(match.matchCount) matches]"
+        }
+        let rendered = options.trim ? line.trimmingASCIIWhitespacePrefix() : line
+        let trimOffset = line.utf8.count - rendered.utf8.count
+        let remainingMatches = replacementStartOffsets(for: match).filter { $0 >= trimOffset + maxColumns }.count
+        return previewLineSuffix(rendered, maxColumns: maxColumns, remainingMatches: remainingMatches)
     }
 
     private func formatBinaryMatch(_ result: SearchFileResult, showPath: Bool) -> String? {

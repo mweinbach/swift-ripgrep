@@ -2025,6 +2025,24 @@ struct RipgrepSearcherTests {
             "\(root.path("a.txt")):1:3:needle",
             "\(root.path("a.txt")):1:14:needle",
         ])
+        try root.write("abc\nABC\nxxxabcxxx\nzzz\nabc\n", to: "vimgrep-columns.txt")
+        #expect(try run(["--vimgrep", "--max-columns", "3", "abc", root.path("vimgrep-columns.txt")]) == [
+            "\(root.path("vimgrep-columns.txt")):1:1:[Omitted long line with 1 matches]",
+            "\(root.path("vimgrep-columns.txt")):3:4:[Omitted long line with 1 matches]",
+            "\(root.path("vimgrep-columns.txt")):5:1:[Omitted long line with 1 matches]",
+        ])
+        #expect(try run([
+            "--vimgrep",
+            "--max-columns",
+            "3",
+            "--max-columns-preview",
+            "abc",
+            root.path("vimgrep-columns.txt"),
+        ]) == [
+            "\(root.path("vimgrep-columns.txt")):1:1:abc [... 0 more matches]",
+            "\(root.path("vimgrep-columns.txt")):3:4:xxx [... 1 more match]",
+            "\(root.path("vimgrep-columns.txt")):5:1:abc [... 0 more matches]",
+        ])
         try root.write("abc\nABC\nxxxabcxxx\nzzz\nabc\n", to: "vimgrep-null-data.txt")
         let vimgrepNullDataOutput = try runExecutableData([
             "--vimgrep",
