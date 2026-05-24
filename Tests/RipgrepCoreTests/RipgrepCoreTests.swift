@@ -923,6 +923,33 @@ struct RipgrepSearcherTests {
             "foo",
             "bar",
         ])
+        let multilineDisabledError = """
+        rg: the literal "\\n" is not allowed in a regex
+
+        Consider enabling multiline mode with the --multiline flag (or -U for short).
+        When multiline mode is enabled, new line characters can be matched.
+        """
+        for arguments in [
+            [#"foo\nbar"#, root.path("multi.txt")],
+            ["--no-multiline", #"foo\nbar"#, root.path("multi.txt")],
+            ["-U", "--no-multiline", #"foo\nbar"#, root.path("multi.txt")],
+            [#"foo\x0Abar"#, root.path("multi.txt")],
+            [#"foo\x{0000A}bar"#, root.path("multi.txt")],
+            [#"foo\u{A}bar"#, root.path("multi.txt")],
+            [#"foo\u{0000A}bar"#, root.path("multi.txt")],
+        ] {
+            var output: [String] = []
+            var errors: [String] = []
+            let exitCode = RipgrepCLI.run(
+                arguments: arguments,
+                stdout: { output.append($0) },
+                stderr: { errors.append($0) }
+            )
+            #expect(exitCode == 2)
+            #expect(output.isEmpty)
+            #expect(errors == [multilineDisabledError])
+        }
+        #expect(try runAllowingNoMatch(["-F", #"foo\nbar"#, root.path("multi.txt")]) == [])
         try root.write("ab\n\ncd\n", to: "zero-width.txt")
         for pattern in ["^", "$", "(?:^)", "(?m:$)"] {
             var output: [String] = []

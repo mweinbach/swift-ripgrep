@@ -26,6 +26,14 @@ public struct PatternMatcher {
                     binary detection is enabled and matching a NUL byte is impossible.
                     """)
                 }
+                if !options.multiline, Self.canMatchLineTerminator(pattern) {
+                    throw RipgrepError.message("""
+                    the literal "\\n" is not allowed in a regex
+
+                    Consider enabling multiline mode with the --multiline flag (or -U for short).
+                    When multiline mode is enabled, new line characters can be matched.
+                    """)
+                }
                 if options.engineMode == .default, let unsupported = Self.defaultEngineUnsupportedFeature(in: pattern) {
                     throw RipgrepError.message(Self.defaultRegexParseError(pattern: pattern, feature: unsupported))
                 }
@@ -90,6 +98,61 @@ public struct PatternMatcher {
             index = pattern.index(after: index)
         }
         return false
+    }
+
+    private static func canMatchLineTerminator(_ pattern: String) -> Bool {
+        if pattern.contains("\n") {
+            return true
+        }
+
+        var escaped = false
+        var index = pattern.startIndex
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                if character == "n" {
+                    return true
+                }
+                if character == "x" {
+                    let next = pattern.index(after: index)
+                    let remainder = pattern[next...].lowercased()
+                    if remainder.hasPrefix("0a") {
+                        return true
+                    }
+                    if bracedHexEscapeValue(in: remainder) == 0x0A {
+                        return true
+                    }
+                }
+                if character == "u" {
+                    let next = pattern.index(after: index)
+                    let remainder = pattern[next...].lowercased()
+                    if remainder.hasPrefix("000a")
+                        || bracedHexEscapeValue(in: remainder) == 0x0A {
+                        return true
+                    }
+                }
+                escaped = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+            }
+            index = pattern.index(after: index)
+        }
+        return false
+    }
+
+    private static func bracedHexEscapeValue(in remainder: String) -> UInt32? {
+        guard remainder.first == "{",
+              let close = remainder.firstIndex(of: "}") else {
+            return nil
+        }
+        let hexStart = remainder.index(after: remainder.startIndex)
+        guard hexStart < close else {
+            return nil
+        }
+        return UInt32(remainder[hexStart..<close], radix: 16)
     }
 
     public func matches(in line: String) -> [Range<String.Index>] {
