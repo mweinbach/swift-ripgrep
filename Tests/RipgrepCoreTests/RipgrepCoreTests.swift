@@ -3243,6 +3243,34 @@ struct RipgrepSearcherTests {
         }
     }
 
+    @Test("reports parser diagnostics like ripgrep")
+    func reportsParserDiagnosticsLikeRipgrep() {
+        for (arguments, expected) in [
+            ([], "rg: ripgrep requires at least one pattern to execute a search"),
+            (["--regexp"], "rg: missing value for flag --regexp: missing argument for option '--regexp'"),
+            (["-e"], "rg: missing value for flag -e: missing argument for option '-e'"),
+            (["--file"], "rg: missing value for flag --file: missing argument for option '--file'"),
+            (["--color"], "rg: missing value for flag --color: missing argument for option '--color'"),
+            (["--sort"], "rg: missing value for flag --sort: missing argument for option '--sort'"),
+            (["--threads"], "rg: missing value for flag --threads: missing argument for option '--threads'"),
+            (["-C"], "rg: missing value for flag -C: missing argument for option '-C'"),
+            (["-C", "nope", "needle"], "rg: error parsing flag -C: value is not a valid number: invalid digit found in string"),
+            (["--path-separator"], "rg: missing value for flag --path-separator: missing argument for option '--path-separator'"),
+        ] {
+            var output: [String] = []
+            var errors: [String] = []
+            let exitCode = RipgrepCLI.run(
+                arguments: arguments,
+                stdout: { output.append($0) },
+                stderr: { errors.append($0) }
+            )
+
+            #expect(exitCode == 2)
+            #expect(output.isEmpty)
+            #expect(errors == [expected])
+        }
+    }
+
     @Test("prints version from short and long flags")
     func printsVersionFromShortAndLongFlags() {
         var output: [String] = []

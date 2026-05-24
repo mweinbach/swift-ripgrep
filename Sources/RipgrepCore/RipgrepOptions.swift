@@ -320,7 +320,7 @@ public enum RipgrepArgumentParser {
                 options.loggingMode = .trace
             case "--generate":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--generate <KIND>' requires a value")
+                    return .error(missingValue(flag: "--generate"))
                 }
                 guard let mode = GenerateMode(rawValue: arguments[index]) else {
                     return .error(unrecognizedChoice(flag: "--generate", value: arguments[index]))
@@ -354,7 +354,7 @@ public enum RipgrepArgumentParser {
                 options.fixedStrings = false
             case "--engine":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--engine <ENGINE>' requires a value")
+                    return .error(missingValue(flag: "--engine"))
                 }
                 guard let mode = parseEngineMode(arguments[index]) else {
                     return .error(unrecognizedEngine(flag: "--engine", value: arguments[index]))
@@ -377,7 +377,7 @@ public enum RipgrepArgumentParser {
                 options.engineMode = .default
             case "--dfa-size-limit":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--dfa-size-limit <NUM>' requires a value")
+                    return .error(missingValue(flag: "--dfa-size-limit"))
                 }
                 guard let limit = parseHumanReadableSize(arguments[index]) else {
                     return .error(invalidSize(flag: "--dfa-size-limit", value: arguments[index]))
@@ -392,7 +392,7 @@ public enum RipgrepArgumentParser {
                 options.dfaSizeLimit = limit
             case "--regex-size-limit":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--regex-size-limit <NUM>' requires a value")
+                    return .error(missingValue(flag: "--regex-size-limit"))
                 }
                 guard let limit = parseHumanReadableSize(arguments[index]) else {
                     return .error(invalidSize(flag: "--regex-size-limit", value: arguments[index]))
@@ -407,7 +407,7 @@ public enum RipgrepArgumentParser {
                 options.regexSizeLimit = limit
             case "-j", "--threads":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--threads <NUM>' requires a value")
+                    return .error(missingValue(flag: argument))
                 }
                 guard let threads = parseNonNegativeInt(arguments[index]) else {
                     return .error(invalidNumber(flag: argument))
@@ -440,7 +440,7 @@ public enum RipgrepArgumentParser {
                 options.bufferMode = .automatic
             case "-E", "--encoding":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--encoding <ENCODING>' requires a value")
+                    return .error(missingValue(flag: argument))
                 }
                 guard let mode = parseEncoding(arguments[index]) else {
                     return .error(unknownEncoding(arguments[index], flag: "--encoding"))
@@ -463,7 +463,7 @@ public enum RipgrepArgumentParser {
                 options.encodingMode = .automatic
             case "-e", "--regexp":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--regexp <PATTERN>' requires a value")
+                    return .error(missingValue(flag: argument))
                 }
                 hasExplicitPatternSource = true
                 explicitPatterns.append(arguments[index])
@@ -476,7 +476,7 @@ public enum RipgrepArgumentParser {
                 explicitPatterns.append(String(value.dropFirst(2)))
             case "-f", "--file":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--file <PATTERNFILE>' requires a value")
+                    return .error(missingValue(flag: argument))
                 }
                 hasExplicitPatternSource = true
                 let path = arguments[index]
@@ -553,7 +553,7 @@ public enum RipgrepArgumentParser {
                 options.onlyMatching = true
             case "-r", "--replace":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--replace <TEXT>' requires a value")
+                    return .error(missingValue(flag: argument))
                 }
                 options.replacement = arguments[index]
                 index += 1
@@ -592,7 +592,7 @@ public enum RipgrepArgumentParser {
                 options.noLineNumber = false
             case "--color":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--color <WHEN>' requires a value")
+                    return .error(missingValue(flag: "--color"))
                 }
                 guard let mode = parseColorMode(arguments[index]) else {
                     return .error(unrecognizedChoice(flag: "--color", value: arguments[index]))
@@ -609,7 +609,7 @@ public enum RipgrepArgumentParser {
                 options.colorMode = .never
             case "--colors":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--colors <COLOR_SPEC>' requires a value")
+                    return .error(missingValue(flag: "--colors"))
                 }
                 guard let change = parseColorChange(arguments[index]) else {
                     return .error(invalidColorSpec(arguments[index]))
@@ -624,7 +624,7 @@ public enum RipgrepArgumentParser {
                 options.colorChanges.append(change)
             case "--hyperlink-format":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--hyperlink-format <FORMAT>' requires a value")
+                    return .error(missingValue(flag: "--hyperlink-format"))
                 }
                 do {
                     options.hyperlinkFormat = try parseHyperlinkFormat(arguments[index])
@@ -641,7 +641,7 @@ public enum RipgrepArgumentParser {
                 }
             case "--hostname-bin":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--hostname-bin <COMMAND>' requires a value")
+                    return .error(missingValue(flag: "--hostname-bin"))
                 }
                 options.hostnameBin = arguments[index].isEmpty ? nil : arguments[index]
                 index += 1
@@ -658,7 +658,7 @@ public enum RipgrepArgumentParser {
                 options.includeZero = false
             case "-M", "--max-columns":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--max-columns <NUM>' requires a value")
+                    return .error(missingValue(flag: argument))
                 }
                 guard let columns = parseNonNegativeInt(arguments[index]) else {
                     return .error("error: invalid max columns '\(arguments[index])'")
@@ -683,7 +683,7 @@ public enum RipgrepArgumentParser {
                 options.maxColumnsPreview = false
             case "--max-filesize":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--max-filesize <NUM>' requires a value")
+                    return .error(missingValue(flag: "--max-filesize"))
                 }
                 guard let size = parseHumanReadableSize(arguments[index]) else {
                     return .error(invalidSize(flag: "--max-filesize", value: arguments[index]))
@@ -720,7 +720,7 @@ public enum RipgrepArgumentParser {
                 options.nullPathTerminator = true
             case "--path-separator":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--path-separator <SEPARATOR>' requires a value")
+                    return .error(missingValue(flag: "--path-separator"))
                 }
                 guard let parsed = parsePathSeparator(arguments[index]) else {
                     return .error(invalidPathSeparator(arguments[index]))
@@ -745,7 +745,7 @@ public enum RipgrepArgumentParser {
                 }
             case "--sort":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--sort <SORTBY>' requires a value")
+                    return .error(missingValue(flag: "--sort"))
                 }
                 if arguments[index] == "none" {
                     options.sortMode = nil
@@ -768,7 +768,7 @@ public enum RipgrepArgumentParser {
                 }
             case "--sortr":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--sortr <SORTBY>' requires a value")
+                    return .error(missingValue(flag: "--sortr"))
                 }
                 if arguments[index] == "none" {
                     options.sortMode = nil
@@ -857,7 +857,7 @@ public enum RipgrepArgumentParser {
                 options.ignoreFileCaseInsensitive = false
             case "--ignore-file":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--ignore-file <PATH>' requires a value")
+                    return .error(missingValue(flag: "--ignore-file"))
                 }
                 options.ignoreFiles.append(URL(fileURLWithPath: arguments[index]))
                 index += 1
@@ -865,7 +865,7 @@ public enum RipgrepArgumentParser {
                 options.ignoreFiles.append(URL(fileURLWithPath: String(value.dropFirst("--ignore-file=".count))))
             case "--pre":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--pre <COMMAND>' requires a value")
+                    return .error(missingValue(flag: "--pre"))
                 }
                 options.preprocessor = arguments[index].isEmpty ? nil : arguments[index]
                 if options.preprocessor != nil {
@@ -882,7 +882,7 @@ public enum RipgrepArgumentParser {
                 options.preprocessor = nil
             case "--pre-glob":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--pre-glob <GLOB>' requires a value")
+                    return .error(missingValue(flag: "--pre-glob"))
                 }
                 guard let glob = parseStrictGlob(arguments[index]) else {
                     return .error(globParseError(arguments[index]))
@@ -897,7 +897,7 @@ public enum RipgrepArgumentParser {
                 options.preGlobPatterns.append(glob)
             case "-g", "--glob":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--glob <GLOB>' requires a value")
+                    return .error(missingValue(flag: argument))
                 }
                 guard let glob = parseStrictGlob(arguments[index]) else {
                     return .error(globParseError(arguments[index]))
@@ -918,7 +918,7 @@ public enum RipgrepArgumentParser {
                 options.globPatterns.append(glob)
             case "--iglob":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--iglob <GLOB>' requires a value")
+                    return .error(missingValue(flag: "--iglob"))
                 }
                 guard let glob = parseStrictGlob(arguments[index]) else {
                     return .error(globParseError(arguments[index]))
@@ -933,7 +933,7 @@ public enum RipgrepArgumentParser {
                 options.caseInsensitiveGlobPatterns.append(glob)
             case "-t", "--type":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--type <TYPE>' requires a value")
+                    return .error(missingValue(flag: argument))
                 }
                 options.typeChanges.append(.select(arguments[index]))
                 index += 1
@@ -943,7 +943,7 @@ public enum RipgrepArgumentParser {
                 options.typeChanges.append(.select(String(value.dropFirst(2))))
             case "-T", "--type-not":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--type-not <TYPE>' requires a value")
+                    return .error(missingValue(flag: argument))
                 }
                 options.typeChanges.append(.negate(arguments[index]))
                 index += 1
@@ -953,7 +953,7 @@ public enum RipgrepArgumentParser {
                 options.typeChanges.append(.negate(String(value.dropFirst(2))))
             case "--type-add":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--type-add <TYPESPEC>' requires a value")
+                    return .error(missingValue(flag: "--type-add"))
                 }
                 options.typeChanges.append(.add(arguments[index]))
                 index += 1
@@ -961,7 +961,7 @@ public enum RipgrepArgumentParser {
                 options.typeChanges.append(.add(String(value.dropFirst("--type-add=".count))))
             case "--type-clear":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--type-clear <TYPE>' requires a value")
+                    return .error(missingValue(flag: "--type-clear"))
                 }
                 options.typeChanges.append(.clear(arguments[index]))
                 index += 1
@@ -1013,7 +1013,7 @@ public enum RipgrepArgumentParser {
                 options.afterContext = 0
             case "-m", "--max-count":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--max-count <NUM>' requires a value")
+                    return .error(missingValue(flag: argument))
                 }
                 guard let count = parseNonNegativeInt(arguments[index]) else {
                     return .error(invalidNumber(flag: argument))
@@ -1034,7 +1034,7 @@ public enum RipgrepArgumentParser {
                 options.maxCount = count
             case "-d", "--max-depth", "--maxdepth":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--max-depth <NUM>' requires a value")
+                    return .error(missingValue(flag: argument))
                 }
                 guard let depth = parseNonNegativeInt(arguments[index]) else {
                     return .error(invalidNumber(flag: argument))
@@ -1061,10 +1061,10 @@ public enum RipgrepArgumentParser {
                 options.maxDepth = depth
             case "-A", "--after-context":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--after-context <NUM>' requires a value")
+                    return .error(missingValue(flag: argument))
                 }
                 guard let count = parseContextCount(arguments[index], flag: argument) else {
-                    return .error("error: invalid context length '\(arguments[index])'")
+                    return .error(invalidNumber(flag: argument))
                 }
                 options.afterContext = count
                 afterContextWasSet = true
@@ -1073,7 +1073,7 @@ public enum RipgrepArgumentParser {
             case let value where value.hasPrefix("--after-context="):
                 let raw = String(value.dropFirst("--after-context=".count))
                 guard let count = parseContextCount(raw, flag: "--after-context") else {
-                    return .error("error: invalid context length '\(raw)'")
+                    return .error(invalidNumber(flag: "--after-context"))
                 }
                 options.afterContext = count
                 afterContextWasSet = true
@@ -1081,17 +1081,17 @@ public enum RipgrepArgumentParser {
             case let value where value.hasPrefix("-A") && value.count > 2:
                 let raw = String(value.dropFirst(2))
                 guard let count = parseContextCount(raw, flag: "-A") else {
-                    return .error("error: invalid context length '\(raw)'")
+                    return .error(invalidNumber(flag: "-A"))
                 }
                 options.afterContext = count
                 afterContextWasSet = true
                 options.passthru = false
             case "-B", "--before-context":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--before-context <NUM>' requires a value")
+                    return .error(missingValue(flag: argument))
                 }
                 guard let count = parseContextCount(arguments[index], flag: argument) else {
-                    return .error("error: invalid context length '\(arguments[index])'")
+                    return .error(invalidNumber(flag: argument))
                 }
                 options.beforeContext = count
                 beforeContextWasSet = true
@@ -1100,7 +1100,7 @@ public enum RipgrepArgumentParser {
             case let value where value.hasPrefix("--before-context="):
                 let raw = String(value.dropFirst("--before-context=".count))
                 guard let count = parseContextCount(raw, flag: "--before-context") else {
-                    return .error("error: invalid context length '\(raw)'")
+                    return .error(invalidNumber(flag: "--before-context"))
                 }
                 options.beforeContext = count
                 beforeContextWasSet = true
@@ -1108,17 +1108,17 @@ public enum RipgrepArgumentParser {
             case let value where value.hasPrefix("-B") && value.count > 2:
                 let raw = String(value.dropFirst(2))
                 guard let count = parseContextCount(raw, flag: "-B") else {
-                    return .error("error: invalid context length '\(raw)'")
+                    return .error(invalidNumber(flag: "-B"))
                 }
                 options.beforeContext = count
                 beforeContextWasSet = true
                 options.passthru = false
             case "-C", "--context":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--context <NUM>' requires a value")
+                    return .error(missingValue(flag: argument))
                 }
                 guard let count = parseContextCount(arguments[index], flag: argument) else {
-                    return .error("error: invalid context length '\(arguments[index])'")
+                    return .error(invalidNumber(flag: argument))
                 }
                 if !beforeContextWasSet {
                     options.beforeContext = count
@@ -1131,7 +1131,7 @@ public enum RipgrepArgumentParser {
             case let value where value.hasPrefix("--context="):
                 let raw = String(value.dropFirst("--context=".count))
                 guard let count = parseContextCount(raw, flag: "--context") else {
-                    return .error("error: invalid context length '\(raw)'")
+                    return .error(invalidNumber(flag: "--context"))
                 }
                 if !beforeContextWasSet {
                     options.beforeContext = count
@@ -1143,7 +1143,7 @@ public enum RipgrepArgumentParser {
             case let value where value.hasPrefix("-C") && value.count > 2:
                 let raw = String(value.dropFirst(2))
                 guard let count = parseContextCount(raw, flag: "-C") else {
-                    return .error("error: invalid context length '\(raw)'")
+                    return .error(invalidNumber(flag: "-C"))
                 }
                 if !beforeContextWasSet {
                     options.beforeContext = count
@@ -1154,7 +1154,7 @@ public enum RipgrepArgumentParser {
                 options.passthru = false
             case "--context-separator":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--context-separator <SEPARATOR>' requires a value")
+                    return .error(missingValue(flag: "--context-separator"))
                 }
                 options.contextSeparator = parseEscapedSeparator(arguments[index])
                 index += 1
@@ -1164,7 +1164,7 @@ public enum RipgrepArgumentParser {
                 options.contextSeparator = nil
             case "--field-match-separator":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--field-match-separator <SEPARATOR>' requires a value")
+                    return .error(missingValue(flag: "--field-match-separator"))
                 }
                 options.fieldMatchSeparator = parseEscapedSeparator(arguments[index])
                 index += 1
@@ -1172,7 +1172,7 @@ public enum RipgrepArgumentParser {
                 options.fieldMatchSeparator = parseEscapedSeparator(String(value.dropFirst("--field-match-separator=".count)))
             case "--field-context-separator":
                 guard index < arguments.count else {
-                    return .error("error: The argument '--field-context-separator <SEPARATOR>' requires a value")
+                    return .error(missingValue(flag: "--field-context-separator"))
                 }
                 options.fieldContextSeparator = parseEscapedSeparator(arguments[index])
                 index += 1
@@ -1219,7 +1219,7 @@ public enum RipgrepArgumentParser {
         if options.mode == .search {
             if explicitPatterns.isEmpty && !options.patternFileStdin && !hasExplicitPatternSource {
                 guard let pattern = positionals.first else {
-                    return .error(usage())
+                    return .error("ripgrep requires at least one pattern to execute a search")
                 }
                 options.pattern = pattern
                 options.patterns = [pattern]
@@ -1525,7 +1525,7 @@ public enum RipgrepArgumentParser {
                 options.generateMode = nil
             case "f":
                 guard index < arguments.count else {
-                    return "error: The argument '--file <PATTERNFILE>' requires a value"
+                    return missingValue(flag: "-f")
                 }
                 hasExplicitPatternSource = true
                 let path = arguments[index]
@@ -1994,6 +1994,10 @@ public enum RipgrepArgumentParser {
 
     private static func unrecognizedChoice(flag: String, value: String) -> String {
         "error parsing flag \(flag): choice '\(value)' is unrecognized"
+    }
+
+    private static func missingValue(flag: String) -> String {
+        "missing value for flag \(flag): missing argument for option '\(flag)'"
     }
 
     private static func unrecognizedEngine(flag: String, value: String) -> String {
