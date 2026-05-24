@@ -229,8 +229,14 @@ public struct StandardPrinter {
         return message
     }
 
-    private func formatOnlyMatching(_ match: SearchMatch, showPath: Bool) -> [String] {
-        if options.invertMatch {
+    private func formatOnlyMatching(
+        _ match: SearchMatch,
+        showPath: Bool,
+        fieldSeparator: String? = nil,
+        forcePositiveSpans: Bool = false
+    ) -> [String] {
+        let separator = fieldSeparator ?? options.fieldMatchSeparator
+        if options.invertMatch && !forcePositiveSpans {
             return [formatOnlyMatchingInverted(match, showPath: showPath)]
         }
 
@@ -258,7 +264,7 @@ public struct StandardPrinter {
                 fields.append(OutputField("\(match.absoluteOffset + replacementStartByte)", colorTarget: nil))
             }
             let text = "\(onlyMatchingText(span, in: match))\(outputTerminator(match.lineTerminator, line: span.text, crlfMatchTerminator: true))"
-            return ["\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(text)"]
+            return ["\(prefix(path: path, fields: fields, fieldSeparator: separator))\(text)"]
         }
     }
 
@@ -394,6 +400,26 @@ public struct StandardPrinter {
             }
             if options.onlyMatching, let matches = matchesByLine[lineNumber] {
                 output.append(contentsOf: matches.flatMap { formatOnlyMatching($0, showPath: showPath) })
+            } else if options.onlyMatching,
+                      options.invertMatch,
+                      !line.positiveSpans.isEmpty {
+                let positiveMatch = SearchMatch(
+                    fileURL: result.fileURL,
+                    lineNumber: line.lineNumber,
+                    column: options.column ? line.positiveSpans.first?.startColumn : nil,
+                    line: line.line,
+                    rawLine: line.rawLine,
+                    lineTerminator: line.lineTerminator,
+                    absoluteOffset: line.absoluteOffset,
+                    matchCount: line.positiveSpans.count,
+                    spans: line.positiveSpans
+                )
+                output.append(contentsOf: formatOnlyMatching(
+                    positiveMatch,
+                    showPath: showPath,
+                    fieldSeparator: options.fieldContextSeparator,
+                    forcePositiveSpans: true
+                ))
             } else if let match = startMatchesByLine[lineNumber], shouldUseWholeMatchFormatter(match) {
                 output.append(format(match, showPath: showPath))
             } else if matchedLineNumbers.contains(lineNumber) {

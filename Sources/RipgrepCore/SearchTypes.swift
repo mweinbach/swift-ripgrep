@@ -69,13 +69,22 @@ public struct SearchLine: Equatable, Sendable {
     public let rawLine: String?
     public let lineTerminator: String
     public let absoluteOffset: Int
+    public let positiveSpans: [MatchSpan]
 
-    public init(lineNumber: Int, line: String, rawLine: String? = nil, lineTerminator: String = "", absoluteOffset: Int = 0) {
+    public init(
+        lineNumber: Int,
+        line: String,
+        rawLine: String? = nil,
+        lineTerminator: String = "",
+        absoluteOffset: Int = 0,
+        positiveSpans: [MatchSpan] = []
+    ) {
         self.lineNumber = lineNumber
         self.line = line
         self.rawLine = rawLine
         self.lineTerminator = lineTerminator
         self.absoluteOffset = absoluteOffset
+        self.positiveSpans = positiveSpans
     }
 
     public var lineWithTerminator: String {

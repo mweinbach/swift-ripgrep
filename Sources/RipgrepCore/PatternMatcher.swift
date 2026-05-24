@@ -165,6 +165,10 @@ public struct PatternMatcher {
         !filteredCandidates(in: line).isEmpty
     }
 
+    public func positiveSpans(in line: String) -> [MatchSpan] {
+        matchSpans(from: filteredCandidates(in: line), in: line)
+    }
+
     public func spans(in line: String) -> [MatchSpan] {
         let filtered = filteredCandidates(in: line)
 
@@ -174,7 +178,14 @@ public struct PatternMatcher {
             ] : []
         }
 
-        return Self.dropAdjacentEmptyMatches(afterNonEmpty: filtered)
+        return matchSpans(from: filtered, in: line)
+    }
+
+    private func matchSpans(
+        from candidates: [(range: Range<String.Index>, replacement: String?)],
+        in line: String
+    ) -> [MatchSpan] {
+        Self.dropAdjacentEmptyMatches(afterNonEmpty: candidates)
             .sorted { lhs, rhs in
                 if lhs.range.lowerBound == rhs.range.lowerBound {
                     return lhs.range.upperBound < rhs.range.upperBound

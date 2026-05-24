@@ -1583,6 +1583,22 @@ struct RipgrepSearcherTests {
             "7-seven",
         ])
 
+        try root.write("alpha\nfoo\nbar\nfoo bar\nFOO\n", to: "invert-context.txt")
+        #expect(try run(["-v", "-o", "-n", "-A1", "foo", root.path("invert-context.txt")]) == [
+            "1:alpha",
+            "2-foo",
+            "3:bar",
+            "4-foo",
+            "5:FOO",
+        ])
+        #expect(try run(["-v", "-o", "-n", "--column", "-A1", "foo", root.path("invert-context.txt")]) == [
+            "1:alpha",
+            "2-1-foo",
+            "3:bar",
+            "4-1-foo",
+            "5:FOO",
+        ])
+
         try root.write("before\ncat cat\nafter\n", to: "only-context.txt")
         #expect(try run(["-n", "-o", "-C1", "cat", root.path("only-context.txt")]) == [
             "1-before",
