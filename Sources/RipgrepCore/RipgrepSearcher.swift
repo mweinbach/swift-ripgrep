@@ -1549,6 +1549,22 @@ public struct RipgrepSearcher {
         guard options.nullData, !options.multiline, !spans.isEmpty else {
             return (spans, false)
         }
+        if options.effectivePatterns.contains(where: containsLineStartAnchor),
+           !options.effectivePatterns.contains(where: containsLineEndAnchor) {
+            let bytes = Array(matchingLine.utf8)
+            let filtered = spans.filter { span in
+                guard span.text.isEmpty,
+                      span.startByte == span.endByte,
+                      span.startByte > 0,
+                      span.startByte < bytes.count else {
+                    return true
+                }
+                return bytes[span.startByte - 1] != UInt8(ascii: "\n")
+            }
+            if filtered.isEmpty || filtered.count != spans.count {
+                return (filtered, filtered.isEmpty)
+            }
+        }
         if !terminator.isEmpty,
            options.effectivePatterns.contains(where: containsRecordEndConstrainedAnchor) {
             let recordEnd = byteCount(matchingLine, options: options)

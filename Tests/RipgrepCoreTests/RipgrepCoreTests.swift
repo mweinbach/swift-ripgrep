@@ -1270,6 +1270,18 @@ struct RipgrepSearcherTests {
             root.path("nul-record-anchors.txt"),
         ], fixture: {})
         #expect(nullDataOnlyLineStartEndOutput == Data([0x00, 0x00, 0x00, 0x00]))
+        try root.write(Data("foo\0bar\nzzz\0foo\n".utf8), to: "nul-record-starts.txt")
+        let nullDataOnlyRecordStartOutput = try runExecutableData([
+            "--null-data",
+            "-n",
+            "-o",
+            "^",
+            root.path("nul-record-starts.txt"),
+        ], fixture: {})
+        #expect(nullDataOnlyRecordStartOutput == Data("1:\02:\03:\0".utf8))
+        #expect(try run(["--null-data", "--count-matches", "^", root.path("nul-record-starts.txt")]) == [
+            "3\0",
+        ])
         let nullDataRecordStartJSONOutput = try run([
             "--json",
             "--null-data",
