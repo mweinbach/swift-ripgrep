@@ -1551,12 +1551,18 @@ public struct RipgrepSearcher {
             }
             return MultilineSpanCandidate(span: span, startLineIndex: startLineIndex, endLineIndex: endLineIndex)
         }
-        let matches = groupedOverlappingLineSpans(candidates, splitSeparatedTrailingLineMatches: true).compactMap { group -> SearchMatch? in
+        let shouldGroupLineAnchors = shouldGroupMultilineJSONLineAnchorSpans(candidates, options: options)
+        let groups = shouldGroupLineAnchors
+            ? [candidates]
+            : groupedOverlappingLineSpans(candidates, splitSeparatedTrailingLineMatches: true)
+        let matches = groups.compactMap { group -> SearchMatch? in
             guard let first = group.first else {
                 return nil
             }
             let startLineIndex = first.startLineIndex
-            let endLineIndex = group.reduce(first.endLineIndex) { max($0, $1.endLineIndex) }
+            let endLineIndex = shouldGroupLineAnchors
+                ? searchLines.count - 1
+                : group.reduce(first.endLineIndex) { max($0, $1.endLineIndex) }
             let blockText = multilineReplacementBlockText(
                 lines: searchLines,
                 startLineIndex: startLineIndex,
@@ -1588,9 +1594,9 @@ public struct RipgrepSearcher {
             let endLineTextEnd = lineTextEndOffset(endLine, options: options)
             let includesEndTerminator = group.contains { $0.span.endByte > endLineTextEnd }
             let reachesEndLineText = group.contains { $0.span.endByte > endLine.absoluteOffset }
-            let lineTerminator = !includesEndTerminator && (startLineIndex == endLineIndex || reachesEndLineText)
-                ? endLine.lineTerminator
-                : ""
+            let shouldUseEndLineTerminator = shouldGroupLineAnchors
+                || (!includesEndTerminator && (startLineIndex == endLineIndex || reachesEndLineText))
+            let lineTerminator = shouldUseEndLineTerminator ? endLine.lineTerminator : ""
 
             return SearchMatch(
                 fileURL: fileURL,
@@ -1616,6 +1622,18 @@ public struct RipgrepSearcher {
             lines: searchLines,
             bytesSearched: absoluteOffset
         )
+    }
+
+    private func shouldGroupMultilineJSONLineAnchorSpans(
+        _ candidates: [MultilineSpanCandidate],
+        options: RipgrepOptions
+    ) -> Bool {
+        options.json
+            && options.multiline
+            && options.maxCount == nil
+            && !candidates.isEmpty
+            && candidates.allSatisfy { $0.span.text.isEmpty && $0.span.startByte == $0.span.endByte }
+            && options.effectivePatterns.allSatisfy(isBareMultilineLineAnchorPattern)
     }
 
     private func multilineMatchCount(
@@ -1649,6 +1667,26 @@ public struct RipgrepSearcher {
         let bodyStart = pattern.index(after: colon)
         let body = pattern[bodyStart..<pattern.index(before: pattern.endIndex)]
         return flags.contains("m") && body == "$"
+    }
+
+    private func isBareMultilineLineAnchorPattern(_ pattern: String) -> Bool {
+        if pattern == "^" || pattern == "$" {
+            return true
+        }
+        if pattern.hasPrefix("(?:"), pattern.hasSuffix(")") {
+            let start = pattern.index(pattern.startIndex, offsetBy: 3)
+            return isBareMultilineLineAnchorPattern(String(pattern[start..<pattern.index(before: pattern.endIndex)]))
+        }
+        guard pattern.hasPrefix("(?"),
+              pattern.hasSuffix(")"),
+              let colon = pattern.firstIndex(of: ":") else {
+            return false
+        }
+        let flagStart = pattern.index(pattern.startIndex, offsetBy: 2)
+        let flags = pattern[flagStart..<colon]
+        let bodyStart = pattern.index(after: colon)
+        let body = pattern[bodyStart..<pattern.index(before: pattern.endIndex)]
+        return flags.contains("m") && (body == "^" || body == "$")
     }
 
     private func rawDataForOutput(_ data: Data, options: RipgrepOptions, matcher: PatternMatcher) -> Data? {

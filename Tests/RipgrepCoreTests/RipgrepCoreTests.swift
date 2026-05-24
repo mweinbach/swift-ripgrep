@@ -1447,6 +1447,24 @@ struct RipgrepSearcherTests {
         #expect(try run(["-U", "--count-matches", "$", root.path("zero-width.txt")]) == ["3"])
         #expect(try run(["-U", "--count-matches", "(?:)", root.path("zero-width.txt")]) == ["7"])
         #expect(try run(["-U", "--count-matches", "x?", root.path("zero-width.txt")]) == ["7"])
+        let jsonLineStartOutput = try run(["-U", "--json", "^", root.path("zero-width.txt")])
+        let jsonLineStartMessages = try jsonLineStartOutput.map(jsonObject)
+        #expect(jsonLineStartMessages.map { $0["type"] as? String } == ["begin", "match", "end", "summary"])
+        let jsonLineStartMatch = jsonLineStartMessages[1]["data"] as? [String: Any]
+        let jsonLineStartLines = jsonLineStartMatch?["lines"] as? [String: String]
+        let jsonLineStartSubmatches = jsonLineStartMatch?["submatches"] as? [[String: Any]]
+        #expect(jsonLineStartLines?["text"] == "ab\n\ncd\n")
+        #expect(jsonLineStartSubmatches?.map { $0["start"] as? Int } == [0, 3, 4])
+        #expect(jsonLineStartSubmatches?.map { $0["end"] as? Int } == [0, 3, 4])
+        let jsonLineEndOutput = try run(["-U", "--json", "-C1", "$", root.path("zero-width.txt")])
+        let jsonLineEndMessages = try jsonLineEndOutput.map(jsonObject)
+        #expect(jsonLineEndMessages.map { $0["type"] as? String } == ["begin", "match", "end", "summary"])
+        let jsonLineEndMatch = jsonLineEndMessages[1]["data"] as? [String: Any]
+        let jsonLineEndLines = jsonLineEndMatch?["lines"] as? [String: String]
+        let jsonLineEndSubmatches = jsonLineEndMatch?["submatches"] as? [[String: Any]]
+        #expect(jsonLineEndLines?["text"] == "ab\n\ncd\n")
+        #expect(jsonLineEndSubmatches?.map { $0["start"] as? Int } == [2, 3, 6])
+        #expect(jsonLineEndSubmatches?.map { $0["end"] as? Int } == [2, 3, 6])
         #expect(try run(["-n", "-U", "-o", #"foo[\s\S]+?bar"#, root.path("multi.txt")]) == [
             "1:foo",
             "2:bar",

@@ -59,10 +59,39 @@ public struct JSONPrinter {
     }
 
     private func messages(for result: SearchFileResult, path: String) -> [JSONValue] {
+        if shouldSuppressContextForMultilineLineAnchors {
+            return result.matches.map { matchMessage($0, path: path) }
+        }
         if options.passthru || options.beforeContext > 0 || options.afterContext > 0 {
             return contextAwareMessages(for: result, path: path)
         }
         return result.matches.map { matchMessage($0, path: path) }
+    }
+
+    private var shouldSuppressContextForMultilineLineAnchors: Bool {
+        options.multiline
+            && options.maxCount == nil
+            && options.effectivePatterns.allSatisfy(isBareMultilineLineAnchorPattern)
+    }
+
+    private func isBareMultilineLineAnchorPattern(_ pattern: String) -> Bool {
+        if pattern == "^" || pattern == "$" {
+            return true
+        }
+        if pattern.hasPrefix("(?:"), pattern.hasSuffix(")") {
+            let start = pattern.index(pattern.startIndex, offsetBy: 3)
+            return isBareMultilineLineAnchorPattern(String(pattern[start..<pattern.index(before: pattern.endIndex)]))
+        }
+        guard pattern.hasPrefix("(?"),
+              pattern.hasSuffix(")"),
+              let colon = pattern.firstIndex(of: ":") else {
+            return false
+        }
+        let flagStart = pattern.index(pattern.startIndex, offsetBy: 2)
+        let flags = pattern[flagStart..<colon]
+        let bodyStart = pattern.index(after: colon)
+        let body = pattern[bodyStart..<pattern.index(before: pattern.endIndex)]
+        return flags.contains("m") && (body == "^" || body == "$")
     }
 
     private func contextAwareMessages(for result: SearchFileResult, path: String) -> [JSONValue] {
