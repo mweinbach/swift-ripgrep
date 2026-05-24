@@ -2056,6 +2056,14 @@ struct RipgrepSearcherTests {
             "[abc]",
             "[def]",
         ])
+        #expect(try run(["-or", "$1", #"([a-z]+)\d+"#, root.path("replace.txt")]) == [
+            "abc",
+            "def",
+        ])
+        #expect(try run(["-orX", #"([a-z]+)\d+"#, root.path("replace.txt")]) == [
+            "X",
+            "X",
+        ])
         #expect(try run(["-o", "--column", "--replace", "X", #"[a-z]+\d+"#, root.path("replace.txt")]) == [
             "1:1:X",
             "1:3:X",

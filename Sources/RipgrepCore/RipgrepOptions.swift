@@ -1477,6 +1477,9 @@ public enum RipgrepArgumentParser {
             if flag == "f" {
                 return offset == flags.count - 1
             }
+            if flag == "r" {
+                return true
+            }
             if !standaloneFlags.contains(flag) {
                 return false
             }
@@ -1494,7 +1497,7 @@ public enum RipgrepArgumentParser {
         }
         let standaloneFlags = Set("iSsFPwxUvonbpNHILzaqclhV")
         for flag in flags {
-            if flag == "f" {
+            if flag == "f" || flag == "r" {
                 return nil
             }
             if !standaloneFlags.contains(flag) {
@@ -1526,7 +1529,8 @@ public enum RipgrepArgumentParser {
         arguments: [String],
         index: inout Int
     ) -> String? {
-        for flag in argument.dropFirst() {
+        let flags = Array(argument.dropFirst())
+        for (offset, flag) in flags.enumerated() {
             switch flag {
             case "i":
                 options.ignoreCase = true
@@ -1586,6 +1590,18 @@ public enum RipgrepArgumentParser {
                 options.mode = .search
                 options.printMode = .filesWithMatches
                 options.generateMode = nil
+            case "r":
+                let nextOffset = offset + 1
+                if nextOffset < flags.count {
+                    options.replacement = String(flags[nextOffset...])
+                    return nil
+                }
+                guard index < arguments.count else {
+                    return missingValue(flag: "-r")
+                }
+                options.replacement = arguments[index]
+                index += 1
+                return nil
             case "f":
                 guard index < arguments.count else {
                     return missingValue(flag: "-f")
