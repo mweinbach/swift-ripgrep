@@ -588,18 +588,20 @@ public struct RipgrepSearcher {
         if options.quiet && options.stats {
             return dataCount
         }
-        if visibleMatches.isEmpty, options.passthru {
-            return binaryByteOffset + 1
-        }
         guard options.printMode == .matchingLines,
-              !options.json,
-              let firstMatch = (visibleMatches.first ?? searchedMatches.first) else {
+              !options.json else {
             return dataCount
         }
         if visibleMatches.isEmpty {
-            if options.beforeContext > 0 {
-                return 0
+            if options.passthru {
+                return binaryByteOffset + 1
             }
+        }
+        guard let firstMatch = (visibleMatches.first ?? searchedMatches.first) else {
+            return dataCount
+        }
+        if visibleMatches.isEmpty, options.beforeContext > 0 {
+            return 0
         }
         return firstMatch.absoluteOffset + firstMatch.lineWithTerminator.utf8.count
     }

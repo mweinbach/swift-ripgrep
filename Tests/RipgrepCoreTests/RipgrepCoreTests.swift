@@ -3682,6 +3682,11 @@ struct RipgrepSearcherTests {
         )
         #expect(passthruNoMatchBinaryStats.contains("0 matches"))
         #expect(passthruNoMatchBinaryStats.contains("4 bytes searched"))
+        let passthruPostNulJSON = try run(["--json", "--passthru", "needle", countRoot.path("post-nul.txt")])
+        let passthruPostNulMessages = try passthruPostNulJSON.map(jsonObject)
+        let passthruPostNulEnd = passthruPostNulMessages.first { $0["type"] as? String == "end" }?["data"] as? [String: Any]
+        let passthruPostNulJSONStats = passthruPostNulEnd?["stats"] as? [String: Any]
+        #expect(passthruPostNulJSONStats?["bytes_searched"] as? Int == 24)
         let beforeContextPostNulStats = runWithExitCode(
             ["--stats", "-B1", "needle", countRoot.path("post-nul.txt")],
             expectedExitCode: 1
