@@ -285,7 +285,9 @@ public struct RipgrepSearcher {
                     dataCount: data.count,
                     visibleMatches: visibleMatches,
                     options: options
-                )
+                ),
+                supplementalMatchedLines: result.supplementalMatchedLines,
+                supplementalMatches: result.supplementalMatches
             ))
         }
 
@@ -409,22 +411,41 @@ public struct RipgrepSearcher {
             let prefixLine = String(line.line[..<nulIndex])
             let contentStart = line.line.index(after: nulIndex)
             let suffixLine = String(line.line[contentStart...])
+            let prefixBytes = byteCount(prefixLine, options: options)
             let prefixWithNULBytes = byteCount(prefixLine, options: options) + byteCount("\0", options: options)
             let rawPieces = jsonBinaryRawLinePieces(line.rawLine)
+            let prefixPositiveSpans = line.positiveSpans.filter { $0.endByte <= prefixBytes }
+            let suffixPositiveSpans = line.positiveSpans.compactMap { span -> MatchSpan? in
+                guard span.startByte >= prefixWithNULBytes else {
+                    return nil
+                }
+                let startByte = span.startByte - prefixWithNULBytes
+                let endByte = span.endByte - prefixWithNULBytes
+                return MatchSpan(
+                    startColumn: column(in: suffixLine, byteOffset: startByte, options: options),
+                    endColumn: column(in: suffixLine, byteOffset: endByte, options: options),
+                    startByte: startByte,
+                    endByte: endByte,
+                    text: span.text,
+                    replacement: span.replacement
+                )
+            }
             return [
                 SearchLine(
                     lineNumber: lineNumber,
                     line: prefixLine,
                     rawLine: rawPieces?.prefix,
                     lineTerminator: "\n",
-                    absoluteOffset: line.absoluteOffset
+                    absoluteOffset: line.absoluteOffset,
+                    positiveSpans: prefixPositiveSpans
                 ),
                 SearchLine(
                     lineNumber: lineNumber + 1,
                     line: suffixLine,
                     rawLine: rawPieces?.suffix,
                     lineTerminator: line.lineTerminator,
-                    absoluteOffset: line.absoluteOffset + prefixWithNULBytes
+                    absoluteOffset: line.absoluteOffset + prefixWithNULBytes,
+                    positiveSpans: suffixPositiveSpans
                 )
             ]
         }
@@ -494,7 +515,9 @@ public struct RipgrepSearcher {
             lines: displayLines,
             binaryByteOffset: binaryByteOffset,
             hasBinaryMatch: result.hasMatch,
-            bytesSearched: data.count
+            bytesSearched: data.count,
+            supplementalMatchedLines: result.supplementalMatchedLines,
+            supplementalMatches: result.supplementalMatches
         )
     }
 

@@ -3445,6 +3445,22 @@ struct RipgrepSearcherTests {
         #expect(splitContext?["line_number"] as? Int == 2)
         #expect(splitLaterMatch?["line_number"] as? Int == 3)
 
+        try root.write(Data("needle\n\0tail needle\n".utf8), to: "binary-max-context.dat")
+        let binaryMaxContextOutput = try run(["--json", "-m1", "-A2", "needle", root.path("binary-max-context.dat")])
+        let binaryMaxContextMessages = try binaryMaxContextOutput.map(jsonObject)
+        #expect(binaryMaxContextMessages.map { $0["type"] as? String } == [
+            "begin",
+            "match",
+            "context",
+            "match",
+            "end",
+            "summary",
+        ])
+        let binaryMaxContextEnd = binaryMaxContextMessages[4]["data"] as? [String: Any]
+        let binaryMaxContextStats = binaryMaxContextEnd?["stats"] as? [String: Any]
+        #expect(binaryMaxContextStats?["matched_lines"] as? Int == 2)
+        #expect(binaryMaxContextStats?["matches"] as? Int == 2)
+
         let implicitBinary = try TemporaryDirectory()
         try implicitBinary.write(Data("needle\0tail\n".utf8), to: "bin.dat")
         var binaryStatsOutput: [String] = []
