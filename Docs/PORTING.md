@@ -184,16 +184,27 @@ The Swift JSON schema and all non-timing values are byte-identical to Rust.
 
 ### Wave 3B — True streaming line buffer + heap cap on chunked I/O
 
-**Status: deferred (not a parity gap).** mmap auto-selection at 16 KiB
-already avoids any heap copy for the file sizes where streaming matters; the
-chunked buffered path is only used for small files and stdin where the
-accumulated `Data` is bounded by content. This is a pure perf optimisation
-and should reopen only if a benchmark shows realistic-workload RSS pressure.
+**Status: done 2026-05-24.** The buffered non-mmap file path now has a
+line-streaming search path for safe non-multiline UTF-8 searches. It reads
+64 KiB chunks, carries partial trailing lines across chunk boundaries, and
+hands each complete line to the matcher without first accumulating the full
+haystack into one `Data`. Multiline, preprocessor, decompressor, stdin,
+non-UTF-8/BOM, binary, and other parity-sensitive cases deliberately fall back
+to the capped accumulating path.
+
+- [x] Add a streaming line reader for buffered file I/O with chunk carry.
+- [x] Route safe `--no-mmap`/buffered file searches through the streaming
+      matcher path while preserving the mmap and multiline paths unchanged.
+- [x] Enforce a 256 MiB default cap on accumulating buffered reads with the
+      diagnostic `haystack size <bytes> exceeds buffered limit <cap>; use
+      --mmap or shrink --max-filesize`.
+- [x] Add streaming perf/fidelity tests covering a 64 MiB synthetic haystack,
+      repeated Sherlock mmap-vs-streaming output, and the buffer-limit guard.
 
 ## Wave 4 — open backlog (no scheduled work)
 
-- True streaming line buffer that hands matcher chunks rather than the full
-  haystack (perf optimisation; see Wave 3B notes above).
+- **(Done 2026-05-24)** True streaming line buffer for safe buffered file
+  searches plus a heap cap on accumulating buffered reads (see Wave 3B).
 - Wider encoding probe coverage (more legacy codepages, GB18030 edge cases,
   big5-hkscs).
 - Compressed-input probe coverage (`.gz`, `.bz2`, `.zst`, `.lz4`).

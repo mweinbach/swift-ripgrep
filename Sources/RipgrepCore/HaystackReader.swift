@@ -9,12 +9,23 @@ struct HaystackReader {
 
     static let bufferedChunkSize = 64 * 1024
     static let automaticMmapThreshold = UInt64(16 * 1024)
+    static let defaultMaxBufferBytes = 256 * 1024 * 1024
 
-    static func read(_ haystack: Haystack, options: RipgrepOptions) throws -> Data {
+    struct StreamedLine {
+        let data: Data
+        let terminator: Data
+        let absoluteOffset: Int
+    }
+
+    static func read(
+        _ haystack: Haystack,
+        options: RipgrepOptions,
+        maxBufferBytes: Int = defaultMaxBufferBytes
+    ) throws -> Data {
         let readPath = try selectedPath(forFileAt: haystack.url, options: options)
         switch readPath {
         case .buffered:
-            return try readBuffered(fileURL: haystack.url)
+            return try readBuffered(fileURL: haystack.url, maxBufferBytes: maxBufferBytes)
         case .mmap:
             do {
                 return try readMmap(fileURL: haystack.url)
@@ -22,13 +33,27 @@ struct HaystackReader {
                 guard options.mmapMode != .always else {
                     throw error
                 }
-                return try readBuffered(fileURL: haystack.url)
+                return try readBuffered(fileURL: haystack.url, maxBufferBytes: maxBufferBytes)
             }
         }
     }
 
-    static func readStandardInput() throws -> Data {
-        try readChunks(from: .standardInput, closeWhenDone: false)
+    static func readStandardInput(maxBufferBytes: Int = defaultMaxBufferBytes) throws -> Data {
+        try readChunks(from: .standardInput, closeWhenDone: false, maxBufferBytes: maxBufferBytes)
+    }
+
+    static func streamLines(
+        _ haystack: Haystack,
+        options: RipgrepOptions,
+        maxCarryBytes: Int = defaultMaxBufferBytes,
+        body: (StreamedLine, inout Bool) throws -> Void
+    ) throws {
+        let readPath = try selectedPath(forFileAt: haystack.url, options: options)
+        guard readPath == .buffered else {
+            throw ReaderError.notBuffered(path: haystack.url.path)
+        }
+        let handle = try FileHandle(forReadingFrom: haystack.url)
+        try streamLines(from: handle, closeWhenDone: true, maxCarryBytes: maxCarryBytes, body: body)
     }
 
     static func selectedPath(forFileAt fileURL: URL, options: RipgrepOptions) throws -> ReadPath {
@@ -57,12 +82,16 @@ struct HaystackReader {
         }
     }
 
-    private static func readBuffered(fileURL: URL) throws -> Data {
+    private static func readBuffered(fileURL: URL, maxBufferBytes: Int) throws -> Data {
         let handle = try FileHandle(forReadingFrom: fileURL)
-        return try readChunks(from: handle, closeWhenDone: true)
+        return try readChunks(from: handle, closeWhenDone: true, maxBufferBytes: maxBufferBytes)
     }
 
-    private static func readChunks(from handle: FileHandle, closeWhenDone: Bool) throws -> Data {
+    private static func readChunks(
+        from handle: FileHandle,
+        closeWhenDone: Bool,
+        maxBufferBytes: Int
+    ) throws -> Data {
         defer {
             if closeWhenDone {
                 try? handle.close()
@@ -74,9 +103,59 @@ struct HaystackReader {
             guard let chunk = try handle.read(upToCount: bufferedChunkSize), !chunk.isEmpty else {
                 break
             }
-            data.append(chunk)
+            try append(chunk, to: &data, maxBufferBytes: maxBufferBytes)
         }
         return data
+    }
+
+    private static func streamLines(
+        from handle: FileHandle,
+        closeWhenDone: Bool,
+        maxCarryBytes: Int,
+        body: (StreamedLine, inout Bool) throws -> Void
+    ) throws {
+        defer {
+            if closeWhenDone {
+                try? handle.close()
+            }
+        }
+
+        var carry = Data()
+        var absoluteOffset = 0
+        var terminate = false
+        while !terminate {
+            guard let chunk = try handle.read(upToCount: bufferedChunkSize), !chunk.isEmpty else {
+                break
+            }
+            try append(chunk, to: &carry, maxBufferBytes: maxCarryBytes)
+
+            while !terminate, let newlineIndex = carry.firstIndex(of: UInt8(ascii: "\n")) {
+                let lineData = Data(carry[..<newlineIndex])
+                let lineByteCount = lineData.count + 1
+                try body(
+                    StreamedLine(
+                        data: lineData,
+                        terminator: Data([UInt8(ascii: "\n")]),
+                        absoluteOffset: absoluteOffset
+                    ),
+                    &terminate
+                )
+                carry.removeSubrange(..<carry.index(after: newlineIndex))
+                absoluteOffset += lineByteCount
+            }
+        }
+
+        if !terminate, !carry.isEmpty {
+            try body(StreamedLine(data: carry, terminator: Data(), absoluteOffset: absoluteOffset), &terminate)
+        }
+    }
+
+    private static func append(_ chunk: Data, to data: inout Data, maxBufferBytes: Int) throws {
+        let nextSize = data.count + chunk.count
+        guard nextSize <= maxBufferBytes else {
+            throw ReaderError.bufferLimitExceeded(size: nextSize, limit: maxBufferBytes)
+        }
+        data.append(chunk)
     }
 
     private static func readMmap(fileURL: URL) throws -> Data {
@@ -123,6 +202,8 @@ extension HaystackReader {
         case posix(path: String, operation: String, code: Int32)
         case notRegular(path: String)
         case tooLarge(path: String, size: UInt64)
+        case bufferLimitExceeded(size: Int, limit: Int)
+        case notBuffered(path: String)
 
         var description: String {
             switch self {
@@ -132,6 +213,10 @@ extension HaystackReader {
                 return "\(path): failed to mmap: not a regular file"
             case .tooLarge(let path, let size):
                 return "\(path): failed to mmap: file is too large to map (\(size) bytes)"
+            case .bufferLimitExceeded(let size, let limit):
+                return "haystack size \(size) exceeds buffered limit \(limit); use --mmap or shrink --max-filesize"
+            case .notBuffered(let path):
+                return "\(path): selected reader is not buffered"
             }
         }
     }

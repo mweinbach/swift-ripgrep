@@ -429,11 +429,147 @@ public struct RipgrepSearcher: @unchecked Sendable {
         options: RipgrepOptions
     ) -> FileSearchOutcome {
         let fileURL = haystack.url
+
+        func isBufferedLimitError(_ error: Error) -> Bool {
+            guard case HaystackReader.ReaderError.bufferLimitExceeded = error else {
+                return false
+            }
+            return true
+        }
+
+        func shouldSurfaceReadError(_ error: Error) -> Bool {
+            options.mmapMode == .always || isBufferedLimitError(error)
+        }
+
+        func canStreamLineByLine() -> Bool {
+            guard !shouldPreprocess(haystack, options: options),
+                  decompressionCommand(for: fileURL, options: options) == nil,
+                  (try? HaystackReader.selectedPath(forFileAt: fileURL, options: options)) == .buffered,
+                  !options.multiline,
+                  !options.nullData,
+                  !options.json,
+                  options.beforeContext == 0,
+                  options.afterContext == 0,
+                  !options.passthru,
+                  !options.invertMatch,
+                  !options.stopOnNonmatch,
+                  options.replacement == nil,
+                  !matcher.usesByteSemantics else {
+                return false
+            }
+            guard case .automatic = options.encodingMode else {
+                return false
+            }
+            return !options.effectivePatterns.contains { pattern in
+                pattern.contains("$")
+                    || pattern.contains(#"\A"#)
+                    || pattern.contains(#"\z"#)
+                    || pattern.contains(#"\Z"#)
+            }
+        }
+
+        func streamedSearchOutcome() throws -> FileSearchOutcome? {
+            guard canStreamLineByLine() else {
+                return nil
+            }
+
+            var matches: [SearchMatch] = []
+            var totalBytes = 0
+            var lineNumber = 0
+            var supplementalMatchedLines = 0
+            var supplementalMatches = 0
+            var fellBackToBufferedSearch = false
+            let maxCount = options.maxCount ?? Int.max
+
+            try HaystackReader.streamLines(haystack, options: options) { streamedLine, terminate in
+                lineNumber += 1
+                var lineData = streamedLine.data
+                lineData.append(streamedLine.terminator)
+                totalBytes = streamedLine.absoluteOffset + lineData.count
+
+                if streamedLine.absoluteOffset == 0,
+                   lineData.starts(with: [0xEF, 0xBB, 0xBF])
+                    || lineData.starts(with: [0xFF, 0xFE])
+                    || lineData.starts(with: [0xFE, 0xFF]) {
+                    fellBackToBufferedSearch = true
+                    terminate = true
+                    return
+                }
+                if !options.disablesBinaryDetection,
+                   shouldCheckBinary(lineData, options: options),
+                   lineData.contains(0) {
+                    fellBackToBufferedSearch = true
+                    terminate = true
+                    return
+                }
+                guard let lineText = String(data: lineData, encoding: .utf8) else {
+                    fellBackToBufferedSearch = true
+                    terminate = true
+                    return
+                }
+
+                var lineOptions = options
+                if options.maxCount != nil {
+                    lineOptions.maxCount = max(0, maxCount - matches.count)
+                }
+                let lineResult = searchContents(
+                    lineText,
+                    fileURL: fileURL,
+                    matcher: matcher,
+                    options: lineOptions,
+                    splitBinaryNUL: false
+                )
+                matches.append(contentsOf: lineResult.matches.map { match in
+                    SearchMatch(
+                        fileURL: match.fileURL,
+                        lineNumber: lineNumber + match.lineNumber - 1,
+                        column: match.column,
+                        line: match.line,
+                        rawLine: match.rawLine,
+                        lineTerminator: match.lineTerminator,
+                        absoluteOffset: streamedLine.absoluteOffset + match.absoluteOffset,
+                        matchCount: match.matchCount,
+                        spans: match.spans
+                    )
+                })
+                supplementalMatchedLines += lineResult.supplementalMatchedLines
+                supplementalMatches += lineResult.supplementalMatches
+                if matches.count >= maxCount {
+                    terminate = true
+                }
+            }
+
+            guard !fellBackToBufferedSearch else {
+                return nil
+            }
+            return FileSearchOutcome(result: SearchFileResult(
+                fileURL: fileURL,
+                matches: matches,
+                bytesSearched: totalBytes,
+                searched: true,
+                supplementalMatchedLines: supplementalMatchedLines,
+                supplementalMatches: supplementalMatches
+            ))
+        }
+
+        do {
+            if let streamed = try streamedSearchOutcome() {
+                return streamed
+            }
+        } catch {
+            if shouldSurfaceReadError(error) {
+                return FileSearchOutcome(
+                    result: SearchFileResult(fileURL: fileURL, matches: [], searched: false),
+                    message: String(describing: error)
+                )
+            }
+        }
+
         let data: Data
         do {
             data = try HaystackReader.read(haystack, options: options)
         } catch {
-            let message = options.mmapMode == .always ? String(describing: error) : nil
+            let message = shouldSurfaceReadError(error) ? String(describing: error) : nil
             return FileSearchOutcome(
                 result: SearchFileResult(fileURL: fileURL, matches: [], searched: false),
                 message: message
