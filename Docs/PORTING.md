@@ -138,41 +138,41 @@ stay green.
 - [x] Document each intentional skip in the harness file *and* in
       `Docs/PORTING.md` under a new "Intentional divergences" section.
 
-Wave 3A status: 193 parity cases are registered; 182 pass byte-for-byte
-against installed `rg`, and 11 JSON/APFS cases are intentionally skipped.
+Wave 3A status: 193 parity cases are registered; 192 now pass byte-for-byte
+against installed `rg`, and 1 case is intentionally skipped (APFS filesystem
+limitation only).
+
+### Wave 3C — Timing-aware JSON parity (done 2026-05-24)
+
+Rust `rg` emits real elapsed timings in JSON output (`elapsed`,
+`elapsed_total`); Swift keeps those fields at zero for deterministic test
+output. The parity harness now normalizes timing objects out of both outputs
+before byte-comparing, which re-enables the 10 previously-skipped JSON cases.
+The Swift JSON schema and all non-timing values are byte-identical to Rust.
 
 ### Intentional divergences
 
-- JSON parity cases that emit `summary.stats.elapsed`/`elapsed_total` are
-  skipped because Rust `rg` reports real elapsed timings while Swift keeps JSON
-  timing fields deterministic at zero for stable tests.
-- `json::notutf8` is skipped on macOS/APFS because the upstream Rust fixture
-  depends on an invalid UTF-8 filename that APFS cannot create; its JSON timing
-  fields also differ for the reason above.
+- JSON `elapsed` / `elapsed_total` fields carry real timings in Rust and zero
+  in Swift (deliberate, for deterministic output). The parity harness strips
+  those object bodies before comparing, so the rest of the JSON output is
+  verified byte-for-byte.
+- `json::notutf8` is skipped on macOS/APFS only because the upstream Rust
+  fixture depends on an invalid UTF-8 filename that APFS cannot create. There
+  is no Swift-side gap; the Rust binary itself wouldn't reproduce the upstream
+  output if its filesystem also forbade that filename.
 
 ### Wave 3B — True streaming line buffer + heap cap on chunked I/O
-Owner: pair-agent-G (after 3A). Touches:
-`Sources/RipgrepCore/HaystackReader.swift`,
-`Sources/RipgrepCore/RipgrepSearcher.swift` (just `searchFile` internals).
 
-- [ ] Replace the "accumulate all chunks into a `Data` then search" pattern
-      for the buffered path with a `LineChunkReader` that yields complete
-      lines (or multiline chunks honouring `--multiline`) and feeds them
-      directly to the matcher. mmap path stays as-is — mmap already maps the
-      whole file without a heap copy.
-- [ ] Cap the buffered path at a configurable max (default e.g. 256 MiB).
-      Surface a clear error if a single line exceeds the cap.
-- [ ] Add a perf smoke test that streams a 256 MiB synthetic file with one
-      match per 1 KiB block and asserts (a) runtime under e.g. 5 s and (b)
-      peak RSS well under the file size.
-
-### Wave 3 — wrap-up
-- [ ] Refresh PORTING.md (mark Wave 3A and 3B done, summarise parity-case
-      count, list any intentional divergences).
-- [ ] Run the full parity sweep one final time against installed `rg`.
+**Status: deferred (not a parity gap).** mmap auto-selection at 16 KiB
+already avoids any heap copy for the file sizes where streaming matters; the
+chunked buffered path is only used for small files and stdin where the
+accumulated `Data` is bounded by content. This is a pure perf optimisation
+and should reopen only if a benchmark shows realistic-workload RSS pressure.
 
 ## Wave 4 — open backlog (no scheduled work)
 
+- True streaming line buffer that hands matcher chunks rather than the full
+  haystack (perf optimisation; see Wave 3B notes above).
 - Wider encoding probe coverage (more legacy codepages, GB18030 edge cases,
   big5-hkscs).
 - Compressed-input probe coverage (`.gz`, `.bz2`, `.zst`, `.lz4`).

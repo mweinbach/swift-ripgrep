@@ -40,8 +40,8 @@ final class ParityHarnessTests: XCTestCase {
                 "exit status mismatch for \(parityCase.name)\n\(renderComparison(swift: swiftResult, rust: rustResult))"
             )
             expectEqualData(
-                swiftResult.stdout,
-                rustResult.stdout,
+                normalize(swiftResult.stdout, for: parityCase),
+                normalize(rustResult.stdout, for: parityCase),
                 stream: "stdout",
                 caseName: parityCase.name
             )
@@ -390,7 +390,90 @@ private func miscParityCases() -> [ParityCase] {
     ]
 }
 
-private let jsonElapsedDivergence = "Rust rg emits real elapsed timings in JSON stats while Swift JSON output is deterministic with zero elapsed fields."
+// MARK: - JSON timing normalization
+//
+// Rust `rg` emits real elapsed timings in JSON output (`elapsed` and
+// `elapsed_total` fields). Swift `ripgrep` keeps those fields at zero for
+// deterministic test output. To allow byte-comparing the rest of the JSON
+// payload, both outputs are normalized through `normalize(_:for:)` which
+// strips the inner key/value pairs of any `elapsed` / `elapsed_total`
+// object before comparison.
+
+private func normalize(_ data: Data, for parityCase: ParityCase) -> Data {
+    guard parityCase.arguments.contains("--json") else { return data }
+    guard var text = String(data: data, encoding: .utf8) else { return data }
+    text = stripJSONTimingFields(in: text)
+    return Data(text.utf8)
+}
+
+private func stripJSONTimingFields(in text: String) -> String {
+    // The Rust and Swift writers happen to emit `elapsed` field children in
+    // the same order, but the values inside differ (Rust real, Swift zero).
+    // Strip the body of every `"elapsed":{...}` and `"elapsed_total":{...}`
+    // object so the surrounding JSON can be byte-compared.
+    var output = String()
+    output.reserveCapacity(text.count)
+    let keys = ["\"elapsed\":", "\"elapsed_total\":"]
+    var index = text.startIndex
+    while index < text.endIndex {
+        var matchedKey: String? = nil
+        for key in keys where text[index...].hasPrefix(key) {
+            matchedKey = key
+            break
+        }
+        guard let key = matchedKey else {
+            output.append(text[index])
+            index = text.index(after: index)
+            continue
+        }
+        output.append(key)
+        index = text.index(index, offsetBy: key.count)
+        // Expect an opening brace immediately after the key.
+        guard index < text.endIndex, text[index] == "{" else {
+            continue
+        }
+        output.append("{}")
+        // Walk past the timing object, respecting nested braces and strings.
+        var depth = 0
+        var inString = false
+        var escape = false
+        while index < text.endIndex {
+            let ch = text[index]
+            index = text.index(after: index)
+            if escape {
+                escape = false
+                continue
+            }
+            if inString {
+                if ch == "\\" {
+                    escape = true
+                } else if ch == "\"" {
+                    inString = false
+                }
+                continue
+            }
+            switch ch {
+            case "\"":
+                inString = true
+            case "{":
+                depth += 1
+            case "}":
+                depth -= 1
+                if depth == 0 {
+                    break
+                }
+            default:
+                break
+            }
+            if depth == 0 {
+                break
+            }
+        }
+    }
+    return output
+}
+
+private let jsonElapsedDivergence: String? = nil
 
 private func jsonParityCases() -> [ParityCase] {
     let sherlockFixture: (URL) throws -> Void = { dir in
