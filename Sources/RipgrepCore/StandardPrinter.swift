@@ -472,9 +472,19 @@ public struct StandardPrinter {
             if options.byteOffset {
                 fields.append(OutputField("\(match.absoluteOffset + replacementStartByte)", colorTarget: nil))
             }
-            let text = "\(onlyMatchingText(span, in: match))\(outputTerminator(match.lineTerminator, line: span.text, crlfMatchTerminator: true))"
+            let text = onlyMatchingOutputText(span, in: match)
             return ["\(prefix(path: path, fields: fields, fieldSeparator: separator))\(text)"]
         }
+    }
+
+    private func onlyMatchingOutputText(_ span: MatchSpan, in match: SearchMatch) -> String {
+        let text = onlyMatchingText(span, in: match)
+        if span.replacement != nil,
+           !options.nullData,
+           text.unicodeScalars.last == "\n" {
+            return String(String.UnicodeScalarView(text.unicodeScalars.dropLast()))
+        }
+        return "\(text)\(outputTerminator(match.lineTerminator, line: span.text, crlfMatchTerminator: true))"
     }
 
     private func formatOnlyMatchingEmptySubmatches(

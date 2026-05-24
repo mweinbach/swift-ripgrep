@@ -2785,6 +2785,22 @@ struct RipgrepSearcherTests {
             "0:X",
             "2:X",
         ])
+        let onlyMatchingTrailingLFReplacement = try runExecutableData([
+            "-o",
+            "--replace",
+            "X\n",
+            #"([a-z]+)\d+"#,
+            root.path("replace.txt"),
+        ]) {}
+        #expect(onlyMatchingTrailingLFReplacement == Data("X\nX\n".utf8))
+        let onlyMatchingTrailingCRLFReplacement = try runExecutableData([
+            "-o",
+            "--replace",
+            "X\r\n",
+            #"([a-z]+)\d+"#,
+            root.path("replace.txt"),
+        ]) {}
+        #expect(onlyMatchingTrailingCRLFReplacement == Data("X\r\nX\r\n".utf8))
         #expect(try run(["--replace", "${0}_${1}_${2}${3}_$$", #"([a-z]+)(\d+)"#, root.path("replace.txt")]) == [
             "abc123_abc_123_$ def456_def_456_$",
         ])
