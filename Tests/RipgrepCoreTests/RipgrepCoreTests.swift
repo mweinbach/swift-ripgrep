@@ -3758,7 +3758,8 @@ struct RipgrepSearcherTests {
         try root.createDirectory("links")
         try root.write("hay\nneedle\n", to: "links/a file.txt")
         let path = root.path("links/a file.txt")
-        let encodedPath = path.replacingOccurrences(of: " ", with: "%20")
+        let hyperlinkPath = path.hasPrefix("/var/") ? "/private\(path)" : path
+        let encodedPath = hyperlinkPath.replacingOccurrences(of: " ", with: "%20")
         let reset = "\u{1B}[0m"
         let linkedPath = "\u{1B}]8;;grep+://\(encodedPath):2\u{1B}\\\(reset)\(path)\(reset)\u{1B}]8;;\u{1B}\\"
 

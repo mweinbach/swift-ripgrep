@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 struct HyperlinkFormatter {
     private static let escape = "\u{1B}"
@@ -83,11 +84,20 @@ struct HyperlinkFormatter {
         guard url.path != "-" else {
             return nil
         }
-        let canonical = url.resolvingSymlinksInPath().standardizedFileURL.path
+        let canonical = canonicalPath(for: url)
         guard canonical.hasPrefix("/") else {
             return nil
         }
         return percentEncode(canonical)
+    }
+
+    private func canonicalPath(for url: URL) -> String {
+        let path = url.standardizedFileURL.path
+        guard let resolved = realpath(path, nil) else {
+            return url.resolvingSymlinksInPath().standardizedFileURL.path
+        }
+        defer { free(resolved) }
+        return String(cString: resolved)
     }
 
     private func percentEncode(_ path: String) -> String {
