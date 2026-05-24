@@ -82,6 +82,7 @@ private func parityCases() -> [ParityCase] {
         + binaryParityCases()
         + multilineParityCases()
         + jsonParityCases()
+        + miscParityCases()
 }
 
 private func existingParityCases() -> [ParityCase] {
@@ -177,6 +178,69 @@ private func binaryParityCases() -> [ParityCase] {
         ParityCase(name: "binary::matching_files_inconsistent_with_count_count", fixture: matchingFilesInconsistentFixture, arguments: ["--sort=path", "-c", "cat"]),
         ParityCase(name: "binary::matching_files_inconsistent_with_count_binary", fixture: matchingFilesInconsistentFixture, arguments: ["--sort=path", "-c", "cat", "--binary"]),
         ParityCase(name: "binary::matching_files_inconsistent_with_count_text", fixture: matchingFilesInconsistentFixture, arguments: ["--sort=path", "-c", "cat", "--text"]),
+    ]
+}
+
+private func miscParityCases() -> [ParityCase] {
+    let sherlockFixture: (URL) throws -> Void = { dir in
+        try write(SHERLOCK, to: "sherlock", in: dir)
+    }
+    let fileTypesFixture: (URL) throws -> Void = { dir in
+        try write(SHERLOCK, to: "sherlock", in: dir)
+        try write("Sherlock", to: "file.py", in: dir)
+        try write("Sherlock", to: "file.rs", in: dir)
+    }
+    let fileTypesNoSherlockFixture: (URL) throws -> Void = { dir in
+        try write("Sherlock", to: "file.py", in: dir)
+        try write("Sherlock", to: "file.rs", in: dir)
+    }
+    return [
+        ParityCase(name: "misc::single_file", fixture: sherlockFixture, arguments: ["Sherlock", "sherlock"]),
+        ParityCase(name: "misc::dir", fixture: sherlockFixture, arguments: ["Sherlock"]),
+        ParityCase(name: "misc::line_numbers", fixture: sherlockFixture, arguments: ["-n", "Sherlock", "sherlock"]),
+        ParityCase(name: "misc::columns", fixture: sherlockFixture, arguments: ["--column", "Sherlock", "sherlock"]),
+        ParityCase(name: "misc::with_filename", fixture: sherlockFixture, arguments: ["-H", "Sherlock", "sherlock"]),
+        ParityCase(name: "misc::with_heading", fixture: sherlockFixture, arguments: ["--with-filename", "--heading", "Sherlock", "sherlock"]),
+        ParityCase(name: "misc::with_heading_default", fixture: { dir in try write(SHERLOCK, to: "sherlock", in: dir); try write("Sherlock Holmes lives on Baker Street.", to: "foo", in: dir) }, arguments: ["-j1", "--heading", "Sherlock"]),
+        ParityCase(name: "misc::inverted", fixture: sherlockFixture, arguments: ["-v", "Sherlock", "sherlock"]),
+        ParityCase(name: "misc::inverted_line_numbers", fixture: sherlockFixture, arguments: ["-n", "-v", "Sherlock", "sherlock"]),
+        ParityCase(name: "misc::case_insensitive", fixture: sherlockFixture, arguments: ["-i", "sherlock", "sherlock"]),
+        ParityCase(name: "misc::word", fixture: sherlockFixture, arguments: ["-w", "as", "sherlock"]),
+        ParityCase(name: "misc::word_period", fixture: { dir in try write("...", to: "haystack", in: dir) }, arguments: ["-ow", ".", "haystack"]),
+        ParityCase(name: "misc::line", fixture: sherlockFixture, arguments: ["-x", "Watson|and exhibited clearly, with a label attached.", "sherlock"]),
+        ParityCase(name: "misc::literal", fixture: { dir in try write(SHERLOCK, to: "sherlock", in: dir); try write("blib\n()\nblab\n", to: "file", in: dir) }, arguments: ["-F", "()", "file"]),
+        ParityCase(name: "misc::quiet", fixture: sherlockFixture, arguments: ["-q", "Sherlock", "sherlock"]),
+        ParityCase(name: "misc::replace", fixture: sherlockFixture, arguments: ["-r", "FooBar", "Sherlock", "sherlock"]),
+        ParityCase(name: "misc::replace_groups", fixture: sherlockFixture, arguments: ["-r", "$2, $1", "([A-Z][a-z]+) ([A-Z][a-z]+)", "sherlock"]),
+        ParityCase(name: "misc::replace_named_groups", fixture: sherlockFixture, arguments: ["-r", "$last, $first", "(?P<first>[A-Z][a-z]+) (?P<last>[A-Z][a-z]+)", "sherlock"]),
+        ParityCase(name: "misc::replace_with_only_matching", fixture: sherlockFixture, arguments: ["-o", "-r", "$1", #"of (\w+)"#, "sherlock"]),
+        ParityCase(name: "misc::file_types", fixture: fileTypesFixture, arguments: ["-t", "rust", "Sherlock"]),
+        ParityCase(name: "misc::file_types_all", fixture: { dir in try write(SHERLOCK, to: "sherlock", in: dir); try write("Sherlock", to: "file.py", in: dir) }, arguments: ["-t", "all", "Sherlock"]),
+        ParityCase(name: "misc::file_types_negate", fixture: fileTypesNoSherlockFixture, arguments: ["-T", "rust", "Sherlock"]),
+        ParityCase(name: "misc::file_types_negate_all", fixture: { dir in try write(SHERLOCK, to: "sherlock", in: dir); try write("Sherlock", to: "file.py", in: dir) }, arguments: ["-T", "all", "Sherlock"]),
+        ParityCase(name: "misc::file_type_clear", fixture: fileTypesFixture, arguments: ["--type-clear", "rust", "-t", "rust", "Sherlock"]),
+        ParityCase(name: "misc::file_type_add", fixture: { dir in try fileTypesFixture(dir); try write("Sherlock", to: "file.wat", in: dir) }, arguments: ["--type-add", "wat:*.wat", "-t", "wat", "Sherlock"]),
+        ParityCase(name: "misc::file_type_add_compose", fixture: { dir in try fileTypesFixture(dir); try write("Sherlock", to: "file.wat", in: dir) }, arguments: ["--type-add", "wat:*.wat", "--type-add", "combo:include:wat,py", "-t", "combo", "Sherlock"]),
+        ParityCase(name: "misc::glob", fixture: fileTypesFixture, arguments: ["-g", "*.rs", "Sherlock"]),
+        ParityCase(name: "misc::glob_negate", fixture: fileTypesNoSherlockFixture, arguments: ["-g", "!*.rs", "Sherlock"]),
+        ParityCase(name: "misc::glob_case_insensitive", fixture: { dir in try write(SHERLOCK, to: "sherlock", in: dir); try write("Sherlock", to: "file.HTML", in: dir) }, arguments: ["--iglob", "*.html", "Sherlock"]),
+        ParityCase(name: "misc::glob_case_sensitive", fixture: { dir in try write(SHERLOCK, to: "sherlock", in: dir); try write("Sherlock", to: "file1.HTML", in: dir); try write("Sherlock", to: "file2.html", in: dir) }, arguments: ["--glob", "*.html", "Sherlock"]),
+        ParityCase(name: "misc::glob_always_case_insensitive", fixture: { dir in try write(SHERLOCK, to: "sherlock", in: dir); try write("Sherlock", to: "file.HTML", in: dir) }, arguments: ["--glob-case-insensitive", "--glob", "*.html", "Sherlock"]),
+        ParityCase(name: "misc::byte_offset_only_matching", fixture: sherlockFixture, arguments: ["-b", "-o", "Sherlock"]),
+        ParityCase(name: "misc::count", fixture: sherlockFixture, arguments: ["--count", "Sherlock"]),
+        ParityCase(name: "misc::count_matches", fixture: sherlockFixture, arguments: ["--count-matches", "the"]),
+        ParityCase(name: "misc::count_matches_inverted", fixture: sherlockFixture, arguments: ["--count-matches", "--invert-match", "Sherlock"]),
+        ParityCase(name: "misc::count_matches_via_only", fixture: sherlockFixture, arguments: ["--count", "--only-matching", "the"]),
+        ParityCase(name: "misc::include_zero", fixture: sherlockFixture, arguments: ["--count", "--include-zero", "nada"]),
+        ParityCase(name: "misc::include_zero_override", fixture: sherlockFixture, arguments: ["--count", "--include-zero", "--no-include-zero", "nada"]),
+        ParityCase(name: "misc::files_with_matches", fixture: sherlockFixture, arguments: ["--files-with-matches", "Sherlock"]),
+        ParityCase(name: "misc::files_without_match", fixture: { dir in try write(SHERLOCK, to: "sherlock", in: dir); try write("foo", to: "file.py", in: dir) }, arguments: ["--files-without-match", "Sherlock"]),
+        ParityCase(name: "misc::after_context", fixture: sherlockFixture, arguments: ["-A", "1", "Sherlock", "sherlock"]),
+        ParityCase(name: "misc::after_context_line_numbers", fixture: sherlockFixture, arguments: ["-A", "1", "-n", "Sherlock", "sherlock"]),
+        ParityCase(name: "misc::before_context", fixture: sherlockFixture, arguments: ["-B", "1", "Sherlock", "sherlock"]),
+        ParityCase(name: "misc::before_context_line_numbers", fixture: sherlockFixture, arguments: ["-B", "1", "-n", "Sherlock", "sherlock"]),
+        ParityCase(name: "misc::context", fixture: sherlockFixture, arguments: ["-C", "1", "world|attached", "sherlock"]),
+        ParityCase(name: "misc::context_line_numbers", fixture: sherlockFixture, arguments: ["-C", "1", "-n", "world|attached", "sherlock"]),
     ]
 }
 
