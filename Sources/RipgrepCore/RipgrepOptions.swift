@@ -420,20 +420,20 @@ public enum RipgrepArgumentParser {
                     return .error(missingValue(flag: argument))
                 }
                 guard let threads = parseNonNegativeInt(arguments[index]) else {
-                    return .error(invalidNumber(flag: argument))
+                    return .error(invalidNumber(flag: argument, value: arguments[index]))
                 }
                 options.threadCount = threads == 0 ? nil : threads
                 index += 1
             case let value where value.hasPrefix("--threads="):
                 let raw = String(value.dropFirst("--threads=".count))
                 guard let threads = parseNonNegativeInt(raw) else {
-                    return .error(invalidNumber(flag: "--threads"))
+                    return .error(invalidNumber(flag: "--threads", value: raw))
                 }
                 options.threadCount = threads == 0 ? nil : threads
             case let value where value.hasPrefix("-j") && value.count > 2:
                 let raw = String(value.dropFirst(2))
                 guard let threads = parseNonNegativeInt(raw) else {
-                    return .error(invalidNumber(flag: "-j"))
+                    return .error(invalidNumber(flag: "-j", value: raw))
                 }
                 options.threadCount = threads == 0 ? nil : threads
             case "--mmap":
@@ -678,20 +678,20 @@ public enum RipgrepArgumentParser {
                     return .error(missingValue(flag: argument))
                 }
                 guard let columns = parseNonNegativeInt(arguments[index]) else {
-                    return .error(invalidNumber(flag: argument))
+                    return .error(invalidNumber(flag: argument, value: arguments[index]))
                 }
                 options.maxColumns = columns == 0 ? nil : columns
                 index += 1
             case let value where value.hasPrefix("--max-columns="):
                 let raw = String(value.dropFirst("--max-columns=".count))
                 guard let columns = parseNonNegativeInt(raw) else {
-                    return .error(invalidNumber(flag: "--max-columns"))
+                    return .error(invalidNumber(flag: "--max-columns", value: raw))
                 }
                 options.maxColumns = columns == 0 ? nil : columns
             case let value where value.hasPrefix("-M") && value.count > 2:
                 let raw = String(value.dropFirst(2))
                 guard let columns = parseNonNegativeInt(raw) else {
-                    return .error(invalidNumber(flag: "-M"))
+                    return .error(invalidNumber(flag: "-M", value: raw))
                 }
                 options.maxColumns = columns == 0 ? nil : columns
             case "--max-columns-preview":
@@ -1033,20 +1033,20 @@ public enum RipgrepArgumentParser {
                     return .error(missingValue(flag: argument))
                 }
                 guard let count = parseNonNegativeInt(arguments[index]) else {
-                    return .error(invalidNumber(flag: argument))
+                    return .error(invalidNumber(flag: argument, value: arguments[index]))
                 }
                 options.maxCount = count
                 index += 1
             case let value where value.hasPrefix("--max-count="):
                 let raw = String(value.dropFirst("--max-count=".count))
                 guard let count = parseNonNegativeInt(raw) else {
-                    return .error(invalidNumber(flag: "--max-count"))
+                    return .error(invalidNumber(flag: "--max-count", value: raw))
                 }
                 options.maxCount = count
             case let value where value.hasPrefix("-m") && value.count > 2:
                 let raw = String(value.dropFirst(2))
                 guard let count = parseNonNegativeInt(raw) else {
-                    return .error(invalidNumber(flag: "-m"))
+                    return .error(invalidNumber(flag: "-m", value: raw))
                 }
                 options.maxCount = count
             case "-d", "--max-depth", "--maxdepth":
@@ -1054,26 +1054,26 @@ public enum RipgrepArgumentParser {
                     return .error(missingValue(flag: argument))
                 }
                 guard let depth = parseNonNegativeInt(arguments[index]) else {
-                    return .error(invalidNumber(flag: argument))
+                    return .error(invalidNumber(flag: argument, value: arguments[index]))
                 }
                 options.maxDepth = depth
                 index += 1
             case let value where value.hasPrefix("--max-depth="):
                 let raw = String(value.dropFirst("--max-depth=".count))
                 guard let depth = parseNonNegativeInt(raw) else {
-                    return .error(invalidNumber(flag: "--max-depth"))
+                    return .error(invalidNumber(flag: "--max-depth", value: raw))
                 }
                 options.maxDepth = depth
             case let value where value.hasPrefix("--maxdepth="):
                 let raw = String(value.dropFirst("--maxdepth=".count))
                 guard let depth = parseNonNegativeInt(raw) else {
-                    return .error(invalidNumber(flag: "--maxdepth"))
+                    return .error(invalidNumber(flag: "--maxdepth", value: raw))
                 }
                 options.maxDepth = depth
             case let value where value.hasPrefix("-d") && value.count > 2:
                 let raw = String(value.dropFirst(2))
                 guard let depth = parseNonNegativeInt(raw) else {
-                    return .error(invalidNumber(flag: "-d"))
+                    return .error(invalidNumber(flag: "-d", value: raw))
                 }
                 options.maxDepth = depth
             case "-A", "--after-context":
@@ -1081,7 +1081,7 @@ public enum RipgrepArgumentParser {
                     return .error(missingValue(flag: argument))
                 }
                 guard let count = parseContextCount(arguments[index], flag: argument) else {
-                    return .error(invalidNumber(flag: argument))
+                    return .error(invalidNumber(flag: argument, value: arguments[index]))
                 }
                 options.afterContext = count
                 afterContextWasSet = true
@@ -1090,7 +1090,7 @@ public enum RipgrepArgumentParser {
             case let value where value.hasPrefix("--after-context="):
                 let raw = String(value.dropFirst("--after-context=".count))
                 guard let count = parseContextCount(raw, flag: "--after-context") else {
-                    return .error(invalidNumber(flag: "--after-context"))
+                    return .error(invalidNumber(flag: "--after-context", value: raw))
                 }
                 options.afterContext = count
                 afterContextWasSet = true
@@ -1098,7 +1098,7 @@ public enum RipgrepArgumentParser {
             case let value where value.hasPrefix("-A") && value.count > 2:
                 let raw = String(value.dropFirst(2))
                 guard let count = parseContextCount(raw, flag: "-A") else {
-                    return .error(invalidNumber(flag: "-A"))
+                    return .error(invalidNumber(flag: "-A", value: raw))
                 }
                 options.afterContext = count
                 afterContextWasSet = true
@@ -1108,7 +1108,7 @@ public enum RipgrepArgumentParser {
                     return .error(missingValue(flag: argument))
                 }
                 guard let count = parseContextCount(arguments[index], flag: argument) else {
-                    return .error(invalidNumber(flag: argument))
+                    return .error(invalidNumber(flag: argument, value: arguments[index]))
                 }
                 options.beforeContext = count
                 beforeContextWasSet = true
@@ -1117,7 +1117,7 @@ public enum RipgrepArgumentParser {
             case let value where value.hasPrefix("--before-context="):
                 let raw = String(value.dropFirst("--before-context=".count))
                 guard let count = parseContextCount(raw, flag: "--before-context") else {
-                    return .error(invalidNumber(flag: "--before-context"))
+                    return .error(invalidNumber(flag: "--before-context", value: raw))
                 }
                 options.beforeContext = count
                 beforeContextWasSet = true
@@ -1125,7 +1125,7 @@ public enum RipgrepArgumentParser {
             case let value where value.hasPrefix("-B") && value.count > 2:
                 let raw = String(value.dropFirst(2))
                 guard let count = parseContextCount(raw, flag: "-B") else {
-                    return .error(invalidNumber(flag: "-B"))
+                    return .error(invalidNumber(flag: "-B", value: raw))
                 }
                 options.beforeContext = count
                 beforeContextWasSet = true
@@ -1135,7 +1135,7 @@ public enum RipgrepArgumentParser {
                     return .error(missingValue(flag: argument))
                 }
                 guard let count = parseContextCount(arguments[index], flag: argument) else {
-                    return .error(invalidNumber(flag: argument))
+                    return .error(invalidNumber(flag: argument, value: arguments[index]))
                 }
                 if !beforeContextWasSet {
                     options.beforeContext = count
@@ -1148,7 +1148,7 @@ public enum RipgrepArgumentParser {
             case let value where value.hasPrefix("--context="):
                 let raw = String(value.dropFirst("--context=".count))
                 guard let count = parseContextCount(raw, flag: "--context") else {
-                    return .error(invalidNumber(flag: "--context"))
+                    return .error(invalidNumber(flag: "--context", value: raw))
                 }
                 if !beforeContextWasSet {
                     options.beforeContext = count
@@ -1160,7 +1160,7 @@ public enum RipgrepArgumentParser {
             case let value where value.hasPrefix("-C") && value.count > 2:
                 let raw = String(value.dropFirst(2))
                 guard let count = parseContextCount(raw, flag: "-C") else {
-                    return .error(invalidNumber(flag: "-C"))
+                    return .error(invalidNumber(flag: "-C", value: raw))
                 }
                 if !beforeContextWasSet {
                     options.beforeContext = count
@@ -2060,8 +2060,19 @@ public enum RipgrepArgumentParser {
         return count
     }
 
-    private static func invalidNumber(flag: String) -> String {
-        "error parsing flag \(flag): value is not a valid number: invalid digit found in string"
+    private static func invalidNumber(flag: String, value: String) -> String {
+        "error parsing flag \(flag): value is not a valid number: \(invalidNumberDetail(value))"
+    }
+
+    private static func invalidNumberDetail(_ raw: String) -> String {
+        if raw.isEmpty {
+            return "cannot parse integer from empty string"
+        }
+        let digits = raw.hasPrefix("+") ? raw.dropFirst() : raw[...]
+        if !digits.isEmpty, digits.allSatisfy(\.isNumber) {
+            return "number too large to fit in target type"
+        }
+        return "invalid digit found in string"
     }
 
     private static func unknownEncoding(_ raw: String, flag: String) -> String {
