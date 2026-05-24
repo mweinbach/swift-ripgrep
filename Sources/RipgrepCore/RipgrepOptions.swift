@@ -611,17 +611,21 @@ public enum RipgrepArgumentParser {
                 guard index < arguments.count else {
                     return .error(missingValue(flag: "--colors"))
                 }
-                guard let change = parseColorChange(arguments[index]) else {
-                    return .error(invalidColorSpec(arguments[index]))
+                let parsedColorChange = parseColorChange(arguments[index])
+                if let change = parsedColorChange.change {
+                    options.colorChanges.append(change)
+                } else if let error = parsedColorChange.error {
+                    return .error(error)
                 }
-                options.colorChanges.append(change)
                 index += 1
             case let value where value.hasPrefix("--colors="):
                 let raw = String(value.dropFirst("--colors=".count))
-                guard let change = parseColorChange(raw) else {
-                    return .error(invalidColorSpec(raw))
+                let parsedColorChange = parseColorChange(raw)
+                if let change = parsedColorChange.change {
+                    options.colorChanges.append(change)
+                } else if let error = parsedColorChange.error {
+                    return .error(error)
                 }
-                options.colorChanges.append(change)
             case "--hyperlink-format":
                 guard index < arguments.count else {
                     return .error(missingValue(flag: "--hyperlink-format"))
@@ -1680,30 +1684,32 @@ public enum RipgrepArgumentParser {
         }
     }
 
-    private static func parseColorChange(_ raw: String) -> ColorChange? {
+    private static func parseColorChange(_ raw: String) -> (change: ColorChange?, error: String?) {
         let pieces = raw.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
         guard pieces.count >= 2, pieces.count <= 3 else {
-            return nil
+            return (nil, invalidColorSpec(raw))
         }
         guard let target = parseColorTarget(pieces[0]) else {
-            return nil
+            return (nil, unrecognizedColorTarget(pieces[0]))
         }
 
         switch pieces[1].lowercased() {
         case "none":
-            guard pieces.count == 2 else { return nil }
-            return ColorChange(target: target, attribute: .none)
+            return (ColorChange(target: target, attribute: .none), nil)
         case "fg":
-            guard pieces.count == 3, isValidColor(pieces[2]) else { return nil }
-            return ColorChange(target: target, attribute: .foreground(pieces[2].lowercased()))
+            guard pieces.count == 3 else { return (nil, invalidColorSpec(raw)) }
+            guard isValidColor(pieces[2]) else { return (nil, unrecognizedColorValue(pieces[2])) }
+            return (ColorChange(target: target, attribute: .foreground(pieces[2].lowercased())), nil)
         case "bg":
-            guard pieces.count == 3, isValidColor(pieces[2]) else { return nil }
-            return ColorChange(target: target, attribute: .background(pieces[2].lowercased()))
+            guard pieces.count == 3 else { return (nil, invalidColorSpec(raw)) }
+            guard isValidColor(pieces[2]) else { return (nil, unrecognizedColorValue(pieces[2])) }
+            return (ColorChange(target: target, attribute: .background(pieces[2].lowercased())), nil)
         case "style":
-            guard pieces.count == 3, isValidStyle(pieces[2]) else { return nil }
-            return ColorChange(target: target, attribute: .style(pieces[2].lowercased()))
+            guard pieces.count == 3 else { return (nil, invalidColorSpec(raw)) }
+            guard isValidStyle(pieces[2]) else { return (nil, unrecognizedColorStyle(pieces[2])) }
+            return (ColorChange(target: target, attribute: .style(pieces[2].lowercased())), nil)
         default:
-            return nil
+            return (nil, unrecognizedColorSpecType(pieces[1]))
         }
     }
 
@@ -1990,6 +1996,36 @@ public enum RipgrepArgumentParser {
         """
         error parsing flag --colors: invalid color spec format: '\(raw)'. Valid format is '(path|line|column|match|highlight):(fg|bg|style):(value)'.
         """
+    }
+
+    private static func unrecognizedColorTarget(_ raw: String) -> String {
+        "error parsing flag --colors: unrecognized output type '\(raw)'. Choose from: path, line, column, match, highlight."
+    }
+
+    private static func unrecognizedColorSpecType(_ raw: String) -> String {
+        "error parsing flag --colors: unrecognized spec type '\(raw)'. Choose from: fg, bg, style, none."
+    }
+
+    private static func unrecognizedColorValue(_ raw: String) -> String {
+        if raw.contains(",") {
+            return "error parsing flag --colors: unrecognized RGB color triple, should be '[0-255],[0-255],[0-255]' (or a hex triple), but is '\(raw)'"
+        }
+        if isColorNumberLike(raw) {
+            return "error parsing flag --colors: unrecognized ansi256 color number, should be '[0-255]' (or a hex number), but is '\(raw)'"
+        }
+        return "error parsing flag --colors: unrecognized color name '\(raw)'. Choose from: black, blue, green, red, cyan, magenta, yellow, white"
+    }
+
+    private static func unrecognizedColorStyle(_ raw: String) -> String {
+        "error parsing flag --colors: unrecognized style attribute '\(raw)'. Choose from: nobold, bold, nointense, intense, nounderline, underline, noitalic, italic."
+    }
+
+    private static func isColorNumberLike(_ raw: String) -> Bool {
+        let lower = raw.lowercased()
+        if lower.hasPrefix("0x") {
+            return UInt64(lower.dropFirst(2), radix: 16) != nil
+        }
+        return UInt64(lower) != nil
     }
 
     private static func unrecognizedChoice(flag: String, value: String) -> String {
