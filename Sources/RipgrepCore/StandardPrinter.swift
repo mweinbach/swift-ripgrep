@@ -1782,16 +1782,11 @@ private struct ANSIColorPalette {
         guard isEnabled else {
             return line
         }
-        let orderedSpans = spans.sorted {
-            if $0.startByte == $1.startByte {
-                return $0.endByte < $1.endByte
-            }
-            return $0.startByte < $1.startByte
-        }
+        let orderedRanges = mergedByteRanges(for: spans)
         var output = ""
         var cursor = line.startIndex
-        for span in orderedSpans {
-            guard let range = indexRange(startByte: span.startByte, endByte: span.endByte, in: line),
+        for byteRange in orderedRanges {
+            guard let range = indexRange(startByte: byteRange.lowerBound, endByte: byteRange.upperBound, in: line),
                   range.lowerBound >= cursor else {
                 continue
             }
@@ -1801,6 +1796,32 @@ private struct ANSIColorPalette {
         }
         output.append(contentsOf: line[cursor..<line.endIndex])
         return output
+    }
+
+    private func mergedByteRanges(for spans: [MatchSpan]) -> [Range<Int>] {
+        let ordered = spans
+            .filter { $0.endByte > $0.startByte }
+            .map { $0.startByte..<$0.endByte }
+            .sorted {
+                if $0.lowerBound == $1.lowerBound {
+                    return $0.upperBound < $1.upperBound
+                }
+                return $0.lowerBound < $1.lowerBound
+            }
+
+        var merged: [Range<Int>] = []
+        for range in ordered {
+            guard let last = merged.last else {
+                merged.append(range)
+                continue
+            }
+            if range.lowerBound <= last.upperBound {
+                merged[merged.count - 1] = last.lowerBound..<max(last.upperBound, range.upperBound)
+            } else {
+                merged.append(range)
+            }
+        }
+        return merged
     }
 
     private func shouldResetPlainText(_ target: ColorTarget) -> Bool {

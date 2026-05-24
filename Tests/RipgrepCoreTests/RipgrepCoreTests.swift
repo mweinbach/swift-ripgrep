@@ -3485,6 +3485,10 @@ struct RipgrepSearcherTests {
         #expect(try run(["--trim", "--color=always", "needle", root.path("a.txt")]) == [
             "alpha \(reset)\(redBold)needle\(reset) beta",
         ])
+        try root.write("barfoo\n", to: "adjacent.txt")
+        #expect(try run(["--color=always", "--no-filename", "foo|bar", root.path("adjacent.txt")]) == [
+            "\(reset)\(redBold)barfoo\(reset)",
+        ])
         #expect(try run(["--vimgrep", "--color=always", "needle", root.path("a.txt")]) == [
             "\(reset)\(magenta)\(root.path("a.txt"))\(reset):\(reset)\(green)1\(reset):\(reset)7\(reset):alpha \(reset)\(redBold)needle\(reset) beta",
         ])
