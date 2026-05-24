@@ -844,7 +844,8 @@ public struct RipgrepSearcher {
         if options.multiline && !options.invertMatch {
             return searchMultilineContents(
                 contents,
-                rawData: rawDataForMatching,
+                rawData: rawData,
+                rawDataForMatching: rawDataForMatching,
                 fileURL: fileURL,
                 matcher: matcher,
                 options: options,
@@ -1116,38 +1117,46 @@ public struct RipgrepSearcher {
     private func searchMultilineContents(
         _ contents: String,
         rawData: Data? = nil,
+        rawDataForMatching: Data? = nil,
         fileURL: URL,
         matcher: PatternMatcher,
         options: RipgrepOptions,
         splitBinaryNUL: Bool = false
     ) -> SearchFileResult {
         let split = splitLines(contents, options: options, splitBinaryNUL: splitBinaryNUL)
-        let rawSplit = matcher.usesByteSemantics
-            ? rawData.map { splitRawLines($0, options: options, splitBinaryNUL: splitBinaryNUL) }
-            : nil
+        let outputRawSplit = rawData.map { splitRawLines($0, options: options, splitBinaryNUL: splitBinaryNUL) }
+        let matchingRawSplit = rawDataForMatching.map { splitRawLines($0, options: options, splitBinaryNUL: splitBinaryNUL) }
         let matchingContents = matcher.usesByteSemantics
-            ? rawSplit?.map { $0.text + $0.terminator }.joined() ?? contents
+            ? matchingRawSplit?.map { $0.text + $0.terminator }.joined() ?? contents
             : contents
+        let rawContentsForSpanAdjustment = matcher.usesByteSemantics
+            ? nil
+            : matchingRawSplit?.map { $0.text + $0.terminator }.joined()
         var searchLines: [SearchLine] = []
         var lineStartOffsets: [Int] = []
         var absoluteOffset = 0
 
         for (offset, splitLine) in split.enumerated() {
-            let rawLine = rawSplit?[safe: offset]
+            let outputRawLine = outputRawSplit?[safe: offset]
+            let matchingRawLine = matchingRawSplit?[safe: offset]
             lineStartOffsets.append(absoluteOffset)
             searchLines.append(SearchLine(
                 lineNumber: offset + 1,
                 line: splitLine.text,
-                rawLine: rawLine?.text,
+                rawLine: outputRawLine?.text,
                 lineTerminator: splitLine.terminator,
                 absoluteOffset: absoluteOffset
             ))
-            absoluteOffset += rawLine.map {
+            absoluteOffset += matchingRawLine.map {
                 $0.text.unicodeScalars.count + $0.terminator.unicodeScalars.count
             } ?? byteCount(splitLine.text, options: options) + byteCount(splitLine.terminator, options: options)
         }
 
-        let spans = matcher.spans(in: matchingContents)
+        let spans = adjustedSpans(
+            matcher.spans(in: matchingContents),
+            rawLine: rawContentsForSpanAdjustment,
+            options: options
+        )
         let limitedSpans = Array(spans.prefix(options.maxCount ?? Int.max))
         let candidateSpans = options.onlyMatching
             ? multilineOnlyMatchingCandidateSpans(

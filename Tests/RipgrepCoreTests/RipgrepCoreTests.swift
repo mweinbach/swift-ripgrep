@@ -1011,6 +1011,27 @@ struct RipgrepSearcherTests {
         #expect(try run(["-a", "--column", "foo", root.path("invalid-utf8.txt")]) == [
             "2:2:\u{FF}foo",
         ])
+        let multilineInvalidOutput = try runExecutableData([
+            "-U",
+            ".",
+            root.path("invalid-utf8.txt"),
+        ], fixture: {})
+        #expect(multilineInvalidOutput == Data([
+            0xC3, 0xA9, 0x0A,
+            0xFF, 0x66, 0x6F, 0x6F, 0x0A,
+        ]))
+        let multilineInvalidOnlyMatchingOutput = try runExecutableData([
+            "-U",
+            "-o",
+            ".",
+            root.path("invalid-utf8.txt"),
+        ], fixture: {})
+        #expect(multilineInvalidOnlyMatchingOutput == Data([
+            0xC3, 0xA9, 0x0A,
+            0x66, 0x0A,
+            0x6F, 0x0A,
+            0x6F, 0x0A,
+        ]))
         try root.write(Data([0x66, 0x6F, 0x6F, 0xFF, 0x62, 0x61, 0x72, 0x0A]), to: "byte-regex.txt")
         let byteRegexOutput = try runExecutableData([#"(?-u)\xFF"#, root.path("byte-regex.txt")], fixture: {})
         #expect(byteRegexOutput == Data([0x66, 0x6F, 0x6F, 0xFF, 0x62, 0x61, 0x72, 0x0A]))

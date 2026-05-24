@@ -917,7 +917,7 @@ public struct StandardPrinter {
     }
 
     private func rawOnlyMatchingText(_ span: MatchSpan, in match: SearchMatch) -> String? {
-        guard options.emitsRawBytes,
+        guard (options.emitsRawBytes || match.rawLine != nil),
               span.replacement == nil,
               let rawLine = match.rawLine,
               span.startByte <= span.endByte else {
