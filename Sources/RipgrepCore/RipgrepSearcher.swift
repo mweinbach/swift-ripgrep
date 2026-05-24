@@ -223,7 +223,7 @@ public struct RipgrepSearcher {
 
         if shouldPreprocess(haystack, options: options) {
             return searchPreprocessedFile(
-                fileURL,
+                haystack,
                 originalData: data,
                 matcher: matcher,
                 options: options
@@ -627,14 +627,16 @@ public struct RipgrepSearcher {
     }
 
     private func searchPreprocessedFile(
-        _ fileURL: URL,
+        _ haystack: Haystack,
         originalData: Data,
         matcher: PatternMatcher,
         options: RipgrepOptions
     ) -> FileSearchOutcome {
         guard let command = options.preprocessor else {
+            let fileURL = haystack.url
             return FileSearchOutcome(result: SearchFileResult(fileURL: fileURL, matches: [], searched: false))
         }
+        let fileURL = haystack.url
         let displayPath = OutputPathFormatter(options: options).displayPath(for: fileURL)
         let commandDisplay = preprocessorCommandDisplay(command: command, filePath: displayPath)
         guard let executable = resolveExecutable(command) else {
@@ -677,12 +679,18 @@ public struct RipgrepSearcher {
                 matcher: matcher,
                 options: options
             )
-            return FileSearchOutcome(result: SearchFileResult(
+            let searchedResult = SearchFileResult(
                 fileURL: result.fileURL,
                 matches: result.matches,
                 lines: result.lines,
                 bytesSearched: data.count,
                 searched: result.searched
+            )
+            return FileSearchOutcome(result: binaryAdjustedPreprocessedResult(
+                searchedResult,
+                data: data,
+                options: options,
+                isExplicit: haystack.isExplicit
             ))
         } catch {
             return FileSearchOutcome(
@@ -690,6 +698,59 @@ public struct RipgrepSearcher {
                 message: "\(displayPath): preprocessor command could not start: '\(commandDisplay)': \(error)"
             )
         }
+    }
+
+    private func binaryAdjustedPreprocessedResult(
+        _ result: SearchFileResult,
+        data: Data,
+        options: RipgrepOptions,
+        isExplicit: Bool
+    ) -> SearchFileResult {
+        guard options.binaryMode != .asText,
+              shouldCheckBinary(data, options: options),
+              let binaryByteOffset = data.firstIndex(of: 0) else {
+            return result
+        }
+        let binaryDetectedBeforeSearch = binaryByteOffset < Self.binaryDetectionBufferSize
+        let visibleMatches = matchesBeforeBinary(result.matches, binaryByteOffset: binaryByteOffset, options: options)
+        let emittedMatches = shouldEmitSuppressedBinaryMatches(options, isExplicit: isExplicit)
+            ? result.matches
+            : visibleMatches
+        let hasBinaryMatch = hasBinaryMatchResult(
+            result: result,
+            visibleMatches: visibleMatches,
+            options: options
+        )
+        let displayLines = hasBinaryMatch ? result.lines : []
+        if options.binaryMode == .automatic && !isExplicit && binaryDetectedBeforeSearch && visibleMatches.isEmpty {
+            return SearchFileResult(
+                fileURL: result.fileURL,
+                matches: [],
+                binaryByteOffset: binaryByteOffset,
+                stoppedBinaryAfterMatch: true,
+                searched: true
+            )
+        }
+        if options.binaryMode == .automatic && !isExplicit && visibleMatches.isEmpty {
+            return SearchFileResult(fileURL: result.fileURL, matches: [], searched: false)
+        }
+        return SearchFileResult(
+            fileURL: result.fileURL,
+            matches: emittedMatches,
+            lines: displayLines,
+            binaryByteOffset: binaryByteOffset,
+            hasBinaryMatch: hasBinaryMatch,
+            stoppedBinaryAfterMatch: options.binaryMode == .automatic && !isExplicit,
+            bytesSearched: suppressedBinaryBytesSearched(
+                dataCount: data.count,
+                binaryByteOffset: binaryByteOffset,
+                searchedMatches: result.matches,
+                visibleMatches: visibleMatches,
+                options: options
+            ),
+            supplementalMatchedLines: result.supplementalMatchedLines,
+            supplementalMatches: result.supplementalMatches
+        )
     }
 
     private func preprocessorCommandDisplay(command: String, filePath: String) -> String {

@@ -2651,6 +2651,14 @@ struct RipgrepSearcherTests {
             "needle",
             root.url.path,
         ]))) == Set(["doc.md", "plain.txt", "pre.sh"]))
+        try root.write("""
+        #!/bin/sh
+        printf 'needle\\n\\0tail needle\\n'
+        """, to: "pre-binary.sh")
+        try root.makeExecutable("pre-binary.sh")
+        #expect(try run(["--pre", root.path("pre-binary.sh"), "needle", root.path("doc.md")]) == [
+            #"binary file matches (found "\0" byte around offset 7)"#,
+        ])
         #expect(try run(["--pre", script, "--pre", "", "needle", root.path("plain.txt")]) == [
             "needle",
         ])

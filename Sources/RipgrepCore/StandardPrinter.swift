@@ -76,6 +76,9 @@ public struct StandardPrinter {
             return results.files.flatMap { result in
                 let matchLines = result.matches.flatMap { formatSearchMatch($0, showPath: showPath(for: results)) }
                 if let binaryLine = formatBinaryMatch(result, showPath: showPath(for: results)) {
+                    if result.stoppedBinaryAfterMatch && !matchLines.isEmpty {
+                        return matchLines + [binaryLine]
+                    }
                     if let offset = result.binaryByteOffset, offset < 64 * 1024 {
                         return [binaryLine]
                     }
