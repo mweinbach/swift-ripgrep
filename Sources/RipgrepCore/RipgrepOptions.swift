@@ -643,7 +643,7 @@ public enum RipgrepArgumentParser {
                 do {
                     options.hyperlinkFormat = try parseHyperlinkFormat(arguments[index])
                 } catch {
-                    return .error("error: invalid hyperlink format: \(error.localizedDescription)")
+                    return .error("error parsing flag --hyperlink-format: invalid hyperlink format: \(error.localizedDescription)")
                 }
                 index += 1
             case let value where value.hasPrefix("--hyperlink-format="):
@@ -651,7 +651,7 @@ public enum RipgrepArgumentParser {
                 do {
                     options.hyperlinkFormat = try parseHyperlinkFormat(raw)
                 } catch {
-                    return .error("error: invalid hyperlink format: \(error.localizedDescription)")
+                    return .error("error parsing flag --hyperlink-format: invalid hyperlink format: \(error.localizedDescription)")
                 }
             case "--hostname-bin":
                 guard index < arguments.count else {
