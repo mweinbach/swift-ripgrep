@@ -650,6 +650,7 @@ public struct FileWalker {
                 pathPrefix: pathPrefix,
                 slashPatternsMatchAnywhere: false,
                 reportLoadErrors: true,
+                caseInsensitive: false,
                 options: options
             )
         }
@@ -746,6 +747,7 @@ public struct FileWalker {
         pathPrefix: String? = nil,
         slashPatternsMatchAnywhere: Bool? = nil,
         reportLoadErrors: Bool = false,
+        caseInsensitive: Bool? = nil,
         options: RipgrepOptions
     ) {
         let loaded = loadMatcher(
@@ -755,7 +757,7 @@ public struct FileWalker {
             pathPrefix: pathPrefix,
             slashPatternsMatchAnywhere: slashPatternsMatchAnywhere,
             reportLoadErrors: reportLoadErrors,
-            caseInsensitive: options.ignoreFileCaseInsensitive
+            caseInsensitive: caseInsensitive ?? options.ignoreFileCaseInsensitive
         )
         ignoreStack.append(loaded.matcher)
         if !options.noIgnoreMessages {

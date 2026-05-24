@@ -2770,6 +2770,17 @@ struct RipgrepSearcherTests {
         try root.write("skip.txt\n", to: "ignore.txt")
 
         #expect(pathBasenames(try run(["--ignore-file", root.path("ignore.txt"), "needle", root.url.path])) == ["keep.swift"])
+        let explicitCaseRoot = try TemporaryDirectory()
+        try explicitCaseRoot.write("needle\n", to: "keep.txt")
+        try explicitCaseRoot.write("needle\n", to: "UPPER.TXT")
+        try explicitCaseRoot.write("*.TXT\n", to: "case.ignore")
+        #expect(Set(pathBasenames(try run([
+            "--ignore-file",
+            explicitCaseRoot.path("case.ignore"),
+            "--ignore-file-case-insensitive",
+            "needle",
+            explicitCaseRoot.url.path,
+        ]))) == Set(["keep.txt"]))
         #expect(pathBasenames(try run(["-g", "*.swift", "needle", root.url.path])) == ["keep.swift"])
         #expect(pathBasenames(try run(["-g*.swift", "needle", root.url.path])) == ["keep.swift"])
         #expect(pathBasenames(try run(["-g", "!skip.txt", "needle", root.url.path])) == ["keep.swift"])
