@@ -1244,9 +1244,10 @@ public struct RipgrepSearcher {
         let split = splitLines(contents, options: options, splitBinaryNUL: splitBinaryNUL)
         let outputRawSplit = rawData.map { splitRawLines($0, options: options, splitBinaryNUL: splitBinaryNUL) }
         let matchingRawSplit = rawDataForMatching.map { splitRawLines($0, options: options, splitBinaryNUL: splitBinaryNUL) }
+        let splitMatchingContents = split.map { $0.text + $0.terminator }.joined()
         let matchingContents = matcher.usesByteSemantics
             ? matchingRawSplit?.map { $0.text + $0.terminator }.joined() ?? contents
-            : contents
+            : splitBinaryNUL ? splitMatchingContents : contents
         let rawContentsForSpanAdjustment = matcher.usesByteSemantics
             ? nil
             : matchingRawSplit?.map { $0.text + $0.terminator }.joined()

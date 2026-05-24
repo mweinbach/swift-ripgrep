@@ -1023,6 +1023,16 @@ struct RipgrepSearcherTests {
         #expect(try run(["--count-matches", #"\b"#, root.path("binary-nul.txt")]) == [
             "5",
         ])
+        try root.write(Data("a\0b\0ab\0\0".utf8), to: "binary-multiline-nul.txt")
+        #expect(try run(["-U", "--count-matches", #"[^\n]+"#, root.path("binary-multiline-nul.txt")]) == [
+            "3",
+        ])
+        #expect(try run(["-U", "--count-matches", #"[^\x0A]+"#, root.path("binary-multiline-nul.txt")]) == [
+            "3",
+        ])
+        #expect(try run(["-U", "-a", "--count-matches", #"[^\n]+"#, root.path("binary-multiline-nul.txt")]) == [
+            "1",
+        ])
         let binaryAnchorOutput = try run(["--json", "$", root.path("binary-nul.txt")])
         let binaryAnchorMessages = try binaryAnchorOutput.map(jsonObject)
         let binaryAnchorMatches = binaryAnchorMessages.compactMap { object -> [String: Any]? in
