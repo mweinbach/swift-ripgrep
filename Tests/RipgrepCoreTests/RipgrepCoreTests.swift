@@ -4303,6 +4303,9 @@ struct RipgrepSearcherTests {
 
         #expect(exitCode == 0)
         #expect(output == ["\(root.path("keep.txt")):needle"])
+        #expect(errors.contains { $0.contains("DEBUG|rg::flags::hiargs|") && $0.contains("number of paths given to search: 1") })
+        #expect(errors.contains { $0.contains("DEBUG|rg::flags::hiargs|") && $0.contains("using 1 thread(s)") })
+        #expect(errors.contains { $0.contains("DEBUG|grep_regex::config|") && $0.contains("assembling HIR from 1 fixed string literals") })
         #expect(errors.contains { $0.contains("DEBUG|swift-ripgrep::walk|") && $0.contains(".hidden.txt: hidden") })
         #expect(errors.contains { $0.contains("DEBUG|swift-ripgrep::walk|") && $0.contains("skip.log: ignore file") })
 

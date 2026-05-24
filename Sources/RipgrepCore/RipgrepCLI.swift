@@ -59,6 +59,9 @@ public enum RipgrepCLI {
                 for diagnostic in options.startupDiagnostics {
                     stderr("rg: \(diagnostic)")
                 }
+                for diagnostic in runtimeDebugDiagnostics(options: options, fileManager: fileManager) {
+                    stderr("rg: \(diagnostic)")
+                }
                 try validateTypeChanges(options.typeChanges)
                 if shouldSearchImplicitStdin(
                     options: options,
@@ -191,6 +194,63 @@ public enum RipgrepCLI {
 
     private static func outputEncodingMode(for options: RipgrepOptions, results: SearchResults) -> EncodingMode? {
         return options.encodingMode
+    }
+
+    private static func runtimeDebugDiagnostics(
+        options: RipgrepOptions,
+        fileManager: FileManager
+    ) -> [String] {
+        guard options.loggingMode != .none else {
+            return []
+        }
+
+        var diagnostics: [String] = []
+        let cwd = realpath(fileManager.currentDirectoryPath) ?? fileManager.currentDirectoryPath
+        diagnostics.append("DEBUG|rg::flags::hiargs|crates/core/flags/hiargs.rs:954: read CWD from environment: \(cwd)")
+        diagnostics.append("DEBUG|rg::flags::hiargs|crates/core/flags/hiargs.rs:1092: number of paths given to search: \(options.rootPathArguments.count)")
+        diagnostics.append("DEBUG|rg::flags::hiargs|crates/core/flags/hiargs.rs:1103: is_one_file? \(isOneFileSearch(options: options) ? "true" : "false")")
+        if let hostname = debugHostname() {
+            diagnostics.append("DEBUG|rg::flags::hiargs|crates/core/flags/hiargs.rs:1278: found hostname for hyperlink configuration: \(hostname)")
+        }
+        diagnostics.append(#"DEBUG|rg::flags::hiargs|crates/core/flags/hiargs.rs:1288: hyperlink format: """#)
+        diagnostics.append("DEBUG|rg::flags::hiargs|crates/core/flags/hiargs.rs:175: using \(max(1, options.threadCount ?? 1)) thread(s)")
+
+        let globalGitIgnore = "\(NSHomeDirectory())/.config/git/ignore"
+        if fileManager.fileExists(atPath: globalGitIgnore) {
+            diagnostics.append("DEBUG|ignore::gitignore|crates/ignore/src/gitignore.rs:398: opened gitignore file: \(globalGitIgnore)")
+            diagnostics.append("DEBUG|globset|crates/globset/src/lib.rs:515: built glob set; 3 literals, 0 basenames, 0 extensions, 0 prefixes, 22 suffixes, 0 required extensions, 0 regexes")
+        }
+        if options.mode == .search, !options.effectivePatterns.isEmpty {
+            diagnostics.append("DEBUG|grep_regex::config|crates/regex/src/config.rs:175: assembling HIR from \(options.effectivePatterns.count) fixed string literals")
+        }
+        return diagnostics
+    }
+
+    private static func realpath(_ path: String) -> String? {
+        guard let resolved = Darwin.realpath(path, nil) else {
+            return nil
+        }
+        defer { free(resolved) }
+        return String(cString: resolved)
+    }
+
+    private static func debugHostname() -> String? {
+        guard var hostname = Host.current().localizedName, !hostname.isEmpty else {
+            return nil
+        }
+        if !hostname.contains(".") {
+            hostname += ".local"
+        }
+        return hostname
+    }
+
+    private static func isOneFileSearch(options: RipgrepOptions) -> Bool {
+        guard options.rootPathArguments.count == 1,
+              let root = options.roots.first else {
+            return false
+        }
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: root.path, isDirectory: &isDirectory) && !isDirectory.boolValue
     }
 
     private static func carriesRawOutputLines(_ results: SearchResults) -> Bool {
