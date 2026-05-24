@@ -155,7 +155,8 @@ public struct FileWalker {
     }
 
     private func missingRootMessage(_ displayPath: String, options: RipgrepOptions, hasExistingRoot: Bool) -> String {
-        guard options.sortMode != nil || !hasExistingRoot else {
+        let filesModeUsesIOMessage = options.mode == .files && !(options.quiet && hasExistingRoot)
+        guard filesModeUsesIOMessage || options.sortMode != nil || !hasExistingRoot else {
             return "\(displayPath): No such file or directory (os error 2)"
         }
         return "\(displayPath): IO error for operation on \(displayPath): No such file or directory (os error 2)"

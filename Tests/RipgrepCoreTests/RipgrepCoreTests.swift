@@ -2291,7 +2291,7 @@ struct RipgrepSearcherTests {
         )
         #expect(exitCode == 2)
         #expect(output.map { URL(fileURLWithPath: $0).lastPathComponent } == ["visible.txt"])
-        #expect(errors == ["rg: missing: No such file or directory (os error 2)"])
+        #expect(errors == ["rg: missing: IO error for operation on missing: No such file or directory (os error 2)"])
 
         output = []
         errors = []
@@ -3345,6 +3345,18 @@ struct RipgrepSearcherTests {
 
         #expect(exitCode == 2)
         #expect(output.isEmpty)
+        #expect(errors == ["rg: \(missingPath): IO error for operation on \(missingPath): No such file or directory (os error 2)"])
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--files", missingPath, root.path("ok.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+
+        #expect(exitCode == 2)
+        #expect(output == [root.path("ok.txt")])
         #expect(errors == ["rg: \(missingPath): IO error for operation on \(missingPath): No such file or directory (os error 2)"])
 
         output = []
