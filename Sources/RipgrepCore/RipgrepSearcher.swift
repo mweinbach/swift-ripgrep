@@ -255,9 +255,13 @@ public struct RipgrepSearcher {
             let emittedMatches = shouldEmitSuppressedBinaryMatches(options, isExplicit: haystack.isExplicit)
                 ? result.matches
                 : visibleMatches
+            let lineNumberShifts = jsonBinaryLineNumberShifts(for: result.lines, options: options)
             let displayMatches = options.json
-                ? jsonBinaryDisplayMatches(emittedMatches, options: options)
+                ? jsonBinaryDisplayMatches(emittedMatches, lineNumberShifts: lineNumberShifts, options: options)
                 : emittedMatches
+            let displayLines = options.json
+                ? jsonBinaryDisplayLines(result.lines, lineNumberShifts: lineNumberShifts, options: options)
+                : result.lines
             if options.binaryMode == .automatic && !haystack.isExplicit && binaryDetectedBeforeSearch {
                 return FileSearchOutcome(result: SearchFileResult(
                     fileURL: fileURL,
@@ -273,7 +277,7 @@ public struct RipgrepSearcher {
             return FileSearchOutcome(result: SearchFileResult(
                 fileURL: fileURL,
                 matches: displayMatches,
-                lines: result.lines,
+                lines: displayLines,
                 binaryByteOffset: binaryByteOffset,
                 hasBinaryMatch: result.hasMatch,
                 stoppedBinaryAfterMatch: options.binaryMode == .automatic && !haystack.isExplicit,
@@ -304,43 +308,151 @@ public struct RipgrepSearcher {
         ))
     }
 
-    private func jsonBinaryDisplayMatches(_ matches: [SearchMatch], options: RipgrepOptions) -> [SearchMatch] {
-        matches.map { match in
+    private func jsonBinaryDisplayMatches(
+        _ matches: [SearchMatch],
+        lineNumberShifts: [Int: Int],
+        options: RipgrepOptions
+    ) -> [SearchMatch] {
+        matches.flatMap { match -> [SearchMatch] in
+            let lineNumber = match.lineNumber + (lineNumberShifts[match.lineNumber] ?? 0)
             guard let nulIndex = match.line.firstIndex(of: "\0") else {
-                return match
-            }
-            let contentStart = match.line.index(after: nulIndex)
-            let prefix = String(match.line[..<contentStart])
-            let prefixBytes = byteCount(prefix, options: options)
-            let adjustedLine = String(match.line[contentStart...])
-            let adjustedRawLine = match.rawLine.map { rawLine in
-                guard let rawNulIndex = rawLine.firstIndex(of: "\0") else {
-                    return rawLine
+                guard lineNumber != match.lineNumber else {
+                    return [match]
                 }
-                return String(rawLine[rawLine.index(after: rawNulIndex)...])
+                return [SearchMatch(
+                    fileURL: match.fileURL,
+                    lineNumber: lineNumber,
+                    column: match.column,
+                    line: match.line,
+                    rawLine: match.rawLine,
+                    lineTerminator: match.lineTerminator,
+                    absoluteOffset: match.absoluteOffset,
+                    matchCount: match.matchCount,
+                    spans: match.spans
+                )]
             }
-            let adjustedSpans = match.spans.map { span in
-                MatchSpan(
-                    startColumn: max(1, span.startColumn - prefixBytes),
-                    endColumn: max(1, span.endColumn - prefixBytes),
-                    startByte: max(0, span.startByte - prefixBytes),
-                    endByte: max(0, span.endByte - prefixBytes),
+            let prefixLine = String(match.line[..<nulIndex])
+            let contentStart = match.line.index(after: nulIndex)
+            let suffixLine = String(match.line[contentStart...])
+            let prefixBytes = byteCount(prefixLine, options: options)
+            let prefixWithNULBytes = prefixBytes + byteCount("\0", options: options)
+            let rawPieces = jsonBinaryRawLinePieces(match.rawLine)
+
+            let prefixSpans = match.spans.filter { $0.endByte <= prefixBytes }
+            let suffixSpans = match.spans.compactMap { span -> MatchSpan? in
+                guard span.startByte >= prefixWithNULBytes else {
+                    return nil
+                }
+                let startByte = span.startByte - prefixWithNULBytes
+                let endByte = span.endByte - prefixWithNULBytes
+                return MatchSpan(
+                    startColumn: column(in: suffixLine, byteOffset: startByte, options: options),
+                    endColumn: column(in: suffixLine, byteOffset: endByte, options: options),
+                    startByte: startByte,
+                    endByte: endByte,
                     text: span.text,
                     replacement: span.replacement
                 )
             }
-            return SearchMatch(
-                fileURL: match.fileURL,
-                lineNumber: match.lineNumber + 1,
-                column: match.column.map { max(1, $0 - prefixBytes) },
-                line: adjustedLine,
-                rawLine: adjustedRawLine,
-                lineTerminator: match.lineTerminator,
-                absoluteOffset: match.absoluteOffset + prefixBytes,
-                matchCount: match.matchCount,
-                spans: adjustedSpans
-            )
+
+            var displayMatches: [SearchMatch] = []
+            if !prefixSpans.isEmpty {
+                displayMatches.append(SearchMatch(
+                    fileURL: match.fileURL,
+                    lineNumber: lineNumber,
+                    column: options.column ? prefixSpans.first?.startColumn : nil,
+                    line: prefixLine,
+                    rawLine: rawPieces?.prefix,
+                    lineTerminator: "\n",
+                    absoluteOffset: match.absoluteOffset,
+                    matchCount: prefixSpans.count,
+                    spans: prefixSpans
+                ))
+            }
+            if !suffixSpans.isEmpty {
+                displayMatches.append(SearchMatch(
+                    fileURL: match.fileURL,
+                    lineNumber: lineNumber + 1,
+                    column: options.column ? suffixSpans.first?.startColumn : nil,
+                    line: suffixLine,
+                    rawLine: rawPieces?.suffix,
+                    lineTerminator: match.lineTerminator,
+                    absoluteOffset: match.absoluteOffset + prefixWithNULBytes,
+                    matchCount: suffixSpans.count,
+                    spans: suffixSpans
+                ))
+            }
+            return displayMatches
         }
+    }
+
+    private func jsonBinaryDisplayLines(
+        _ lines: [SearchLine],
+        lineNumberShifts: [Int: Int],
+        options: RipgrepOptions
+    ) -> [SearchLine] {
+        lines.flatMap { line -> [SearchLine] in
+            let lineNumber = line.lineNumber + (lineNumberShifts[line.lineNumber] ?? 0)
+            guard let nulIndex = line.line.firstIndex(of: "\0") else {
+                guard lineNumber != line.lineNumber else {
+                    return [line]
+                }
+                return [SearchLine(
+                    lineNumber: lineNumber,
+                    line: line.line,
+                    rawLine: line.rawLine,
+                    lineTerminator: line.lineTerminator,
+                    absoluteOffset: line.absoluteOffset,
+                    positiveSpans: line.positiveSpans
+                )]
+            }
+            let prefixLine = String(line.line[..<nulIndex])
+            let contentStart = line.line.index(after: nulIndex)
+            let suffixLine = String(line.line[contentStart...])
+            let prefixWithNULBytes = byteCount(prefixLine, options: options) + byteCount("\0", options: options)
+            let rawPieces = jsonBinaryRawLinePieces(line.rawLine)
+            return [
+                SearchLine(
+                    lineNumber: lineNumber,
+                    line: prefixLine,
+                    rawLine: rawPieces?.prefix,
+                    lineTerminator: "\n",
+                    absoluteOffset: line.absoluteOffset
+                ),
+                SearchLine(
+                    lineNumber: lineNumber + 1,
+                    line: suffixLine,
+                    rawLine: rawPieces?.suffix,
+                    lineTerminator: line.lineTerminator,
+                    absoluteOffset: line.absoluteOffset + prefixWithNULBytes
+                )
+            ]
+        }
+    }
+
+    private func jsonBinaryLineNumberShifts(for lines: [SearchLine], options: RipgrepOptions) -> [Int: Int] {
+        guard options.json else {
+            return [:]
+        }
+        var shifts: [Int: Int] = [:]
+        var shift = 0
+        for line in lines.sorted(by: { $0.lineNumber < $1.lineNumber }) {
+            shifts[line.lineNumber] = shift
+            if line.line.contains("\0") {
+                shift += 1
+            }
+        }
+        return shifts
+    }
+
+    private func jsonBinaryRawLinePieces(_ rawLine: String?) -> (prefix: String, suffix: String)? {
+        guard let rawLine,
+              let rawNulIndex = rawLine.firstIndex(of: "\0") else {
+            return nil
+        }
+        let prefix = String(rawLine[..<rawNulIndex])
+        let suffix = String(rawLine[rawLine.index(after: rawNulIndex)...])
+        return (prefix, suffix)
     }
 
     private func searchStdin(
@@ -369,13 +481,17 @@ public struct RipgrepSearcher {
         let emittedMatches = shouldEmitSuppressedBinaryMatches(options, isExplicit: true)
             ? result.matches
             : visibleMatches
+        let lineNumberShifts = jsonBinaryLineNumberShifts(for: result.lines, options: options)
         let displayMatches = options.json
-            ? jsonBinaryDisplayMatches(emittedMatches, options: options)
+            ? jsonBinaryDisplayMatches(emittedMatches, lineNumberShifts: lineNumberShifts, options: options)
             : emittedMatches
+        let displayLines = options.json
+            ? jsonBinaryDisplayLines(result.lines, lineNumberShifts: lineNumberShifts, options: options)
+            : result.lines
         return SearchFileResult(
             fileURL: fileURL,
             matches: displayMatches,
-            lines: result.lines,
+            lines: displayLines,
             binaryByteOffset: binaryByteOffset,
             hasBinaryMatch: result.hasMatch,
             bytesSearched: data.count

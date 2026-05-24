@@ -3398,6 +3398,53 @@ struct RipgrepSearcherTests {
         let jsonBinaryStats = jsonBinaryEnd?["stats"] as? [String: Any]
         #expect(jsonBinaryStats?["matches"] as? Int == 2)
 
+        try root.write(Data("needle\0tail needle\n".utf8), to: "binary-same-line.dat")
+        let sameLineJSONOutput = try run(["--json", "needle", root.path("binary-same-line.dat")])
+        let sameLineJSONMessages = try sameLineJSONOutput.map(jsonObject)
+        let sameLineJSONMatches = sameLineJSONMessages.compactMap { message -> [String: Any]? in
+            guard message["type"] as? String == "match" else { return nil }
+            return message["data"] as? [String: Any]
+        }
+        let sameLineFirstLines = sameLineJSONMatches[0]["lines"] as? [String: String]
+        let sameLineSecondLines = sameLineJSONMatches[1]["lines"] as? [String: String]
+        let sameLineSecondSubmatches = sameLineJSONMatches[1]["submatches"] as? [[String: Any]]
+        #expect(sameLineFirstLines?["text"] == "needle\n")
+        #expect(sameLineJSONMatches[0]["line_number"] as? Int == 1)
+        #expect(sameLineSecondLines?["text"] == "tail needle\n")
+        #expect(sameLineJSONMatches[1]["line_number"] as? Int == 2)
+        #expect(sameLineSecondSubmatches?.first?["start"] as? Int == 5)
+
+        let sameLineContextOutput = try run(["--json", "-A1", "needle", root.path("binary-same-line.dat")])
+        let sameLineContextMessages = try sameLineContextOutput.map(jsonObject)
+        #expect(sameLineContextMessages.map { $0["type"] as? String } == ["begin", "match", "match", "end", "summary"])
+
+        try root.write(Data("\0needle\n".utf8), to: "binary-leading-nul.dat")
+        let leadingContextOutput = try run(["--json", "-B1", "needle", root.path("binary-leading-nul.dat")])
+        let leadingContextMessages = try leadingContextOutput.map(jsonObject)
+        #expect(leadingContextMessages.map { $0["type"] as? String } == ["begin", "context", "match", "end", "summary"])
+
+        try root.write(Data("a\0b\nneedle\n".utf8), to: "binary-later-line.dat")
+        let laterLineOutput = try run(["--json", "-B1", "needle", root.path("binary-later-line.dat")])
+        let laterLineMessages = try laterLineOutput.map(jsonObject)
+        let laterLineContext = laterLineMessages[1]["data"] as? [String: Any]
+        let laterLineContextLines = laterLineContext?["lines"] as? [String: String]
+        let laterLineMatch = laterLineMessages[2]["data"] as? [String: Any]
+        #expect(laterLineContextLines?["text"] == "b\n")
+        #expect(laterLineContext?["line_number"] as? Int == 2)
+        #expect(laterLineMatch?["line_number"] as? Int == 3)
+
+        try root.write(Data("needle\0tail\nneedle\n".utf8), to: "binary-split-and-later.dat")
+        let splitAndLaterOutput = try run(["--json", "-A1", "needle", root.path("binary-split-and-later.dat")])
+        let splitAndLaterMessages = try splitAndLaterOutput.map(jsonObject)
+        let splitAndLaterTypes = splitAndLaterMessages.map { $0["type"] as? String }
+        let splitContext = splitAndLaterMessages[2]["data"] as? [String: Any]
+        let splitContextLines = splitContext?["lines"] as? [String: String]
+        let splitLaterMatch = splitAndLaterMessages[3]["data"] as? [String: Any]
+        #expect(splitAndLaterTypes == ["begin", "match", "context", "match", "end", "summary"])
+        #expect(splitContextLines?["text"] == "tail\n")
+        #expect(splitContext?["line_number"] as? Int == 2)
+        #expect(splitLaterMatch?["line_number"] as? Int == 3)
+
         let implicitBinary = try TemporaryDirectory()
         try implicitBinary.write(Data("needle\0tail\n".utf8), to: "bin.dat")
         var binaryStatsOutput: [String] = []
