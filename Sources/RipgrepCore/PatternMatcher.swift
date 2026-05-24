@@ -281,6 +281,7 @@ public struct PatternMatcher {
 
     private static func regexPattern(for pattern: String, options: RipgrepOptions) -> String {
         var source = foundationNamedCapturePattern(for: pattern)
+        source = foundationAnyClassPattern(for: source)
         if source == ")(" {
             source = ""
         }
@@ -352,6 +353,48 @@ public struct PatternMatcher {
             index = pattern.index(after: index)
         }
 
+        return output
+    }
+
+    private static func foundationAnyClassPattern(for pattern: String) -> String {
+        var output = ""
+        var escaped = false
+        var inClass = false
+        var index = pattern.startIndex
+
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                if !inClass, character == "p", pattern[index...].hasPrefix("p{Any}") {
+                    output += "[\\s\\S]"
+                    index = pattern.index(index, offsetBy: "p{Any}".count)
+                } else if !inClass, character == "P", pattern[index...].hasPrefix("P{Any}") {
+                    output += "(?!)"
+                    index = pattern.index(index, offsetBy: "P{Any}".count)
+                } else {
+                    output.append("\\")
+                    output.append(character)
+                    index = pattern.index(after: index)
+                }
+                escaped = false
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "[" {
+                inClass = true
+            } else if character == "]" {
+                inClass = false
+            }
+            output.append(character)
+            index = pattern.index(after: index)
+        }
+        if escaped {
+            output.append("\\")
+        }
         return output
     }
 
@@ -440,6 +483,12 @@ public struct PatternMatcher {
         while index < pattern.endIndex {
             let character = pattern[index]
             if escaped {
+                if (character == "p" || character == "P"),
+                   let close = bracedUnicodeClassEnd(after: index, in: pattern) {
+                    escaped = false
+                    index = pattern.index(after: close)
+                    continue
+                }
                 escaped = false
             } else if character == "\\" {
                 escaped = true
@@ -472,6 +521,12 @@ public struct PatternMatcher {
         while index < pattern.endIndex {
             let character = pattern[index]
             if escaped {
+                if (character == "p" || character == "P"),
+                   let close = bracedUnicodeClassEnd(after: index, in: pattern) {
+                    escaped = false
+                    index = pattern.index(after: close)
+                    continue
+                }
                 escaped = false
             } else if character == "\\" {
                 escaped = true
@@ -501,6 +556,14 @@ public struct PatternMatcher {
             index = pattern.index(after: index)
         }
         return nil
+    }
+
+    private static func bracedUnicodeClassEnd(after index: String.Index, in pattern: String) -> String.Index? {
+        let brace = pattern.index(after: index)
+        guard brace < pattern.endIndex, pattern[brace] == "{" else {
+            return nil
+        }
+        return pattern[brace...].firstIndex(of: "}")
     }
 
     private static func unopenedGroupDiagnostic(_ pattern: String) -> UnsupportedRegexFeature? {

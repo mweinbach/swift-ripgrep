@@ -927,6 +927,13 @@ struct RipgrepSearcherTests {
         try root.write("xxx\nabc\ndefabc\ndefxxx\nxxx", to: "overlap2.txt")
         try root.write("a\nbaz\nabc\n", to: "anchors.txt")
         try root.write("foobar\nfoobar\nfoo quux", to: "vimgrep.txt")
+        try root.write("""
+        For the Doctor Watsons of this world, as opposed to the Sherlock
+        Holmeses, success in the province of detective work must always
+        be, to a very large extent, the result of luck. Sherlock Holmes
+        can extract a clew from a wisp of straw or a flake of cigar ash;
+        but Doctor Watson has to have it taken out for him and dusted,
+        """, to: "any-class.txt")
 
         #expect(try run(["-n", "-U", #"foo\nbar"#, root.path("multi.txt")]) == [
             "1:foo",
@@ -984,6 +991,11 @@ struct RipgrepSearcherTests {
             "1:foo",
             "2:bar",
         ])
+        #expect(try run(["-n", "-U", "-o", #"foo\p{Any}+?bar"#, root.path("multi.txt")]) == [
+            "1:foo",
+            "2:bar",
+        ])
+        #expect(try runAllowingNoMatch(["-U", #"\P{Any}"#, root.path("multi.txt")]) == [])
         #expect(try run([
             "--no-line-number",
             "--no-filename",
@@ -1032,6 +1044,19 @@ struct RipgrepSearcherTests {
         #expect(try run(["-U", "--vimgrep", #"foobar\nfoobar\nfoo|quux"#, root.path("vimgrep.txt")]) == [
             "\(root.path("vimgrep.txt")):1:1:foobar",
             "\(root.path("vimgrep.txt")):3:5:foo quux",
+        ])
+        #expect(try run(["-n", "-U", "--only-matching", #"Watson|Sherlock\p{Any}+?Holmes"#, root.path("any-class.txt")]) == [
+            "1:Watson",
+            "1:Sherlock",
+            "2:Holmes",
+            "3:Sherlock Holmes",
+            "5:Watson",
+        ])
+        #expect(try run(["-n", "-U", "-C1", #"detective work\p{Any}+?result of luck"#, root.path("any-class.txt")]) == [
+            "1-For the Doctor Watsons of this world, as opposed to the Sherlock",
+            "2:Holmeses, success in the province of detective work must always",
+            "3:be, to a very large extent, the result of luck. Sherlock Holmes",
+            "4-can extract a clew from a wisp of straw or a flake of cigar ash;",
         ])
         #expect(try run([
             "-n",
