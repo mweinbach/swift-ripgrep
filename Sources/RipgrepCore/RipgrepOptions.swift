@@ -183,6 +183,7 @@ public struct RipgrepOptions: Equatable {
     public var pathSeparator: Character?
     public var withFilename: Bool?
     public var hidden = false
+    public var unrestrictedCount = 0
     public var noIgnore = false
     public var noIgnoreDot = false
     public var noIgnoreExclude = false
@@ -585,6 +586,8 @@ public enum RipgrepArgumentParser {
                 options.replacement = String(value.dropFirst("--replace=".count))
             case let value where value.hasPrefix("-r") && value.count > 2:
                 options.replacement = String(value.dropFirst(2))
+            case let value where unrestrictedRepeatError(inCluster: value) != nil:
+                return .error(unrestrictedRepeatError(inCluster: value)!)
             case let value where invalidShortFlag(inCluster: value) != nil:
                 return .error(unrecognizedFlag("-\(invalidShortFlag(inCluster: value)!)"))
             case let value where isShortFlagCluster(value):
@@ -1035,14 +1038,17 @@ public enum RipgrepArgumentParser {
                 options.nullData = true
                 options.crlf = false
             case "-u", "--unrestricted":
-                applyUnrestricted(to: &options)
+                if let error = applyUnrestricted(to: &options) {
+                    return .error(error)
+                }
             case "-uu":
-                applyUnrestricted(to: &options)
-                applyUnrestricted(to: &options)
+                if let error = applyUnrestricted(repeatCount: 2, to: &options) {
+                    return .error(error)
+                }
             case "-uuu":
-                applyUnrestricted(to: &options)
-                applyUnrestricted(to: &options)
-                applyUnrestricted(to: &options)
+                if let error = applyUnrestricted(repeatCount: 3, to: &options) {
+                    return .error(error)
+                }
             case "--passthru", "--passthrough":
                 options.passthru = true
                 options.beforeContext = 0
@@ -1487,7 +1493,7 @@ public enum RipgrepArgumentParser {
             return false
         }
         let flags = argument.dropFirst()
-        let standaloneFlags = Set("iSsFPwxUvonbpNHILzaqclhV")
+        let standaloneFlags = Set("iSsFPwxUvonbpNHILzaqclhVu")
         for (offset, flag) in flags.enumerated() {
             if flag == "f" {
                 return offset == flags.count - 1
@@ -1507,10 +1513,10 @@ public enum RipgrepArgumentParser {
             return nil
         }
         let flags = argument.dropFirst()
-        guard let first = flags.first, !Set("efgEdABCmMjTtu").contains(first) else {
+        guard let first = flags.first, !Set("efgEdABCmMjTt").contains(first) else {
             return nil
         }
-        let standaloneFlags = Set("iSsFPwxUvonbpNHILzaqclhV")
+        let standaloneFlags = Set("iSsFPwxUvonbpNHILzaqclhVu")
         for flag in flags {
             if flag == "f" || flag == "r" {
                 return nil
@@ -1520,6 +1526,17 @@ public enum RipgrepArgumentParser {
             }
         }
         return nil
+    }
+
+    private static func unrestrictedRepeatError(inCluster argument: String) -> String? {
+        guard argument.hasPrefix("-"), !argument.hasPrefix("--"), argument.count > 2 else {
+            return nil
+        }
+        let unrestrictedCount = argument.dropFirst().filter { $0 == "u" }.count
+        guard unrestrictedCount > 3 else {
+            return nil
+        }
+        return "error parsing flag -u: flag can only be repeated up to 3 times"
     }
 
     private static func shortClusterControlResult(_ argument: String) -> CLIParseResult? {
@@ -1595,6 +1612,10 @@ public enum RipgrepArgumentParser {
                 options.searchZip = true
             case "a":
                 options.binaryMode = .asText
+            case "u":
+                if let error = applyUnrestricted(to: &options) {
+                    return error
+                }
             case "q":
                 options.quiet = true
             case "c":
@@ -1753,7 +1774,20 @@ public enum RipgrepArgumentParser {
         parseNonNegativeInt(raw)
     }
 
-    private static func applyUnrestricted(to options: inout RipgrepOptions) {
+    private static func applyUnrestricted(repeatCount: Int, to options: inout RipgrepOptions) -> String? {
+        for _ in 0..<repeatCount {
+            if let error = applyUnrestricted(to: &options) {
+                return error
+            }
+        }
+        return nil
+    }
+
+    private static func applyUnrestricted(to options: inout RipgrepOptions) -> String? {
+        guard options.unrestrictedCount < 3 else {
+            return "error parsing flag -u: flag can only be repeated up to 3 times"
+        }
+        options.unrestrictedCount += 1
         if !options.noIgnore {
             options.noIgnore = true
             options.noIgnoreDot = true
@@ -1764,6 +1798,7 @@ public enum RipgrepArgumentParser {
         } else {
             options.binaryMode = .searchAndSuppress
         }
+        return nil
     }
 
     private static func parseEncoding(_ raw: String) -> EncodingMode? {

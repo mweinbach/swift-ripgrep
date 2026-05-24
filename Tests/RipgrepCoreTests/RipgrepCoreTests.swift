@@ -6178,6 +6178,10 @@ struct RipgrepSearcherTests {
                 ["--max-depthh"],
                 "rg: unrecognized flag --max-depthh\n\nsimilar flags that are available: --max-depth, --maxdepth"
             ),
+            (
+                ["-uuuu"],
+                "rg: error parsing flag -u: flag can only be repeated up to 3 times"
+            ),
             (["-inZ"], "rg: unrecognized flag -Z"),
             (["-hZ"], "rg: unrecognized flag -Z"),
         ] {
