@@ -3670,6 +3670,24 @@ struct RipgrepSearcherTests {
         let explicitPostNulStats = try run(["--stats", "needle", countRoot.path("post-nul.txt")])
         #expect(explicitPostNulStats.contains("1 matches"))
         #expect(explicitPostNulStats.contains("11 bytes searched"))
+        let passthruPostNulStats = runWithExitCode(
+            ["--stats", "--passthru", "needle", countRoot.path("post-nul.txt")],
+            expectedExitCode: 1
+        )
+        #expect(passthruPostNulStats.contains("0 matches"))
+        #expect(passthruPostNulStats.contains("4 bytes searched"))
+        let passthruNoMatchBinaryStats = runWithExitCode(
+            ["--stats", "--passthru", "zzz", countRoot.path("post-nul.txt")],
+            expectedExitCode: 1
+        )
+        #expect(passthruNoMatchBinaryStats.contains("0 matches"))
+        #expect(passthruNoMatchBinaryStats.contains("4 bytes searched"))
+        let beforeContextPostNulStats = runWithExitCode(
+            ["--stats", "-B1", "needle", countRoot.path("post-nul.txt")],
+            expectedExitCode: 1
+        )
+        #expect(beforeContextPostNulStats.contains("0 matches"))
+        #expect(beforeContextPostNulStats.contains("0 bytes searched"))
 
         var quietBinaryStatsOutput: [String] = []
         let quietBinaryStatsExitCode = RipgrepCLI.run(
@@ -4417,6 +4435,19 @@ struct RipgrepSearcherTests {
         )
         #expect(errors.isEmpty)
         #expect(exitCode == (output.isEmpty ? 1 : 0))
+        return output
+    }
+
+    private func runWithExitCode(_ arguments: [String], expectedExitCode: Int) -> [String] {
+        var output: [String] = []
+        var errors: [String] = []
+        let exitCode = RipgrepCLI.run(
+            arguments: arguments,
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(errors.isEmpty)
+        #expect(exitCode == expectedExitCode)
         return output
     }
 
