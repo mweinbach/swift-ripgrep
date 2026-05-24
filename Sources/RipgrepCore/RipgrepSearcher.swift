@@ -208,12 +208,7 @@ public struct RipgrepSearcher {
     }
 
     private func comparePaths(_ lhs: URL, _ rhs: URL) -> ComparisonResult {
-        let lhsPath = lhs.path
-        let rhsPath = rhs.path
-        if lhsPath == rhsPath {
-            return .orderedSame
-        }
-        return lhsPath < rhsPath ? .orderedAscending : .orderedDescending
+        PathSort.compare(lhs, rhs)
     }
 
     private func searchFile(

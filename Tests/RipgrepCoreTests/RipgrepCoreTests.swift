@@ -1338,6 +1338,19 @@ struct RipgrepSearcherTests {
         #expect(pathBasenames(try run(["--sort", "modified", "needle", root.url.path])) == ["b.txt", "a.txt"])
         #expect(pathBasenames(try run(["--sort-files", "--files", root.url.path])) == ["a.txt", "b.txt"])
 
+        let componentRoot = try TemporaryDirectory()
+        try componentRoot.createDirectory("a")
+        try componentRoot.write("needle\n", to: "a/c")
+        try componentRoot.write("needle\n", to: "a-b")
+        #expect(try run(["--sort", "path", "needle", componentRoot.url.path]) == [
+            "\(componentRoot.path("a/c")):needle",
+            "\(componentRoot.path("a-b")):needle",
+        ])
+        #expect(try run(["--sort-files", "--files", componentRoot.url.path]) == [
+            componentRoot.path("a/c"),
+            componentRoot.path("a-b"),
+        ])
+
         let traversalRoot = try TemporaryDirectory()
         try traversalRoot.createDirectory("a")
         try traversalRoot.createDirectory("b")
