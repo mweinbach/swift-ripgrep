@@ -191,23 +191,67 @@ public struct PatternMatcher {
         from candidates: [(range: Range<String.Index>, replacement: String?)],
         in line: String
     ) -> [MatchSpan] {
-        Self.dropAdjacentEmptyMatches(afterNonEmpty: candidates)
+        internalUTF8EmptyMatches(
+            in: Self.dropAdjacentEmptyMatches(afterNonEmpty: candidates),
+            line: line
+        )
             .sorted { lhs, rhs in
-                if lhs.range.lowerBound == rhs.range.lowerBound {
-                    return lhs.range.upperBound < rhs.range.upperBound
+                let lhsStart = lhs.byteOffset ?? line[..<lhs.range.lowerBound].utf8.count
+                let rhsStart = rhs.byteOffset ?? line[..<rhs.range.lowerBound].utf8.count
+                if lhsStart == rhsStart {
+                    let lhsEnd = lhs.byteOffset ?? line[..<lhs.range.upperBound].utf8.count
+                    let rhsEnd = rhs.byteOffset ?? line[..<rhs.range.upperBound].utf8.count
+                    return lhsEnd < rhsEnd
                 }
-                return lhs.range.lowerBound < rhs.range.lowerBound
+                return lhsStart < rhsStart
             }
             .map { candidate in
-                MatchSpan(
-                    startColumn: column(for: candidate.range.lowerBound, in: line),
-                    endColumn: column(for: candidate.range.upperBound, in: line),
-                    startByte: byteOffset(for: candidate.range.lowerBound, in: line),
-                    endByte: byteOffset(for: candidate.range.upperBound, in: line),
+                let startByte = candidate.byteOffset ?? byteOffset(for: candidate.range.lowerBound, in: line)
+                let endByte = candidate.byteOffset ?? byteOffset(for: candidate.range.upperBound, in: line)
+                let startColumn = candidate.column ?? column(for: candidate.range.lowerBound, in: line)
+                let endColumn = candidate.column ?? column(for: candidate.range.upperBound, in: line)
+                return MatchSpan(
+                    startColumn: startColumn,
+                    endColumn: endColumn,
+                    startByte: startByte,
+                    endByte: endByte,
                     text: String(line[candidate.range]),
                     replacement: candidate.replacement
                 )
             }
+    }
+
+    private func internalUTF8EmptyMatches(
+        in candidates: [(range: Range<String.Index>, replacement: String?)],
+        line: String
+    ) -> [(range: Range<String.Index>, replacement: String?, byteOffset: Int?, column: Int?)] {
+        var output: [(range: Range<String.Index>, replacement: String?, byteOffset: Int?, column: Int?)] = candidates.map {
+            ($0.range, $0.replacement, nil, nil)
+        }
+        guard !usesByteSemantics else {
+            return output
+        }
+        for candidate in candidates where candidate.range.isEmpty && candidate.range.lowerBound < line.endIndex {
+            let character = line[candidate.range.lowerBound]
+            guard character.unicodeScalars.count == 1 else {
+                continue
+            }
+            let width = character.utf8.count
+            guard width > 1 else {
+                continue
+            }
+            let startByte = line[..<candidate.range.lowerBound].utf8.count
+            let startColumn = line.distance(from: line.startIndex, to: candidate.range.lowerBound) + 1
+            for offset in 1..<width {
+                output.append((
+                    candidate.range,
+                    candidate.replacement,
+                    startByte + offset,
+                    startColumn + offset
+                ))
+            }
+        }
+        return output
     }
 
     private func filteredCandidates(in line: String) -> [(range: Range<String.Index>, replacement: String?)] {

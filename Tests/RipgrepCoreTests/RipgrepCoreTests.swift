@@ -863,6 +863,37 @@ struct RipgrepSearcherTests {
         #expect(try run(["-o", "--byte-offset", "--column", "abc", root.path("unicode-offsets.txt")]) == [
             "1:3:2:abc",
         ])
+        try root.write("á\na_1\n--\n", to: "unicode-empty-offsets.txt")
+        #expect(try run(["--count-matches", "x?", root.path("unicode-empty-offsets.txt")]) == [
+            "10",
+        ])
+        #expect(try run(["--count-matches", "a?", root.path("unicode-empty-offsets.txt")]) == [
+            "9",
+        ])
+        #expect(try run(["-bo", "x?", root.path("unicode-empty-offsets.txt")]) == [
+            "0:",
+            "1:",
+            "2:",
+            "3:",
+            "4:",
+            "5:",
+            "6:",
+            "7:",
+            "8:",
+            "9:",
+        ])
+        #expect(try run(["-n", "--column", "-o", "x?", root.path("unicode-empty-offsets.txt")]) == [
+            "1:1:",
+            "1:2:",
+            "1:3:",
+            "2:1:",
+            "2:2:",
+            "2:3:",
+            "2:4:",
+            "3:1:",
+            "3:2:",
+            "3:3:",
+        ])
     }
 
     @Test("searches NUL delimited data")
