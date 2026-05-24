@@ -565,7 +565,7 @@ public struct StandardPrinter {
             } else if let match = startMatchesByLine[lineNumber], shouldUseWholeMatchFormatter(match) {
                 output.append(format(match, showPath: showPath))
             } else if matchedLineNumbers.contains(lineNumber)
-                        || (!options.passthru && !options.invertMatch && !options.multiline && !line.positiveSpans.isEmpty) {
+                        || (!options.passthru && !options.invertMatch && !line.positiveSpans.isEmpty) {
                 output.append(formatMatchedLine(
                     line,
                     fileURL: result.fileURL,

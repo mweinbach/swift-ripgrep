@@ -1463,6 +1463,22 @@ public struct RipgrepSearcher {
             rawLine: rawContentsForSpanAdjustment,
             options: options
         )
+        let positiveSpansByLine = multilinePositiveSpansByLine(
+            spans: spans,
+            lines: searchLines,
+            lineStartOffsets: lineStartOffsets,
+            options: options
+        )
+        let searchLinesWithPositiveSpans = searchLines.map { line in
+            SearchLine(
+                lineNumber: line.lineNumber,
+                line: line.line,
+                rawLine: line.rawLine,
+                lineTerminator: line.lineTerminator,
+                absoluteOffset: line.absoluteOffset,
+                positiveSpans: positiveSpansByLine[line.lineNumber] ?? []
+            )
+        }
         let limitedSpans = Array(spans.prefix(options.maxCount ?? Int.max))
         let candidateSpans = options.onlyMatching
             ? multilineOnlyMatchingCandidateSpans(
@@ -1535,8 +1551,14 @@ public struct RipgrepSearcher {
             return SearchFileResult(
                 fileURL: fileURL,
                 matches: matches,
-                lines: searchLines,
-                bytesSearched: absoluteOffset
+                lines: searchLinesWithPositiveSpans,
+                bytesSearched: multilineBytesSearched(
+                    lines: searchLinesWithPositiveSpans,
+                    matches: matches,
+                    limitedSpans: limitedSpans,
+                    totalBytes: absoluteOffset,
+                    options: options
+                )
             )
         }
 
@@ -1619,9 +1641,85 @@ public struct RipgrepSearcher {
         return SearchFileResult(
             fileURL: fileURL,
             matches: matches,
-            lines: searchLines,
-            bytesSearched: absoluteOffset
+            lines: searchLinesWithPositiveSpans,
+            bytesSearched: multilineBytesSearched(
+                lines: searchLinesWithPositiveSpans,
+                matches: matches,
+                limitedSpans: limitedSpans,
+                totalBytes: absoluteOffset,
+                options: options
+            ),
+            supplementalMatchedLines: supplementalMatchedLineCount(
+                lines: searchLinesWithPositiveSpans,
+                matches: matches,
+                options: options
+            ),
+            supplementalMatches: supplementalMatchCount(
+                lines: searchLinesWithPositiveSpans,
+                matches: matches,
+                options: options
+            )
         )
+    }
+
+    private func multilineBytesSearched(
+        lines: [SearchLine],
+        matches: [SearchMatch],
+        limitedSpans: [MatchSpan],
+        totalBytes: Int,
+        options: RipgrepOptions
+    ) -> Int {
+        guard options.maxCount != nil,
+              !limitedSpans.isEmpty,
+              let lastSpan = limitedSpans.last,
+              let line = lines.first(where: { line in
+                  lastSpan.startByte >= line.absoluteOffset
+                      && lastSpan.endByte <= line.absoluteOffset
+                          + byteCount(line.line, options: options)
+                          + byteCount(line.lineTerminator, options: options)
+              }),
+              !options.effectivePatterns.contains(where: hasMultilineLineAnchor) else {
+            return totalBytes
+        }
+        let searchedThrough = line.absoluteOffset + byteCount(line.line, options: options) + byteCount(line.lineTerminator, options: options)
+        return bytesSearched(
+            lines: lines,
+            matches: matches,
+            bytesSearchedThroughMaxCount: searchedThrough,
+            totalBytes: totalBytes,
+            options: options
+        )
+    }
+
+    private func hasMultilineLineAnchor(_ pattern: String) -> Bool {
+        pattern.contains("^") || pattern.contains("$")
+    }
+
+    private func multilinePositiveSpansByLine(
+        spans: [MatchSpan],
+        lines: [SearchLine],
+        lineStartOffsets: [Int],
+        options: RipgrepOptions
+    ) -> [Int: [MatchSpan]] {
+        spans.reduce(into: [Int: [MatchSpan]]()) { spansByLine, span in
+            guard let startLineIndex = lineIndex(containingByteOffset: span.startByte, lineStartOffsets: lineStartOffsets),
+                  let endLineIndex = endLineIndex(for: span, lineStartOffsets: lineStartOffsets),
+                  startLineIndex == endLineIndex,
+                  startLineIndex < lines.count else {
+                return
+            }
+            let line = lines[startLineIndex]
+            let startByte = span.startByte - line.absoluteOffset
+            let endByte = span.endByte - line.absoluteOffset
+            spansByLine[line.lineNumber, default: []].append(MatchSpan(
+                startColumn: column(in: line.lineWithTerminator, byteOffset: startByte, options: options),
+                endColumn: column(in: line.lineWithTerminator, byteOffset: endByte, options: options),
+                startByte: startByte,
+                endByte: endByte,
+                text: span.text,
+                replacement: span.replacement
+            ))
+        }
     }
 
     private func shouldGroupMultilineJSONLineAnchorSpans(

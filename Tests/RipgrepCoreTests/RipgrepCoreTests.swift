@@ -1575,6 +1575,55 @@ struct RipgrepSearcherTests {
             "\(root.path("multi-context.txt"))-7-post",
             "\(root.path("multi-context.txt")):8:1:aaa",
         ])
+        try root.write("needle\nnext\nneedle\ntail\n", to: "multi-max-context.txt")
+        #expect(try run(["-U", "-n", "-m1", "-A2", "needle", root.path("multi-max-context.txt")]) == [
+            "1:needle",
+            "2-next",
+            "3:needle",
+        ])
+        #expect(try run(["-U", "--vimgrep", "-m1", "-A2", "needle", root.path("multi-max-context.txt")]) == [
+            "\(root.path("multi-max-context.txt")):1:1:needle",
+            "\(root.path("multi-max-context.txt"))-2-next",
+            "\(root.path("multi-max-context.txt")):3:1:needle",
+        ])
+
+        let jsonMultilineMaxOutput = try run([
+            "-U",
+            "--json",
+            "-m1",
+            "-A2",
+            "needle",
+            root.path("multi-max-context.txt"),
+        ])
+        let jsonMultilineMaxMessages = try jsonMultilineMaxOutput.map(jsonObject)
+        #expect(jsonMultilineMaxMessages.map { $0["type"] as? String } == [
+            "begin",
+            "match",
+            "context",
+            "match",
+            "end",
+            "summary",
+        ])
+        let jsonMultilineMaxEnd = jsonMultilineMaxMessages[4]["data"] as? [String: Any]
+        let jsonMultilineMaxStats = jsonMultilineMaxEnd?["stats"] as? [String: Any]
+        #expect(jsonMultilineMaxStats?["bytes_searched"] as? Int == "needle\nnext\nneedle\n".utf8.count)
+        #expect(jsonMultilineMaxStats?["matched_lines"] as? Int == 2)
+        #expect(jsonMultilineMaxStats?["matches"] as? Int == 2)
+
+        let jsonMultilineMaxNoContextOutput = try run([
+            "-U",
+            "--json",
+            "-m1",
+            "needle",
+            root.path("multi-max-context.txt"),
+        ])
+        let jsonMultilineMaxNoContextMessages = try jsonMultilineMaxNoContextOutput.map(jsonObject)
+        let jsonMultilineMaxNoContextEnd = jsonMultilineMaxNoContextMessages[2]["data"] as? [String: Any]
+        let jsonMultilineMaxNoContextStats = jsonMultilineMaxNoContextEnd?["stats"] as? [String: Any]
+        #expect(jsonMultilineMaxNoContextStats?["bytes_searched"] as? Int == "needle\n".utf8.count)
+        #expect(jsonMultilineMaxNoContextStats?["matched_lines"] as? Int == 1)
+        #expect(jsonMultilineMaxNoContextStats?["matches"] as? Int == 1)
+
         try root.write("foo\nbar\nfoo bar\n", to: "json-multiline-context.txt")
         let jsonMultilineAfterOutput = try run([
             "-U",
