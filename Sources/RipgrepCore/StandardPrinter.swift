@@ -217,7 +217,10 @@ public struct StandardPrinter {
     private func formatVimgrep(_ match: SearchMatch, showPath: Bool) -> [String] {
         let replacementLine = options.replacement == nil ? nil : firstRenderedLine(renderedText(for: match))
         let replacementOffsets = replacementStartOffsetsByIndex(for: match)
-        return match.spans.enumerated().map { index, span in
+        return match.spans.enumerated().compactMap { index, span in
+            if shouldSuppressMultilineVimgrepSpan(span, in: match) {
+                return nil
+            }
             let replacementStartByte = replacementOffsets[index]
             let lineText = replacementLine.map { vimgrepReplacementLineText($0, match: match) } ?? vimgrepLineText(for: match)
             let rawText = options.onlyMatching
@@ -414,24 +417,59 @@ public struct StandardPrinter {
             && span.replacement == nil
             && !options.fixedStrings
             && !options.effectivePatterns.isEmpty
-            && options.effectivePatterns.allSatisfy(isZeroWidthAssertionPattern)
+            && options.effectivePatterns.contains(where: containsLineAnchor)
     }
 
-    private func isZeroWidthAssertionPattern(_ pattern: String) -> Bool {
-        switch pattern {
-        case "^", "$", "\\A", "\\z", "\\b", "\\B":
+    private func shouldSuppressMultilineVimgrepSpan(_ span: MatchSpan, in match: SearchMatch) -> Bool {
+        guard options.multiline,
+              span.text.isEmpty,
+              span.replacement == nil,
+              !options.fixedStrings else {
+            return false
+        }
+        if options.effectivePatterns.contains(where: containsLineStartAnchor) {
             return true
-        default:
-            return unwrappedSingleGroupPattern(pattern).map(isZeroWidthAssertionPattern) ?? false
         }
+        return match.line.isEmpty && options.effectivePatterns.contains(where: containsLineEndAnchor)
     }
 
-    private func unwrappedSingleGroupPattern(_ pattern: String) -> String? {
-        for prefix in ["(?:", "(?m:", "(?-m:"] where pattern.hasPrefix(prefix) && pattern.hasSuffix(")") {
-            let start = pattern.index(pattern.startIndex, offsetBy: prefix.count)
-            return String(pattern[start..<pattern.index(before: pattern.endIndex)])
+    private func containsLineAnchor(_ pattern: String) -> Bool {
+        containsLineStartAnchor(pattern) || containsLineEndAnchor(pattern)
+    }
+
+    private func containsLineStartAnchor(_ pattern: String) -> Bool {
+        containsAnchor("^", in: pattern)
+    }
+
+    private func containsLineEndAnchor(_ pattern: String) -> Bool {
+        containsAnchor("$", in: pattern)
+    }
+
+    private func containsAnchor(_ anchor: Character, in pattern: String) -> Bool {
+        var escaped = false
+        var inClass = false
+        for character in pattern {
+            if escaped {
+                escaped = false
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                continue
+            }
+            if character == "[" {
+                inClass = true
+                continue
+            }
+            if character == "]" {
+                inClass = false
+                continue
+            }
+            if !inClass && character == anchor {
+                return true
+            }
         }
-        return nil
+        return false
     }
 
     private func formatOnlyMatchingInverted(_ match: SearchMatch, showPath: Bool) -> String {

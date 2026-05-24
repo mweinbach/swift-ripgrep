@@ -1444,6 +1444,31 @@ struct RipgrepSearcherTests {
             #expect(output.isEmpty)
             #expect(errors.isEmpty)
         }
+        #expect(try run(["-U", "-n", "-o", #"\b"#, root.path("multi.txt")]) == [
+            "1:",
+            "1:",
+            "2:",
+            "2:",
+            "3:",
+            "3:",
+        ])
+        #expect(try run(["-U", "-n", "-o", #"foo|$"#, root.path("multi.txt")]) == [
+            "1:foo",
+        ])
+        var vimgrepLineStartOutput: [String] = []
+        var vimgrepLineStartErrors: [String] = []
+        let vimgrepLineStartExitCode = RipgrepCLI.run(
+            arguments: ["-U", "--vimgrep", "^", root.path("zero-width.txt")],
+            stdout: { vimgrepLineStartOutput.append($0) },
+            stderr: { vimgrepLineStartErrors.append($0) }
+        )
+        #expect(vimgrepLineStartExitCode == 0)
+        #expect(vimgrepLineStartOutput.isEmpty)
+        #expect(vimgrepLineStartErrors.isEmpty)
+        #expect(try run(["-U", "--vimgrep", "$", root.path("zero-width.txt")]) == [
+            "\(root.path("zero-width.txt")):1:3:ab",
+            "\(root.path("zero-width.txt")):3:3:cd",
+        ])
         #expect(try run(["-U", "--count-matches", "$", root.path("zero-width.txt")]) == ["3"])
         #expect(try run(["-U", "--count-matches", "(?:)", root.path("zero-width.txt")]) == ["7"])
         #expect(try run(["-U", "--count-matches", "x?", root.path("zero-width.txt")]) == ["7"])
@@ -1453,18 +1478,26 @@ struct RipgrepSearcherTests {
         let jsonLineStartMatch = jsonLineStartMessages[1]["data"] as? [String: Any]
         let jsonLineStartLines = jsonLineStartMatch?["lines"] as? [String: String]
         let jsonLineStartSubmatches = jsonLineStartMatch?["submatches"] as? [[String: Any]]
+        let jsonLineStartEnd = jsonLineStartMessages[2]["data"] as? [String: Any]
+        let jsonLineStartStats = jsonLineStartEnd?["stats"] as? [String: Any]
         #expect(jsonLineStartLines?["text"] == "ab\n\ncd\n")
         #expect(jsonLineStartSubmatches?.map { $0["start"] as? Int } == [0, 3, 4])
         #expect(jsonLineStartSubmatches?.map { $0["end"] as? Int } == [0, 3, 4])
+        #expect(jsonLineStartStats?["matched_lines"] as? Int == 3)
+        #expect(jsonLineStartStats?["matches"] as? Int == 3)
         let jsonLineEndOutput = try run(["-U", "--json", "-C1", "$", root.path("zero-width.txt")])
         let jsonLineEndMessages = try jsonLineEndOutput.map(jsonObject)
         #expect(jsonLineEndMessages.map { $0["type"] as? String } == ["begin", "match", "end", "summary"])
         let jsonLineEndMatch = jsonLineEndMessages[1]["data"] as? [String: Any]
         let jsonLineEndLines = jsonLineEndMatch?["lines"] as? [String: String]
         let jsonLineEndSubmatches = jsonLineEndMatch?["submatches"] as? [[String: Any]]
+        let jsonLineEndEnd = jsonLineEndMessages[2]["data"] as? [String: Any]
+        let jsonLineEndStats = jsonLineEndEnd?["stats"] as? [String: Any]
         #expect(jsonLineEndLines?["text"] == "ab\n\ncd\n")
         #expect(jsonLineEndSubmatches?.map { $0["start"] as? Int } == [2, 3, 6])
         #expect(jsonLineEndSubmatches?.map { $0["end"] as? Int } == [2, 3, 6])
+        #expect(jsonLineEndStats?["matched_lines"] as? Int == 3)
+        #expect(jsonLineEndStats?["matches"] as? Int == 3)
         #expect(try run(["-n", "-U", "-o", #"foo[\s\S]+?bar"#, root.path("multi.txt")]) == [
             "1:foo",
             "2:bar",

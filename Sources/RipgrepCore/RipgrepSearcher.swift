@@ -1396,6 +1396,11 @@ public struct RipgrepSearcher {
               options.beforeContext > 0 || options.afterContext > 0 else {
             return []
         }
+        if options.multiline,
+           options.maxCount == nil,
+           options.effectivePatterns.allSatisfy(isBareMultilineLineAnchorPattern) {
+            return []
+        }
         let matchedLineNumbers = Set(matches.map(\.lineNumber))
         let selected = selectedContextLineNumbers(lineCount: lines.count, matches: matches, options: options)
         return lines.filter {
