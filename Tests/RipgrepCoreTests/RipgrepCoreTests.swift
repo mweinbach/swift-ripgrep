@@ -1582,6 +1582,7 @@ struct RipgrepSearcherTests {
         let multiRoot = try TemporaryDirectory()
         try multiRoot.write("needle\nafter\n", to: "a.txt")
         try multiRoot.write("needle\nafter\n", to: "b.txt")
+        try multiRoot.write("", to: "empty.txt")
         #expect(try run(["--sort", "path", "-n", "-A1", "needle", multiRoot.url.path]) == [
             "\(multiRoot.path("a.txt")):1:needle",
             "\(multiRoot.path("a.txt"))-2-after",
@@ -1603,6 +1604,19 @@ struct RipgrepSearcherTests {
             "\(multiRoot.path("b.txt")):1:needle",
             "\(multiRoot.path("b.txt"))-2-after",
         ])
+        #expect(try run(["--sort", "path", "--passthru", "needle", multiRoot.url.path]) == [
+            "\(multiRoot.path("a.txt")):needle",
+            "\(multiRoot.path("a.txt"))-after",
+            "\(multiRoot.path("b.txt")):needle",
+            "\(multiRoot.path("b.txt"))-after",
+        ])
+        #expect(try runAllowingNoMatch(["^", multiRoot.path("empty.txt")]) == [])
+        let emptyPassthruJSON = runWithExitCode(
+            ["--json", "--passthru", "needle", multiRoot.path("empty.txt")],
+            expectedExitCode: 1
+        )
+        let emptyPassthruMessages = try emptyPassthruJSON.map(jsonObject)
+        #expect(emptyPassthruMessages.map { $0["type"] as? String } == ["summary"])
         #expect(try run([
             "-n",
             "-A1",

@@ -1505,6 +1505,9 @@ public struct RipgrepSearcher {
         options: RipgrepOptions,
         splitBinaryNUL: Bool = false
     ) -> [(text: String, terminator: String)] {
+        guard !contents.isEmpty else {
+            return []
+        }
         if options.nullData {
             return splitNulDelimited(contents)
         }
@@ -1528,6 +1531,9 @@ public struct RipgrepSearcher {
     }
 
     private func splitNulDelimited(_ contents: String) -> [(text: String, terminator: String)] {
+        guard !contents.isEmpty else {
+            return []
+        }
         var lines: [(String, String)] = []
         var current = String.UnicodeScalarView()
         for scalar in contents.unicodeScalars {
@@ -1549,6 +1555,9 @@ public struct RipgrepSearcher {
         options: RipgrepOptions,
         splitBinaryNUL: Bool = false
     ) -> [(text: String, terminator: String)] {
+        guard !data.isEmpty else {
+            return []
+        }
         let separator: UInt8 = options.nullData ? 0 : UInt8(ascii: "\n")
         var lines: [(String, String)] = []
         var current = String.UnicodeScalarView()

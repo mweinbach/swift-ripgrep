@@ -55,7 +55,7 @@ public struct JSONPrinter {
     }
 
     private func shouldPrintFile(_ result: SearchFileResult) -> Bool {
-        result.hasMatch || (options.passthru && result.searched)
+        result.hasMatch || (options.passthru && !result.lines.isEmpty)
     }
 
     private func messages(for result: SearchFileResult, path: String) -> [JSONValue] {
