@@ -932,12 +932,17 @@ public struct StandardPrinter {
             }
             if shouldSeparateFiles,
                !output.isEmpty,
+               !isBinaryOnlyContextResult(result),
                let contextSeparator = options.contextSeparator {
                 output.append(contextSeparator)
             }
             output.append(contentsOf: lines)
         }
         return output
+    }
+
+    private func isBinaryOnlyContextResult(_ result: SearchFileResult) -> Bool {
+        result.hasBinaryMatch && result.binaryByteOffset != nil
     }
 
     private func shouldUseWholeMatchFormatter(_ match: SearchMatch) -> Bool {

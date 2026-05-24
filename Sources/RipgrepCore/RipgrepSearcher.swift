@@ -549,33 +549,36 @@ public struct RipgrepSearcher {
             rawDataForMatching: rawDataForMatching(data, options: options, matcher: matcher),
             fileURL: fileURL,
             matcher: matcher,
-            options: options
+            options: options,
+            splitBinaryNUL: shouldSplitStdinBinaryNUL(options: options)
         )
         guard !options.disablesBinaryDetection,
               shouldCheckBinary(data, options: options),
               let binaryByteOffset = data.firstIndex(of: 0) else {
             return result
         }
-        let binaryDetectedBeforeSearch = binaryByteOffset < Self.binaryDetectionBufferSize
-        let visibleMatches = binaryDetectedBeforeSearch
-            ? []
-            : matchesBeforeBinary(result.matches, binaryByteOffset: binaryByteOffset, options: options)
+        let visibleMatches = matchesBeforeBinary(result.matches, binaryByteOffset: binaryByteOffset, options: options)
         let emittedMatches = shouldEmitSuppressedBinaryMatches(options, isExplicit: true)
             ? result.matches
             : visibleMatches
+        let hasBinaryMatch = hasBinaryMatchResult(
+            result: result,
+            visibleMatches: visibleMatches,
+            options: options
+        )
         let lineNumberShifts = jsonBinaryLineNumberShifts(for: result.lines, options: options)
         let displayMatches = options.json
             ? jsonBinaryDisplayMatches(emittedMatches, lineNumberShifts: lineNumberShifts, options: options)
             : emittedMatches
         let displayLines = options.json
             ? jsonBinaryDisplayLines(result.lines, lineNumberShifts: lineNumberShifts, options: options)
-            : result.lines
+            : hasBinaryMatch ? result.lines : []
         return SearchFileResult(
             fileURL: fileURL,
             matches: displayMatches,
             lines: displayLines,
             binaryByteOffset: binaryByteOffset,
-            hasBinaryMatch: result.hasMatch,
+            hasBinaryMatch: hasBinaryMatch,
             bytesSearched: data.count,
             supplementalMatchedLines: result.supplementalMatchedLines,
             supplementalMatches: result.supplementalMatches
@@ -588,8 +591,21 @@ public struct RipgrepSearcher {
         options: RipgrepOptions
     ) -> [SearchMatch] {
         matches.filter { match in
-            let matchEnd = match.spans.map(\.endByte).max() ?? byteCount(match.line, options: options)
-            return match.absoluteOffset + matchEnd <= binaryByteOffset
+            guard !match.spans.isEmpty else {
+                return match.absoluteOffset + byteCount(match.line, options: options) <= binaryByteOffset
+            }
+            return match.spans.contains { span in
+                match.absoluteOffset + span.endByte <= binaryByteOffset
+            }
+        }
+    }
+
+    private func shouldSplitStdinBinaryNUL(options: RipgrepOptions) -> Bool {
+        switch options.printMode {
+        case .count, .countMatches:
+            return true
+        case .matchingLines, .filesWithMatches, .filesWithoutMatch:
+            return false
         }
     }
 

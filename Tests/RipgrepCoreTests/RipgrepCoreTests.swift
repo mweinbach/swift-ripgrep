@@ -5006,6 +5006,38 @@ struct RipgrepSearcherTests {
         #expect(stdinOutput == [
             #"binary file matches (found "\0" byte around offset 7)"#,
         ])
+
+        stdinOutput = []
+        stdinExitCode = RipgrepCLI.run(
+            arguments: ["--passthru", "tail", "-"],
+            stdout: { stdinOutput.append($0) },
+            stdin: "needle\n\0tail\n"
+        )
+        #expect(stdinExitCode == 1)
+        #expect(stdinOutput == [])
+
+        stdinOutput = []
+        stdinExitCode = RipgrepCLI.run(
+            arguments: ["-B1", "tail", "-"],
+            stdout: { stdinOutput.append($0) },
+            stdin: "needle\n\0tail\n"
+        )
+        #expect(stdinExitCode == 1)
+        #expect(stdinOutput == [])
+
+        let stdinContextFile = try TemporaryDirectory()
+        try stdinContextFile.write("file needle\nfile tail\n", to: "file.txt")
+        stdinOutput = []
+        stdinExitCode = RipgrepCLI.run(
+            arguments: ["-A1", "tail", stdinContextFile.path("file.txt"), "-"],
+            stdout: { stdinOutput.append($0) },
+            stdin: "needle\0tail\n"
+        )
+        #expect(stdinExitCode == 0)
+        #expect(stdinOutput == [
+            "\(stdinContextFile.path("file.txt")):file tail",
+            #"<stdin>: binary file matches (found "\0" byte around offset 6)"#,
+        ])
         #expect(try run(["-a", "needle", root.path("bin.dat")]) == [
             "needle\0tail",
         ])
