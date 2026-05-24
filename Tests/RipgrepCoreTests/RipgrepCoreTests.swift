@@ -894,6 +894,20 @@ struct RipgrepSearcherTests {
             "8:",
             "9:",
         ])
+        #expect(try run(["-bo", "^", root.path("unicode-empty-offsets.txt")]) == [
+            "0:",
+            "3:",
+            "7:",
+        ])
+        #expect(try run(["-bo", #"\b"#, root.path("unicode-empty-offsets.txt")]) == [
+            "0:",
+            "2:",
+            "3:",
+            "6:",
+        ])
+        #expect(try run(["--count-matches", #"\b"#, root.path("unicode-empty-offsets.txt")]) == [
+            "4",
+        ])
         #expect(try run(["-n", "--column", "-o", "x?", root.path("unicode-empty-offsets.txt")]) == [
             "1:1:",
             "1:2:",

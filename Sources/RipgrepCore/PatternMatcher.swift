@@ -280,7 +280,8 @@ public struct PatternMatcher {
         var output: [(range: Range<String.Index>, replacement: String?, byteOffset: Int?, column: Int?)] = candidates.map {
             ($0.range, $0.replacement, nil, nil)
         }
-        guard !usesByteSemantics else {
+        guard !usesByteSemantics,
+              !options.effectivePatterns.allSatisfy(Self.suppressesInternalUTF8EmptyMatches) else {
             return output
         }
         for candidate in candidates where candidate.range.isEmpty && candidate.range.lowerBound < line.endIndex {
@@ -389,6 +390,20 @@ public struct PatternMatcher {
             return true
         default:
             return unwrappedSingleGroupPattern(pattern).map(isEndAssertionPattern) ?? false
+        }
+    }
+
+    private static func suppressesInternalUTF8EmptyMatches(_ pattern: String) -> Bool {
+        if pattern.contains("|") {
+            return pattern.split(separator: "|", omittingEmptySubsequences: false).allSatisfy {
+                suppressesInternalUTF8EmptyMatches(String($0))
+            }
+        }
+        switch pattern {
+        case "^", "$", "\\A", "\\z", "\\b", "\\B":
+            return true
+        default:
+            return unwrappedSingleGroupPattern(pattern).map(suppressesInternalUTF8EmptyMatches) ?? false
         }
     }
 
