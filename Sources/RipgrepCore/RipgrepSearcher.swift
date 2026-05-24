@@ -531,6 +531,9 @@ public struct RipgrepSearcher {
         guard options.binaryMode == .searchAndSuppress || isExplicit else {
             return false
         }
+        if options.quiet && options.stats {
+            return true
+        }
         if options.json {
             return true
         }
@@ -547,6 +550,9 @@ public struct RipgrepSearcher {
         visibleMatches: [SearchMatch],
         options: RipgrepOptions
     ) -> Int {
+        if options.quiet && options.stats {
+            return dataCount
+        }
         guard options.printMode == .matchingLines,
               !options.json,
               let firstMatch = visibleMatches.first else {

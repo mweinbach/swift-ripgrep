@@ -3344,6 +3344,16 @@ struct RipgrepSearcherTests {
         #expect(postNulStats.contains("1 matched lines"))
         #expect(postNulStats.contains("26 bytes searched"))
 
+        var quietBinaryStatsOutput: [String] = []
+        let quietBinaryStatsExitCode = RipgrepCLI.run(
+            arguments: ["-q", "--stats", "cat", countRoot.path("file1.txt")],
+            stdout: { quietBinaryStatsOutput.append($0) }
+        )
+        #expect(quietBinaryStatsExitCode == 0)
+        #expect(quietBinaryStatsOutput.contains("3 matches"))
+        #expect(quietBinaryStatsOutput.contains("2 matched lines"))
+        #expect(quietBinaryStatsOutput.contains("26 bytes searched"))
+
         let withoutRoot = try TemporaryDirectory()
         try withoutRoot.write(Data("hay\0cat\n".utf8), to: "binary.txt")
         try withoutRoot.write("hay\n", to: "text.txt")
