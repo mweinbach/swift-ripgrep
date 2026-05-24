@@ -153,7 +153,7 @@ public struct JSONPrinter {
 
     private func submatchObject(_ span: MatchSpan) -> JSONValue {
         var fields: [(String, JSONValue)] = [
-            ("match", dataObject(span.text, rawWhenEncodingDisabled: true)),
+            ("match", dataObject(span.text, rawWhenEncodingDisabled: options.encodingMode == .disabled)),
         ]
         if let replacement = span.replacement {
             fields.append(("replacement", dataObject(replacement)))

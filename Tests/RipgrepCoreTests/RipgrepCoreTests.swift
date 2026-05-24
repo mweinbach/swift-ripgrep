@@ -953,6 +953,27 @@ struct RipgrepSearcherTests {
             )
         })
         #expect(textOutput == Data([0x32, 0x3A, 0xFF, 0x66, 0x6F, 0x6F, 0x0A]))
+        try root.write(Data([
+            0x63, 0x61, 0x66, 0xE9, 0x0A,
+            0x6E, 0x65, 0x65, 0x64, 0x6C, 0x65, 0x20, 0x63, 0x61, 0x66, 0xE9, 0x0A,
+        ]), to: "latin1.txt")
+        #expect(try runAllowingNoMatch(["caf.", root.path("latin1.txt")]) == [])
+        #expect(try runAllowingNoMatch(["--no-encoding", "caf.", root.path("latin1.txt")]) == [])
+        let invalidAutomaticLineOutput = try runExecutableData(["needle", root.path("latin1.txt")], fixture: {})
+        #expect(invalidAutomaticLineOutput == Data([
+            0x6E, 0x65, 0x65, 0x64, 0x6C, 0x65, 0x20, 0x63, 0x61, 0x66, 0xE9, 0x0A,
+        ]))
+        #expect(try run(["--encoding", "latin1", "caf.", root.path("latin1.txt")]) == [
+            "café",
+            "needle café",
+        ])
+        let latin1JsonOutput = try run(["--json", "--encoding", "latin1", "caf.", root.path("latin1.txt")])
+        let latin1JsonMatches = try latin1JsonOutput.map(jsonObject).compactMap { object -> [String: Any]? in
+            guard object["type"] as? String == "match" else { return nil }
+            return object["data"] as? [String: Any]
+        }
+        let firstLatin1Submatch = (latin1JsonMatches.first?["submatches"] as? [[String: Any]])?.first
+        #expect((firstLatin1Submatch?["match"] as? [String: String])?["text"] == "café")
         let onlyMatchingTextOutput = try runExecutableData([
             "-a",
             "-o",

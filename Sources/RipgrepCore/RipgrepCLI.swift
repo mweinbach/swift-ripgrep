@@ -113,6 +113,7 @@ public enum RipgrepCLI {
                 }
 
                 let results = try searcher.search(options: options, stdin: searchStdin)
+                let outputEncodingMode = options.json ? nil : outputEncodingMode(for: options, results: results)
                 let outputLines = options.json
                     ? JSONPrinter(options: options).lines(for: results)
                     : printer.lines(for: results)
@@ -120,7 +121,7 @@ public enum RipgrepCLI {
                     emitStdout(
                         line,
                         stdout: stdout,
-                        encodingMode: options.json ? nil : outputEncodingMode(for: options),
+                        encodingMode: outputEncodingMode,
                         suppressNewlineForTrailingNul: options.nullData || options.nullPathTerminator
                     )
                 }
@@ -180,8 +181,18 @@ public enum RipgrepCLI {
         FileHandle.standardOutput.write(Data(output.utf8))
     }
 
-    private static func outputEncodingMode(for options: RipgrepOptions) -> EncodingMode? {
-        options.emitsRawBytes ? .disabled : options.encodingMode
+    private static func outputEncodingMode(for options: RipgrepOptions, results: SearchResults) -> EncodingMode? {
+        if options.emitsRawBytes || carriesRawOutputLines(results) {
+            return .disabled
+        }
+        return options.encodingMode
+    }
+
+    private static func carriesRawOutputLines(_ results: SearchResults) -> Bool {
+        results.files.contains { file in
+            file.matches.contains { $0.rawLine != nil }
+                || file.lines.contains { $0.rawLine != nil }
+        }
     }
 
     private static func hasSuccessfulOutput(results: SearchResults, options: RipgrepOptions) -> Bool {

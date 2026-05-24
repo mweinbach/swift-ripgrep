@@ -1722,6 +1722,8 @@ public enum RipgrepArgumentParser {
             return .explicit(.utf16LittleEndian)
         case "utf-16be", "utf16be":
             return .explicit(.utf16BigEndian)
+        case "latin1", "latin-1", "iso-8859-1", "iso8859-1":
+            return .explicit(.isoLatin1)
         case "shift_jis", "shift-jis", "sjis":
             return .explicit(Self.stringEncoding(.shiftJIS))
         case "euc-jp", "eucjp":
