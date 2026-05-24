@@ -105,17 +105,67 @@ into a much smaller implementation:
    binary and folding the diffs back into `PatternMatcher.swift` — an ongoing
    quality effort rather than a finite porting slice.
 
-## Wave 3 — remaining structural work (deferred)
+## Wave 3 — true 1:1 parity push (active 2026-05-24)
 
-- True streaming line buffer that hands matcher chunks rather than the full
-  haystack. mmap already avoids a heap copy of file bodies, so this is a
-  matcher-side optimisation, not a correctness gap. Worth doing once we have
-  a perf smoke test that demonstrates a regression at multi-GiB inputs.
-- Heap limit enforcement on the buffered I/O path (Rust's `--max-filesize`
-  is already honoured by the walker; Rust also caps the in-memory buffer
-  growth — the Swift chunked reader currently grows unboundedly).
-- Wider parity-harness fixture coverage (more encodings, more compressed
-  inputs, more pathological regex cases).
+### Wave 3A — Comprehensive parity harness vs Rust tests/* + drift fixes
+Owner: pair-agent-F. Touches: `Tests/RipgrepCoreTests/ParityHarnessTests.swift`
+(rewrite to data-driven), new `Tests/RipgrepCoreTests/ParityHay.swift` (port
+of Rust `tests/hay.rs` constants), new `Tests/Fixtures/parity/` subtrees as
+needed, and bug fixes anywhere in `Sources/RipgrepCore/` that the harness
+flags. Do NOT delete or downgrade the existing 81 Swift Testing cases — they
+stay green.
+
+- [ ] Port Rust's `tests/hay.rs` constants (`SHERLOCK`, `SHERLOCK_CRLF`, etc.)
+      into a Swift constant module. They are the canonical haystacks used by
+      most Rust integration tests.
+- [ ] Convert `ParityHarnessTests` into a data-driven runner: each case is a
+      `(name, fixtureBuilder, args[, stdin])` tuple. The runner creates a
+      tempdir, lets `fixtureBuilder` populate it, runs both binaries with
+      `args`, and asserts byte-identical stdout/stderr/exit-code.
+- [ ] Port at least ~150 cases drawn from Rust's `tests/binary.rs`,
+      `tests/multiline.rs`, `tests/json.rs`, `tests/misc.rs`,
+      `tests/feature.rs`, `tests/regression.rs`. Concentrate on cases that
+      exercise behaviour the existing Swift Testing suite *doesn't* already
+      cover — passthru, OSC8 hyperlinks, `--null`/`-Z` JSON variants, weird
+      regex regressions (look for `r123`-style names), `-Uw` multiline word
+      boundaries, etc.
+- [ ] Run the harness. For every diff, fix the Swift implementation until
+      the case matches Rust byte-for-byte. Most fixes land in
+      `Sources/RipgrepCore/PatternMatcher.swift`, but the output formatters
+      (`StandardPrinter`, `JSONPrinter`) and `RipgrepSearcher` are fair game
+      too. Skip a case (with a clear `XCTSkip("known divergence: ...")`) only
+      if the difference is intentional (e.g. Swift PCRE2 version string).
+- [ ] Document each intentional skip in the harness file *and* in
+      `Docs/PORTING.md` under a new "Intentional divergences" section.
+
+### Wave 3B — True streaming line buffer + heap cap on chunked I/O
+Owner: pair-agent-G (after 3A). Touches:
+`Sources/RipgrepCore/HaystackReader.swift`,
+`Sources/RipgrepCore/RipgrepSearcher.swift` (just `searchFile` internals).
+
+- [ ] Replace the "accumulate all chunks into a `Data` then search" pattern
+      for the buffered path with a `LineChunkReader` that yields complete
+      lines (or multiline chunks honouring `--multiline`) and feeds them
+      directly to the matcher. mmap path stays as-is — mmap already maps the
+      whole file without a heap copy.
+- [ ] Cap the buffered path at a configurable max (default e.g. 256 MiB).
+      Surface a clear error if a single line exceeds the cap.
+- [ ] Add a perf smoke test that streams a 256 MiB synthetic file with one
+      match per 1 KiB block and asserts (a) runtime under e.g. 5 s and (b)
+      peak RSS well under the file size.
+
+### Wave 3 — wrap-up
+- [ ] Refresh PORTING.md (mark Wave 3A and 3B done, summarise parity-case
+      count, list any intentional divergences).
+- [ ] Run the full parity sweep one final time against installed `rg`.
+
+## Wave 4 — open backlog (no scheduled work)
+
+- Wider encoding probe coverage (more legacy codepages, GB18030 edge cases,
+  big5-hkscs).
+- Compressed-input probe coverage (`.gz`, `.bz2`, `.zst`, `.lz4`).
+- Generated-asset refresh automation (`rg.help.*`, `rg.1`, shell
+  completions) from the Rust checkout.
 
 ## Medium-priority improvements
 
