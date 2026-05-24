@@ -719,7 +719,8 @@ public struct RipgrepSearcher {
         }
         if options.json,
            options.multiline,
-           options.effectivePatterns.contains(where: isMultilineBinaryBoundaryPattern) {
+           (options.effectivePatterns.contains(where: isMultilineBinaryBoundaryPattern)
+            || options.effectivePatterns.contains(where: containsNULPattern)) {
             return binaryByteOffset
         }
         guard options.printMode == .matchingLines,
@@ -1031,6 +1032,7 @@ public struct RipgrepSearcher {
             let shouldSplitMultilineBinaryNUL = shouldSplitBinaryNUL
                 && options.printMode == .countMatches
                 && !options.effectivePatterns.contains(where: containsLineAnchor)
+                && !options.effectivePatterns.contains(where: containsNULPattern)
                 && !options.effectivePatterns.contains(where: containsLineTerminatorOutsideCharacterClass)
             return searchMultilineContents(
                 contents,

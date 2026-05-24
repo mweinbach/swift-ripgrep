@@ -1187,6 +1187,9 @@ struct RipgrepSearcherTests {
         #expect(try run(["-U", "--count-matches", #"[^\x0A]+"#, root.path("binary-multiline-nul.txt")]) == [
             "3",
         ])
+        #expect(try run(["-U", "--count-matches", #"[^\x00]"#, root.path("binary-multiline-nul.txt")]) == [
+            "4",
+        ])
         #expect(try run(["-U", "-a", "--count-matches", #"[^\n]+"#, root.path("binary-multiline-nul.txt")]) == [
             "1",
         ])

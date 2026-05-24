@@ -1140,8 +1140,8 @@ public struct PatternMatcher {
             let character = pattern[index]
             if escaped {
                 if character == "x" || character == "u",
-                   let escape = bracedScalarEscape(after: index, in: pattern) {
-                    output += NSRegularExpression.escapedPattern(for: String(escape.scalar))
+                   let escape = scalarEscapeSource(after: index, kind: character, in: pattern) {
+                    output += escape.source
                     index = pattern.index(after: escape.end)
                 } else {
                     output.append("\\")
@@ -1165,10 +1165,36 @@ public struct PatternMatcher {
         return output
     }
 
+    private static func scalarEscapeSource(
+        after index: String.Index,
+        kind: Character,
+        in pattern: String
+    ) -> (source: String, end: String.Index)? {
+        if let escape = bracedScalarEscape(after: index, in: pattern) {
+            return ("\\x{\(String(escape.value, radix: 16, uppercase: true))}", escape.end)
+        }
+        let digitCount = kind == "x" ? 2 : 4
+        var end = index
+        var digits = ""
+        for _ in 0..<digitCount {
+            let next = pattern.index(after: end)
+            guard next < pattern.endIndex, pattern[next].isHexDigit else {
+                return nil
+            }
+            digits.append(pattern[next])
+            end = next
+        }
+        guard let value = UInt32(digits, radix: 16),
+              UnicodeScalar(value) != nil else {
+            return nil
+        }
+        return ("\\x{\(String(value, radix: 16, uppercase: true))}", end)
+    }
+
     private static func bracedScalarEscape(
         after index: String.Index,
         in pattern: String
-    ) -> (scalar: UnicodeScalar, end: String.Index)? {
+    ) -> (value: UInt32, end: String.Index)? {
         let brace = pattern.index(after: index)
         guard brace < pattern.endIndex, pattern[brace] == "{",
               let close = pattern[brace...].firstIndex(of: "}") else {
@@ -1177,10 +1203,10 @@ public struct PatternMatcher {
         let digitsStart = pattern.index(after: brace)
         guard digitsStart < close,
               let value = UInt32(pattern[digitsStart..<close], radix: 16),
-              let scalar = UnicodeScalar(value) else {
+              UnicodeScalar(value) != nil else {
             return nil
         }
-        return (scalar, close)
+        return (value, close)
     }
 
     private struct UnsupportedRegexFeature {
