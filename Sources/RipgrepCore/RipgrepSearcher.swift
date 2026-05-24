@@ -13,7 +13,6 @@ private struct FileSearchOutcome {
 private struct DecompressionCommand {
     let executable: URL
     let arguments: [String]
-    let displayCommand: String
 }
 
 private struct MultilineSpanCandidate {
@@ -231,7 +230,6 @@ public struct RipgrepSearcher {
         if let decompressionCommand = decompressionCommand(for: fileURL, options: options) {
             return searchDecompressedFile(
                 fileURL,
-                originalData: data,
                 command: decompressionCommand,
                 matcher: matcher,
                 options: options
@@ -657,16 +655,16 @@ public struct RipgrepSearcher {
 
     private func searchDecompressedFile(
         _ fileURL: URL,
-        originalData: Data,
         command: DecompressionCommand,
         matcher: PatternMatcher,
         options: RipgrepOptions
     ) -> FileSearchOutcome {
         do {
+            let displayPath = OutputPathFormatter(options: options).displayPath(for: fileURL)
             let data = try runStreamingCommand(
                 executable: command.executable,
                 arguments: command.arguments,
-                inputFile: fileURL
+                inputPath: commandInputPath(displayPath: displayPath, fileURL: fileURL, options: options)
             )
             let contents = decode(data, options: options)
             let result = searchContents(
@@ -680,13 +678,14 @@ public struct RipgrepSearcher {
                 fileURL: result.fileURL,
                 matches: result.matches,
                 lines: result.lines,
-                bytesSearched: originalData.count,
+                bytesSearched: data.count,
                 searched: result.searched
             ))
         } catch {
+            let displayPath = OutputPathFormatter(options: options).displayPath(for: fileURL)
             return FileSearchOutcome(
                 result: SearchFileResult(fileURL: fileURL, matches: [], searched: false),
-                message: "\(fileURL.path): decompression command failed: '\(command.displayCommand)': \(error)"
+                message: "\(displayPath): \(error)"
             )
         }
     }
@@ -694,31 +693,34 @@ public struct RipgrepSearcher {
     private func runStreamingCommand(
         executable: URL,
         arguments: [String],
-        inputFile: URL
+        inputPath: String
     ) throws -> Data {
         let process = Process()
         process.executableURL = executable
         process.arguments = arguments
 
-        let input = try FileHandle(forReadingFrom: inputFile)
         let output = Pipe()
         let stderr = Pipe()
-        process.standardInput = input
+        process.arguments = arguments + [inputPath]
         process.standardOutput = output
         process.standardError = stderr
 
         try process.run()
-        input.closeFile()
         let data = output.fileHandleForReading.readDataToEndOfFile()
         let errorData = stderr.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
 
         guard process.terminationStatus == 0 else {
-            let stderrText = String(data: errorData, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            throw RipgrepError.message(stderrText?.isEmpty == false ? stderrText! : "<stderr is empty>")
+            throw RipgrepError.message(preprocessorErrorText(errorData))
         }
         return data
+    }
+
+    private func commandInputPath(displayPath: String, fileURL: URL, options: RipgrepOptions) -> String {
+        guard options.pathSeparator == nil else {
+            return fileURL.path
+        }
+        return displayPath
     }
 
     private func decompressionCommand(
@@ -749,8 +751,7 @@ public struct RipgrepSearcher {
         }
         return DecompressionCommand(
             executable: executable,
-            arguments: spec.arguments,
-            displayCommand: ([spec.program] + spec.arguments).joined(separator: " ")
+            arguments: spec.arguments
         )
     }
 

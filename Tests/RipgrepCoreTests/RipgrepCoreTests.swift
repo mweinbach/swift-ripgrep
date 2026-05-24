@@ -1857,6 +1857,35 @@ struct RipgrepSearcherTests {
             "needle",
             root.path("compressed.txt.gz"),
         ]) == ["preprocessed needle"])
+
+        let jsonOutput = try run([
+            "--json",
+            "--search-zip",
+            "needle",
+            root.path("compressed.txt.gz"),
+        ])
+        let jsonMessages = try jsonOutput.map(jsonObject)
+        let endMessage = jsonMessages.first { $0["type"] as? String == "end" }
+        let endData = endMessage?["data"] as? [String: Any]
+        let stats = endData?["stats"] as? [String: Any]
+        #expect(stats?["bytes_searched"] as? Int == "needle in gzip\n".utf8.count)
+
+        try root.write("not gzip\nneedle\n", to: "bad.gz")
+        var output: [String] = []
+        var errors: [String] = []
+        let exitCode = RipgrepCLI.run(
+            arguments: ["--search-zip", "needle", root.path("bad.gz")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["rg: \(root.path("bad.gz")): " + """
+
+        -------------------------------------------------------------------------------
+        gzip: \(root.path("bad.gz")): not in gzip format
+        -------------------------------------------------------------------------------
+        """])
     }
 
     @Test("prints only matching text and replacements")
