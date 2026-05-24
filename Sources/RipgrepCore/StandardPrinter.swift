@@ -288,7 +288,7 @@ public struct StandardPrinter {
             let terminator = outputTerminator(
                 match.lineTerminator,
                 line: options.onlyMatching ? span.text : (replacementLine ?? projection?.line ?? match.line),
-                crlfMatchTerminator: options.onlyMatching,
+                crlfMatchTerminator: options.onlyMatching || (options.multiline && options.lineRegexp),
                 forceCRLF: isColumnLimitedVimgrepLine(match: match, replacementLine: replacementLine, projectedLine: projection?.line)
             )
             if text.rawBytePayload != nil {

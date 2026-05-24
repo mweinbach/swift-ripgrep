@@ -2456,6 +2456,7 @@ struct RipgrepSearcherTests {
         try root.write("foo\r\nbar\rquux\nbaz\r\n", to: "crlf.txt")
         try root.write("a\r\nb\r\n", to: "plain-crlf.txt")
         try root.write("foo\r\nbar\r\nbaz\r\n", to: "crlf-line-regexp.txt")
+        try root.write("foo\nbar\nbaz\n", to: "lf-line-regexp.txt")
         try root.write("\n", to: "lf-empty.txt")
         try root.write("first\nlast", to: "lf-no-final-newline.txt")
         try root.write("foo\r\nbar", to: "crlf-no-final-newline.txt")
@@ -2576,6 +2577,9 @@ struct RipgrepSearcherTests {
         ])
         #expect(try run(["-U", "--crlf", "--vimgrep", "-x", #"\bbar\b"#, root.path("crlf-line-regexp.txt")]) == [
             "\(root.path("crlf-line-regexp.txt")):2:1:bar\r",
+        ])
+        #expect(try run(["-U", "--crlf", "--vimgrep", "-x", #"\bbar\b"#, root.path("lf-line-regexp.txt")]) == [
+            "\(root.path("lf-line-regexp.txt")):2:1:bar\r",
         ])
         #expect(try run(["--crlf", "-o", "foo$", root.path("crlf.txt")]) == [
             "foo\r",
