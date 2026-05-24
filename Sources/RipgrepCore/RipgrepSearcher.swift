@@ -872,7 +872,7 @@ public struct RipgrepSearcher {
             return true
         }
         let matcher = GlobMatcher(patterns: options.preGlobPatterns, overrideSemantics: true)
-        return matcher.allows(relativePath: haystack.url.path, isDirectory: false)
+        return matcher.allows(relativePath: haystack.overridePath, isDirectory: false)
     }
 
     private func searchPreprocessedFile(

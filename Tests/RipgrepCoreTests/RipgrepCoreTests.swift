@@ -3028,6 +3028,48 @@ struct RipgrepSearcherTests {
             "needle",
             root.url.path,
         ]))) == Set(["doc.md", "plain.txt", "pre.sh"]))
+        try root.createDirectory("sub")
+        try root.write("plain needle\n", to: "sub/doc.md")
+        #expect(try run([
+            "--sort",
+            "path",
+            "--pre",
+            script,
+            "--pre-glob",
+            "sub/**",
+            "needle",
+            ".",
+        ]) == [
+            "./plain.txt:needle",
+            #"./pre.sh:printf 'converted needle from %s\n' "$(basename "$1")""#,
+            "./sub/doc.md:converted needle from doc.md",
+        ])
+        #expect(try run([
+            "--sort",
+            "path",
+            "--pre",
+            script,
+            "--pre-glob",
+            "sub/**",
+            "needle",
+            "sub",
+        ]) == [
+            "sub/doc.md:converted needle from doc.md",
+        ])
+        #expect(try run([
+            "--sort",
+            "path",
+            "--pre",
+            script,
+            "--pre-glob",
+            "sub/**",
+            "needle",
+            root.url.path,
+        ]) == [
+            "\(root.path("plain.txt")):needle",
+            #"\#(root.path("pre.sh")):printf 'converted needle from %s\n' "$(basename "$1")""#,
+            "\(root.path("sub/doc.md")):plain needle",
+        ])
         try root.write("""
         #!/bin/sh
         printf 'needle\\n\\0tail needle\\n'

@@ -3,10 +3,12 @@ import Foundation
 public struct Haystack: Equatable {
     public let url: URL
     public let isExplicit: Bool
+    public let overridePath: String
 
-    public init(url: URL, isExplicit: Bool) {
+    public init(url: URL, isExplicit: Bool, overridePath: String? = nil) {
         self.url = url
         self.isExplicit = isExplicit
+        self.overridePath = overridePath ?? url.path
     }
 }
 
@@ -269,7 +271,7 @@ public struct FileWalker {
                 debug("ignoring \(url.path): \(fileSize) bytes exceeds max filesize \(maxFileSize)", options: options, diagnostics: &diagnostics)
                 return []
             }
-            return [Haystack(url: url, isExplicit: isExplicit)]
+            return [Haystack(url: url, isExplicit: isExplicit, overridePath: overridePath)]
         }
 
         guard resolvedValues.isDirectory == true else {
