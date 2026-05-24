@@ -203,7 +203,7 @@ public struct StandardPrinter {
 
         let prefixText = prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator)
         let line = renderedLine(for: match)
-        if shouldEmitRawLineBytes(for: match) {
+        if shouldEmitRawLineBytes(for: match) || line.rawBytePayload != nil {
             return rawByteLine(prefix: prefixText, text: line)
         }
         return "\(prefixText)\(line)"
@@ -609,7 +609,7 @@ public struct StandardPrinter {
 
     private func rawByteLine(prefix: String, text: String) -> String {
         var bytes = Array(prefix.utf8)
-        bytes.append(contentsOf: text.rawByteData())
+        bytes.append(contentsOf: (text.rawBytePayload ?? text).rawByteData())
         return .rawByteMarked(bytes)
     }
 

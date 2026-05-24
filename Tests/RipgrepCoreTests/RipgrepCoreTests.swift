@@ -3473,6 +3473,17 @@ struct RipgrepSearcherTests {
             root.path("utf8-empty-replace.txt"),
         ]) {}
         #expect(internalUTF8OptionalLiteralReplacement == Data([0x58, 0xC3, 0x58, 0xA1, 0x58, 0x0A]))
+        let prefixedInternalUTF8Replacement = try runExecutableData([
+            "-H",
+            "--replace",
+            "<$0>",
+            "x?",
+            root.path("utf8-empty-replace.txt"),
+        ]) {}
+        #expect(prefixedInternalUTF8Replacement == Data(
+            "\(root.path("utf8-empty-replace.txt")):<>".utf8
+        ) + Data([0xC3]) + Data("<>".utf8) + Data([0xA1]) + Data("<>\n".utf8)
+        )
         let internalUTF8OnlyMatchingReplacement = try runExecutableData([
             "-o",
             "--replace",
