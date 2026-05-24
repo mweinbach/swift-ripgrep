@@ -4308,8 +4308,8 @@ struct RipgrepSearcherTests {
         #expect(errors.contains { $0.contains("DEBUG|grep_regex::config|") && $0.contains("assembling HIR from 1 fixed string literals") })
         #expect(errors.contains { $0.contains("DEBUG|ignore::gitignore|") && $0.contains("opened gitignore file:") && $0.contains(".ignore") })
         #expect(errors.contains { $0.contains("DEBUG|globset|") && $0.contains("built glob set; 0 literals, 0 basenames, 1 extensions") })
-        #expect(errors.contains { $0.contains("DEBUG|swift-ripgrep::walk|") && $0.contains(".hidden.txt: hidden") })
-        #expect(errors.contains { $0.contains("DEBUG|swift-ripgrep::walk|") && $0.contains("skip.log: ignore file") })
+        #expect(errors.contains { $0.contains("DEBUG|ignore::walk|") && $0.contains(".hidden.txt: Ignore(IgnoreMatch(Hidden))") })
+        #expect(errors.contains { $0.contains("DEBUG|ignore::walk|") && $0.contains("skip.log: Ignore(IgnoreMatch(Gitignore(Glob") && $0.contains(#"original: "*.log""#) && $0.contains(#"actual: "**/*.log""#) })
 
         output = []
         errors = []
@@ -4320,8 +4320,8 @@ struct RipgrepSearcherTests {
         )
         #expect(filesExitCode == 0)
         #expect(output == [root.path("keep.txt")])
-        #expect(errors.contains { $0.contains("DEBUG|swift-ripgrep::walk|") && $0.contains(".hidden.txt: hidden") })
-        #expect(errors.contains { $0.contains("DEBUG|swift-ripgrep::walk|") && $0.contains("skip.log: ignore file") })
+        #expect(errors.contains { $0.contains("DEBUG|ignore::walk|") && $0.contains(".hidden.txt: Ignore(IgnoreMatch(Hidden))") })
+        #expect(errors.contains { $0.contains("DEBUG|ignore::walk|") && $0.contains("skip.log: Ignore(IgnoreMatch(Gitignore(Glob") && $0.contains(#"original: "*.log""#) })
 
         output = []
         errors = []
@@ -4331,7 +4331,7 @@ struct RipgrepSearcherTests {
             stderr: { errors.append($0) }
         )
         #expect(traceExitCode == 0)
-        #expect(errors.contains { $0.contains("DEBUG|swift-ripgrep::walk|") })
+        #expect(errors.contains { $0.contains("DEBUG|ignore::walk|") && $0.contains("Ignore(IgnoreMatch(") })
     }
 
     @Test("honors symlink and one file system traversal toggles")
@@ -4740,7 +4740,7 @@ struct RipgrepSearcherTests {
         )
         #expect(exitCode == 1)
         #expect(output.isEmpty)
-        #expect(errors.contains { $0.contains("DEBUG|swift-ripgrep::walk|") && $0.contains("ignored-dir") && $0.contains("ignore file") })
+        #expect(errors.contains { $0.contains("DEBUG|ignore::walk|") && $0.contains("ignored-dir") && $0.contains("Ignore(IgnoreMatch(Gitignore(Glob") })
 
         let implicit = try TemporaryDirectory()
         try implicit.write("*\n", to: ".ignore")

@@ -108,6 +108,7 @@ public struct FileWalker {
             let rootBase = rootBase(for: root.standardizedFileURL)
             let rootArgument = offset < options.rootPathArguments.count ? options.rootPathArguments[offset] : ""
             let rootArgumentIsAbsolute = (rootArgument as NSString).isAbsolutePath
+            let rootDebugDisplayPath = rootDisplayPath(at: offset, root: root, options: options)
             var rootIgnoreStack = baseIgnoreStack
             if reportedExplicitIgnoreFileWarnings {
                 var ignoredWarnings: [String] = []
@@ -146,6 +147,7 @@ public struct FileWalker {
                 depth: 0,
                 ancestors: [],
                 rootBase: rootBase,
+                rootDebugDisplayPath: rootDebugDisplayPath,
                 rootArgumentIsAbsolute: rootArgumentIsAbsolute,
                 rootVolume: rootVolume,
                 messages: &messages,
@@ -191,6 +193,7 @@ public struct FileWalker {
         depth: Int,
         ancestors: [DirectoryVisit],
         rootBase: URL,
+        rootDebugDisplayPath: String,
         rootArgumentIsAbsolute: Bool,
         rootVolume: String?,
         messages: inout [String],
@@ -228,11 +231,33 @@ public struct FileWalker {
                isHidden(url),
                (isDirectory || !typeRegistry.selectedTypeAllows(path: relativePath)),
                !isIncludedByIgnore(relativePath: relativePath, isDirectory: isDirectory, ignoreStack: ignoreStack) {
-                debug("ignoring \(url.path): hidden", options: options, diagnostics: &diagnostics)
+                debugHiddenMatch(
+                    displayPath: debugDisplayPath(
+                        for: url,
+                        relativePath: relativePath,
+                        rootDisplayPath: rootDebugDisplayPath,
+                        rootArgumentIsAbsolute: rootArgumentIsAbsolute
+                    ),
+                    options: options,
+                    diagnostics: &diagnostics
+                )
                 return []
             }
             if !isIncludedByOverride && !ignoreStack.allows(relativePath: relativePath, isDirectory: isDirectory) {
-                debug("ignoring \(url.path): ignore file", options: options, diagnostics: &diagnostics)
+                debugIgnoreMatch(
+                    path: url.path,
+                    displayPath: debugDisplayPath(
+                        for: url,
+                        relativePath: relativePath,
+                        rootDisplayPath: rootDebugDisplayPath,
+                        rootArgumentIsAbsolute: rootArgumentIsAbsolute
+                    ),
+                    relativePath: relativePath,
+                    isDirectory: isDirectory,
+                    ignoreStack: ignoreStack,
+                    options: options,
+                    diagnostics: &diagnostics
+                )
                 filtered = true
                 return []
             }
@@ -337,6 +362,7 @@ public struct FileWalker {
                 depth: depth + 1,
                 ancestors: childAncestors,
                 rootBase: rootBase,
+                rootDebugDisplayPath: rootDebugDisplayPath,
                 rootArgumentIsAbsolute: rootArgumentIsAbsolute,
                 rootVolume: rootVolume,
                 messages: &messages,
@@ -380,6 +406,58 @@ public struct FileWalker {
             return
         }
         diagnostics.append("DEBUG|swift-ripgrep::walk| \(message)")
+    }
+
+    private func debugIgnoreMatch(
+        path: String,
+        displayPath: String,
+        relativePath: String,
+        isDirectory: Bool,
+        ignoreStack: IgnoreStack,
+        options: RipgrepOptions,
+        diagnostics: inout [String]
+    ) {
+        guard options.loggingMode != nil else {
+            return
+        }
+        guard let rule = ignoreStack.matchingRule(relativePath: relativePath, isDirectory: isDirectory) else {
+            diagnostics.append("DEBUG|swift-ripgrep::walk| ignoring \(displayPath): ignore file")
+            return
+        }
+        let from = rule.sourcePath.map { #"Some("\#($0)")"# } ?? "None"
+        let match = "Ignore(IgnoreMatch(Gitignore(Glob { from: \(from), original: \"\(rule.originalPattern)\", actual: \"\(rule.actualPattern)\", is_whitelist: \(rule.decision == .include ? "true" : "false"), is_only_dir: \(rule.directoryOnly ? "true" : "false") })))"
+        diagnostics.append("DEBUG|ignore::walk|crates/ignore/src/walk.rs:1942: ignoring \(displayPath): \(match)")
+    }
+
+    private func debugHiddenMatch(
+        displayPath: String,
+        options: RipgrepOptions,
+        diagnostics: inout [String]
+    ) {
+        guard options.loggingMode != nil else {
+            return
+        }
+        diagnostics.append("DEBUG|ignore::walk|crates/ignore/src/walk.rs:1942: ignoring \(displayPath): Ignore(IgnoreMatch(Hidden))")
+    }
+
+    private func debugDisplayPath(
+        for url: URL,
+        relativePath: String,
+        rootDisplayPath: String,
+        rootArgumentIsAbsolute: Bool
+    ) -> String {
+        guard !rootArgumentIsAbsolute else {
+            return url.path
+        }
+        guard !relativePath.isEmpty else {
+            return rootDisplayPath
+        }
+        let root = rootDisplayPath.isEmpty ? "." : rootDisplayPath
+        if root == "." {
+            return "./\(relativePath)"
+        }
+        let separator = root.hasSuffix("/") ? "" : "/"
+        return "\(root)\(separator)\(relativePath)"
     }
 
     private func volumeIdentifier(for url: URL) -> String? {
@@ -912,7 +990,8 @@ public struct FileWalker {
             caseInsensitive: caseInsensitive,
             stripBasePath: scope.stripBasePath,
             pathPrefix: scope.pathPrefix,
-            slashPatternsMatchAnywhere: matchSlashPatternsAnywhere
+            slashPatternsMatchAnywhere: matchSlashPatternsAnywhere,
+            sourcePath: ignoreDiagnosticPath(fileURL, displayPath: displayPath)
         ), messages: parsed.messages, diagnostics: diagnostics)
     }
 

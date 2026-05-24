@@ -7,14 +7,17 @@ public struct GlobMatcher: Equatable {
     }
 
     public struct Rule: Equatable {
+        let originalPattern: String
         let pattern: String
+        let actualPattern: String
         let decision: Decision
         let caseInsensitive: Bool
         let directoryOnly: Bool
         let anchored: Bool
         let basenameOnly: Bool
+        let sourcePath: String?
 
-        init(pattern: String, decision: Decision, caseInsensitive: Bool) {
+        init(pattern: String, decision: Decision, caseInsensitive: Bool, sourcePath: String?) {
             var source = pattern.replacingOccurrences(of: #"\/"#, with: "/")
             let directoryOnly = source.hasSuffix("/")
             if directoryOnly {
@@ -25,12 +28,24 @@ public struct GlobMatcher: Equatable {
                 source.removeFirst()
             }
 
+            let basenameOnly = !source.contains("/")
+            var actual = source
+            if !anchored && basenameOnly && !actual.hasPrefix("**/") {
+                actual = "**/\(actual)"
+            }
+            if actual.hasSuffix("/**") {
+                actual = "\(actual)/*"
+            }
+
+            self.originalPattern = pattern
             self.pattern = source
+            self.actualPattern = actual
             self.decision = decision
             self.caseInsensitive = caseInsensitive
             self.directoryOnly = directoryOnly
             self.anchored = anchored
-            self.basenameOnly = !source.contains("/")
+            self.basenameOnly = basenameOnly
+            self.sourcePath = sourcePath
         }
     }
 
@@ -47,14 +62,16 @@ public struct GlobMatcher: Equatable {
         caseInsensitive: Bool = false,
         stripBasePath: String? = nil,
         pathPrefix: String = "",
-        slashPatternsMatchAnywhere: Bool? = nil
+        slashPatternsMatchAnywhere: Bool? = nil,
+        sourcePath: String? = nil
     ) {
         self.init(
             patternEntries: patterns.map { ($0, caseInsensitive) },
             overrideSemantics: overrideSemantics,
             stripBasePath: stripBasePath,
             pathPrefix: pathPrefix,
-            slashPatternsMatchAnywhere: slashPatternsMatchAnywhere
+            slashPatternsMatchAnywhere: slashPatternsMatchAnywhere,
+            sourcePath: sourcePath
         )
     }
 
@@ -63,7 +80,8 @@ public struct GlobMatcher: Equatable {
         overrideSemantics: Bool = false,
         stripBasePath: String? = nil,
         pathPrefix: String = "",
-        slashPatternsMatchAnywhere: Bool? = nil
+        slashPatternsMatchAnywhere: Bool? = nil,
+        sourcePath: String? = nil
     ) {
         var rules: [Rule] = []
         for entry in patternEntries {
@@ -84,7 +102,8 @@ public struct GlobMatcher: Equatable {
             rules.append(Rule(
                 pattern: pattern,
                 decision: decision,
-                caseInsensitive: entry.caseInsensitive
+                caseInsensitive: entry.caseInsensitive,
+                sourcePath: sourcePath
             ))
         }
 
@@ -108,14 +127,18 @@ public struct GlobMatcher: Equatable {
     }
 
     public func decision(relativePath: String, isDirectory: Bool) -> Decision? {
+        matchingRule(relativePath: relativePath, isDirectory: isDirectory)?.decision
+    }
+
+    public func matchingRule(relativePath: String, isDirectory: Bool) -> Rule? {
         guard let scopedPath = scopedPath(for: relativePath) else {
             return nil
         }
-        var decision: Decision?
+        var matchedRule: Rule?
         for rule in rules where matches(rule, relativePath: scopedPath, isDirectory: isDirectory) {
-            decision = rule.decision
+            matchedRule = rule
         }
-        return decision
+        return matchedRule
     }
 
     private func scopedPath(for relativePath: String) -> String? {
@@ -260,12 +283,16 @@ public struct IgnoreStack {
     }
 
     public func decision(relativePath: String, isDirectory: Bool) -> GlobMatcher.Decision? {
-        var decision: GlobMatcher.Decision?
+        matchingRule(relativePath: relativePath, isDirectory: isDirectory)?.decision
+    }
+
+    public func matchingRule(relativePath: String, isDirectory: Bool) -> GlobMatcher.Rule? {
+        var matchedRule: GlobMatcher.Rule?
         for matcher in matchers {
-            if let matcherDecision = matcher.decision(relativePath: relativePath, isDirectory: isDirectory) {
-                decision = matcherDecision
+            if let rule = matcher.matchingRule(relativePath: relativePath, isDirectory: isDirectory) {
+                matchedRule = rule
             }
         }
-        return decision
+        return matchedRule
     }
 }
