@@ -81,6 +81,7 @@ private func parityCases() -> [ParityCase] {
     existingParityCases()
         + binaryParityCases()
         + multilineParityCases()
+        + jsonParityCases()
 }
 
 private func existingParityCases() -> [ParityCase] {
@@ -176,6 +177,33 @@ private func binaryParityCases() -> [ParityCase] {
         ParityCase(name: "binary::matching_files_inconsistent_with_count_count", fixture: matchingFilesInconsistentFixture, arguments: ["--sort=path", "-c", "cat"]),
         ParityCase(name: "binary::matching_files_inconsistent_with_count_binary", fixture: matchingFilesInconsistentFixture, arguments: ["--sort=path", "-c", "cat", "--binary"]),
         ParityCase(name: "binary::matching_files_inconsistent_with_count_text", fixture: matchingFilesInconsistentFixture, arguments: ["--sort=path", "-c", "cat", "--text"]),
+    ]
+}
+
+private let jsonElapsedDivergence = "Rust rg emits real elapsed timings in JSON stats while Swift JSON output is deterministic with zero elapsed fields."
+
+private func jsonParityCases() -> [ParityCase] {
+    let sherlockFixture: (URL) throws -> Void = { dir in
+        try write(SHERLOCK, to: "sherlock", in: dir)
+    }
+    let sherlockCRLFFixture: (URL) throws -> Void = { dir in
+        try write(SHERLOCK_CRLF, to: "sherlock", in: dir)
+    }
+    let notUTF8FileFixture: (URL) throws -> Void = { dir in
+        try write(Data([0x71, 0x75, 0x75, 0x78, 0xFF, 0x62, 0x61, 0x7A]), to: "foo", in: dir)
+    }
+    return [
+        ParityCase(name: "json::basic", fixture: sherlockFixture, arguments: ["--json", "-B1", "Sherlock Holmes", "sherlock"], intentionallySkippedBecause: jsonElapsedDivergence),
+        ParityCase(name: "json::replacement", fixture: sherlockFixture, arguments: ["--json", "-B1", "Sherlock Holmes", "-r", "John Watson", "sherlock"], intentionallySkippedBecause: jsonElapsedDivergence),
+        ParityCase(name: "json::quiet_stats", fixture: sherlockFixture, arguments: ["--json", "--quiet", "--stats", "Sherlock Holmes", "sherlock"], intentionallySkippedBecause: jsonElapsedDivergence),
+        ParityCase(name: "json::notutf8", fixture: { _ in }, arguments: ["--json", #"(?-u)\xFF"#], intentionallySkippedBecause: "APFS does not support Rust's invalid UTF-8 filename fixture; JSON elapsed fields also differ byte-for-byte."),
+        ParityCase(name: "json::notutf8_file", fixture: notUTF8FileFixture, arguments: ["--json", #"(?-u)\xFF"#], intentionallySkippedBecause: jsonElapsedDivergence),
+        ParityCase(name: "json::crlf", fixture: sherlockCRLFFixture, arguments: ["--json", "--crlf", #"Sherlock$"#, "sherlock"], intentionallySkippedBecause: jsonElapsedDivergence),
+        ParityCase(name: "json::r1095_missing_crlf_default", fixture: { dir in try write("test\r\n", to: "foo", in: dir) }, arguments: ["--json", "test"], intentionallySkippedBecause: jsonElapsedDivergence),
+        ParityCase(name: "json::r1095_missing_crlf_flag", fixture: { dir in try write("test\r\n", to: "foo", in: dir) }, arguments: ["--json", "--crlf", "test"], intentionallySkippedBecause: jsonElapsedDivergence),
+        ParityCase(name: "json::r1095_crlf_empty_match_default", fixture: { dir in try write("test\r\n\n", to: "foo", in: dir) }, arguments: ["-U", "--json", "\n"], intentionallySkippedBecause: jsonElapsedDivergence),
+        ParityCase(name: "json::r1095_crlf_empty_match_flag", fixture: { dir in try write("test\r\n\n", to: "foo", in: dir) }, arguments: ["-U", "--json", "--crlf", "\n"], intentionallySkippedBecause: jsonElapsedDivergence),
+        ParityCase(name: "json::r1412_look_behind_match_missing", fixture: { dir in try write("foo\nbar\n", to: "test", in: dir) }, arguments: ["--pcre2", "-U", "--json", "(?<=foo\\n)bar"], intentionallySkippedBecause: jsonElapsedDivergence),
     ]
 }
 
