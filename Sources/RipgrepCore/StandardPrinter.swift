@@ -680,10 +680,14 @@ public struct StandardPrinter {
 
     private func shouldSuppressMultilineEmptyOnlyMatch(_ span: MatchSpan) -> Bool {
         options.multiline
-            && ((span.text.isEmpty && span.replacement == nil) || span.replacement == "")
+            && ((span.text.isEmpty
+                    && span.replacement == nil
+                    && options.effectivePatterns.contains(where: containsLineAnchor))
+                || (span.replacement == ""
+                    && (containsRenderedLineTerminator(span.text)
+                        || options.effectivePatterns.contains(where: containsLineAnchor))))
             && !options.fixedStrings
             && !options.effectivePatterns.isEmpty
-            && options.effectivePatterns.contains(where: containsLineAnchor)
     }
 
     private func shouldSuppressMultilineVimgrepSpan(_ span: MatchSpan, in match: SearchMatch) -> Bool {

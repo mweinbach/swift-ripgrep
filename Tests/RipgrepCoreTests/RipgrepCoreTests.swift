@@ -1949,6 +1949,8 @@ struct RipgrepSearcherTests {
             ["-U", "-o", "-r", "", "^|$", root.path("multi.txt")],
             ["-U", "-o", "-r", "${missing}", "^|$", root.path("multi.txt")],
             ["-U", "-o", "-r", "", "^ba", root.path("multi.txt")],
+            ["-U", "-o", "-r", "", #"foo\nbar"#, root.path("multi.txt")],
+            ["-U", "-o", "-r", "${missing}", #"(?s)foo.*baz"#, root.path("multi.txt")],
         ] {
             var output: [String] = []
             var errors: [String] = []
