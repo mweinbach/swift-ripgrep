@@ -49,6 +49,15 @@ public struct PatternMatcher {
                 if options.engineMode == .automatic, let unsupported = Self.defaultEngineUnsupportedFeature(in: pattern) {
                     throw RipgrepError.message(Self.automaticEngineUnavailableMessage(pattern: pattern, feature: unsupported))
                 }
+                if let unicodeDiagnostic = Self.unicodeClassInNoUnicodeDiagnostic(
+                    pattern,
+                    unicodeEnabled: !options.noUnicode
+                ) {
+                    let message = options.engineMode == .automatic
+                        ? Self.automaticEngineUnavailableMessage(pattern: pattern, feature: unicodeDiagnostic)
+                        : Self.defaultRegexParseError(pattern: pattern, feature: unicodeDiagnostic)
+                    throw RipgrepError.message(message)
+                }
                 if let parseError = Self.defaultRegexParseErrorIfRecognized(pattern) {
                     throw RipgrepError.message(parseError)
                 }
@@ -1297,6 +1306,153 @@ public struct PatternMatcher {
         }
         if let diagnostic = unopenedGroupDiagnostic(pattern) {
             return defaultRegexParseError(pattern: pattern, feature: diagnostic)
+        }
+        return nil
+    }
+
+    private static func unicodeClassInNoUnicodeDiagnostic(
+        _ pattern: String,
+        unicodeEnabled: Bool
+    ) -> UnsupportedRegexFeature? {
+        scanUnicodeClass(in: pattern, from: pattern.startIndex, to: pattern.endIndex, unicodeEnabled: unicodeEnabled)
+    }
+
+    private static func scanUnicodeClass(
+        in pattern: String,
+        from start: String.Index,
+        to end: String.Index,
+        unicodeEnabled: Bool
+    ) -> UnsupportedRegexFeature? {
+        var escaped = false
+        var inClass = false
+        var currentUnicodeEnabled = unicodeEnabled
+        var index = start
+
+        while index < end {
+            let character = pattern[index]
+            if escaped {
+                if (character == "p" || character == "P"),
+                   let propertyEnd = unicodePropertyEnd(after: index, in: pattern) {
+                    if !currentUnicodeEnabled {
+                        let backslash = pattern.index(before: index)
+                        return UnsupportedRegexFeature(
+                            byteOffset: pattern[..<backslash].utf8.count,
+                            caretLength: pattern[backslash..<propertyEnd].utf8.count,
+                            message: "Unicode not allowed here"
+                        )
+                    }
+                    escaped = false
+                    index = propertyEnd
+                    continue
+                }
+                escaped = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "[" {
+                inClass = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "]" {
+                inClass = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if !inClass,
+               character == "(",
+               let flags = inlineUnicodeFlags(in: pattern, openingAt: index) {
+                if flags.scoped,
+                   let close = flags.close,
+                   let diagnostic = scanUnicodeClass(
+                    in: pattern,
+                    from: flags.bodyStart,
+                    to: close,
+                    unicodeEnabled: flags.unicodeEnabled ?? currentUnicodeEnabled
+                   ) {
+                    return diagnostic
+                }
+                if flags.scoped {
+                    index = flags.end
+                    continue
+                }
+                if let unicodeEnabled = flags.unicodeEnabled {
+                    currentUnicodeEnabled = unicodeEnabled
+                }
+                index = flags.end
+                continue
+            }
+            index = pattern.index(after: index)
+        }
+        return nil
+    }
+
+    private static func unicodePropertyEnd(after index: String.Index, in pattern: String) -> String.Index? {
+        let propertyStart = pattern.index(after: index)
+        guard propertyStart < pattern.endIndex else {
+            return nil
+        }
+        if pattern[propertyStart] == "{" {
+            guard let close = pattern[propertyStart...].firstIndex(of: "}") else {
+                return nil
+            }
+            return pattern.index(after: close)
+        }
+        guard pattern[propertyStart].isASCII, pattern[propertyStart].isLetter else {
+            return nil
+        }
+        return pattern.index(after: propertyStart)
+    }
+
+    private static func inlineUnicodeFlags(
+        in pattern: String,
+        openingAt opening: String.Index
+    ) -> (scoped: Bool, unicodeEnabled: Bool?, bodyStart: String.Index, close: String.Index?, end: String.Index)? {
+        let question = pattern.index(after: opening)
+        guard question < pattern.endIndex, pattern[question] == "?" else {
+            return nil
+        }
+
+        var cursor = pattern.index(after: question)
+        var disabling = false
+        var unicodeEnabled: Bool?
+        while cursor < pattern.endIndex {
+            let character = pattern[cursor]
+            if character == ":" {
+                guard let close = closingGroupIndex(in: pattern, openingAt: opening) else {
+                    return nil
+                }
+                return (
+                    scoped: true,
+                    unicodeEnabled: unicodeEnabled,
+                    bodyStart: pattern.index(after: cursor),
+                    close: close,
+                    end: pattern.index(after: close)
+                )
+            }
+            if character == ")" {
+                return (
+                    scoped: false,
+                    unicodeEnabled: unicodeEnabled,
+                    bodyStart: cursor,
+                    close: nil,
+                    end: pattern.index(after: cursor)
+                )
+            }
+            guard character == "-" || character.isASCII && character.isLetter else {
+                return nil
+            }
+            if character == "-" {
+                disabling = true
+            } else if character == "u" {
+                unicodeEnabled = !disabling
+            }
+            cursor = pattern.index(after: cursor)
         }
         return nil
     }
