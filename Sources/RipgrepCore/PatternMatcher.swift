@@ -2,6 +2,7 @@ import Foundation
 
 public struct PatternMatcher {
     private let options: RipgrepOptions
+    private let patternSources: [String]
     private let patterns: [CompiledPattern]
     public let usesByteSemantics: Bool
 
@@ -12,6 +13,7 @@ public struct PatternMatcher {
             : patternSources.contains { Self.regexUsesByteSemantics(pattern: $0, options: options) }
 
         self.options = options
+        self.patternSources = patternSources
         self.usesByteSemantics = usesByteSemantics
         self.patterns = try patternSources.flatMap { pattern -> [CompiledPattern] in
             if options.wordRegexp && pattern.isEmpty {
@@ -418,12 +420,37 @@ public struct PatternMatcher {
                 })
             }
         }
+        if shouldAddBareCRLineEndNotWordBoundary(in: line) {
+            let range = line.endIndex..<line.endIndex
+            candidates.append((range, replacement(for: range, in: line)))
+        }
 
         return candidates.filter { candidate in
-            (!options.wordRegexp || isWordBounded(candidate.range, in: line))
+            !shouldDropBareCRLineEndWordBoundary(candidate.range, in: line)
+                && (!options.wordRegexp || isWordBounded(candidate.range, in: line))
                 && (!options.lineRegexp || isLineRegexpBounded(candidate.range, in: line))
                 && !shouldDropTrailingMultilineEmptySpan(candidate.range, in: line)
         }
+    }
+
+    private func shouldDropBareCRLineEndWordBoundary(_ range: Range<String.Index>, in line: String) -> Bool {
+        options.wordRegexp
+            && !options.crlf
+            && !options.multiline
+            && !options.nullData
+            && line.hasSuffix("\r")
+            && range.isEmpty
+            && range.lowerBound == line.endIndex
+            && patternSources.allSatisfy { $0 == "\\b" }
+    }
+
+    private func shouldAddBareCRLineEndNotWordBoundary(in line: String) -> Bool {
+        options.wordRegexp
+            && !options.crlf
+            && !options.multiline
+            && !options.nullData
+            && line.hasSuffix("\r")
+            && patternSources.allSatisfy { $0 == "\\B" }
     }
 
     private static func dropAdjacentEmptyMatches(

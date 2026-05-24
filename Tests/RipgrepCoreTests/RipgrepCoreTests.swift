@@ -44,6 +44,15 @@ struct RipgrepSearcherTests {
             "empty:",
         ])
         #expect(try runAllowingNoMatch(["-wo", #"\W+"#, root.path("word-edges.txt")]) == [])
+        try root.write(Data("foo\r\nbar\r\nbaz\r\n".utf8), to: "crlf-word-boundary.txt")
+        #expect(try runAllowingNoMatch(["-w", #"\b"#, root.path("crlf-word-boundary.txt")]) == [])
+        let crlfNotWordBoundaryOutput = try runExecutableData([
+            "-w",
+            "-bo",
+            #"\B"#,
+            root.path("crlf-word-boundary.txt"),
+        ], fixture: {})
+        #expect(crlfNotWordBoundaryOutput == Data("4:\n9:\n14:\n".utf8))
         try root.write("é e\u{301} É π Δ δ привет Привет １２3\n", to: "unicode-word-edges.txt")
         #expect(try run(["-wo", #"[[:^alpha:]]+"#, root.path("unicode-word-edges.txt")]) == [
             "é",
