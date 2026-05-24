@@ -4839,6 +4839,33 @@ struct RipgrepSearcherTests {
         ])) == ["keep.swift"])
         try root.createDirectory("sub")
         try root.write("needle\n", to: "sub/nested.txt")
+        let originalDirectory = FileManager.default.currentDirectoryPath
+        defer { FileManager.default.changeCurrentDirectoryPath(originalDirectory) }
+        #expect(FileManager.default.changeCurrentDirectoryPath(root.url.path))
+        #expect(try run([
+            "--sort",
+            "path",
+            "-g",
+            "sub/**",
+            "needle",
+            "sub",
+        ]) == ["sub/nested.txt:needle"])
+        #expect(try runAllowingNoMatch([
+            "--sort",
+            "path",
+            "-g",
+            "sub/**",
+            "needle",
+            root.url.path,
+        ]) == [])
+        #expect(try run([
+            "--sort",
+            "path",
+            "-g",
+            "**/sub/**",
+            "needle",
+            root.url.path,
+        ]) == ["\(root.path("sub/nested.txt")):needle"])
         #expect(pathBasenames(try run([
             "--sort",
             "path",

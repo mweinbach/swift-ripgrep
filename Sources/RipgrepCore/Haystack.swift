@@ -103,6 +103,8 @@ public struct FileWalker {
                 continue
             }
             let rootBase = rootBase(for: root.standardizedFileURL)
+            let rootArgument = offset < options.rootPathArguments.count ? options.rootPathArguments[offset] : ""
+            let rootArgumentIsAbsolute = (rootArgument as NSString).isAbsolutePath
             var rootIgnoreStack = baseIgnoreStack
             if reportedExplicitIgnoreFileWarnings {
                 var ignoredWarnings: [String] = []
@@ -138,6 +140,7 @@ public struct FileWalker {
                 depth: 0,
                 ancestors: [],
                 rootBase: rootBase,
+                rootArgumentIsAbsolute: rootArgumentIsAbsolute,
                 rootVolume: rootVolume,
                 messages: &messages,
                 warnings: &warnings,
@@ -182,6 +185,7 @@ public struct FileWalker {
         depth: Int,
         ancestors: [DirectoryVisit],
         rootBase: URL,
+        rootArgumentIsAbsolute: Bool,
         rootVolume: String?,
         messages: inout [String],
         warnings: inout [String],
@@ -203,7 +207,7 @@ public struct FileWalker {
         ])
         let isDirectory = values.isDirectory == true
         let relativePath = relativePath(for: url, rootBase: rootBase)
-        let overridePath = overridePath(for: url)
+        let overridePath = overridePath(for: url, rootArgumentIsAbsolute: rootArgumentIsAbsolute)
 
         if !isExplicit {
             let overrideDecision = overrides.decision(relativePath: overridePath, isDirectory: isDirectory)
@@ -326,6 +330,7 @@ public struct FileWalker {
                 depth: depth + 1,
                 ancestors: childAncestors,
                 rootBase: rootBase,
+                rootArgumentIsAbsolute: rootArgumentIsAbsolute,
                 rootVolume: rootVolume,
                 messages: &messages,
                 warnings: &warnings,
@@ -780,8 +785,11 @@ public struct FileWalker {
         return url.lastPathComponent
     }
 
-    private func overridePath(for url: URL) -> String {
+    private func overridePath(for url: URL, rootArgumentIsAbsolute: Bool) -> String {
         let path = url.standardizedFileURL.path
+        guard !rootArgumentIsAbsolute else {
+            return path.hasPrefix("/") ? String(path.dropFirst()) : path
+        }
         let cwd = URL(fileURLWithPath: fileManager.currentDirectoryPath, isDirectory: true)
             .standardizedFileURL
             .path
