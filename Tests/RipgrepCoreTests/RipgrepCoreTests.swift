@@ -1548,6 +1548,21 @@ struct RipgrepSearcherTests {
         #expect(errors == [
             expectedPreprocessorError
         ])
+
+        output = []
+        errors = []
+        let missingExitCode = RipgrepCLI.run(
+            arguments: ["--pre", root.path("missing-preprocessor"), "needle", root.path("doc.md")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(missingExitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == [
+            "rg: \(root.path("doc.md")): preprocessor command could not start: " +
+                "'\"\(root.path("missing-preprocessor"))\" \"\(root.path("doc.md"))\"': " +
+                "No such file or directory (os error 2)"
+        ])
     }
 
     @Test("searches gzip compressed files")

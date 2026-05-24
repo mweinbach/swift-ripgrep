@@ -378,10 +378,18 @@ public struct RipgrepSearcher {
         guard let command = options.preprocessor else {
             return FileSearchOutcome(result: SearchFileResult(fileURL: fileURL, matches: [], searched: false))
         }
+        let displayPath = OutputPathFormatter(options: options).displayPath(for: fileURL)
+        let commandDisplay = preprocessorCommandDisplay(command: command, filePath: displayPath)
+        guard let executable = resolveExecutable(command) else {
+            return FileSearchOutcome(
+                result: SearchFileResult(fileURL: fileURL, matches: [], searched: false),
+                message: "\(displayPath): preprocessor command could not start: '\(commandDisplay)': No such file or directory (os error 2)"
+            )
+        }
         do {
             let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = [command, fileURL.path]
+            process.executableURL = executable
+            process.arguments = [fileURL.path]
 
             let input = try FileHandle(forReadingFrom: fileURL)
             let output = Pipe()
@@ -397,10 +405,9 @@ public struct RipgrepSearcher {
             process.waitUntilExit()
 
             guard process.terminationStatus == 0 else {
-                let displayPath = OutputPathFormatter(options: options).displayPath(for: fileURL)
                 return FileSearchOutcome(
                     result: SearchFileResult(fileURL: fileURL, matches: [], searched: false),
-                    message: "\(displayPath): preprocessor command failed: '\"\(command)\" \"\(displayPath)\"': \(preprocessorErrorText(errorData))"
+                    message: "\(displayPath): preprocessor command failed: '\(commandDisplay)': \(preprocessorErrorText(errorData))"
                 )
             }
 
@@ -422,9 +429,13 @@ public struct RipgrepSearcher {
         } catch {
             return FileSearchOutcome(
                 result: SearchFileResult(fileURL: fileURL, matches: [], searched: false),
-                message: "\(fileURL.path): preprocessor command could not start: '\(command)': \(error)"
+                message: "\(displayPath): preprocessor command could not start: '\(commandDisplay)': \(error)"
             )
         }
+    }
+
+    private func preprocessorCommandDisplay(command: String, filePath: String) -> String {
+        "\"\(command)\" \"\(filePath)\""
     }
 
     private func preprocessorErrorText(_ data: Data) -> String {
