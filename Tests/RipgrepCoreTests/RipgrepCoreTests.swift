@@ -1745,6 +1745,8 @@ struct RipgrepSearcherTests {
         #expect(try run(["-U", "-n", "-o", #"foo|$"#, root.path("multi.txt")]) == [
             "1:foo",
         ])
+        #expect(try runAllowingNoMatch(["-U", #"(?-m)bar$"#, root.path("multi.txt")]) == [])
+        #expect(try runAllowingNoMatch(["-U", "-o", #"(?-m)bar$"#, root.path("multi.txt")]) == [])
         var vimgrepLineStartOutput: [String] = []
         var vimgrepLineStartErrors: [String] = []
         let vimgrepLineStartExitCode = RipgrepCLI.run(

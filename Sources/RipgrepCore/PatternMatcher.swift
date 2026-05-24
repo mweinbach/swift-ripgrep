@@ -2333,8 +2333,8 @@ public struct PatternMatcher {
     }
 
     private static func multilineLineEndPattern(for pattern: String) -> String {
-        transformAnchors(in: pattern) { anchor in
-            anchor == "$" ? "(?=\\n|(?<!\\n)\\z)" : String(anchor)
+        transformMultilineAnchors(in: pattern) { anchor, multilineEnabled in
+            anchor == "$" && multilineEnabled ? "(?=\\n|(?<!\\n)\\z)" : String(anchor)
         }
     }
 
@@ -2388,6 +2388,131 @@ public struct PatternMatcher {
         }
 
         return output
+    }
+
+    private static func transformMultilineAnchors(
+        in pattern: String,
+        replacement: (Character, Bool) -> String
+    ) -> String {
+        transformMultilineAnchors(in: pattern, defaultMultilineEnabled: true, replacement: replacement)
+    }
+
+    private static func transformMultilineAnchors(
+        in pattern: String,
+        defaultMultilineEnabled: Bool,
+        replacement: (Character, Bool) -> String
+    ) -> String {
+        var output = ""
+        var escaped = false
+        var inClass = false
+        var multilineEnabled = defaultMultilineEnabled
+        var index = pattern.startIndex
+
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                output.append(character)
+                escaped = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "\\" {
+                output.append(character)
+                escaped = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "[" {
+                inClass = true
+                output.append(character)
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "]" {
+                inClass = false
+                output.append(character)
+                index = pattern.index(after: index)
+                continue
+            }
+            if !inClass,
+               character == "(",
+               let flags = inlineMultilineFlags(in: pattern, openingAt: index) {
+                if flags.scoped, let close = flags.close {
+                    output += pattern[index..<flags.bodyStart]
+                    output += transformMultilineAnchors(
+                        in: String(pattern[flags.bodyStart..<close]),
+                        defaultMultilineEnabled: flags.multilineEnabled ?? multilineEnabled,
+                        replacement: replacement
+                    )
+                    output.append(")")
+                    index = flags.end
+                    continue
+                }
+                output += pattern[index..<flags.end]
+                if let flagMultilineEnabled = flags.multilineEnabled {
+                    multilineEnabled = flagMultilineEnabled
+                }
+                index = flags.end
+                continue
+            }
+            if !inClass && (character == "^" || character == "$") {
+                output += replacement(character, multilineEnabled)
+                index = pattern.index(after: index)
+                continue
+            }
+            output.append(character)
+            index = pattern.index(after: index)
+        }
+
+        return output
+    }
+
+    private static func inlineMultilineFlags(
+        in pattern: String,
+        openingAt opening: String.Index
+    ) -> (scoped: Bool, multilineEnabled: Bool?, bodyStart: String.Index, close: String.Index?, end: String.Index)? {
+        let question = pattern.index(after: opening)
+        guard question < pattern.endIndex, pattern[question] == "?" else {
+            return nil
+        }
+
+        var cursor = pattern.index(after: question)
+        var disabling = false
+        var multilineEnabled: Bool?
+        while cursor < pattern.endIndex {
+            let character = pattern[cursor]
+            if character == ":" {
+                guard let close = closingGroupIndex(in: pattern, openingAt: opening) else {
+                    return nil
+                }
+                return (
+                    scoped: true,
+                    multilineEnabled: multilineEnabled,
+                    bodyStart: pattern.index(after: cursor),
+                    close: close,
+                    end: pattern.index(after: close)
+                )
+            }
+            if character == ")" {
+                return (
+                    scoped: false,
+                    multilineEnabled: multilineEnabled,
+                    bodyStart: cursor,
+                    close: nil,
+                    end: pattern.index(after: cursor)
+                )
+            }
+            guard character == "-" || character.isASCII && character.isLetter else {
+                return nil
+            }
+            if character == "-" {
+                disabling = true
+            } else if character == "m" {
+                multilineEnabled = !disabling
+            }
+            cursor = pattern.index(after: cursor)
+        }
+        return nil
     }
 
     private func literalRanges(_ literal: String, in line: String) -> [Range<String.Index>] {
