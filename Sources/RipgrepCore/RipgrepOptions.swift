@@ -747,7 +747,9 @@ public enum RipgrepArgumentParser {
                 options.trim = false
             case "--vimgrep":
                 options.vimgrep = true
-                options.colorMode = .never
+                if options.colorMode == .automatic {
+                    options.colorMode = .never
+                }
             case "-0", "--null":
                 options.nullPathTerminator = true
             case "--path-separator":
