@@ -3391,6 +3391,18 @@ struct RipgrepSearcherTests {
             (["--unknown"], "rg: unrecognized flag --unknown"),
             (["--foo=bar"], "rg: unrecognized flag --foo"),
             (["-Z"], "rg: unrecognized flag -Z"),
+            (
+                ["--replace X"],
+                "rg: unrecognized flag --replace X\n\nsimilar flags that are available: --replace"
+            ),
+            (
+                ["--ignore-cas"],
+                "rg: unrecognized flag --ignore-cas\n\nsimilar flags that are available: --ignore-case, --ignore-file, --ignore, --ignore-dot, --ignore-vcs"
+            ),
+            (
+                ["--files-with-match"],
+                "rg: unrecognized flag --files-with-match\n\nsimilar flags that are available: --files-with-matches, --files-without-match"
+            ),
         ] {
             var output: [String] = []
             var errors: [String] = []

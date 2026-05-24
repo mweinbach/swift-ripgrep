@@ -2140,8 +2140,179 @@ public enum RipgrepArgumentParser {
         let flag = argument.hasPrefix("--")
             ? argument.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? argument
             : argument
-        return "unrecognized flag \(flag)"
+        let suggestions = flagSuggestions(for: flag)
+        guard !suggestions.isEmpty else {
+            return "unrecognized flag \(flag)"
+        }
+        return "unrecognized flag \(flag)\n\nsimilar flags that are available: \(suggestions.joined(separator: ", "))"
     }
+
+    private static func flagSuggestions(for flag: String) -> [String] {
+        guard flag.hasPrefix("--") else {
+            return []
+        }
+        if flag.contains(" ") {
+            return knownLongFlags.filter { knownFlag in
+                guard knownFlag.count >= 8,
+                      flag.hasPrefix("\(knownFlag) ") else {
+                    return false
+                }
+                let remainder = flag.dropFirst(knownFlag.count + 1)
+                return !remainder.hasPrefix("\"")
+            }
+        }
+        if flag.hasPrefix("--ignore-") {
+            return primaryIgnoreFlagSuggestions.filter { knownFlag in
+                knownFlag.hasPrefix(flag) || commonPrefixLength(flag, knownFlag) >= 8
+            }
+        }
+        return knownLongFlags.filter { knownFlag in
+            flag == knownFlag
+                || knownFlag.hasPrefix(flag)
+                || commonPrefixLength(flag, knownFlag) >= 9
+        }
+    }
+
+    private static func commonPrefixLength(_ lhs: String, _ rhs: String) -> Int {
+        var count = 0
+        for (left, right) in zip(lhs, rhs) {
+            guard left == right else {
+                break
+            }
+            count += 1
+        }
+        return count
+    }
+
+    private static let knownLongFlags = [
+        "--after-context",
+        "--auto-hybrid-regex",
+        "--before-context",
+        "--binary",
+        "--block-buffered",
+        "--byte-offset",
+        "--case-sensitive",
+        "--color",
+        "--colors",
+        "--column",
+        "--context",
+        "--context-separator",
+        "--count",
+        "--count-matches",
+        "--crlf",
+        "--debug",
+        "--dfa-size-limit",
+        "--encoding",
+        "--engine",
+        "--field-context-separator",
+        "--field-match-separator",
+        "--file",
+        "--files",
+        "--files-with-matches",
+        "--files-without-match",
+        "--fixed-strings",
+        "--follow",
+        "--generate",
+        "--glob",
+        "--glob-case-insensitive",
+        "--heading",
+        "--hidden",
+        "--hostname-bin",
+        "--hyperlink-format",
+        "--iglob",
+        "--ignore",
+        "--ignore-case",
+        "--ignore-dot",
+        "--ignore-exclude",
+        "--ignore-file",
+        "--ignore-file-case-insensitive",
+        "--ignore-files",
+        "--ignore-global",
+        "--ignore-messages",
+        "--ignore-parent",
+        "--ignore-vcs",
+        "--include-zero",
+        "--json",
+        "--line-buffered",
+        "--line-number",
+        "--line-regexp",
+        "--max-columns",
+        "--max-columns-preview",
+        "--max-count",
+        "--max-depth",
+        "--max-filesize",
+        "--mmap",
+        "--multiline",
+        "--multiline-dotall",
+        "--no-config",
+        "--no-context-separator",
+        "--no-encoding",
+        "--no-fixed-strings",
+        "--no-heading",
+        "--no-ignore",
+        "--no-ignore-dot",
+        "--no-ignore-exclude",
+        "--no-ignore-file-case-insensitive",
+        "--no-ignore-files",
+        "--no-ignore-global",
+        "--no-ignore-messages",
+        "--no-ignore-parent",
+        "--no-ignore-vcs",
+        "--no-line-number",
+        "--no-messages",
+        "--no-mmap",
+        "--no-pcre2",
+        "--no-pcre2-unicode",
+        "--no-require-git",
+        "--no-sort-files",
+        "--no-text",
+        "--no-unicode",
+        "--null",
+        "--null-data",
+        "--one-file-system",
+        "--only-matching",
+        "--passthrough",
+        "--passthru",
+        "--path-separator",
+        "--pcre2",
+        "--pcre2-unicode",
+        "--pcre2-version",
+        "--pre",
+        "--pre-glob",
+        "--pretty",
+        "--quiet",
+        "--regex-size-limit",
+        "--regexp",
+        "--replace",
+        "--require-git",
+        "--search-zip",
+        "--smart-case",
+        "--sort",
+        "--sort-files",
+        "--sortr",
+        "--stats",
+        "--stop-on-nonmatch",
+        "--text",
+        "--threads",
+        "--trace",
+        "--trim",
+        "--type",
+        "--type-add",
+        "--type-clear",
+        "--type-list",
+        "--unrestricted",
+        "--vimgrep",
+        "--with-filename",
+        "--word-regexp",
+    ]
+
+    private static let primaryIgnoreFlagSuggestions = [
+        "--ignore-case",
+        "--ignore-file",
+        "--ignore",
+        "--ignore-dot",
+        "--ignore-vcs",
+    ]
 }
 
 private enum PatternFileResult {
