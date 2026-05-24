@@ -3953,6 +3953,26 @@ struct RipgrepSearcherTests {
                 "rg: unrecognized flag --replace X\n\nsimilar flags that are available: --replace"
             ),
             (
+                ["--replace \"A B\""],
+                "rg: unrecognized flag --replace \"A B\"\n\nsimilar flags that are available: --replace"
+            ),
+            (
+                ["--colo r"],
+                "rg: unrecognized flag --colo r\n\nsimilar flags that are available: --color"
+            ),
+            (
+                ["--colorr"],
+                "rg: unrecognized flag --colorr\n\nsimilar flags that are available: --color, --colors"
+            ),
+            (
+                ["--sort bad"],
+                "rg: unrecognized flag --sort bad"
+            ),
+            (
+                ["--line-number --ignore-case"],
+                "rg: unrecognized flag --line-number --ignore-case"
+            ),
+            (
                 ["--ignore-cas"],
                 "rg: unrecognized flag --ignore-cas\n\nsimilar flags that are available: --ignore-case, --ignore-file, --ignore, --ignore-dot, --ignore-vcs"
             ),

@@ -2231,14 +2231,27 @@ public enum RipgrepArgumentParser {
             return []
         }
         if flag.contains(" ") {
-            return knownLongFlags.filter { knownFlag in
-                guard knownFlag.count >= 8,
-                      flag.hasPrefix("\(knownFlag) ") else {
-                    return false
+            let firstToken = flag.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: false)
+                .first
+                .map(String.init) ?? flag
+            if knownLongFlags.contains(firstToken) {
+                return knownLongFlags.filter { knownFlag in
+                    guard knownFlag.count >= 8, flag.hasPrefix("\(knownFlag) ") else {
+                        return false
+                    }
+                    let remainder = flag.dropFirst(knownFlag.count + 1)
+                    return !remainder.hasPrefix("-")
                 }
-                let remainder = flag.dropFirst(knownFlag.count + 1)
-                return !remainder.hasPrefix("\"")
             }
+            let prefixMatches = knownLongFlags.filter { knownFlag in
+                firstToken.count >= 6
+                    && knownFlag.count >= 7
+                    && knownFlag.hasPrefix(firstToken)
+            }
+            guard let shortest = prefixMatches.map(\.count).min() else {
+                return []
+            }
+            return prefixMatches.filter { $0.count == shortest }
         }
         if flag.hasPrefix("--no-") {
             var suggestions: [String] = []
@@ -2567,6 +2580,7 @@ public enum RipgrepArgumentParser {
     ]
 
     private static let flagSuggestionExtras = [
+        "--colorr": ["--color", "--colors"],
         "--max-depthh": ["--maxdepth"],
     ]
 
