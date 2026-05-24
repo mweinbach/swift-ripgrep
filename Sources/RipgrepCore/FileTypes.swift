@@ -42,8 +42,20 @@ public struct FileTypeRegistry: Equatable, Sendable {
     @discardableResult
     public mutating func apply(_ changes: [TypeChange]) -> [String] {
         var errors: [String] = []
+        var filters: [TypeChange] = []
         for change in changes {
             switch change {
+            case .select, .negate:
+                filters.append(change)
+            case .clear(let name): clear(name)
+            case .add(let spec):
+                if !add(spec) {
+                    errors.append("invalid definition (format is type:glob, e.g., html:*.html)")
+                }
+            }
+        }
+        for filter in filters {
+            switch filter {
             case .select(let name):
                 if !select(name) {
                     errors.append("unrecognized file type: \(name)")
@@ -52,11 +64,8 @@ public struct FileTypeRegistry: Equatable, Sendable {
                 if !negate(name) {
                     errors.append("unrecognized file type: \(name)")
                 }
-            case .clear(let name): clear(name)
-            case .add(let spec):
-                if !add(spec) {
-                    errors.append("invalid definition (format is type:glob, e.g., html:*.html)")
-                }
+            case .clear, .add:
+                break
             }
         }
         return errors

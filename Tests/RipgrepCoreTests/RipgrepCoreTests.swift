@@ -5169,10 +5169,17 @@ struct RipgrepSearcherTests {
     func supportsTypeAddClearIncludeAndList() throws {
         let root = try TemporaryDirectory()
         try root.write("needle\n", to: "one.foo")
+        try root.write("needle\n", to: "one.txt")
         try root.write("needle\n", to: "two.swift")
         try root.write("needle\n", to: "three.rs")
 
-        #expect(pathBasenames(try run(["--type-add", "foo:*.foo", "-tfoo", "needle", root.url.path])) == ["one.foo"])
+        #expect(pathBasenames(try run(["--sort", "path", "--type-add", "foo:*.foo", "-tfoo", "needle", root.url.path])) == ["one.foo"])
+        #expect(pathBasenames(try run(["--sort", "path", "-tfoo", "--type-add", "foo:*.foo", "needle", root.url.path])) == ["one.foo"])
+        #expect(pathBasenames(try run(["--sort", "path", "-Tfoo", "--type-add", "foo:*.foo", "needle", root.url.path])) == [
+            "one.txt",
+            "three.rs",
+            "two.swift",
+        ])
         #expect(Set(pathBasenames(try run([
             "--type-add", "src:include:swift,rust",
             "-tsrc",
