@@ -84,15 +84,17 @@ public struct FileWalker {
             throw RipgrepError.message(error)
         }
 
+        let rootExistence = options.effectiveRoots.map { fileManager.fileExists(atPath: $0.path) }
+        let hasExistingRoot = rootExistence.contains(true)
         for (offset, root) in options.effectiveRoots.enumerated() {
             if options.useStdin,
                offset < options.rootPathArguments.count,
                options.rootPathArguments[offset] == "-" {
                 continue
             }
-            guard fileManager.fileExists(atPath: root.path) else {
+            guard offset < rootExistence.count, rootExistence[offset] else {
                 let displayPath = rootDisplayPath(at: offset, root: root, options: options)
-                messages.append(missingRootMessage(displayPath, options: options))
+                messages.append(missingRootMessage(displayPath, options: options, hasExistingRoot: hasExistingRoot))
                 continue
             }
             let rootBase = rootBase(for: root.standardizedFileURL)
@@ -152,8 +154,8 @@ public struct FileWalker {
         )
     }
 
-    private func missingRootMessage(_ displayPath: String, options: RipgrepOptions) -> String {
-        guard options.sortMode != nil else {
+    private func missingRootMessage(_ displayPath: String, options: RipgrepOptions, hasExistingRoot: Bool) -> String {
+        guard options.sortMode != nil || !hasExistingRoot else {
             return "\(displayPath): No such file or directory (os error 2)"
         }
         return "\(displayPath): IO error for operation on \(displayPath): No such file or directory (os error 2)"
