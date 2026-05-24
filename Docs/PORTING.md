@@ -7,14 +7,17 @@ available.
 
 ## Status — 2026-05-24
 
-**Functional 1:1 with Rust ripgrep 15.1.0.** Verified via:
+**Functional 1:1 with Rust ripgrep 15.1.0, including the streaming I/O
+architecture.** Verified via:
 
-- **81 Swift Testing cases** across 10 suites covering search, output formats,
+- **91 Swift Testing cases** across 12 suites covering search, output formats,
   ignore rules, file types, stdin, encodings, binary handling, parser
-  diagnostics, the new mmap/worker pool, and PCRE2.
-- **193 parity-harness cases** drawn from Rust's own `tests/binary.rs`,
+  diagnostics, mmap/worker pool, PCRE2, streaming haystack reads, and
+  generated-asset drift.
+- **205 parity-harness cases** drawn from Rust's own `tests/binary.rs`,
   `tests/multiline.rs`, `tests/json.rs`, `tests/misc.rs`, `tests/feature.rs`
-  and `tests/regression.rs`. **192 pass byte-for-byte** (including JSON
+  and `tests/regression.rs`, plus compressed-input probes for `.gz` /
+  `.bz2` / `.zst` / `.lz4`. **204 pass byte-for-byte** (including JSON
   output after stripping `elapsed`/`elapsed_total` timing values, which are
   inherently non-deterministic in Rust). The remaining 1 is skipped because
   APFS refuses to create the invalid-UTF-8 filename the upstream Rust fixture
@@ -22,6 +25,9 @@ available.
 - **Ad-hoc parity sweep:** 36/36 probes byte-identical to `rg` across PCRE2,
   encoding labels, mmap selection, threaded search, every output mode,
   glob/ignore handling, and JSON output.
+- **Asset drift suite:** stored help/man/completion files are pinned to the
+  current binary's `--generate`/`--help` output via 7 dedicated tests.
+  `scripts/refresh-generated-assets.sh` regenerates them when needed.
 
 Every public CLI flag accepted by Rust ripgrep is parsed; every flag that
 controls runtime behaviour is wired to the corresponding subsystem.
