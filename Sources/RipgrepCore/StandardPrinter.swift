@@ -288,6 +288,19 @@ public struct StandardPrinter {
                 crlfMatchTerminator: options.onlyMatching,
                 forceCRLF: isColumnLimitedVimgrepLine(match: match, replacementLine: replacementLine, projectedLine: projection?.line)
             )
+            if text.rawBytePayload != nil {
+                let fieldPrefix = fields.dropLast().isEmpty
+                    ? ""
+                    : "\(fields.dropLast().joined(separator: options.fieldMatchSeparator))\(options.fieldMatchSeparator)"
+                if showPath {
+                    let path = renderPath(for: match.fileURL, line: lineNumber, column: column)
+                    return rawByteLine(
+                        prefix: "\(path)\(matchPathFieldSeparator())\(fieldPrefix)",
+                        text: "\(text)\(terminator)"
+                    )
+                }
+                return rawByteLine(prefix: fieldPrefix, text: "\(text)\(terminator)")
+            }
             guard showPath else {
                 return "\(fields.joined(separator: options.fieldMatchSeparator))\(terminator)"
             }

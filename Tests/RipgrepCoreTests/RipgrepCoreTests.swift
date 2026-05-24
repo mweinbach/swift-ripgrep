@@ -3622,6 +3622,26 @@ struct RipgrepSearcherTests {
             "\(root.path("vimgrep-replace.txt")):1:1:0:<abc> <def>",
             "\(root.path("vimgrep-replace.txt")):1:7:6:<abc> <def>",
         ])
+        try root.write("á\n", to: "vimgrep-utf8-replace.txt")
+        let vimgrepUTF8Replacement = try runExecutableData([
+            "--vimgrep",
+            "--replace",
+            "<$0>",
+            "x?",
+            root.path("vimgrep-utf8-replace.txt"),
+        ]) {}
+        let vimgrepUTF8ReplacementLine1 = Data(
+            "\(root.path("vimgrep-utf8-replace.txt")):1:1:<>".utf8
+        ) + Data([0xC3]) + Data("<>".utf8) + Data([0xA1]) + Data("<>\n".utf8)
+        let vimgrepUTF8ReplacementLine2 = Data(
+            "\(root.path("vimgrep-utf8-replace.txt")):1:4:<>".utf8
+        ) + Data([0xC3]) + Data("<>".utf8) + Data([0xA1]) + Data("<>\n".utf8)
+        let vimgrepUTF8ReplacementLine3 = Data(
+            "\(root.path("vimgrep-utf8-replace.txt")):1:7:<>".utf8
+        ) + Data([0xC3]) + Data("<>".utf8) + Data([0xA1]) + Data("<>\n".utf8)
+        #expect(vimgrepUTF8Replacement == vimgrepUTF8ReplacementLine1
+            + vimgrepUTF8ReplacementLine2
+            + vimgrepUTF8ReplacementLine3)
         try root.write("Watson Sherlock\nnone\nSherlock Holmes\nDoctor Watson\n", to: "vimgrep.txt")
         #expect(try run(["--vimgrep", "-N", "Sherlock|Watson", root.path("vimgrep.txt")]) == [
             "\(root.path("vimgrep.txt")):1:Watson Sherlock",
