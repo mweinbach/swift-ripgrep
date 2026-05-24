@@ -5030,6 +5030,28 @@ struct RipgrepSearcherTests {
         let jsonBinaryStats = jsonBinaryEnd?["stats"] as? [String: Any]
         #expect(jsonBinaryStats?["matches"] as? Int == 2)
 
+        try root.write(Data("bin\0needle\npost\0tail needle\n".utf8), to: "binary-multiline-json.dat")
+        let multilineBinaryJSONOutput = try run(["-U", "--json", "needle", root.path("binary-multiline-json.dat")])
+        let multilineBinaryJSONMessages = try multilineBinaryJSONOutput.map(jsonObject)
+        let multilineBinaryJSONMatches = multilineBinaryJSONMessages.compactMap { message -> [String: Any]? in
+            guard message["type"] as? String == "match" else { return nil }
+            return message["data"] as? [String: Any]
+        }
+        #expect(multilineBinaryJSONMatches.map { $0["line_number"] as? Int } == [2, 4])
+        #expect(multilineBinaryJSONMatches.compactMap { ($0["lines"] as? [String: String])?["text"] } == [
+            "needle\n",
+            "tail needle\n",
+        ])
+        let multilineBinaryJSONSecondSubmatches = multilineBinaryJSONMatches[1]["submatches"] as? [[String: Any]]
+        #expect(multilineBinaryJSONSecondSubmatches?.first?["start"] as? Int == 5)
+        #expect(multilineBinaryJSONSecondSubmatches?.first?["end"] as? Int == 11)
+
+        let multilineBinaryAnchorJSONOutput = try run(["-U", "--json", "^", root.path("binary-multiline-json.dat")])
+        let multilineBinaryAnchorJSONMessages = try multilineBinaryAnchorJSONOutput.map(jsonObject)
+        let multilineBinaryAnchorEnd = multilineBinaryAnchorJSONMessages.first { $0["type"] as? String == "end" }?["data"] as? [String: Any]
+        let multilineBinaryAnchorStats = multilineBinaryAnchorEnd?["stats"] as? [String: Any]
+        #expect(multilineBinaryAnchorStats?["bytes_searched"] as? Int == 3)
+
         try root.write(Data("needle\0tail needle\n".utf8), to: "binary-same-line.dat")
         let sameLineJSONOutput = try run(["--json", "needle", root.path("binary-same-line.dat")])
         let sameLineJSONMessages = try sameLineJSONOutput.map(jsonObject)

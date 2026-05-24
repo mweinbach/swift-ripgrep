@@ -333,7 +333,7 @@ public struct RipgrepSearcher {
         lineNumberShifts: [Int: Int],
         options: RipgrepOptions
     ) -> [SearchMatch] {
-        guard !options.multiline else {
+        guard shouldSplitJSONBinaryDisplayLines(options: options) else {
             return matches
         }
         return matches.flatMap { match -> [SearchMatch] in
@@ -414,7 +414,7 @@ public struct RipgrepSearcher {
         lineNumberShifts: [Int: Int],
         options: RipgrepOptions
     ) -> [SearchLine] {
-        guard !options.multiline else {
+        guard shouldSplitJSONBinaryDisplayLines(options: options) else {
             return lines
         }
         return lines.flatMap { line -> [SearchLine] in
@@ -476,7 +476,7 @@ public struct RipgrepSearcher {
     }
 
     private func jsonBinaryLineNumberShifts(for lines: [SearchLine], options: RipgrepOptions) -> [Int: Int] {
-        guard options.json, !options.multiline else {
+        guard shouldSplitJSONBinaryDisplayLines(options: options) else {
             return [:]
         }
         var shifts: [Int: Int] = [:]
@@ -488,6 +488,11 @@ public struct RipgrepSearcher {
             }
         }
         return shifts
+    }
+
+    private func shouldSplitJSONBinaryDisplayLines(options: RipgrepOptions) -> Bool {
+        options.json
+            && (!options.multiline || !options.effectivePatterns.allSatisfy(isBareMultilineLineAnchorPattern))
     }
 
     private func jsonBinaryRawLinePieces(_ rawLine: String?) -> (prefix: String, suffix: String)? {
@@ -603,8 +608,8 @@ public struct RipgrepSearcher {
         }
         if options.json,
            options.multiline,
-           searchedMatches.isEmpty,
-           options.effectivePatterns.contains(where: isMultilineBinaryBoundaryPattern) {
+           options.effectivePatterns.allSatisfy(isBareMultilineLineAnchorPattern)
+                || (searchedMatches.isEmpty && options.effectivePatterns.contains(where: isMultilineBinaryBoundaryPattern)) {
             return binaryByteOffset
         }
         guard options.printMode == .matchingLines,
