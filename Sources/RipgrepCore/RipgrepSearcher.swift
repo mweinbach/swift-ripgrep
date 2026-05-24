@@ -538,10 +538,17 @@ public struct RipgrepSearcher {
             let segmentSpans = spans.compactMap { span -> MatchSpan? in
                 let clippedStartByte = max(span.startByte, segmentStartByte)
                 let clippedEndByte = min(span.endByte, segmentEndByte)
-                guard clippedStartByte < clippedEndByte,
-                      span.startByte < segmentEndByte,
-                      span.endByte > segmentStartByte else {
-                    return nil
+                if span.startByte == span.endByte {
+                    guard span.startByte >= segmentStartByte,
+                          span.startByte <= segmentEndByte else {
+                        return nil
+                    }
+                } else {
+                    guard clippedStartByte < clippedEndByte,
+                          span.startByte < segmentEndByte,
+                          span.endByte > segmentStartByte else {
+                        return nil
+                    }
                 }
                 let startByte = clippedStartByte - segmentStartByte
                 let endByte = clippedEndByte - segmentStartByte
@@ -572,7 +579,7 @@ public struct RipgrepSearcher {
                 let segmentText = String(text[segmentStart..<index])
                 segmentStartByte += byteCount(segmentText, options: options) + byteCount("\0", options: options)
                 segmentStart = text.index(after: index)
-                lineNumber += 1
+                lineNumber += jsonBinaryDisplayLineCount(segmentText)
             }
             index = text.index(after: index)
         }
@@ -580,6 +587,10 @@ public struct RipgrepSearcher {
             appendSegment(end: text.endIndex, terminator: lineTerminator)
         }
         return output
+    }
+
+    private func jsonBinaryDisplayLineCount(_ text: String) -> Int {
+        max(1, text.unicodeScalars.filter { $0 == "\n" }.count + 1)
     }
 
     private func splitJSONBinaryRawSegments(_ rawText: String) -> [String] {
@@ -598,6 +609,9 @@ public struct RipgrepSearcher {
     }
 
     private func byteSlice(in text: String, start: Int, end: Int, options: RipgrepOptions) -> String {
+        guard start < end else {
+            return ""
+        }
         guard start > 0 || end < byteCount(text, options: options) else {
             return text
         }
@@ -1869,7 +1883,8 @@ public struct RipgrepSearcher {
             return MultilineSpanCandidate(span: span, startLineIndex: startLineIndex, endLineIndex: endLineIndex)
         }
         let shouldGroupLineAnchors = shouldGroupMultilineJSONLineAnchorSpans(candidates, options: options)
-        let groups = shouldGroupLineAnchors
+        let shouldGroupNULPattern = shouldGroupMultilineJSONNULPatternSpans(candidates, options: options)
+        let groups = shouldGroupLineAnchors || shouldGroupNULPattern
             ? [candidates]
             : groupedOverlappingLineSpans(candidates, splitSeparatedTrailingLineMatches: true)
         let matches = groups.compactMap { group -> SearchMatch? in
@@ -1877,7 +1892,7 @@ public struct RipgrepSearcher {
                 return nil
             }
             let startLineIndex = first.startLineIndex
-            let endLineIndex = shouldGroupLineAnchors
+            let endLineIndex = shouldGroupLineAnchors || shouldGroupNULPattern
                 ? searchLines.count - 1
                 : group.reduce(first.endLineIndex) { max($0, $1.endLineIndex) }
             let blockText = multilineReplacementBlockText(
@@ -2054,6 +2069,17 @@ public struct RipgrepSearcher {
             && !candidates.isEmpty
             && options.effectivePatterns.contains(where: containsLineAnchor)
             && candidates.contains { $0.span.startByte == $0.span.endByte && $0.span.text.isEmpty }
+    }
+
+    private func shouldGroupMultilineJSONNULPatternSpans(
+        _ candidates: [MultilineSpanCandidate],
+        options: RipgrepOptions
+    ) -> Bool {
+        options.json
+            && options.multiline
+            && options.maxCount == nil
+            && !candidates.isEmpty
+            && options.effectivePatterns.contains(where: containsNULPattern)
     }
 
     private func multilineMatchCount(

@@ -101,7 +101,7 @@ public struct JSONPrinter {
         if options.passthru {
             selectedLineNumbers = result.lines.map(\.lineNumber)
         } else {
-            let lineCount = result.lines.count
+            let lineCount = jsonContextLineCount(for: result)
             let selected = result.matches.reduce(into: Set<Int>()) { lineNumbers, match in
                 let matchLineNumbers = multilineLineNumbers(for: match)
                 let lower = max(1, (matchLineNumbers.first ?? match.lineNumber) - options.beforeContext)
@@ -120,7 +120,8 @@ public struct JSONPrinter {
             if matchedLineNumbers.contains(lineNumber) {
                 return nil
             }
-            guard let line = result.lines.first(where: { $0.lineNumber == lineNumber }) else {
+            guard let line = result.lines.first(where: { $0.lineNumber == lineNumber })
+                    ?? synthesizedTrailingContextLine(lineNumber: lineNumber, in: result) else {
                 return nil
             }
             if !options.passthru, !options.invertMatch, !line.positiveSpans.isEmpty {
@@ -138,6 +139,41 @@ public struct JSONPrinter {
             }
             return contextMessage(line, path: path)
         }
+    }
+
+    private func jsonContextLineCount(for result: SearchFileResult) -> Int {
+        let maxLineNumber = result.lines.map(\.lineNumber).max() ?? 0
+        guard options.multiline,
+              options.json,
+              options.afterContext > 0,
+              let last = result.lines.last,
+              last.lineTerminator == "\n",
+              lineEndOffset(last) < result.bytesSearched else {
+            return maxLineNumber
+        }
+        return maxLineNumber + 1
+    }
+
+    private func synthesizedTrailingContextLine(lineNumber: Int, in result: SearchFileResult) -> SearchLine? {
+        guard options.multiline,
+              options.json,
+              options.afterContext > 0,
+              let previous = result.lines.last,
+              lineNumber == previous.lineNumber + 1,
+              previous.lineTerminator == "\n",
+              lineEndOffset(previous) < result.bytesSearched else {
+            return nil
+        }
+        return SearchLine(
+            lineNumber: lineNumber,
+            line: "",
+            lineTerminator: "\n",
+            absoluteOffset: lineEndOffset(previous)
+        )
+    }
+
+    private func lineEndOffset(_ line: SearchLine) -> Int {
+        line.absoluteOffset + line.line.utf8.count + line.lineTerminator.utf8.count
     }
 
     private func multilineLineNumbers(for match: SearchMatch) -> [Int] {
