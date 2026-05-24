@@ -368,6 +368,9 @@ public struct StandardPrinter {
     }
 
     private func contextLines(for result: SearchFileResult, showPath: Bool) -> [String] {
+        if let binaryLine = formatBinaryMatch(result, showPath: showPath) {
+            return [binaryLine]
+        }
         let matchedLineNumbers = multilineMatchedLineNumbers(for: result)
         let startMatchesByLine = firstMatchesByLine(for: result)
         let matchesByLine = matchesGroupedByLine(for: result)
