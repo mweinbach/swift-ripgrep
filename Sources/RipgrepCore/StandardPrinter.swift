@@ -982,7 +982,7 @@ public struct StandardPrinter {
                 continue
             }
             if !output.isEmpty {
-                output.append(options.nullData ? "\0" : "")
+                output.append(headingSeparatorTerminator())
             }
             if showPath {
                 output.append("\(renderPath(for: result.fileURL))\(searchPathTerminator())")
@@ -1569,7 +1569,17 @@ public struct StandardPrinter {
     }
 
     private func searchPathTerminator() -> String {
-        options.nullPathTerminator || options.nullData ? "\0" : ""
+        if options.nullPathTerminator || options.nullData {
+            return "\0"
+        }
+        return options.crlf ? "\r" : ""
+    }
+
+    private func headingSeparatorTerminator() -> String {
+        if options.nullData {
+            return "\0"
+        }
+        return options.crlf ? "\r" : ""
     }
 
     private func pathFieldSeparator() -> String {

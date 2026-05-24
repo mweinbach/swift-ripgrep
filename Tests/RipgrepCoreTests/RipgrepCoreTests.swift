@@ -578,6 +578,27 @@ struct RipgrepSearcherTests {
         #expect(try run(["--files", "-l", "needle", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == ["one.txt"])
         #expect(try run(["--files", "--files-without-match", "needle", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == ["two.txt"])
         #expect(try run(["--files-without-match", "needle", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent } == ["two.txt"])
+        let crlfFilesWithMatches = try runExecutableData(["--crlf", "-l", "needle", root.url.path]) {}
+        #expect(crlfFilesWithMatches == Data("\(root.path("one.txt"))\r\n".utf8))
+        let crlfFilesWithoutMatch = try runExecutableData(["--crlf", "--files-without-match", "needle", root.url.path]) {}
+        #expect(crlfFilesWithoutMatch == Data("\(root.path("two.txt"))\r\n".utf8))
+        try root.write("pin one\n", to: "heading-a.txt")
+        try root.write("pin two\n", to: "heading-b.txt")
+        let crlfHeadingOutput = try runExecutableData([
+            "--sort",
+            "path",
+            "--crlf",
+            "--heading",
+            "pin",
+            root.url.path,
+        ]) {}
+        #expect(crlfHeadingOutput == Data((
+            "\(root.path("heading-a.txt"))\r\n" +
+            "pin one\n" +
+            "\r\n" +
+            "\(root.path("heading-b.txt"))\r\n" +
+            "pin two\n"
+        ).utf8))
 
         var output: [String] = []
         var exitCode = RipgrepCLI.run(
