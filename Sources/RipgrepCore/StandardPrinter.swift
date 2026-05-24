@@ -1442,7 +1442,7 @@ public struct StandardPrinter {
     }
 
     private func splitRenderedLines(_ text: String) -> [String] {
-        let terminator: UnicodeScalar = text.contains("\0") ? "\0" : "\n"
+        let terminator = renderedLineTerminator()
         var lines: [String] = []
         var current = String.UnicodeScalarView()
         for scalar in text.unicodeScalars {
@@ -1460,7 +1460,7 @@ public struct StandardPrinter {
     }
 
     private func containsRenderedLineTerminator(_ text: String) -> Bool {
-        text.unicodeScalars.contains("\n") || text.unicodeScalars.contains("\0")
+        text.unicodeScalars.contains(renderedLineTerminator())
     }
 
     private func firstRenderedLine(_ text: String) -> String {
@@ -1470,7 +1470,7 @@ public struct StandardPrinter {
     private func lineOffset(in text: String, beforeByteOffset byteOffset: Int) -> Int {
         var bytes = 0
         var lines = 0
-        let terminator: UnicodeScalar = text.contains("\0") ? "\0" : "\n"
+        let terminator = renderedLineTerminator()
         for scalar in text.unicodeScalars {
             guard bytes < byteOffset else {
                 break
@@ -1481,6 +1481,10 @@ public struct StandardPrinter {
             }
         }
         return lines
+    }
+
+    private func renderedLineTerminator() -> UnicodeScalar {
+        options.nullData ? "\0" : "\n"
     }
 
     private func indexRange(startColumn: Int, endColumn: Int, in line: String) -> Range<String.Index>? {

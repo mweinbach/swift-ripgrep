@@ -4979,6 +4979,15 @@ struct RipgrepSearcherTests {
             "nul-anchors.dat",
         ])
 
+        try root.write(Data("a\0needle\nb\0\n".utf8), to: "text-multiline-nul.dat")
+        let multilineTextNULOutput = try runExecutableData([
+            "-U",
+            "-a",
+            "needle",
+            root.path("text-multiline-nul.dat"),
+        ], fixture: {})
+        #expect(multilineTextNULOutput == Data("a\0needle\n".utf8))
+
         let countRoot = try TemporaryDirectory()
         try countRoot.write(Data("cat cat\npadding\n\0tail cat\n".utf8), to: "file1.txt")
         try countRoot.write("cat here\n", to: "file2.txt")
