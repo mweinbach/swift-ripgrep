@@ -1090,6 +1090,25 @@ struct RipgrepSearcherTests {
             "\(root.path("vimgrep.txt")):1:1:foobar",
             "\(root.path("vimgrep.txt")):3:5:foo quux",
         ])
+        try root.write("pre\naaa\nbbb\nctx\naaa\nbbb\npost\naaa\nbbb\n", to: "multi-context.txt")
+        #expect(try run(["-U", "-n", "-m1", "-o", "-A2", #"aaa\nbbb"#, root.path("multi-context.txt")]) == [
+            "2:aaa",
+            "3:bbb",
+            "4-ctx",
+            "5-aaa",
+        ])
+        #expect(try run(["-U", "--vimgrep", "-m1", "-A2", #"aaa\nbbb"#, root.path("multi-context.txt")]) == [
+            "\(root.path("multi-context.txt")):2:1:aaa",
+            "\(root.path("multi-context.txt"))-4-ctx",
+            "\(root.path("multi-context.txt"))-5-aaa",
+        ])
+        #expect(try run(["-U", "--vimgrep", "-A2", #"aaa\nbbb"#, root.path("multi-context.txt")]) == [
+            "\(root.path("multi-context.txt")):2:1:aaa",
+            "\(root.path("multi-context.txt"))-4-ctx",
+            "\(root.path("multi-context.txt")):5:1:aaa",
+            "\(root.path("multi-context.txt"))-7-post",
+            "\(root.path("multi-context.txt")):8:1:aaa",
+        ])
         #expect(try run(["-n", "-U", "--only-matching", #"Watson|Sherlock\p{Any}+?Holmes"#, root.path("any-class.txt")]) == [
             "1:Watson",
             "1:Sherlock",

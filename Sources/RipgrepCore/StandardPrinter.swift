@@ -403,6 +403,7 @@ public struct StandardPrinter {
             } else if options.onlyMatching,
                       !options.passthru,
                       !options.invertMatch,
+                      !options.multiline,
                       !line.positiveSpans.isEmpty {
                 let positiveMatch = SearchMatch(
                     fileURL: result.fileURL,
@@ -418,6 +419,7 @@ public struct StandardPrinter {
                 output.append(contentsOf: formatOnlyMatching(positiveMatch, showPath: showPath))
             } else if options.onlyMatching,
                       options.invertMatch,
+                      !options.multiline,
                       !line.positiveSpans.isEmpty {
                 let positiveMatch = SearchMatch(
                     fileURL: result.fileURL,
@@ -436,10 +438,13 @@ public struct StandardPrinter {
                     fieldSeparator: options.fieldContextSeparator,
                     forcePositiveSpans: true
                 ))
+            } else if options.onlyMatching, matchedLineNumbers.contains(lineNumber) {
+                previous = lineNumber
+                continue
             } else if let match = startMatchesByLine[lineNumber], shouldUseWholeMatchFormatter(match) {
                 output.append(format(match, showPath: showPath))
             } else if matchedLineNumbers.contains(lineNumber)
-                        || (!options.passthru && !options.invertMatch && !line.positiveSpans.isEmpty) {
+                        || (!options.passthru && !options.invertMatch && !options.multiline && !line.positiveSpans.isEmpty) {
                 output.append(formatMatchedLine(
                     line,
                     fileURL: result.fileURL,
@@ -462,15 +467,7 @@ public struct StandardPrinter {
         if options.passthru {
             selectedLineNumbers = result.lines.map(\.lineNumber)
         } else {
-            let lineCount = result.lines.count
-            let selected = result.matches.reduce(into: Set<Int>()) { lineNumbers, match in
-                let lower = max(1, match.lineNumber - options.beforeContext)
-                let upper = min(lineCount, match.lineNumber + options.afterContext)
-                for lineNumber in lower...upper {
-                    lineNumbers.insert(lineNumber)
-                }
-            }
-            selectedLineNumbers = selected.sorted()
+            selectedLineNumbers = vimgrepSelectedContextLineNumbers(for: result)
         }
 
         var output: [String] = []
@@ -502,9 +499,37 @@ public struct StandardPrinter {
             } else {
                 output.append(formatVimgrepContextLine(line, fileURL: result.fileURL, showPath: showPath))
             }
-            previous = lineNumber
+            if let matches = matchesByLine[lineNumber] {
+                previous = max(lineNumber, matches.flatMap { multilineLineNumbers(for: $0) }.max() ?? lineNumber)
+            } else {
+                previous = lineNumber
+            }
         }
         return output
+    }
+
+    private func vimgrepSelectedContextLineNumbers(for result: SearchFileResult) -> [Int] {
+        let lineCount = result.lines.count
+        let selected = result.matches.reduce(into: Set<Int>()) { lineNumbers, match in
+            let matchLineNumbers = multilineLineNumbers(for: match)
+            let firstLine = matchLineNumbers.first ?? match.lineNumber
+            let lastLine = matchLineNumbers.last ?? match.lineNumber
+            let lower = max(1, firstLine - options.beforeContext)
+            let upper = min(lineCount, lastLine + options.afterContext)
+
+            if lower < firstLine {
+                for lineNumber in lower..<firstLine {
+                    lineNumbers.insert(lineNumber)
+                }
+            }
+            lineNumbers.insert(firstLine)
+            if lastLine < upper {
+                for lineNumber in (lastLine + 1)...upper {
+                    lineNumbers.insert(lineNumber)
+                }
+            }
+        }
+        return selected.sorted()
     }
 
     private func contextLines(for results: SearchResults, showPath: Bool) -> [String] {
