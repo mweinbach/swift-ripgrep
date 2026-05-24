@@ -86,10 +86,11 @@ struct OutputPathFormatter {
     }
 
     private func applyPathSeparator(_ path: String) -> String {
+        let normalizedPath = path.precomposedStringWithCanonicalMapping
         guard let pathSeparator = options.pathSeparator else {
-            return path
+            return normalizedPath
         }
-        return String(path.map { $0 == "/" ? pathSeparator : $0 })
+        return String(normalizedPath.map { $0 == "/" ? pathSeparator : $0 })
     }
 }
 

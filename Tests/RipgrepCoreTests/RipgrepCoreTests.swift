@@ -523,6 +523,17 @@ struct RipgrepSearcherTests {
             root.path("dir/one.txt"),
         ])
 
+        try root.write("needle\n", to: "unicode-é.txt")
+        #expect(try run(["--files", "--sort", "path", root.url.path]) == [
+            root.path("dir/one.txt"),
+            root.path("dir/two.txt"),
+            root.path("unicode-é.txt").precomposedStringWithCanonicalMapping,
+        ])
+        #expect(try run(["-l", "--sort", "path", "needle", root.url.path]) == [
+            root.path("dir/one.txt"),
+            root.path("unicode-é.txt").precomposedStringWithCanonicalMapping,
+        ])
+
         var output: [String] = []
         var errors: [String] = []
         let exitCode = RipgrepCLI.run(
