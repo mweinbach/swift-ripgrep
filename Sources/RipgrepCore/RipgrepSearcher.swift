@@ -2294,8 +2294,8 @@ public struct RipgrepSearcher {
             return false
         }
         switch options.encodingMode {
-        case .explicit:
-            return false
+        case .explicit(let encoding):
+            return encoding != .utf16LittleEndian && encoding != .utf16BigEndian
         case .disabled:
             return true
         case .automatic:

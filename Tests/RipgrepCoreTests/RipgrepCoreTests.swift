@@ -4849,6 +4849,12 @@ struct RipgrepSearcherTests {
         #expect(try run(["-U", #"(?s)needle.*tail"#, root.path("bin.dat")]) == [
             #"binary file matches (found "\0" byte around offset 6)"#,
         ])
+        #expect(try run(["--encoding", "utf-8", "needle", root.path("bin.dat")]) == [
+            #"binary file matches (found "\0" byte around offset 6)"#,
+        ])
+        #expect(try run(["--encoding", "latin1", "needle", root.path("bin.dat")]) == [
+            #"binary file matches (found "\0" byte around offset 6)"#,
+        ])
         #expect(try runAllowingNoMatch(["-U", #"needle\ntail"#, root.path("bin.dat")]) == [])
         #expect(try run(["-n", "needle", root.path("before-nul.dat")]) == [
             #"binary file matches (found "\0" byte around offset 7)"#,
