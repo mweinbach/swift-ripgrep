@@ -137,6 +137,8 @@ public struct FileWalker {
                 to: &rootIgnoreStack,
                 warnings: &warnings,
                 diagnostics: &diagnostics,
+                rootDebugDisplayPath: rootDebugDisplayPath,
+                rootArgumentIsAbsolute: rootArgumentIsAbsolute,
                 options: options
             )
             let rootVolume = options.oneFileSystem ? volumeIdentifier(for: root.standardizedFileURL) : nil
@@ -333,6 +335,8 @@ public struct FileWalker {
                 warnings: &warnings,
                 diagnostics: &diagnostics,
                 rootBase: rootBase,
+                rootDebugDisplayPath: rootDebugDisplayPath,
+                rootArgumentIsAbsolute: rootArgumentIsAbsolute,
                 options: options
             )
         }
@@ -561,6 +565,8 @@ public struct FileWalker {
         to ignoreStack: inout IgnoreStack,
         warnings: inout [String],
         diagnostics: inout [String],
+        rootDebugDisplayPath: String,
+        rootArgumentIsAbsolute: Bool,
         options: RipgrepOptions
     ) {
         guard (try? root.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true,
@@ -573,6 +579,8 @@ public struct FileWalker {
             warnings: &warnings,
             diagnostics: &diagnostics,
             rootBase: rootBase,
+            rootDebugDisplayPath: rootDebugDisplayPath,
+            rootArgumentIsAbsolute: rootArgumentIsAbsolute,
             options: options
         )
     }
@@ -1217,37 +1225,60 @@ public struct FileWalker {
         warnings: inout [String],
         diagnostics: inout [String],
         rootBase: URL,
+        rootDebugDisplayPath: String,
+        rootArgumentIsAbsolute: Bool,
         options: RipgrepOptions
     ) {
         let scopeDirectory = logicalDirectory ?? directoryURL
         if !options.noIgnoreDot {
+            let ignoreURL = directoryURL.appendingPathComponent(".ignore")
             appendLoadedMatcher(
-                from: directoryURL.appendingPathComponent(".ignore"),
+                from: ignoreURL,
                 to: &ignoreStack,
                 warnings: &warnings,
                 diagnostics: &diagnostics,
                 rootBase: rootBase,
                 scopeDirectory: scopeDirectory,
+                displayPath: ignoreFileDebugDisplayPath(
+                    for: scopeDirectory.appendingPathComponent(".ignore"),
+                    rootBase: rootBase,
+                    rootDisplayPath: rootDebugDisplayPath,
+                    rootArgumentIsAbsolute: rootArgumentIsAbsolute
+                ),
                 options: options
             )
+            let rgignoreURL = directoryURL.appendingPathComponent(".rgignore")
             appendLoadedMatcher(
-                from: directoryURL.appendingPathComponent(".rgignore"),
+                from: rgignoreURL,
                 to: &ignoreStack,
                 warnings: &warnings,
                 diagnostics: &diagnostics,
                 rootBase: rootBase,
                 scopeDirectory: scopeDirectory,
+                displayPath: ignoreFileDebugDisplayPath(
+                    for: scopeDirectory.appendingPathComponent(".rgignore"),
+                    rootBase: rootBase,
+                    rootDisplayPath: rootDebugDisplayPath,
+                    rootArgumentIsAbsolute: rootArgumentIsAbsolute
+                ),
                 options: options
             )
         }
         if !options.noIgnoreVCS && (options.noRequireGit || isInGitRepository(directoryURL)) {
+            let gitignoreURL = directoryURL.appendingPathComponent(".gitignore")
             appendLoadedMatcher(
-                from: directoryURL.appendingPathComponent(".gitignore"),
+                from: gitignoreURL,
                 to: &ignoreStack,
                 warnings: &warnings,
                 diagnostics: &diagnostics,
                 rootBase: rootBase,
                 scopeDirectory: scopeDirectory,
+                displayPath: ignoreFileDebugDisplayPath(
+                    for: scopeDirectory.appendingPathComponent(".gitignore"),
+                    rootBase: rootBase,
+                    rootDisplayPath: rootDebugDisplayPath,
+                    rootArgumentIsAbsolute: rootArgumentIsAbsolute
+                ),
                 options: options
             )
         }
@@ -1262,8 +1293,28 @@ public struct FileWalker {
                 diagnostics: &diagnostics,
                 rootBase: rootBase,
                 scopeDirectory: scopeDirectory,
+                displayPath: ignoreFileDebugDisplayPath(
+                    for: scopeDirectory.appendingPathComponent(".git/info/exclude"),
+                    rootBase: rootBase,
+                    rootDisplayPath: rootDebugDisplayPath,
+                    rootArgumentIsAbsolute: rootArgumentIsAbsolute
+                ),
                 options: options
             )
         }
+    }
+
+    private func ignoreFileDebugDisplayPath(
+        for logicalURL: URL,
+        rootBase: URL,
+        rootDisplayPath: String,
+        rootArgumentIsAbsolute: Bool
+    ) -> String {
+        debugDisplayPath(
+            for: logicalURL,
+            relativePath: relativePath(for: logicalURL, rootBase: rootBase),
+            rootDisplayPath: rootDisplayPath,
+            rootArgumentIsAbsolute: rootArgumentIsAbsolute
+        )
     }
 }
