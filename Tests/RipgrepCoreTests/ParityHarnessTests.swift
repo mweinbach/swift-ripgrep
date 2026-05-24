@@ -37,6 +37,14 @@ final class ParityHarnessTests: XCTestCase {
                 name: "multiline search across line terminators",
                 arguments: ["-U", "--multiline", "two\\nline", "\(fixtureRoot)/multiline.txt"]
             ),
+            ParityCase(
+                name: "threaded sorted text search",
+                arguments: ["--threads", "4", "--sort", "path", "needle", fixtureRoot]
+            ),
+            ParityCase(
+                name: "single-thread sorted text search",
+                arguments: ["--threads", "1", "--sort", "path", "needle", fixtureRoot]
+            ),
         ]
 
         for parityCase in cases {

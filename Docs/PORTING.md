@@ -230,20 +230,20 @@ Owner: pair-agent-E (dispatched only after 2A lands). Touches:
 top of `search(options:stdin:)`), `Sources/RipgrepCore/RipgrepCLI.swift`
 (stdout flush wiring).
 
-- [ ] Drive the per-haystack loop with a bounded `TaskGroup`. Default the
+- [x] Drive the per-haystack loop with a bounded `TaskGroup`. Default the
       worker count to `min(ProcessInfo.processInfo.activeProcessorCount, 12)`
       (matching the Rust ripgrep cap) and let `--threads N` override it
       (clamped to ≥1). When `N == 1`, fall back to the existing sequential
       path so behaviour is unchanged.
-- [ ] Preserve deterministic per-walk-order output: collect results into an
+- [x] Preserve deterministic per-walk-order output: collect results into an
       array indexed by walk position and emit in that order. The existing
       tests assume stable ordering.
-- [ ] Wire `--line-buffered` / `--block-buffered` to the stdout flush policy
+- [x] Wire `--line-buffered` / `--block-buffered` to the stdout flush policy
       in `RipgrepCLI`. Default to line buffering when stdout is a TTY
       (`isatty(STDOUT_FILENO)`), block otherwise. Use `setvbuf` (line `_IOLBF`
       or block `_IOFBF`) — fall back to manual `fflush` after each match line
       if `setvbuf` is impractical.
-- [ ] Tests: extend `ParityHarnessTests` with a `--threads 4` and a
+- [x] Tests: extend `ParityHarnessTests` with a `--threads 4` and a
       `--threads 1` invocation to prove output is byte-identical. Add a
       determinism test that runs the same search 8x with `--threads 8` and
       asserts identical stdout each time.

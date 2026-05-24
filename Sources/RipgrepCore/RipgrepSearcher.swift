@@ -1,6 +1,6 @@
 import Foundation
 
-private struct FileSearchOutcome {
+private struct FileSearchOutcome: Sendable {
     let result: SearchFileResult
     let message: String?
 
@@ -15,6 +15,68 @@ private struct DecompressionCommand {
     let arguments: [String]
 }
 
+private struct SearchedHaystack: Sendable {
+    let url: URL
+    let result: SearchFileResult
+    let message: String?
+}
+
+private struct SearchWorkItem: Sendable {
+    let index: Int
+    let url: URL
+    let isExplicit: Bool
+    let overridePath: String
+}
+
+private actor ParallelSearchState {
+    private let items: [SearchWorkItem]
+    private var nextIndex = 0
+    private var results: [SearchedHaystack?]
+
+    init(items: [SearchWorkItem]) {
+        self.items = items
+        self.results = Array(repeating: nil, count: items.count)
+    }
+
+    func next() -> SearchWorkItem? {
+        guard nextIndex < items.count else {
+            return nil
+        }
+        let item = items[nextIndex]
+        nextIndex += 1
+        return item
+    }
+
+    func store(_ item: SearchWorkItem, outcome: FileSearchOutcome) {
+        results[item.index] = SearchedHaystack(
+            url: item.url,
+            result: outcome.result,
+            message: outcome.message
+        )
+    }
+
+    func orderedResults() -> [SearchedHaystack] {
+        results.compactMap { $0 }
+    }
+}
+
+private final class ParallelSearchCompletion: @unchecked Sendable {
+    private let lock = NSLock()
+    private var result: Result<[SearchedHaystack], Error>?
+
+    func set(_ result: Result<[SearchedHaystack], Error>) {
+        lock.lock()
+        self.result = result
+        lock.unlock()
+    }
+
+    func get() throws -> [SearchedHaystack] {
+        lock.lock()
+        defer { lock.unlock() }
+        return try result!.get()
+    }
+}
+
 private struct MultilineSpanCandidate {
     let span: MatchSpan
     let startLineIndex: Int
@@ -26,7 +88,7 @@ private struct RawLineMap {
     let invalidDecodedRanges: [Range<Int>]
 }
 
-public struct RipgrepSearcher {
+public struct RipgrepSearcher: @unchecked Sendable {
     private static let binaryDetectionBufferSize = 64 * 1024
 
     private let fileManager: FileManager
@@ -79,12 +141,15 @@ public struct RipgrepSearcher {
         var messages = walkResults.messages
         let warnings = walkResults.warnings
         let diagnostics = walkResults.diagnostics
-        let searchedHaystacks = walkResults.haystacks.map { haystack in
-            let outcome = searchFile(haystack, matcher: matcher, options: options)
-            if let message = outcome.message {
+        let searchedHaystacks = try searchHaystacks(
+            walkResults.haystacks,
+            matcher: matcher,
+            options: options
+        )
+        for haystack in searchedHaystacks {
+            if let message = haystack.message {
                 messages.append(message)
             }
-            return (url: haystack.url, result: outcome.result)
         }
         var files = searchedHaystacks.map(\.result)
 
@@ -230,6 +295,91 @@ public struct RipgrepSearcher {
         return (0..<count).map { index in
             searchStdin(index == 0 ? data : Data(), matcher: matcher, options: options)
         }
+    }
+
+    private func searchHaystacks(
+        _ haystacks: [Haystack],
+        matcher: PatternMatcher,
+        options: RipgrepOptions
+    ) throws -> [SearchedHaystack] {
+        let workerCount = effectiveWorkerCount(options: options)
+        guard workerCount > 1, haystacks.count > 1 else {
+            return haystacks.map { haystack in
+                let outcome = searchFile(haystack, matcher: matcher, options: options)
+                return SearchedHaystack(
+                    url: haystack.url,
+                    result: outcome.result,
+                    message: outcome.message
+                )
+            }
+        }
+
+        let items = haystacks.enumerated().map { index, haystack in
+            SearchWorkItem(
+                index: index,
+                url: haystack.url,
+                isExplicit: haystack.isExplicit,
+                overridePath: haystack.overridePath
+            )
+        }
+        return try runParallelSearch(items: items, options: options, workerCount: min(workerCount, items.count))
+    }
+
+    private func effectiveWorkerCount(options: RipgrepOptions) -> Int {
+        if let requested = options.threadCount {
+            return requested <= 1 ? 1 : requested
+        }
+        return max(1, min(ProcessInfo.processInfo.activeProcessorCount, 12))
+    }
+
+    private func runParallelSearch(
+        items: [SearchWorkItem],
+        options: RipgrepOptions,
+        workerCount: Int
+    ) throws -> [SearchedHaystack] {
+        let semaphore = DispatchSemaphore(value: 0)
+        let completion = ParallelSearchCompletion()
+        Task {
+            do {
+                let results = try await searchHaystacksConcurrently(
+                    items: items,
+                    options: options,
+                    workerCount: workerCount
+                )
+                completion.set(.success(results))
+            } catch {
+                completion.set(.failure(error))
+            }
+            semaphore.signal()
+        }
+        semaphore.wait()
+        return try completion.get()
+    }
+
+    private func searchHaystacksConcurrently(
+        items: [SearchWorkItem],
+        options: RipgrepOptions,
+        workerCount: Int
+    ) async throws -> [SearchedHaystack] {
+        let state = ParallelSearchState(items: items)
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for _ in 0..<workerCount {
+                group.addTask { [options] in
+                    let matcher = try PatternMatcher(options: options)
+                    while let item = await state.next() {
+                        let haystack = Haystack(
+                            url: item.url,
+                            isExplicit: item.isExplicit,
+                            overridePath: item.overridePath
+                        )
+                        let outcome = searchFile(haystack, matcher: matcher, options: options)
+                        await state.store(item, outcome: outcome)
+                    }
+                }
+            }
+            try await group.waitForAll()
+        }
+        return await state.orderedResults()
     }
 
     private func isRootMatch(_ url: URL, root: URL) -> Bool {

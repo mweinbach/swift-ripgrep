@@ -1,6 +1,6 @@
 import Foundation
 
-public struct Haystack: Equatable {
+public struct Haystack: Equatable, Sendable {
     public let url: URL
     public let isExplicit: Bool
     public let overridePath: String

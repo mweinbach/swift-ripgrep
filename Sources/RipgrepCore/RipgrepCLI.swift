@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 public enum RipgrepCLI {
@@ -50,6 +51,7 @@ public enum RipgrepCLI {
             stderr(message.hasPrefix("rg: ") ? message : "rg: \(message)")
             return 2
         case .run(var options):
+            configureStdoutBuffering(options: options, stdoutOverride: stdout)
             do {
                 if !options.noMessages {
                     for warning in options.startupWarnings {
@@ -181,7 +183,7 @@ public enum RipgrepCLI {
         let data = output.rawBytePayload.map { $0.rawByteData() } ?? (encodingMode == .disabled
             ? output.rawByteData()
             : Data(output.utf8))
-        FileHandle.standardOutput.write(data)
+        writeStdout(data)
     }
 
     private static func emitStdoutVerbatim(_ output: String, stdout: ((String) -> Void)?) {
@@ -189,7 +191,45 @@ public enum RipgrepCLI {
             stdout(output)
             return
         }
-        FileHandle.standardOutput.write(Data(output.utf8))
+        writeStdout(Data(output.utf8))
+    }
+
+    private static func configureStdoutBuffering(
+        options: RipgrepOptions,
+        stdoutOverride: ((String) -> Void)?
+    ) {
+        guard stdoutOverride == nil else {
+            return
+        }
+        switch resolvedBufferMode(options.bufferMode) {
+        case .line:
+            setvbuf(Darwin.stdout, nil, _IOLBF, 0)
+        case .block:
+            setvbuf(Darwin.stdout, nil, _IOFBF, 65_536)
+        case .automatic:
+            break
+        }
+    }
+
+    private static func resolvedBufferMode(_ mode: BufferMode) -> BufferMode {
+        switch mode {
+        case .automatic:
+            return isatty(STDOUT_FILENO) != 0 ? .line : .block
+        case .line, .block:
+            return mode
+        }
+    }
+
+    private static func writeStdout(_ data: Data) {
+        guard !data.isEmpty else {
+            return
+        }
+        data.withUnsafeBytes { buffer in
+            guard let baseAddress = buffer.baseAddress else {
+                return
+            }
+            fwrite(baseAddress, 1, buffer.count, Darwin.stdout)
+        }
     }
 
     private static func outputEncodingMode(for options: RipgrepOptions, results: SearchResults) -> EncodingMode? {
@@ -213,7 +253,9 @@ public enum RipgrepCLI {
             diagnostics.append("DEBUG|rg::flags::hiargs|crates/core/flags/hiargs.rs:1278: found hostname for hyperlink configuration: \(hostname)")
         }
         diagnostics.append(#"DEBUG|rg::flags::hiargs|crates/core/flags/hiargs.rs:1288: hyperlink format: """#)
-        diagnostics.append("DEBUG|rg::flags::hiargs|crates/core/flags/hiargs.rs:175: using \(max(1, options.threadCount ?? 1)) thread(s)")
+        let threadCount = options.threadCount.map { max(1, $0) }
+            ?? max(1, min(ProcessInfo.processInfo.activeProcessorCount, 12))
+        diagnostics.append("DEBUG|rg::flags::hiargs|crates/core/flags/hiargs.rs:175: using \(threadCount) thread(s)")
 
         let globalGitIgnore = "\(NSHomeDirectory())/.config/git/ignore"
         if fileManager.fileExists(atPath: globalGitIgnore) {

@@ -127,7 +127,7 @@ public struct SortMode: Equatable {
     }
 }
 
-public struct RipgrepOptions: Equatable {
+public struct RipgrepOptions: Equatable, @unchecked Sendable {
     public var startupWarnings: [String] = []
     public var startupDiagnostics: [String] = []
     public var mode: SearchMode = .search
