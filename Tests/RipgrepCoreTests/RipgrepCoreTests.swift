@@ -1761,6 +1761,19 @@ struct RipgrepSearcherTests {
         #expect(try run(["--pre", script, "needle", root.path("doc.md")]) == [
             "converted needle from doc.md",
         ])
+        let originalDirectory = FileManager.default.currentDirectoryPath
+        defer { FileManager.default.changeCurrentDirectoryPath(originalDirectory) }
+        #expect(FileManager.default.changeCurrentDirectoryPath(root.url.path))
+        #expect(try run(["--pre", script, "needle", "doc.md"]) == [
+            "converted needle from doc.md",
+        ])
+        let jsonOutput = try run(["--json", "--pre", script, "needle", "doc.md"])
+        let jsonMessages = try jsonOutput.map(jsonObject)
+        let endMessage = jsonMessages.first { $0["type"] as? String == "end" }
+        let endData = endMessage?["data"] as? [String: Any]
+        let stats = endData?["stats"] as? [String: Any]
+        #expect(stats?["bytes_searched"] as? Int == "converted needle from doc.md\n".utf8.count)
+
         #expect(Set(pathBasenames(try run([
             "--pre",
             script,

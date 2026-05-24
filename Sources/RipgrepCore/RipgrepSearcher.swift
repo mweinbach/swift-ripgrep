@@ -628,7 +628,7 @@ public struct RipgrepSearcher {
         do {
             let process = Process()
             process.executableURL = executable
-            process.arguments = [fileURL.path]
+            process.arguments = [displayPath]
 
             let input = try FileHandle(forReadingFrom: fileURL)
             let output = Pipe()
@@ -662,7 +662,7 @@ public struct RipgrepSearcher {
                 fileURL: result.fileURL,
                 matches: result.matches,
                 lines: result.lines,
-                bytesSearched: originalData.count,
+                bytesSearched: data.count,
                 searched: result.searched
             ))
         } catch {
