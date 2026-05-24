@@ -208,6 +208,9 @@ public struct StandardPrinter {
     }
 
     private func vimgrepLineText(for match: SearchMatch) -> String {
+        if options.nullData {
+            return renderedLine(match.line)
+        }
         let line = firstRenderedLine(match.line)
         if let maxColumns = options.maxColumns,
            options.maxColumnsPreview,

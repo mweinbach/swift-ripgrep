@@ -2025,6 +2025,17 @@ struct RipgrepSearcherTests {
             "\(root.path("a.txt")):1:3:needle",
             "\(root.path("a.txt")):1:14:needle",
         ])
+        try root.write("abc\nABC\nxxxabcxxx\nzzz\nabc\n", to: "vimgrep-null-data.txt")
+        let vimgrepNullDataOutput = try runExecutableData([
+            "--vimgrep",
+            "--null-data",
+            "abc",
+            root.path("vimgrep-null-data.txt"),
+        ]) {}
+        let vimgrepNullDataLine = "\(root.path("vimgrep-null-data.txt")):1:1:abc\nABC\nxxxabcxxx\nzzz\nabc\n\0"
+        #expect(vimgrepNullDataOutput == Data(
+            "\(vimgrepNullDataLine)\(root.path("vimgrep-null-data.txt")):1:12:abc\nABC\nxxxabcxxx\nzzz\nabc\n\0\(root.path("vimgrep-null-data.txt")):1:23:abc\nABC\nxxxabcxxx\nzzz\nabc\n\0".utf8
+        ))
         try root.write("abc123 def456\n", to: "vimgrep-replace.txt")
         #expect(try run(["--vimgrep", "--replace", "X", #"[a-z]+\d+"#, root.path("vimgrep-replace.txt")]) == [
             "\(root.path("vimgrep-replace.txt")):1:1:X X",
