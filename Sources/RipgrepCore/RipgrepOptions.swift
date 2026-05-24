@@ -129,6 +129,7 @@ public struct SortMode: Equatable {
 
 public struct RipgrepOptions: Equatable {
     public var startupWarnings: [String] = []
+    public var startupDiagnostics: [String] = []
     public var mode: SearchMode = .search
     public var generateMode: GenerateMode?
     public var printMode: PrintMode = .matchingLines
@@ -283,17 +284,25 @@ public enum RipgrepArgumentParser {
     ) -> CLIParseResult {
         let finalArguments: [String]
         let startupWarnings: [String]
+        let startupDiagnostics: [String]
+        let shouldEmitConfigDebug = arguments.contains { $0 == "--debug" || $0 == "--trace" }
         if shouldLoadConfig(for: arguments) {
-            let config = configArguments(environment: environment)
+            let config = configArguments(environment: environment, emitDebug: shouldEmitConfigDebug)
             finalArguments = config.arguments + arguments
             startupWarnings = config.warnings
+            startupDiagnostics = config.diagnostics
+                + (shouldEmitConfigDebug && config.arguments.isEmpty ? [noConfigArgumentsDebugMessage] : [])
         } else {
             finalArguments = arguments
             startupWarnings = []
+            startupDiagnostics = shouldEmitConfigDebug && arguments.contains("--no-config")
+                ? [noConfigDebugMessage]
+                : []
         }
         let parsed = parseFinal(finalArguments)
         if case .run(var options) = parsed {
             options.startupWarnings.append(contentsOf: startupWarnings)
+            options.startupDiagnostics.append(contentsOf: startupDiagnostics)
             return .run(options)
         }
         return parsed
@@ -1633,9 +1642,19 @@ public enum RipgrepArgumentParser {
         }
     }
 
-    private static func configArguments(environment: [String: String]) -> (arguments: [String], warnings: [String]) {
-        guard let path = environment["RIPGREP_CONFIG_PATH"], !path.isEmpty else {
-            return ([], [])
+    private static func configArguments(
+        environment: [String: String],
+        emitDebug: Bool
+    ) -> (arguments: [String], warnings: [String], diagnostics: [String]) {
+        guard let path = environment["RIPGREP_CONFIG_PATH"] else {
+            return (
+                [],
+                [],
+                emitDebug ? [missingConfigPathDebugMessage] : []
+            )
+        }
+        guard !path.isEmpty else {
+            return ([], [], [])
         }
         let contents: String
         do {
@@ -1643,7 +1662,7 @@ public enum RipgrepArgumentParser {
         } catch {
             return ([], [
                 "failed to read the file specified in RIPGREP_CONFIG_PATH: \(path): \(configReadErrorDescription(path: path, error: error))",
-            ])
+            ], [])
         }
         let arguments: [String] = contents.components(separatedBy: .newlines).compactMap { line in
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1652,7 +1671,24 @@ public enum RipgrepArgumentParser {
             }
             return trimmed
         }
-        return (arguments, [])
+        let diagnostics = emitDebug && !arguments.isEmpty
+            ? [loadedConfigDebugMessage(path: path, arguments: arguments)]
+            : []
+        return (arguments, [], diagnostics)
+    }
+
+    private static let missingConfigPathDebugMessage =
+        "DEBUG|rg::flags::config|crates/core/flags/config.rs:19: RIPGREP_CONFIG_PATH environment variable is not set, therefore not reading any config file"
+
+    private static let noConfigArgumentsDebugMessage =
+        "DEBUG|rg::flags::parse|crates/core/flags/parse.rs:97: no extra arguments found from configuration file"
+
+    private static let noConfigDebugMessage =
+        "DEBUG|rg::flags::parse|crates/core/flags/parse.rs:89: not reading config files because --no-config is present"
+
+    private static func loadedConfigDebugMessage(path: String, arguments: [String]) -> String {
+        let formattedArguments = arguments.map { "\"\($0)\"" }.joined(separator: ", ")
+        return "DEBUG|rg::flags::config|crates/core/flags/config.rs:47: \(path): arguments loaded from config file: [\(formattedArguments)]"
     }
 
     private static func configReadErrorDescription(path: String, error: Error) -> String {

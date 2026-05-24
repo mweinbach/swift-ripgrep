@@ -56,6 +56,9 @@ public enum RipgrepCLI {
                         stderr("rg: \(warning)")
                     }
                 }
+                for diagnostic in options.startupDiagnostics {
+                    stderr("rg: \(diagnostic)")
+                }
                 try validateTypeChanges(options.typeChanges)
                 if shouldSearchImplicitStdin(
                     options: options,

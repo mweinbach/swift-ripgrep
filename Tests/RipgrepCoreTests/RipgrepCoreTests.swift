@@ -2280,14 +2280,28 @@ struct RipgrepSearcherTests {
         #expect(try run(["--no-config", "needle", root.url.path], environment: environment) == [])
         #expect(try run(["--case-sensitive", "needle", root.url.path], environment: environment) == [])
 
+        var output: [String] = []
+        var errors: [String] = []
+        let debugConfigExitCode = RipgrepCLI.run(
+            arguments: ["--debug", "needle", root.path("a.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) },
+            environment: environment
+        )
+        #expect(debugConfigExitCode == 0)
+        #expect(output == ["1:Needle"])
+        #expect(errors.contains(
+            "rg: DEBUG|rg::flags::config|crates/core/flags/config.rs:47: \(root.path("ripgreprc")): arguments loaded from config file: [\"--ignore-case\", \"--line-number\", \"--glob\", \"*.txt\"]"
+        ))
+
         try root.write("--replace\n\"X Y\"\n", to: "ripgreprc")
         #expect(try run(["Needle", root.path("a.txt")], environment: environment) == [
             "\"X Y\"",
         ])
 
         try root.write("--ignore-case --line-number\n", to: "ripgreprc")
-        var output: [String] = []
-        var errors: [String] = []
+        output = []
+        errors = []
         let sameLineConfigExitCode = RipgrepCLI.run(
             arguments: ["needle", root.path("a.txt")],
             stdout: { output.append($0) },
@@ -2317,15 +2331,34 @@ struct RipgrepSearcherTests {
 
         output = []
         errors = []
+        let missingEnvironmentExitCode = RipgrepCLI.run(
+            arguments: ["--debug", "Needle", root.path("a.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) },
+            environment: [:]
+        )
+        #expect(missingEnvironmentExitCode == 0)
+        #expect(output == ["Needle"])
+        #expect(errors.contains(
+            "rg: DEBUG|rg::flags::config|crates/core/flags/config.rs:19: RIPGREP_CONFIG_PATH environment variable is not set, therefore not reading any config file"
+        ))
+        #expect(errors.contains(
+            "rg: DEBUG|rg::flags::parse|crates/core/flags/parse.rs:97: no extra arguments found from configuration file"
+        ))
+
+        output = []
+        errors = []
         let noConfigExitCode = RipgrepCLI.run(
-            arguments: ["--no-config", "Needle", root.path("a.txt")],
+            arguments: ["--debug", "--no-config", "Needle", root.path("a.txt")],
             stdout: { output.append($0) },
             stderr: { errors.append($0) },
             environment: ["RIPGREP_CONFIG_PATH": missingConfig]
         )
         #expect(noConfigExitCode == 0)
         #expect(output == ["Needle"])
-        #expect(errors.isEmpty)
+        #expect(errors.contains(
+            "rg: DEBUG|rg::flags::parse|crates/core/flags/parse.rs:89: not reading config files because --no-config is present"
+        ))
     }
 
     @Test("quiet mode still prints stats")
