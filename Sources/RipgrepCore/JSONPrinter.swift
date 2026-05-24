@@ -235,6 +235,9 @@ public struct JSONPrinter {
 
     private func fileStatsObject(for result: SearchFileResult, bytesPrinted: Int) -> JSONValue {
         let matchCount = options.invertMatch ? 0 : result.matches.reduce(0) { $0 + $1.matchCount } + result.supplementalMatches
+        let promotedBinaryMatch = matchCount == 0
+            && result.hasBinaryMatch
+            && !shouldPreserveZeroMultilineBinaryMatchCount
         return .object([
             ("elapsed", fileElapsedObject()),
             ("searches", .int(result.searched ? 1 : 0)),
@@ -242,8 +245,28 @@ public struct JSONPrinter {
             ("bytes_searched", .int(result.bytesSearched)),
             ("bytes_printed", .int(bytesPrinted)),
             ("matched_lines", .int(result.matches.reduce(0) { $0 + MatchedLineCounter.count($1, options: options) } + result.supplementalMatchedLines)),
-            ("matches", .int(matchCount == 0 && result.hasBinaryMatch ? 1 : matchCount)),
+            ("matches", .int(promotedBinaryMatch ? 1 : matchCount)),
         ])
+    }
+
+    private var shouldPreserveZeroMultilineBinaryMatchCount: Bool {
+        options.multiline && options.effectivePatterns.allSatisfy(isBareMultilineLineEndPattern)
+    }
+
+    private func isBareMultilineLineEndPattern(_ pattern: String) -> Bool {
+        if pattern == "$" {
+            return true
+        }
+        guard pattern.hasPrefix("(?"),
+              pattern.hasSuffix(")"),
+              let colon = pattern.firstIndex(of: ":") else {
+            return false
+        }
+        let flagStart = pattern.index(pattern.startIndex, offsetBy: 2)
+        let flags = pattern[flagStart..<colon]
+        let bodyStart = pattern.index(after: colon)
+        let body = pattern[bodyStart..<pattern.index(before: pattern.endIndex)]
+        return flags.contains("m") && body == "$"
     }
 
     private func summaryStatsObject(for results: SearchResults, bytesPrinted: Int) -> JSONValue {

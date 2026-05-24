@@ -4907,6 +4907,19 @@ struct RipgrepSearcherTests {
         #expect(try run(["-U", "tail", root.path("bin.dat")]) == [
             #"binary file matches (found "\0" byte around offset 6)"#,
         ])
+        #expect(try run(["-U", "$", root.path("bin.dat")]) == [
+            #"binary file matches (found "\0" byte around offset 6)"#,
+        ])
+        let multilineBinaryEndOutput = try runExecutableData([
+            "-U",
+            "-a",
+            "$",
+            root.path("bin.dat"),
+        ], fixture: {})
+        #expect(multilineBinaryEndOutput == Data("needle\0tail\n".utf8))
+        #expect(try run(["-U", "-a", "--count-matches", "$", root.path("bin.dat")]) == [
+            "1",
+        ])
         #expect(try runAllowingNoMatch(["-U", "needle.tail", root.path("bin.dat")]) == [])
         #expect(try run(["-U", "--multiline-dotall", "needle.tail", root.path("bin.dat")]) == [
             #"binary file matches (found "\0" byte around offset 6)"#,
@@ -5171,6 +5184,15 @@ struct RipgrepSearcherTests {
         let multilineBinaryAnchorEnd = multilineBinaryAnchorJSONMessages.first { $0["type"] as? String == "end" }?["data"] as? [String: Any]
         let multilineBinaryAnchorStats = multilineBinaryAnchorEnd?["stats"] as? [String: Any]
         #expect(multilineBinaryAnchorStats?["bytes_searched"] as? Int == 3)
+
+        let multilineBinaryEndJSONOutput = try run(["-U", "--json", "$", root.path("binary-multiline-records.dat")])
+        let multilineBinaryEndJSONMessages = try multilineBinaryEndJSONOutput.map(jsonObject)
+        let multilineBinaryEndJSONMatch = multilineBinaryEndJSONMessages.first { $0["type"] as? String == "match" }?["data"] as? [String: Any]
+        let multilineBinaryEndJSONSubmatches = multilineBinaryEndJSONMatch?["submatches"] as? [[String: Any]]
+        let multilineBinaryEndJSONEnd = multilineBinaryEndJSONMessages.first { $0["type"] as? String == "end" }?["data"] as? [String: Any]
+        let multilineBinaryEndJSONStats = multilineBinaryEndJSONEnd?["stats"] as? [String: Any]
+        #expect(multilineBinaryEndJSONSubmatches?.isEmpty == true)
+        #expect(multilineBinaryEndJSONStats?["matches"] as? Int == 0)
 
         try root.write(Data("needle\0tail needle\n".utf8), to: "binary-same-line.dat")
         let sameLineJSONOutput = try run(["--json", "needle", root.path("binary-same-line.dat")])

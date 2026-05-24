@@ -147,7 +147,10 @@ public struct RipgrepSearcher {
                     return total
                 }
                 let matchCount = file.matches.reduce(0) { $0 + $1.matchCount }
-                return total + (matchCount == 0 && file.hasBinaryMatch ? 1 : matchCount) + file.supplementalMatches
+                let promotedBinaryMatch = matchCount == 0
+                    && file.hasBinaryMatch
+                    && !shouldPreserveZeroMultilineBinaryMatchCount(options: options)
+                return total + (promotedBinaryMatch ? 1 : matchCount) + file.supplementalMatches
             }
         )
 
@@ -159,6 +162,10 @@ public struct RipgrepSearcher {
             diagnostics: diagnostics,
             filtered: walkResults.filtered
         )
+    }
+
+    private func shouldPreserveZeroMultilineBinaryMatchCount(options: RipgrepOptions) -> Bool {
+        options.multiline && options.effectivePatterns.allSatisfy(isBareMultilineLineEndPattern)
     }
 
     private func preservesExplicitStdinPosition(options: RipgrepOptions) -> Bool {
@@ -431,7 +438,17 @@ public struct RipgrepSearcher {
 
     private func shouldSplitJSONBinaryDisplayLines(options: RipgrepOptions) -> Bool {
         options.json
+            && !options.effectivePatterns.contains(where: containsNULPattern)
             && (!options.multiline || !options.effectivePatterns.contains(where: isMultilineBinaryBoundaryPattern))
+    }
+
+    private func containsNULPattern(_ pattern: String) -> Bool {
+        pattern.contains("\0")
+            || pattern.contains(#"\0"#)
+            || pattern.lowercased().contains(#"\x00"#)
+            || pattern.lowercased().contains(#"\x{0}"#)
+            || pattern.lowercased().contains(#"\u0000"#)
+            || pattern.lowercased().contains(#"\u{0}"#)
     }
 
     private func jsonBinaryDisplayPieces(
@@ -1013,6 +1030,7 @@ public struct RipgrepSearcher {
         if options.multiline && !options.invertMatch {
             let shouldSplitMultilineBinaryNUL = shouldSplitBinaryNUL
                 && options.printMode == .countMatches
+                && !options.effectivePatterns.contains(where: containsLineAnchor)
                 && !options.effectivePatterns.contains(where: containsLineTerminatorOutsideCharacterClass)
             return searchMultilineContents(
                 contents,
@@ -1702,6 +1720,20 @@ public struct RipgrepSearcher {
             in: matchingContents,
             options: options
         )
+        if spans.isEmpty,
+           let preserved = multilineBinaryEndAnchorMatch(
+               contents: matchingContents,
+               fileURL: fileURL,
+               lines: searchLines,
+               options: options
+           ) {
+            return SearchFileResult(
+                fileURL: fileURL,
+                matches: [preserved],
+                lines: searchLines,
+                bytesSearched: absoluteOffset
+            )
+        }
         let positiveSpansByLine = multilinePositiveSpansByLine(
             spans: spans,
             lines: searchLines,
@@ -1898,6 +1930,33 @@ public struct RipgrepSearcher {
                 matches: matches,
                 options: options
             )
+        )
+    }
+
+    private func multilineBinaryEndAnchorMatch(
+        contents: String,
+        fileURL: URL,
+        lines: [SearchLine],
+        options: RipgrepOptions
+    ) -> SearchMatch? {
+        guard options.multiline,
+              !contents.isEmpty,
+              contents.contains("\0"),
+              !contents.contains("\n"),
+              options.effectivePatterns.allSatisfy(isBareMultilineLineEndPattern),
+              let line = lines.first else {
+            return nil
+        }
+        return SearchMatch(
+            fileURL: fileURL,
+            lineNumber: line.lineNumber,
+            column: nil,
+            line: line.line,
+            rawLine: line.rawLine,
+            lineTerminator: line.lineTerminator,
+            absoluteOffset: line.absoluteOffset,
+            matchCount: 0,
+            spans: []
         )
     }
 
