@@ -1194,8 +1194,14 @@ public struct RipgrepSearcher {
             let positiveSpans = syntheticBinarySplitSpans(
                 syntheticInlineCRLFBoundarySpans(
                     crlfTrimmedSpans(
-                        adjustedSpans(
-                            matcher.positiveSpans(in: lineForMatching),
+                        unicodeWordBoundedSpans(
+                            adjustedSpans(
+                                matcher.positiveSpans(in: lineForMatching),
+                                rawLine: rawLineForSpanAdjustment,
+                                options: options
+                            ),
+                            decodedLine: line,
+                            matcher: matcher,
                             rawLine: rawLineForSpanAdjustment,
                             options: options
                         ),
@@ -1226,8 +1232,14 @@ public struct RipgrepSearcher {
 
             let rawSpans = syntheticInlineCRLFBoundarySpans(
                 crlfTrimmedSpans(
-                    adjustedSpans(
-                        matcher.spans(in: lineForMatching),
+                    unicodeWordBoundedSpans(
+                        adjustedSpans(
+                            matcher.spans(in: lineForMatching),
+                            rawLine: rawLineForSpanAdjustment,
+                            options: options
+                        ),
+                        decodedLine: line,
+                        matcher: matcher,
                         rawLine: rawLineForSpanAdjustment,
                         options: options
                     ),
@@ -1437,6 +1449,75 @@ public struct RipgrepSearcher {
                 replacement: span.replacement
             )
         }
+    }
+
+    private func unicodeWordBoundedSpans(
+        _ spans: [MatchSpan],
+        decodedLine: String,
+        matcher: PatternMatcher,
+        rawLine: String?,
+        options: RipgrepOptions
+    ) -> [MatchSpan] {
+        guard options.wordRegexp,
+              !options.noUnicode,
+              matcher.usesByteSemantics,
+              rawLine == nil else {
+            return spans
+        }
+        return spans.filter { isUnicodeWordBounded($0, in: decodedLine) }
+    }
+
+    private func isUnicodeWordBounded(_ span: MatchSpan, in line: String) -> Bool {
+        guard let lower = utf8Index(in: line, atByteOffset: span.startByte),
+              let upper = utf8Index(in: line, atByteOffset: span.endByte) else {
+            return false
+        }
+        let before = lower == line.startIndex ? nil : line[line.index(before: lower)]
+        let after = upper == line.endIndex ? nil : line[upper]
+        if lower == upper {
+            return !isUnicodeWordCharacter(before) && !isUnicodeWordCharacter(after)
+        }
+
+        let matched = line[lower..<upper]
+        guard matched.contains(where: { isUnicodeWordCharacter($0) }) else {
+            return false
+        }
+        if let first = matched.first,
+           isUnicodeWordCharacter(first),
+           isUnicodeWordCharacter(before) {
+            return false
+        }
+        if let last = matched.last,
+           isUnicodeWordCharacter(last),
+           isUnicodeWordCharacter(after) {
+            return false
+        }
+        return true
+    }
+
+    private func isUnicodeWordCharacter(_ character: Character?) -> Bool {
+        guard let character else {
+            return false
+        }
+        return character.unicodeScalars.allSatisfy {
+            CharacterSet.alphanumerics.contains($0)
+                || CharacterSet.nonBaseCharacters.contains($0)
+                || $0 == "_"
+        }
+    }
+
+    private func utf8Index(in line: String, atByteOffset byteOffset: Int) -> String.Index? {
+        guard byteOffset >= 0 else {
+            return nil
+        }
+        var bytes = 0
+        for index in line.indices {
+            if bytes == byteOffset {
+                return index
+            }
+            bytes += line[index].utf8.count
+        }
+        return bytes == byteOffset ? line.endIndex : nil
     }
 
     private func syntheticInlineCRLFBoundarySpans(

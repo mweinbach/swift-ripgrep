@@ -556,7 +556,7 @@ public struct PatternMatcher {
             source = byteRegexLiteralPattern(for: source)
         }
         if options.wordRegexp {
-            source = wordRegexpPattern(for: source, usesByteSemantics: usesByteSemantics)
+            source = wordRegexpPattern(for: source, usesByteSemantics: options.noUnicode)
         }
         if options.lineRegexp {
             source = "^(?:\(source))$"
@@ -2771,7 +2771,7 @@ public struct PatternMatcher {
         guard let character else {
             return false
         }
-        if usesByteSemantics {
+        if options.noUnicode {
             return character.isASCIIWordCharacter
         }
         return character.unicodeScalars.allSatisfy {

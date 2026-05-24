@@ -348,6 +348,7 @@ struct RipgrepSearcherTests {
         try root.write("Σ\nσ\n", to: "casefold.txt")
         try root.write("ABC\nabc\nδ\n", to: "ascii-case.txt")
         try root.write("abc ABC 123 _ é π\nword-word\nfoo bar\n", to: "posix-alpha.txt")
+        try root.write("abc ABC\nbar\nfoo bar\néx xé\n123_\n", to: "inline-word-boundary.txt")
         try root.write("abc ABC café π δ Δ xyz_123 éx xé\n", to: "scoped-modes.txt")
         try root.write("\n##\n", to: "empty-word.txt")
 
@@ -356,6 +357,20 @@ struct RipgrepSearcherTests {
         #expect(try run(["-o", #"(?-u)\w+"#, root.path("classes.txt")]) == ["caf", "_"])
         #expect(try run(["-w", "x", root.path("words.txt")]) == ["x"])
         #expect(try run(["-won", "x", root.path("words.txt")]) == ["3:x"])
+        #expect(try run(["-w", #"(?-u:\w+)|é"#, root.path("inline-word-boundary.txt")]) == [
+            "abc ABC",
+            "bar",
+            "foo bar",
+            "123_",
+        ])
+        #expect(try run(["-wo", #"(?-u:\w+)|é"#, root.path("inline-word-boundary.txt")]) == [
+            "abc",
+            "ABC",
+            "bar",
+            "foo",
+            "bar",
+            "123_",
+        ])
         #expect(try run(["-won", "", root.path("empty-word.txt")]) == ["1:", "2:", "2:", "2:"])
         let noUnicodeWordOutput = try runExecutableData(["--no-unicode", "-w", "x", root.path("words.txt")], fixture: {})
         #expect(noUnicodeWordOutput == Data("éx\nxé\nx\n".utf8))
