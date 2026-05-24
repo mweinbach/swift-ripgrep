@@ -16,7 +16,7 @@ public struct JSONPrinter {
         var output: [String] = []
         var totalBytesPrinted = 0
         if !options.quiet {
-            for result in results.files where result.hasMatch {
+            for result in results.files where shouldPrintFile(result) {
                 let path = displayPath(for: result.fileURL)
                 var fileOutput: [String] = []
                 fileOutput.append(jsonLine(.object([
@@ -52,6 +52,10 @@ public struct JSONPrinter {
             ("type", .string("summary")),
         ])))
         return output
+    }
+
+    private func shouldPrintFile(_ result: SearchFileResult) -> Bool {
+        result.hasMatch || (options.passthru && result.searched)
     }
 
     private func messages(for result: SearchFileResult, path: String) -> [JSONValue] {

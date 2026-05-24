@@ -840,6 +840,16 @@ struct RipgrepSearcherTests {
         #expect(lines?["text"] == "needle\0")
         #expect(match?["line_number"] as? Int == 2)
         #expect(match?["absolute_offset"] as? Int == 6)
+
+        try root.write("needle\nhay\nneedle\n", to: "lf-record.txt")
+        let lfRecordOutput = try run(["--json", "--null-data", "needle", root.path("lf-record.txt")])
+        let lfRecordMessages = try lfRecordOutput.map(jsonObject)
+        let lfRecordEnd = lfRecordMessages.first { $0["type"] as? String == "end" }?["data"] as? [String: Any]
+        let lfRecordStats = lfRecordEnd?["stats"] as? [String: Any]
+        let lfRecordSummary = lfRecordMessages.first { $0["type"] as? String == "summary" }?["data"] as? [String: Any]
+        let lfRecordSummaryStats = lfRecordSummary?["stats"] as? [String: Any]
+        #expect(lfRecordStats?["matched_lines"] as? Int == 1)
+        #expect(lfRecordSummaryStats?["matched_lines"] as? Int == 1)
     }
 
     @Test("decodes BOM and explicit encodings")
@@ -2345,6 +2355,36 @@ struct RipgrepSearcherTests {
         #expect(passthruJSONStats?["bytes_searched"] as? Int == 35)
         #expect(passthruJSONStats?["matched_lines"] as? Int == 1)
         #expect(passthruJSONStats?["matches"] as? Int == 1)
+
+        try root.write("nomatch\n", to: "passthru-no-match.txt")
+        let passthruNoMatchOutput = try run([
+            "--json",
+            "--passthru",
+            "needle",
+            root.path("passthru-no-match.txt"),
+            root.path("json.txt"),
+        ])
+        let passthruNoMatchMessages = try passthruNoMatchOutput.map(jsonObject)
+        #expect(passthruNoMatchMessages.map { $0["type"] as? String } == [
+            "begin",
+            "context",
+            "end",
+            "begin",
+            "context",
+            "match",
+            "context",
+            "end",
+            "summary",
+        ])
+        let passthruNoMatchContext = passthruNoMatchMessages[1]["data"] as? [String: Any]
+        let passthruNoMatchLines = passthruNoMatchContext?["lines"] as? [String: String]
+        #expect(passthruNoMatchLines?["text"] == "nomatch\n")
+        let passthruNoMatchEnd = passthruNoMatchMessages[2]["data"] as? [String: Any]
+        let passthruNoMatchStats = passthruNoMatchEnd?["stats"] as? [String: Any]
+        #expect(passthruNoMatchStats?["searches"] as? Int == 1)
+        #expect(passthruNoMatchStats?["searches_with_match"] as? Int == 0)
+        #expect(passthruNoMatchStats?["matched_lines"] as? Int == 0)
+        #expect(passthruNoMatchStats?["matches"] as? Int == 0)
 
         let invertedOutput = try run(["--json", "-v", "needle", root.path("json.txt")])
         let invertedMessages = try invertedOutput.map(jsonObject)

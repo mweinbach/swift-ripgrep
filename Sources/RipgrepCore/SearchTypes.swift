@@ -198,6 +198,9 @@ public enum RipgrepError: Error, CustomStringConvertible, Equatable, Sendable {
 
 enum MatchedLineCounter {
     static func count(_ match: SearchMatch, options: RipgrepOptions) -> Int {
+        if options.nullData {
+            return 1
+        }
         if options.multiline {
             return multilineCount(match, options: options)
         }
