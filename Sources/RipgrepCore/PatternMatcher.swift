@@ -614,7 +614,14 @@ public struct PatternMatcher {
         var escaped = false
         for character in source {
             if escaped {
-                weight += character == "p" || character == "P" ? 16 : 2
+                switch character {
+                case "p", "P":
+                    weight += 16
+                case "d", "D", "s", "S", "w", "W":
+                    weight += 16_384
+                default:
+                    weight += 2
+                }
                 escaped = false
                 continue
             }
@@ -3084,7 +3091,7 @@ public struct PatternMatcher {
 
         let matched = line[range]
         guard matched.contains(where: { isWordCharacter($0) }) else {
-            return false
+            return !isWordCharacter(before) && !isWordCharacter(after)
         }
         if let first = matched.first,
            isWordCharacter(first),

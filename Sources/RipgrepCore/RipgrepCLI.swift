@@ -319,6 +319,7 @@ public enum RipgrepCLI {
     ) -> Bool {
         options.mode == .search
             && !options.useStdin
+            && !options.patternFileStdin
             && options.rootPathArguments.isEmpty
             && options.roots.count == 1
             && options.roots[0].path == FileManager.default.currentDirectoryPath

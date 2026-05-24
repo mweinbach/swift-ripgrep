@@ -141,7 +141,7 @@ public struct TextEncoding: Equatable, Sendable {
         add(iso2022JP, "csiso2022jp", "iso-2022-jp")
         add(shiftJIS, "csshiftjis", "ms932", "ms_kanji", "shift-jis", "shift_jis", "sjis", "windows-31j", "x-sjis")
         add(eucKR, "cseuckr", "csksc56011987", "euc-kr", "iso-ir-149", "korean", "ks_c_5601-1987", "ks_c_5601-1989", "ksc5601", "ksc_5601", "windows-949")
-        add(.replacement, "csiso2022kr", "hz-gb-2312", "iso-2022-cn", "iso-2022-cn-ext", "iso-2022-kr", "replacement")
+        add(.replacement, "hz-gb-2312", "iso-2022-cn", "iso-2022-cn-ext", "iso-2022-kr", "replacement")
         add(.utf16BigEndian, "unicodefffe", "utf-16be", "utf16be")
         add(.utf16LittleEndian, "csunicode", "iso-10646-ucs-2", "ucs-2", "unicode", "unicodefeff", "utf-16", "utf-16le", "utf16", "utf16le")
         add(.xUserDefined, "x-user-defined")
