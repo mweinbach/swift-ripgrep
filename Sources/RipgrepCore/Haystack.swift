@@ -475,6 +475,7 @@ public struct FileWalker {
             to: &ignoreStack,
             warnings: &warnings,
             rootBase: rootBase,
+            ignoreExplicitRootMatch: true,
             options: options
         )
         appendLoadedMatcher(
@@ -482,6 +483,7 @@ public struct FileWalker {
             to: &ignoreStack,
             warnings: &warnings,
             rootBase: rootBase,
+            ignoreExplicitRootMatch: true,
             options: options
         )
     }
@@ -503,6 +505,7 @@ public struct FileWalker {
             to: &ignoreStack,
             warnings: &warnings,
             rootBase: rootBase,
+            ignoreExplicitRootMatch: true,
             options: options
         )
         if !options.noIgnoreExclude,
@@ -513,6 +516,7 @@ public struct FileWalker {
                 warnings: &warnings,
                 rootBase: rootBase,
                 scopeDirectory: parentURL,
+                ignoreExplicitRootMatch: true,
                 options: options
             )
         }
@@ -751,6 +755,7 @@ public struct FileWalker {
         slashPatternsMatchAnywhere: Bool? = nil,
         reportLoadErrors: Bool = false,
         caseInsensitive: Bool? = nil,
+        ignoreExplicitRootMatch: Bool = false,
         options: RipgrepOptions
     ) {
         let loaded = loadMatcher(
@@ -760,7 +765,8 @@ public struct FileWalker {
             pathPrefix: pathPrefix,
             slashPatternsMatchAnywhere: slashPatternsMatchAnywhere,
             reportLoadErrors: reportLoadErrors,
-            caseInsensitive: caseInsensitive ?? options.ignoreFileCaseInsensitive
+            caseInsensitive: caseInsensitive ?? options.ignoreFileCaseInsensitive,
+            ignoreExplicitRootMatch: ignoreExplicitRootMatch
         )
         ignoreStack.append(loaded.matcher)
         if !options.noIgnoreMessages {
@@ -775,7 +781,8 @@ public struct FileWalker {
         pathPrefix: String? = nil,
         slashPatternsMatchAnywhere: Bool? = nil,
         reportLoadErrors: Bool = false,
-        caseInsensitive: Bool = false
+        caseInsensitive: Bool = false,
+        ignoreExplicitRootMatch: Bool = false
     ) -> LoadedIgnoreMatcher {
         let contents: String
         do {
@@ -787,13 +794,42 @@ public struct FileWalker {
         let parsed = parseIgnorePatterns(contents, fileURL: fileURL)
         let scope = pathPrefix.map { (stripBasePath: String?.none, pathPrefix: $0) }
             ?? ignoreScope(for: scopeDirectory ?? fileURL.deletingLastPathComponent(), rootBase: rootBase)
+        let patterns = ignoreExplicitRootMatch
+            ? patternsIgnoringExplicitRootMatch(
+                parsed.patterns,
+                scope: scope,
+                slashPatternsMatchAnywhere: slashPatternsMatchAnywhere,
+                caseInsensitive: caseInsensitive
+            )
+            : parsed.patterns
         return LoadedIgnoreMatcher(matcher: GlobMatcher(
-            patterns: parsed.patterns,
+            patterns: patterns,
             caseInsensitive: caseInsensitive,
             stripBasePath: scope.stripBasePath,
             pathPrefix: scope.pathPrefix,
             slashPatternsMatchAnywhere: slashPatternsMatchAnywhere
         ), messages: parsed.messages)
+    }
+
+    private func patternsIgnoringExplicitRootMatch(
+        _ patterns: [String],
+        scope: (stripBasePath: String?, pathPrefix: String),
+        slashPatternsMatchAnywhere: Bool?,
+        caseInsensitive: Bool
+    ) -> [String] {
+        guard !scope.pathPrefix.isEmpty else {
+            return patterns
+        }
+        return patterns.filter { pattern in
+            let matcher = GlobMatcher(
+                patterns: [pattern],
+                caseInsensitive: caseInsensitive,
+                stripBasePath: scope.stripBasePath,
+                pathPrefix: scope.pathPrefix,
+                slashPatternsMatchAnywhere: slashPatternsMatchAnywhere
+            )
+            return matcher.decision(relativePath: "", isDirectory: true) != .exclude
+        }
     }
 
     private func ignoreFileLoadMessage(for fileURL: URL) -> String {

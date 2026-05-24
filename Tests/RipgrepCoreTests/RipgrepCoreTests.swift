@@ -2967,6 +2967,17 @@ struct RipgrepSearcherTests {
             "skip.txt",
         ]))
 
+        let explicitRoot = try TemporaryDirectory()
+        try explicitRoot.createDirectory("a/b")
+        try explicitRoot.write("b\n", to: "a/.ignore")
+        try explicitRoot.write("needle\n", to: "a/b/kept")
+        let originalDirectory = FileManager.default.currentDirectoryPath
+        defer { FileManager.default.changeCurrentDirectoryPath(originalDirectory) }
+        #expect(FileManager.default.changeCurrentDirectoryPath(explicitRoot.url.path))
+        #expect(try run(["--files", "a/b"]) == ["a/b/kept"])
+        #expect(try run(["needle", "a/b"]) == ["a/b/kept:needle"])
+        #expect(try runAllowingNoMatch(["--files", "a"]) == [])
+
         let nested = try TemporaryDirectory()
         try nested.createDirectory(".git")
         try nested.write("skip.txt\n", to: ".gitignore")
