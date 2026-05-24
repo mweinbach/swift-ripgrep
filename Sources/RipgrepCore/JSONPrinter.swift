@@ -96,14 +96,16 @@ public struct JSONPrinter {
 
     private func contextAwareMessages(for result: SearchFileResult, path: String) -> [JSONValue] {
         let matchesByLine = Dictionary(uniqueKeysWithValues: result.matches.map { ($0.lineNumber, $0) })
+        let matchedLineNumbers = Set(result.matches.flatMap(multilineLineNumbers))
         let selectedLineNumbers: [Int]
         if options.passthru {
             selectedLineNumbers = result.lines.map(\.lineNumber)
         } else {
             let lineCount = result.lines.count
             let selected = result.matches.reduce(into: Set<Int>()) { lineNumbers, match in
-                let lower = max(1, match.lineNumber - options.beforeContext)
-                let upper = min(lineCount, match.lineNumber + options.afterContext)
+                let matchLineNumbers = multilineLineNumbers(for: match)
+                let lower = max(1, (matchLineNumbers.first ?? match.lineNumber) - options.beforeContext)
+                let upper = min(lineCount, (matchLineNumbers.last ?? match.lineNumber) + options.afterContext)
                 for lineNumber in lower...upper {
                     lineNumbers.insert(lineNumber)
                 }
@@ -114,6 +116,9 @@ public struct JSONPrinter {
         return selectedLineNumbers.compactMap { lineNumber in
             if let match = matchesByLine[lineNumber] {
                 return matchMessage(match, path: path)
+            }
+            if matchedLineNumbers.contains(lineNumber) {
+                return nil
             }
             guard let line = result.lines.first(where: { $0.lineNumber == lineNumber }) else {
                 return nil
@@ -133,6 +138,32 @@ public struct JSONPrinter {
             }
             return contextMessage(line, path: path)
         }
+    }
+
+    private func multilineLineNumbers(for match: SearchMatch) -> [Int] {
+        guard options.multiline else {
+            return [match.lineNumber]
+        }
+        let lineCount = splitRenderedLines(match.lineWithTerminator).count
+        return Array(match.lineNumber..<(match.lineNumber + max(1, lineCount)))
+    }
+
+    private func splitRenderedLines(_ text: String) -> [String] {
+        let terminator: UnicodeScalar = text.contains("\0") ? "\0" : "\n"
+        var lines: [String] = []
+        var current = String.UnicodeScalarView()
+        for scalar in text.unicodeScalars {
+            if scalar == terminator {
+                lines.append(String(current))
+                current.removeAll(keepingCapacity: true)
+            } else {
+                current.append(scalar)
+            }
+        }
+        if !current.isEmpty || text.unicodeScalars.last != terminator {
+            lines.append(String(current))
+        }
+        return lines
     }
 
     private func matchMessage(_ match: SearchMatch, path: String) -> JSONValue {

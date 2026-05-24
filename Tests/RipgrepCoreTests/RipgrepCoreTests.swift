@@ -1575,6 +1575,38 @@ struct RipgrepSearcherTests {
             "\(root.path("multi-context.txt"))-7-post",
             "\(root.path("multi-context.txt")):8:1:aaa",
         ])
+        try root.write("foo\nbar\nfoo bar\n", to: "json-multiline-context.txt")
+        let jsonMultilineAfterOutput = try run([
+            "-U",
+            "--json",
+            "-C1",
+            #"foo\nbar"#,
+            root.path("json-multiline-context.txt"),
+        ])
+        let jsonMultilineAfterMessages = try jsonMultilineAfterOutput.map(jsonObject)
+        #expect(jsonMultilineAfterMessages.map { $0["type"] as? String } == ["begin", "match", "context", "end", "summary"])
+        let jsonMultilineAfterMatch = jsonMultilineAfterMessages[1]["data"] as? [String: Any]
+        let jsonMultilineAfterContext = jsonMultilineAfterMessages[2]["data"] as? [String: Any]
+        #expect(jsonMultilineAfterMatch?["line_number"] as? Int == 1)
+        #expect((jsonMultilineAfterMatch?["lines"] as? [String: String])?["text"] == "foo\nbar\n")
+        #expect(jsonMultilineAfterContext?["line_number"] as? Int == 3)
+        #expect((jsonMultilineAfterContext?["lines"] as? [String: String])?["text"] == "foo bar\n")
+
+        let jsonMultilineBeforeOutput = try run([
+            "-U",
+            "--json",
+            "-C1",
+            #"bar\nfoo"#,
+            root.path("json-multiline-context.txt"),
+        ])
+        let jsonMultilineBeforeMessages = try jsonMultilineBeforeOutput.map(jsonObject)
+        #expect(jsonMultilineBeforeMessages.map { $0["type"] as? String } == ["begin", "context", "match", "end", "summary"])
+        let jsonMultilineBeforeContext = jsonMultilineBeforeMessages[1]["data"] as? [String: Any]
+        let jsonMultilineBeforeMatch = jsonMultilineBeforeMessages[2]["data"] as? [String: Any]
+        #expect(jsonMultilineBeforeContext?["line_number"] as? Int == 1)
+        #expect((jsonMultilineBeforeContext?["lines"] as? [String: String])?["text"] == "foo\n")
+        #expect(jsonMultilineBeforeMatch?["line_number"] as? Int == 2)
+        #expect((jsonMultilineBeforeMatch?["lines"] as? [String: String])?["text"] == "bar\nfoo bar\n")
         #expect(try run(["-n", "-U", "--only-matching", #"Watson|Sherlock\p{Any}+?Holmes"#, root.path("any-class.txt")]) == [
             "1:Watson",
             "1:Sherlock",
