@@ -1386,7 +1386,7 @@ public struct RipgrepSearcher {
         case .disabled:
             return String(decoding: data, as: UTF8.self)
         case .explicit(let encoding):
-            return decode(data, encoding: encoding)
+            return decodeExplicit(data, encoding: encoding)
         }
     }
 
@@ -1410,6 +1410,16 @@ public struct RipgrepSearcher {
 
     private func decode(_ data: Data, encoding: String.Encoding) -> String {
         String(data: data, encoding: encoding) ?? String(decoding: data, as: UTF8.self)
+    }
+
+    private func decodeExplicit(_ data: Data, encoding: String.Encoding) -> String {
+        if encoding == .utf16LittleEndian, data.starts(with: [0xFF, 0xFE]) {
+            return decodeSlice(data.dropFirst(2), encoding: encoding)
+        }
+        if encoding == .utf16BigEndian, data.starts(with: [0xFE, 0xFF]) {
+            return decodeSlice(data.dropFirst(2), encoding: encoding)
+        }
+        return decode(data, encoding: encoding)
     }
 
     private func splitLines(

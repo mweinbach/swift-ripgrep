@@ -840,6 +840,7 @@ struct RipgrepSearcherTests {
     func decodesBOMAndExplicitEncodings() throws {
         let root = try TemporaryDirectory()
         try root.write(Data([0xFF, 0xFE]) + Data("hay\nneedle\n".utf16LittleEndianBytes), to: "bom16le.txt")
+        try root.write(Data([0xFE, 0xFF]) + Data("needle\n".utf16BigEndianBytes), to: "bom16be.txt")
         try root.write(Data("hay\nneedle\n".utf16LittleEndianBytes), to: "utf16le.txt")
         try root.write(Data([0xEF, 0xBB, 0xBF]) + Data("needle\n".utf8), to: "bom8.txt")
         try root.write(Data([
@@ -854,6 +855,8 @@ struct RipgrepSearcherTests {
         ]), to: "eucjp.txt")
 
         #expect(try run(["-n", "needle", root.path("bom16le.txt")]) == ["2:needle"])
+        #expect(try run(["-n", "-E", "utf-16le", "needle", root.path("bom16le.txt")]) == ["2:needle"])
+        #expect(try run(["-n", "-E", "utf-16be", "needle", root.path("bom16be.txt")]) == ["1:needle"])
         #expect(try runAllowingNoMatch(["-n", "-E", "none", "needle", root.path("bom16le.txt")]) == [])
         #expect(try run(["-n", "-E", "utf-16le", "needle", root.path("utf16le.txt")]) == ["2:needle"])
         #expect(try run(["-n", "needle", root.path("bom8.txt")]) == ["1:needle"])
@@ -4239,6 +4242,15 @@ private extension String {
             [
                 UInt8(codeUnit & 0x00FF),
                 UInt8((codeUnit & 0xFF00) >> 8),
+            ]
+        }
+    }
+
+    var utf16BigEndianBytes: [UInt8] {
+        utf16.flatMap { codeUnit in
+            [
+                UInt8((codeUnit & 0xFF00) >> 8),
+                UInt8(codeUnit & 0x00FF),
             ]
         }
     }
