@@ -3164,6 +3164,8 @@ struct RipgrepSearcherTests {
             ("bad:fg:red", "rg: error parsing flag --colors: unrecognized output type 'bad'. Choose from: path, line, column, match, highlight."),
             ("match:bad:red", "rg: error parsing flag --colors: unrecognized spec type 'bad'. Choose from: fg, bg, style, none."),
             ("match:fg:notacolor", "rg: error parsing flag --colors: unrecognized color name 'notacolor'. Choose from: black, blue, green, red, cyan, magenta, yellow, white"),
+            ("match:fg:bad", "rg: error parsing flag --colors: unrecognized ansi256 color number, should be '[0-255]' (or a hex number), but is 'bad'"),
+            ("match:fg:f", "rg: error parsing flag --colors: unrecognized ansi256 color number, should be '[0-255]' (or a hex number), but is 'f'"),
             ("match:fg:300", "rg: error parsing flag --colors: unrecognized ansi256 color number, should be '[0-255]' (or a hex number), but is '300'"),
             ("match:fg:0x100", "rg: error parsing flag --colors: unrecognized color name '0x100'. Choose from: black, blue, green, red, cyan, magenta, yellow, white"),
             ("match:fg:0xFF00AA", "rg: error parsing flag --colors: unrecognized color name '0xFF00AA'. Choose from: black, blue, green, red, cyan, magenta, yellow, white"),

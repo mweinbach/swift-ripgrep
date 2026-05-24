@@ -2130,7 +2130,7 @@ public enum RipgrepArgumentParser {
     }
 
     private static func isColorNumberLike(_ raw: String) -> Bool {
-        UInt64(raw) != nil
+        UInt64(raw) != nil || raw.allSatisfy(\.isHexDigit)
     }
 
     private static func unrecognizedChoice(flag: String, value: String) -> String {
