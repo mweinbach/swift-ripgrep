@@ -123,6 +123,7 @@ public struct RipgrepSearcher {
                 files.append(stdinResult)
             }
         }
+        files = sorted(files, options: options)
 
         let matchedFiles = files.filter(\.hasMatch)
         let summary = SearchSummary(
@@ -160,6 +161,9 @@ public struct RipgrepSearcher {
 
     private func sorted(_ files: [SearchFileResult], options: RipgrepOptions) -> [SearchFileResult] {
         guard let sortMode = options.sortMode else {
+            return files
+        }
+        if sortMode.kind == .path && !sortMode.reverse {
             return files
         }
         return files.sorted { lhs, rhs in

@@ -2256,6 +2256,9 @@ struct RipgrepSearcherTests {
         #expect(pathBasenames(try run(["--sort", "path", "needle", root.url.path])) == ["a.txt", "b.txt"])
         #expect(pathBasenames(try run(["--sortr", "path", "needle", root.url.path])) == ["b.txt", "a.txt"])
         #expect(pathBasenames(try run(["--sort", "modified", "needle", root.url.path])) == ["b.txt", "a.txt"])
+        #expect(pathBasenames(try run(["--sort", "path", "needle", root.path("b.txt"), root.path("a.txt")])) == ["b.txt", "a.txt"])
+        #expect(pathBasenames(try run(["--sortr", "path", "needle", root.path("a.txt"), root.path("b.txt")])) == ["b.txt", "a.txt"])
+        #expect(pathBasenames(try run(["--sort", "modified", "needle", root.path("a.txt"), root.path("b.txt")])) == ["b.txt", "a.txt"])
         #expect(pathBasenames(try run(["--sort-files", "--files", root.url.path])) == ["a.txt", "b.txt"])
 
         let componentRoot = try TemporaryDirectory()
