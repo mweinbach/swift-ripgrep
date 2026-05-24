@@ -85,6 +85,112 @@ private func parityCases() -> [ParityCase] {
         + miscParityCases()
         + featureParityCases()
         + regressionParityCases()
+        + compressedInputParityCases()
+}
+
+private func compressedInputParityCases() -> [ParityCase] {
+    // Compressed-input formats `rg` decompresses through external tools when
+    // `--search-zip` (alias `-z`) is set. Each fixture writes the SHERLOCK
+    // haystack as a real compressed file using the system's compressor.
+    // If the system tool isn't available the case is skipped (Rust `rg`
+    // would also fail to decompress without the tool, so parity isn't
+    // possible anyway).
+    let formats: [(name: String, ext: String, tool: String, encodeArgs: [String])] = [
+        ("gz",  ".gz",  "gzip",  ["-c"]),
+        ("bz2", ".bz2", "bzip2", ["-c"]),
+        ("zst", ".zst", "zstd",  ["-q", "-c"]),
+        ("lz4", ".lz4", "lz4",   ["-q", "-c"]),
+    ]
+    var cases: [ParityCase] = []
+    for format in formats {
+        let toolPath = locateTool(format.tool)
+        let basename = "sherlock" + format.ext
+        let skip = (toolPath == nil)
+            ? "system tool `\(format.tool)` is not available on PATH"
+            : nil
+        let fixture: (URL) throws -> Void = { dir in
+            guard let tool = toolPath else { return }
+            try writeCompressed(SHERLOCK, to: basename, in: dir, tool: tool, arguments: format.encodeArgs)
+        }
+        cases.append(ParityCase(
+            name: "searchzip::\(format.name)_match",
+            fixture: fixture,
+            arguments: ["--search-zip", "-n", "Sherlock", basename],
+            intentionallySkippedBecause: skip
+        ))
+        cases.append(ParityCase(
+            name: "searchzip::\(format.name)_count",
+            fixture: fixture,
+            arguments: ["--search-zip", "-c", "Sherlock", basename],
+            intentionallySkippedBecause: skip
+        ))
+        cases.append(ParityCase(
+            name: "searchzip::\(format.name)_files_with_matches",
+            fixture: fixture,
+            arguments: ["--search-zip", "-l", "Sherlock", basename],
+            intentionallySkippedBecause: skip
+        ))
+    }
+    return cases
+}
+
+private func locateTool(_ name: String) -> URL? {
+    // PATH lookup; mirrors `which <name>` without spawning a subshell.
+    guard let pathValue = ProcessInfo.processInfo.environment["PATH"] else {
+        return nil
+    }
+    for directory in pathValue.split(separator: ":") {
+        let candidate = URL(fileURLWithPath: String(directory)).appendingPathComponent(name)
+        if FileManager.default.isExecutableFile(atPath: candidate.path) {
+            return candidate
+        }
+    }
+    return nil
+}
+
+private func writeCompressed(
+    _ contents: String,
+    to relativePath: String,
+    in dir: URL,
+    tool: URL,
+    arguments: [String]
+) throws {
+    let destination = dir.appendingPathComponent(relativePath)
+    try FileManager.default.createDirectory(
+        at: destination.deletingLastPathComponent(),
+        withIntermediateDirectories: true
+    )
+
+    let process = Process()
+    process.executableURL = tool
+    process.arguments = arguments
+
+    let stdin = Pipe()
+    let stdout = Pipe()
+    let stderr = Pipe()
+    process.standardInput = stdin
+    process.standardOutput = stdout
+    process.standardError = stderr
+
+    try process.run()
+
+    let inputHandle = stdin.fileHandleForWriting
+    try inputHandle.write(contentsOf: Data(contents.utf8))
+    try inputHandle.close()
+
+    let compressed = stdout.fileHandleForReading.readDataToEndOfFile()
+    _ = stderr.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+
+    guard process.terminationStatus == 0 else {
+        throw NSError(
+            domain: "ParityHarness",
+            code: Int(process.terminationStatus),
+            userInfo: [NSLocalizedDescriptionKey: "\(tool.lastPathComponent) exited with \(process.terminationStatus)"]
+        )
+    }
+
+    try compressed.write(to: destination, options: .atomic)
 }
 
 private func existingParityCases() -> [ParityCase] {
