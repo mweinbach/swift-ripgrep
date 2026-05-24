@@ -2486,6 +2486,46 @@ struct RipgrepSearcherTests {
             "3",
         ])
         #expect(try run(["-v", "-n", #"\A"#, root.path("absolute-start.txt")]) == [])
+        try root.write("foo\nfoo\nbarfoo\nquux\n", to: "absolute-start-alternation.txt")
+        #expect(try run(["-n", "-o", #"\A|bar"#, root.path("absolute-start-alternation.txt")]) == [
+            "1:",
+            "2:foo",
+            "3:bar",
+            "4:quux",
+        ])
+        #expect(try run(["-n", "-o", #"bar|\A"#, root.path("absolute-start-alternation.txt")]) == [
+            "1:",
+            "2:foo",
+            "3:bar",
+            "4:quux",
+        ])
+        #expect(try run(["-n", "-o", #"\A|foo"#, root.path("absolute-start-alternation.txt")]) == [
+            "1:",
+            "2:foo",
+            "3:foo",
+            "4:quux",
+        ])
+        #expect(try run(["-n", "-o", #"foo|\A"#, root.path("absolute-start-alternation.txt")]) == [
+            "1:foo",
+            "2:foo",
+            "3:foo",
+            "4:quux",
+        ])
+        #expect(try run(["--count-matches", #"\A|bar"#, root.path("absolute-start-alternation.txt")]) == [
+            "4",
+        ])
+        #expect(try run(["-n", "-o", "--replace", "X", #"\A|bar"#, root.path("absolute-start-alternation.txt")]) == [
+            "1:X",
+            "2:foo",
+            "3:X",
+            "4:quux",
+        ])
+        #expect(try run(["--replace", "X", #"\A|foo"#, root.path("absolute-start-alternation.txt")]) == [
+            "Xfoo",
+            "X",
+            "barX",
+            "quux",
+        ])
         #expect(try run(["--replace", "${0}f", #".*"#, root.path("empty-match.txt")]) == [
             "af",
             "f",
@@ -2887,6 +2927,26 @@ struct RipgrepSearcherTests {
         let absoluteStartStats = absoluteStartEndData?["stats"] as? [String: Any]
         #expect(absoluteStartStats?["matched_lines"] as? Int == 3)
         #expect(absoluteStartStats?["matches"] as? Int == 1)
+
+        try root.write("foo\nfoo\nbarfoo\nquux\n", to: "absolute-start-alternation-json.txt")
+        let absoluteStartAlternationOutput = try run(["--json", #"\A|bar"#, root.path("absolute-start-alternation-json.txt")])
+        let absoluteStartAlternationMessages = try absoluteStartAlternationOutput.map(jsonObject)
+        let absoluteStartAlternationMatches = absoluteStartAlternationMessages.compactMap { message -> [String: Any]? in
+            guard message["type"] as? String == "match" else { return nil }
+            return message["data"] as? [String: Any]
+        }
+        #expect(absoluteStartAlternationMatches.count == 4)
+        #expect((absoluteStartAlternationMatches[0]["submatches"] as? [[String: Any]])?.count == 1)
+        #expect((absoluteStartAlternationMatches[1]["submatches"] as? [[String: Any]])?.isEmpty == true)
+        let absoluteStartAlternationLine3 = absoluteStartAlternationMatches[2]["submatches"] as? [[String: Any]]
+        let absoluteStartAlternationLine3Text = absoluteStartAlternationLine3?.first?["match"] as? [String: String]
+        #expect(absoluteStartAlternationLine3Text?["text"] == "bar")
+        #expect((absoluteStartAlternationMatches[3]["submatches"] as? [[String: Any]])?.isEmpty == true)
+        let absoluteStartAlternationEnd = absoluteStartAlternationMessages.first { $0["type"] as? String == "end" }
+        let absoluteStartAlternationEndData = absoluteStartAlternationEnd?["data"] as? [String: Any]
+        let absoluteStartAlternationStats = absoluteStartAlternationEndData?["stats"] as? [String: Any]
+        #expect(absoluteStartAlternationStats?["matched_lines"] as? Int == 4)
+        #expect(absoluteStartAlternationStats?["matches"] as? Int == 2)
 
         try root.write("alpha needle\nneedle beta\nzzz\n", to: "context-bytes-json.txt")
         let contextBytesOutput = try run(["--json", "-B1", "needle", root.path("context-bytes-json.txt")])

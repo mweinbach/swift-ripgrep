@@ -11,13 +11,13 @@ public struct PatternMatcher {
 
         self.options = options
         self.usesByteSemantics = usesByteSemantics
-        self.patterns = try patternSources.map { pattern in
+        self.patterns = try patternSources.flatMap { pattern -> [CompiledPattern] in
             if options.wordRegexp && pattern.isEmpty {
-                return .emptyWordBoundary
+                return [.emptyWordBoundary]
             }
             if options.fixedStrings {
                 let literal = options.effectiveIgnoreCase ? Self.foldedCase(pattern, options: options) : pattern
-                return .literal(usesByteSemantics ? Self.bytePattern(literal) : literal)
+                return [.literal(usesByteSemantics ? Self.bytePattern(literal) : literal)]
             } else {
                 if options.engineMode == .pcre2 {
                     throw RipgrepError.message("PCRE2 is not available in this build of ripgrep")
@@ -49,19 +49,23 @@ public struct PatternMatcher {
                 if let parseError = Self.defaultRegexParseErrorIfRecognized(pattern) {
                     throw RipgrepError.message(parseError)
                 }
-                let source = Self.regexPattern(for: pattern, options: options)
                 do {
-                    var regexOptions: NSRegularExpression.Options = options.effectiveIgnoreCase && !options.noUnicode ? [.caseInsensitive] : []
-                    if (options.multiline && !options.crlf) || (options.nullData && !options.crlf) {
-                        regexOptions.insert(.anchorsMatchLines)
+                    let sources = Self.regexPatterns(for: pattern, options: options)
+                    return try sources.map { source in
+                        var regexOptions: NSRegularExpression.Options = options.effectiveIgnoreCase && !options.noUnicode ? [.caseInsensitive] : []
+                        if (options.multiline && !options.crlf) || (options.nullData && !options.crlf) {
+                            regexOptions.insert(.anchorsMatchLines)
+                        }
+                        if options.multiline && options.multilineDotall {
+                            regexOptions.insert(.dotMatchesLineSeparators)
+                        }
+                        return .regex(try NSRegularExpression(
+                            pattern: source,
+                            options: regexOptions
+                        ))
                     }
-                    if options.multiline && options.multilineDotall {
-                        regexOptions.insert(.dotMatchesLineSeparators)
-                    }
-                    return .regex(try NSRegularExpression(
-                        pattern: source,
-                        options: regexOptions
-                    ))
+                } catch let error as RipgrepError {
+                    throw error
                 } catch {
                     throw RipgrepError.invalidRegex(error.localizedDescription)
                 }
@@ -243,7 +247,7 @@ public struct PatternMatcher {
         from candidates: [(range: Range<String.Index>, replacement: String?)],
         in line: String
     ) -> [MatchSpan] {
-        internalUTF8EmptyMatches(
+        let spans = internalUTF8EmptyMatches(
             in: Self.dropAdjacentEmptyMatches(afterNonEmpty: candidates),
             line: line
         )
@@ -271,6 +275,19 @@ public struct PatternMatcher {
                     replacement: candidate.replacement
                 )
             }
+        return deduplicated(spans)
+    }
+
+    private func deduplicated(_ spans: [MatchSpan]) -> [MatchSpan] {
+        var seen: Set<MatchSpanIdentity> = []
+        var output: [MatchSpan] = []
+        for span in spans {
+            let identity = MatchSpanIdentity(span)
+            if seen.insert(identity).inserted {
+                output.append(span)
+            }
+        }
+        return output
     }
 
     private func internalUTF8EmptyMatches(
@@ -407,12 +424,30 @@ public struct PatternMatcher {
         }
     }
 
+    private static func isAbsoluteStartAssertionPattern(_ pattern: String) -> Bool {
+        switch pattern {
+        case "\\A":
+            return true
+        default:
+            return unwrappedSingleGroupPattern(pattern).map(isAbsoluteStartAssertionPattern) ?? false
+        }
+    }
+
     private static func unwrappedSingleGroupPattern(_ pattern: String) -> String? {
         for prefix in ["(?:", "(?m:", "(?-m:"] where pattern.hasPrefix(prefix) && pattern.hasSuffix(")") {
             let start = pattern.index(pattern.startIndex, offsetBy: prefix.count)
             return String(pattern[start..<pattern.index(before: pattern.endIndex)])
         }
         return nil
+    }
+
+    private static func regexPatterns(for pattern: String, options: RipgrepOptions) -> [String] {
+        let alternatives = topLevelAlternatives(in: pattern)
+        if alternatives.count > 1,
+           alternatives.contains(where: isAbsoluteStartAssertionPattern) {
+            return alternatives.map { regexPattern(for: $0, options: options) }
+        }
+        return [regexPattern(for: pattern, options: options)]
     }
 
     private static func regexPattern(for pattern: String, options: RipgrepOptions) -> String {
@@ -458,6 +493,56 @@ public struct PatternMatcher {
             source = strictLineEndPattern(for: source)
         }
         return source
+    }
+
+    private static func topLevelAlternatives(in pattern: String) -> [String] {
+        var alternatives: [String] = []
+        var start = pattern.startIndex
+        var index = pattern.startIndex
+        var escaped = false
+        var inClass = false
+        var depth = 0
+
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                escaped = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if inClass {
+                if character == "]" {
+                    inClass = false
+                }
+                index = pattern.index(after: index)
+                continue
+            }
+            switch character {
+            case "[":
+                inClass = true
+            case "(":
+                depth += 1
+            case ")":
+                depth = max(0, depth - 1)
+            case "|" where depth == 0:
+                alternatives.append(String(pattern[start..<index]))
+                start = pattern.index(after: index)
+            default:
+                break
+            }
+            index = pattern.index(after: index)
+        }
+
+        guard !alternatives.isEmpty else {
+            return [pattern]
+        }
+        alternatives.append(String(pattern[start..<pattern.endIndex]))
+        return alternatives
     }
 
     private static func inlineCRLFPattern(for pattern: String) -> (pattern: String, enablesGlobalCRLF: Bool) {
@@ -2034,4 +2119,18 @@ private enum CompiledPattern {
     case emptyWordBoundary
     case regex(NSRegularExpression)
     case literal(String)
+}
+
+private struct MatchSpanIdentity: Hashable {
+    let startByte: Int
+    let endByte: Int
+    let text: String
+    let replacement: String?
+
+    init(_ span: MatchSpan) {
+        self.startByte = span.startByte
+        self.endByte = span.endByte
+        self.text = span.text
+        self.replacement = span.replacement
+    }
 }

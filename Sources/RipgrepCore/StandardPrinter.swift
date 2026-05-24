@@ -128,30 +128,47 @@ public struct StandardPrinter {
     }
 
     private func onlyMatchingCount(for result: SearchFileResult) -> Int {
-        if hasAbsoluteStartAnchorPattern {
+        if hasAnyAbsoluteStartAnchorPattern {
             return result.matches.count + result.supplementalMatches
         }
         return result.matches.reduce(0) { $0 + $1.matchCount } + result.supplementalMatches
     }
 
     private func countMatchesCount(for result: SearchFileResult) -> Int {
-        if hasAbsoluteStartAnchorPattern {
+        if hasAnyAbsoluteStartAnchorPattern {
             return result.matches.count + result.supplementalMatches
         }
         return result.matches.reduce(0) { $0 + $1.matchCount } + result.supplementalMatches
     }
 
-    private var hasAbsoluteStartAnchorPattern: Bool {
-        !options.multiline && options.effectivePatterns.allSatisfy(isAbsoluteStartAssertionPattern)
+    private var hasAnyAbsoluteStartAnchorPattern: Bool {
+        !options.multiline && options.effectivePatterns.contains(where: containsAbsoluteStartAnchor)
     }
 
-    private func isAbsoluteStartAssertionPattern(_ pattern: String) -> Bool {
-        switch pattern {
-        case "\\A":
-            return true
-        default:
-            return unwrappedSingleGroupPattern(pattern).map(isAbsoluteStartAssertionPattern) ?? false
+    private func containsAbsoluteStartAnchor(_ pattern: String) -> Bool {
+        var escaped = false
+        var inClass = false
+        for character in pattern {
+            if escaped {
+                if !inClass && character == "A" {
+                    return true
+                }
+                escaped = false
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                continue
+            }
+            if character == "[" {
+                inClass = true
+                continue
+            }
+            if character == "]" {
+                inClass = false
+            }
         }
+        return false
     }
 
     public func paths(_ urls: [URL]) -> [String] {
