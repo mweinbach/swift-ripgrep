@@ -653,23 +653,24 @@ public struct RipgrepSearcher {
             let lineByteCount = rawLines?[safe: offset].map {
                 $0.text.unicodeScalars.count + $0.terminator.unicodeScalars.count
             } ?? byteCount(splitLine.text, options: options) + byteCount(splitLine.terminator, options: options)
+            let positiveSpans = adjustedSpans(
+                matcher.positiveSpans(in: line),
+                rawLine: rawLine,
+                options: options
+            )
             guard matches.count < maxCount else {
                 searchLines.append(SearchLine(
                     lineNumber: lineNumber,
                     line: line,
                     rawLine: rawLine,
                     lineTerminator: splitLine.terminator,
-                    absoluteOffset: absoluteOffset
+                    absoluteOffset: absoluteOffset,
+                    positiveSpans: positiveSpans
                 ))
                 absoluteOffset += lineByteCount
                 continue
             }
 
-            let positiveSpans = adjustedSpans(
-                matcher.positiveSpans(in: line),
-                rawLine: rawLine,
-                options: options
-            )
             let spans = adjustedSpans(
                 matcher.spans(in: line),
                 rawLine: rawLine,

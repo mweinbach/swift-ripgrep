@@ -401,6 +401,22 @@ public struct StandardPrinter {
             if options.onlyMatching, let matches = matchesByLine[lineNumber] {
                 output.append(contentsOf: matches.flatMap { formatOnlyMatching($0, showPath: showPath) })
             } else if options.onlyMatching,
+                      !options.passthru,
+                      !options.invertMatch,
+                      !line.positiveSpans.isEmpty {
+                let positiveMatch = SearchMatch(
+                    fileURL: result.fileURL,
+                    lineNumber: line.lineNumber,
+                    column: options.column ? line.positiveSpans.first?.startColumn : nil,
+                    line: line.line,
+                    rawLine: line.rawLine,
+                    lineTerminator: line.lineTerminator,
+                    absoluteOffset: line.absoluteOffset,
+                    matchCount: line.positiveSpans.count,
+                    spans: line.positiveSpans
+                )
+                output.append(contentsOf: formatOnlyMatching(positiveMatch, showPath: showPath))
+            } else if options.onlyMatching,
                       options.invertMatch,
                       !line.positiveSpans.isEmpty {
                 let positiveMatch = SearchMatch(
@@ -422,7 +438,8 @@ public struct StandardPrinter {
                 ))
             } else if let match = startMatchesByLine[lineNumber], shouldUseWholeMatchFormatter(match) {
                 output.append(format(match, showPath: showPath))
-            } else if matchedLineNumbers.contains(lineNumber) {
+            } else if matchedLineNumbers.contains(lineNumber)
+                        || (!options.passthru && !options.invertMatch && !line.positiveSpans.isEmpty) {
                 output.append(formatMatchedLine(
                     line,
                     fileURL: result.fileURL,
@@ -469,6 +486,19 @@ public struct StandardPrinter {
             }
             if let matches = matchesByLine[lineNumber] {
                 output.append(contentsOf: matches.flatMap { formatVimgrep($0, showPath: showPath) })
+            } else if !options.passthru, !options.invertMatch, !line.positiveSpans.isEmpty {
+                let positiveMatch = SearchMatch(
+                    fileURL: result.fileURL,
+                    lineNumber: line.lineNumber,
+                    column: options.column ? line.positiveSpans.first?.startColumn : nil,
+                    line: line.line,
+                    rawLine: line.rawLine,
+                    lineTerminator: line.lineTerminator,
+                    absoluteOffset: line.absoluteOffset,
+                    matchCount: line.positiveSpans.count,
+                    spans: line.positiveSpans
+                )
+                output.append(contentsOf: formatVimgrep(positiveMatch, showPath: showPath))
             } else {
                 output.append(formatVimgrepContextLine(line, fileURL: result.fileURL, showPath: showPath))
             }

@@ -1582,6 +1582,18 @@ struct RipgrepSearcherTests {
             "6:other",
             "7-seven",
         ])
+        try root.write("pre\nneedle one\nctx\nneedle two\npost\n", to: "max-context.txt")
+        #expect(try run(["-n", "-m1", "-A2", "-B1", "needle", root.path("max-context.txt")]) == [
+            "1-pre",
+            "2:needle one",
+            "3-ctx",
+            "4:needle two",
+        ])
+        #expect(try run(["-n", "-m1", "-o", "-A2", "needle", root.path("max-context.txt")]) == [
+            "2:needle",
+            "3-ctx",
+            "4:needle",
+        ])
         #expect(try run(["-n", "--passthru", "match", root.path("context.txt")]) == [
             "1-one",
             "2-two",
