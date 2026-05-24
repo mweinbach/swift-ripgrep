@@ -587,6 +587,7 @@ public struct RipgrepSearcher {
         var absoluteOffset = 0
         let maxCount = options.maxCount ?? Int.max
         var hasMatched = false
+        var hasPositiveMatched = false
         var bytesSearchedThroughMaxCount: Int?
 
         for (offset, splitLine) in lines.enumerated() {
@@ -614,10 +615,16 @@ public struct RipgrepSearcher {
                 rawLine: rawLine,
                 options: options
             )
+            let positiveMatched = options.invertMatch && options.stopOnNonmatch
+                ? matcher.hasPositiveMatch(in: line)
+                : !spans.isEmpty
             guard !spans.isEmpty else {
                 absoluteOffset += lineByteCount
-                if options.stopOnNonmatch && hasMatched {
+                if options.stopOnNonmatch && !options.invertMatch && hasMatched {
                     break
+                }
+                if positiveMatched {
+                    hasPositiveMatched = true
                 }
                 continue
             }
@@ -637,6 +644,12 @@ public struct RipgrepSearcher {
             absoluteOffset += lineByteCount
             if matches.count == maxCount {
                 bytesSearchedThroughMaxCount = absoluteOffset
+            }
+            if options.stopOnNonmatch && options.invertMatch && hasPositiveMatched && !positiveMatched {
+                break
+            }
+            if positiveMatched {
+                hasPositiveMatched = true
             }
         }
 

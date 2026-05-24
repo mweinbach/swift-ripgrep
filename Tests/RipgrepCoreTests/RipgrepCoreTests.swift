@@ -1605,6 +1605,12 @@ struct RipgrepSearcherTests {
             "2:match1",
             "3:match2",
         ])
+
+        try root.write("alpha\nneedle\nbeta\nneedle\ngamma\n", to: "stop-invert.txt")
+        #expect(try run(["--stop-on-nonmatch", "-v", "needle", root.path("stop-invert.txt")]) == [
+            "alpha",
+            "beta",
+        ])
     }
 
     @Test("searches preprocessor output")

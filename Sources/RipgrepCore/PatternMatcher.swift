@@ -161,7 +161,39 @@ public struct PatternMatcher {
         }
     }
 
+    public func hasPositiveMatch(in line: String) -> Bool {
+        !filteredCandidates(in: line).isEmpty
+    }
+
     public func spans(in line: String) -> [MatchSpan] {
+        let filtered = filteredCandidates(in: line)
+
+        if options.invertMatch {
+            return filtered.isEmpty ? [
+                MatchSpan(startColumn: 1, endColumn: 1, startByte: 0, endByte: 0, text: "", replacement: nil),
+            ] : []
+        }
+
+        return Self.dropAdjacentEmptyMatches(afterNonEmpty: filtered)
+            .sorted { lhs, rhs in
+                if lhs.range.lowerBound == rhs.range.lowerBound {
+                    return lhs.range.upperBound < rhs.range.upperBound
+                }
+                return lhs.range.lowerBound < rhs.range.lowerBound
+            }
+            .map { candidate in
+                MatchSpan(
+                    startColumn: column(for: candidate.range.lowerBound, in: line),
+                    endColumn: column(for: candidate.range.upperBound, in: line),
+                    startByte: byteOffset(for: candidate.range.lowerBound, in: line),
+                    endByte: byteOffset(for: candidate.range.upperBound, in: line),
+                    text: String(line[candidate.range]),
+                    replacement: candidate.replacement
+                )
+            }
+    }
+
+    private func filteredCandidates(in line: String) -> [(range: Range<String.Index>, replacement: String?)] {
         var candidates: [(range: Range<String.Index>, replacement: String?)] = []
         for pattern in patterns {
             switch pattern {
@@ -188,35 +220,11 @@ public struct PatternMatcher {
             }
         }
 
-        let filtered = candidates.filter { candidate in
+        return candidates.filter { candidate in
             (!options.wordRegexp || isWordBounded(candidate.range, in: line))
                 && (!options.lineRegexp || (candidate.range.lowerBound == lineStartIndex(in: line) && candidate.range.upperBound == lineEndIndex(in: line)))
                 && !shouldDropTrailingMultilineEmptySpan(candidate.range, in: line)
         }
-
-        if options.invertMatch {
-            return filtered.isEmpty ? [
-                MatchSpan(startColumn: 1, endColumn: 1, startByte: 0, endByte: 0, text: "", replacement: nil),
-            ] : []
-        }
-
-        return Self.dropAdjacentEmptyMatches(afterNonEmpty: filtered)
-            .sorted { lhs, rhs in
-                if lhs.range.lowerBound == rhs.range.lowerBound {
-                    return lhs.range.upperBound < rhs.range.upperBound
-                }
-                return lhs.range.lowerBound < rhs.range.lowerBound
-            }
-            .map { candidate in
-                MatchSpan(
-                    startColumn: column(for: candidate.range.lowerBound, in: line),
-                    endColumn: column(for: candidate.range.upperBound, in: line),
-                    startByte: byteOffset(for: candidate.range.lowerBound, in: line),
-                    endByte: byteOffset(for: candidate.range.upperBound, in: line),
-                    text: String(line[candidate.range]),
-                    replacement: candidate.replacement
-                )
-            }
     }
 
     private static func dropAdjacentEmptyMatches(
