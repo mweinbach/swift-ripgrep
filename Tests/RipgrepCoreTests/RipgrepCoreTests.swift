@@ -45,6 +45,18 @@ struct RipgrepSearcherTests {
         #expect(try run(["-Fw", "", root.path("empty-literal.txt")]) == [""])
         #expect(try run(["-Fx", "", root.path("empty-literal.txt")]) == [""])
         #expect(try runAllowingNoMatch(["-Fv", "", root.path("empty-literal.txt")]) == [])
+        try root.write("a\nb\nab\nba\n\n", to: "empty-word-regex.txt")
+        #expect(try run(["-w", "a*", root.path("empty-word-regex.txt")]) == ["a", ""])
+        #expect(try run(["-wo", "a*", root.path("empty-word-regex.txt")]) == ["a", ""])
+        #expect(try run(["-w", "--count-matches", "a*", root.path("empty-word-regex.txt")]) == ["2"])
+        #expect(try run(["-w", "-bo", "a*", root.path("empty-word-regex.txt")]) == [
+            "0:a",
+            "10:",
+        ])
+        #expect(try run(["-w", "-n", "--column", "-o", "a*", root.path("empty-word-regex.txt")]) == [
+            "1:1:a",
+            "5:1:",
+        ])
 
         var output: [String] = []
         var errors: [String] = []

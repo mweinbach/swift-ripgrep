@@ -414,7 +414,6 @@ public struct PatternMatcher {
         }
         let inlineCRLF = inlineCRLFPattern(for: source)
         source = inlineCRLF.pattern
-        let isEmptyPattern = source.isEmpty
         if source.isEmpty {
             source = "(?:)"
         }
@@ -426,11 +425,6 @@ public struct PatternMatcher {
         }
         if options.noUnicode || hasInlineNoUnicode {
             source = byteRegexLiteralPattern(for: source)
-        }
-        if options.wordRegexp && !isEmptyPattern {
-            source = options.noUnicode
-                ? "(?<![0-9A-Za-z_])(?:\(source))(?![0-9A-Za-z_])"
-                : "\\b(?:\(source))\\b"
         }
         if options.lineRegexp {
             source = "^(?:\(source))$"
