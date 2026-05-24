@@ -86,7 +86,7 @@ public struct StandardPrinter {
         case .count:
             return countResults(for: results).map { result in
                 let count = options.onlyMatching
-                    ? result.matches.reduce(0) { $0 + $1.matchCount } + result.supplementalMatches
+                    ? onlyMatchingCount(for: result)
                     : result.matches.isEmpty && result.hasBinaryMatch ? 1 : result.matches.count + result.supplementalMatchedLines
                 return countLine(count, fileURL: result.fileURL, showPath: showPath(for: results))
             }
@@ -94,7 +94,7 @@ public struct StandardPrinter {
             return countResults(for: results).map { result in
                 let count = result.matches.isEmpty && result.hasBinaryMatch
                     ? 1
-                    : result.matches.reduce(0) { $0 + $1.matchCount } + result.supplementalMatches
+                    : countMatchesCount(for: result)
                 return countLine(count, fileURL: result.fileURL, showPath: showPath(for: results))
             }
         case .filesWithMatches:
@@ -125,6 +125,33 @@ public struct StandardPrinter {
             return "\(renderPath(for: fileURL))\(pathFieldSeparator())\(count)\(suffix)"
         }
         return "\(count)\(suffix)"
+    }
+
+    private func onlyMatchingCount(for result: SearchFileResult) -> Int {
+        if hasAbsoluteStartAnchorPattern {
+            return result.matches.count + result.supplementalMatches
+        }
+        return result.matches.reduce(0) { $0 + $1.matchCount } + result.supplementalMatches
+    }
+
+    private func countMatchesCount(for result: SearchFileResult) -> Int {
+        if hasAbsoluteStartAnchorPattern {
+            return result.matches.count + result.supplementalMatches
+        }
+        return result.matches.reduce(0) { $0 + $1.matchCount } + result.supplementalMatches
+    }
+
+    private var hasAbsoluteStartAnchorPattern: Bool {
+        !options.multiline && options.effectivePatterns.allSatisfy(isAbsoluteStartAssertionPattern)
+    }
+
+    private func isAbsoluteStartAssertionPattern(_ pattern: String) -> Bool {
+        switch pattern {
+        case "\\A":
+            return true
+        default:
+            return unwrappedSingleGroupPattern(pattern).map(isAbsoluteStartAssertionPattern) ?? false
+        }
     }
 
     public func paths(_ urls: [URL]) -> [String] {

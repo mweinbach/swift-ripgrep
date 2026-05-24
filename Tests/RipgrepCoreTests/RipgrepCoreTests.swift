@@ -2471,6 +2471,21 @@ struct RipgrepSearcherTests {
             "a",
             "",
         ])
+        try root.write("one\ntwo\nthree\n", to: "absolute-start.txt")
+        #expect(try run(["-n", "-o", #"\A"#, root.path("absolute-start.txt")]) == [
+            "1:",
+            "2:two",
+            "3:three",
+        ])
+        #expect(try run(["--column", "-n", "-o", #"\A"#, root.path("absolute-start.txt")]) == [
+            "1:1:",
+            "2:two",
+            "3:three",
+        ])
+        #expect(try run(["--count-matches", #"\A"#, root.path("absolute-start.txt")]) == [
+            "3",
+        ])
+        #expect(try run(["-v", "-n", #"\A"#, root.path("absolute-start.txt")]) == [])
         #expect(try run(["--replace", "${0}f", #".*"#, root.path("empty-match.txt")]) == [
             "af",
             "f",
@@ -2855,6 +2870,23 @@ struct RipgrepSearcherTests {
         let summary = messages[5]["data"] as? [String: Any]
         let summaryStats = summary?["stats"] as? [String: Any]
         #expect(summaryStats?["bytes_printed"] as? Int == stats?["bytes_printed"] as? Int)
+
+        try root.write("one\ntwo\nthree\n", to: "absolute-start-json.txt")
+        let absoluteStartOutput = try run(["--json", #"\A"#, root.path("absolute-start-json.txt")])
+        let absoluteStartMessages = try absoluteStartOutput.map(jsonObject)
+        let absoluteStartMatches = absoluteStartMessages.compactMap { message -> [String: Any]? in
+            guard message["type"] as? String == "match" else { return nil }
+            return message["data"] as? [String: Any]
+        }
+        #expect(absoluteStartMatches.count == 3)
+        #expect((absoluteStartMatches[0]["submatches"] as? [[String: Any]])?.count == 1)
+        #expect((absoluteStartMatches[1]["submatches"] as? [[String: Any]])?.isEmpty == true)
+        #expect((absoluteStartMatches[2]["submatches"] as? [[String: Any]])?.isEmpty == true)
+        let absoluteStartEnd = absoluteStartMessages.first { $0["type"] as? String == "end" }
+        let absoluteStartEndData = absoluteStartEnd?["data"] as? [String: Any]
+        let absoluteStartStats = absoluteStartEndData?["stats"] as? [String: Any]
+        #expect(absoluteStartStats?["matched_lines"] as? Int == 3)
+        #expect(absoluteStartStats?["matches"] as? Int == 1)
 
         try root.write("alpha needle\nneedle beta\nzzz\n", to: "context-bytes-json.txt")
         let contextBytesOutput = try run(["--json", "-B1", "needle", root.path("context-bytes-json.txt")])

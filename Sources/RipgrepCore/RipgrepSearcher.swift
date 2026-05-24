@@ -942,7 +942,12 @@ public struct RipgrepSearcher {
                 splitBinaryNUL: shouldSplitBinaryNUL,
                 options: options
             )
-            let spans = syntheticAdjusted.spans
+            let absoluteStartAdjusted = absoluteStartTrimmedSpans(
+                syntheticAdjusted.spans,
+                lineNumber: lineNumber,
+                options: options
+            )
+            let spans = absoluteStartAdjusted.spans
             searchLines.append(SearchLine(
                 lineNumber: lineNumber,
                 line: line,
@@ -951,10 +956,11 @@ public struct RipgrepSearcher {
                 absoluteOffset: absoluteOffset,
                 positiveSpans: positiveSpans
             ))
+            let preserveMatchedLine = syntheticAdjusted.preserveMatchedLine || absoluteStartAdjusted.preserveMatchedLine
             let positiveMatched = options.invertMatch && options.stopOnNonmatch
                 ? !positiveSpans.isEmpty
-                : (!spans.isEmpty || syntheticAdjusted.preserveMatchedLine)
-            guard !spans.isEmpty || syntheticAdjusted.preserveMatchedLine else {
+                : (!spans.isEmpty || preserveMatchedLine)
+            guard !spans.isEmpty || preserveMatchedLine else {
                 absoluteOffset += lineByteCount
                 if options.stopOnNonmatch && !options.invertMatch && hasMatched {
                     break
@@ -1150,6 +1156,32 @@ public struct RipgrepSearcher {
         return (filtered, filtered.isEmpty && !spans.isEmpty)
     }
 
+    private func absoluteStartTrimmedSpans(
+        _ spans: [MatchSpan],
+        lineNumber: Int,
+        options: RipgrepOptions
+    ) -> (spans: [MatchSpan], preserveMatchedLine: Bool) {
+        guard lineNumber > 1,
+              !options.multiline,
+              options.effectivePatterns.allSatisfy(isAbsoluteStartAssertionPattern),
+              !spans.isEmpty else {
+            return (spans, false)
+        }
+        let filtered = spans.filter {
+            !($0.startByte == 0 && $0.endByte == 0 && $0.text.isEmpty)
+        }
+        return (filtered, filtered.isEmpty && !spans.isEmpty)
+    }
+
+    private func isAbsoluteStartAssertionPattern(_ pattern: String) -> Bool {
+        switch pattern {
+        case "\\A":
+            return true
+        default:
+            return unwrappedSingleGroupPattern(pattern).map(isAbsoluteStartAssertionPattern) ?? false
+        }
+    }
+
     private func containsLineStartAnchor(_ pattern: String) -> Bool {
         containsAnchor("^", in: pattern)
     }
@@ -1221,6 +1253,14 @@ public struct RipgrepSearcher {
             }
         }
         return false
+    }
+
+    private func unwrappedSingleGroupPattern(_ pattern: String) -> String? {
+        for prefix in ["(?:", "(?m:", "(?-m:"] where pattern.hasPrefix(prefix) && pattern.hasSuffix(")") {
+            let start = pattern.index(pattern.startIndex, offsetBy: prefix.count)
+            return String(pattern[start..<pattern.index(before: pattern.endIndex)])
+        }
+        return nil
     }
 
     private func supplementalMatchedLineCount(
