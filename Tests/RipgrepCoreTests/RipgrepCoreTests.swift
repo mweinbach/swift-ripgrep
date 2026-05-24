@@ -924,8 +924,21 @@ struct RipgrepSearcherTests {
             "needl [... 1 more match]",
         ])
         #expect(try run(["-M", "12", "--replace", "PIN", "needle", root.path("columns.txt")]) == [
-            "[Omitted long line with 1 match]",
-            "[Omitted long line with 1 match]",
+            "short PIN",
+            "[Omitted long line with 1 matches]",
+        ])
+        try root.write("needle tail\nhay\nneedle tail again\n", to: "replacement-context-columns.txt")
+        #expect(try run([
+            "-M5",
+            "-B1",
+            "--replace",
+            "X",
+            #"needle\s+tail"#,
+            root.path("replacement-context-columns.txt"),
+        ]) == [
+            "X",
+            "hay",
+            "[Omitted long line with 1 matches]",
         ])
         try root.write("needle middle needle tail\n", to: "replacement-preview.txt")
         #expect(try run([
@@ -3477,6 +3490,17 @@ struct RipgrepSearcherTests {
         #expect(try run(["--replace", "${}_${bad-name}_${1}", #"([a-z]+)\d+"#, root.path("replace.txt")]) == [
             "${}_${bad-name}_abc ${}_${bad-name}_def",
         ])
+        try root.write("κόσμε needle\n", to: "unicode-replace-column.txt")
+        #expect(try run([
+            "-o",
+            "--column",
+            "--replace",
+            "$1",
+            #"\bneedle\b"#,
+            root.path("unicode-replace-column.txt"),
+        ]) == [
+            "1:13:",
+        ])
 
         try root.write("abc123\nfoo\nπ\n", to: "invert-only.txt")
         #expect(try run(["-v", "-o", "foo", root.path("invert-only.txt")]) == [
@@ -3585,6 +3609,16 @@ struct RipgrepSearcherTests {
         #expect(try run(["--vimgrep", "-N", "--no-column", "--column", "Sherlock", root.path("vimgrep.txt")]) == [
             "\(root.path("vimgrep.txt")):8:Watson Sherlock",
             "\(root.path("vimgrep.txt")):1:Sherlock Holmes",
+        ])
+        try root.write("κόσμε target\n", to: "vimgrep-unicode-replace-column.txt")
+        #expect(try run([
+            "--vimgrep",
+            "--replace",
+            "$1",
+            #"\btarget\b"#,
+            root.path("vimgrep-unicode-replace-column.txt"),
+        ]) == [
+            "\(root.path("vimgrep-unicode-replace-column.txt")):1:13:κόσμε ",
         ])
         #expect(try run(["--heading", "-n", "--sort=path", "needle", root.url.path]) == [
             "\(root.path("a.txt"))",

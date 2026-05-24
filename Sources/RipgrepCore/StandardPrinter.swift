@@ -1627,11 +1627,11 @@ public struct StandardPrinter {
         guard let maxColumns = options.maxColumns, originalLine.utf8.count >= maxColumns else {
             return nil
         }
-        guard options.maxColumnsPreview else {
-            return "[Omitted long line with \(match.matchCount) \(match.matchCount == 1 ? "match" : "matches")]"
-        }
         guard line.utf8.count >= maxColumns else {
             return nil
+        }
+        guard options.maxColumnsPreview else {
+            return "[Omitted long line with \(match.matchCount) matches]"
         }
         let remainingMatches = replacementStartOffsets(for: match).filter { $0 >= maxColumns }.count
         return previewLineSuffix(line, maxColumns: maxColumns, remainingMatches: remainingMatches)
@@ -1734,16 +1734,7 @@ public struct StandardPrinter {
     }
 
     private func column(in line: String, byteOffset: Int) -> Int {
-        var bytes = 0
-        var column = 1
-        for character in line {
-            guard bytes < byteOffset else {
-                break
-            }
-            bytes += String(character).utf8.count
-            column += 1
-        }
-        return column
+        byteOffset + 1
     }
 
     private func splitRenderedLines(_ text: String) -> [String] {
