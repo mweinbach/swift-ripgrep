@@ -1415,6 +1415,10 @@ struct RipgrepSearcherTests {
             "1:foo",
             "2:bar",
         ])
+        #expect(try run(["-n", "-U", "-F", "foo\nbar", root.path("multi.txt")]) == [
+            "1:foo",
+            "2:bar",
+        ])
         #expect(try run(["-U", "-o", #"foo\nbar"#, root.path("multi.txt")]) == [
             "foo",
             "bar",
@@ -1436,6 +1440,7 @@ struct RipgrepSearcherTests {
             [#"[\n]"#, root.path("multi.txt")],
             [#"[\x0A]"#, root.path("multi.txt")],
             [#"[\u{A}]"#, root.path("multi.txt")],
+            ["-F", "foo\nbar", root.path("multi.txt")],
         ] {
             var output: [String] = []
             var errors: [String] = []

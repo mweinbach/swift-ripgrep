@@ -16,6 +16,11 @@ public struct PatternMatcher {
                 return [.emptyWordBoundary]
             }
             if options.fixedStrings {
+                if !options.multiline,
+                   !(options.nullData && !options.crlf),
+                   pattern.contains("\n") {
+                    throw RipgrepError.message(Self.lineTerminatorPatternError)
+                }
                 let literal = options.effectiveIgnoreCase ? Self.foldedCase(pattern, options: options) : pattern
                 return [.literal(usesByteSemantics ? Self.bytePattern(literal) : literal)]
             } else {
@@ -33,12 +38,7 @@ public struct PatternMatcher {
                 if !options.multiline,
                    !(options.nullData && !options.crlf),
                    Self.canMatchLineTerminator(pattern) {
-                    throw RipgrepError.message("""
-                    the literal "\\n" is not allowed in a regex
-
-                    Consider enabling multiline mode with the --multiline flag (or -U for short).
-                    When multiline mode is enabled, new line characters can be matched.
-                    """)
+                    throw RipgrepError.message(Self.lineTerminatorPatternError)
                 }
                 if options.engineMode == .default, let unsupported = Self.defaultEngineUnsupportedFeature(in: pattern) {
                     throw RipgrepError.message(Self.defaultRegexParseError(pattern: pattern, feature: unsupported))
@@ -72,6 +72,13 @@ public struct PatternMatcher {
             }
         }
     }
+
+    private static let lineTerminatorPatternError = """
+    the literal "\\n" is not allowed in a regex
+
+    Consider enabling multiline mode with the --multiline flag (or -U for short).
+    When multiline mode is enabled, new line characters can be matched.
+    """
 
     private static func canMatchNUL(_ pattern: String) -> Bool {
         if pattern.contains("\0") {
