@@ -2108,11 +2108,7 @@ public enum RipgrepArgumentParser {
     }
 
     private static func isColorNumberLike(_ raw: String) -> Bool {
-        let lower = raw.lowercased()
-        if lower.hasPrefix("0x") {
-            return UInt64(lower.dropFirst(2), radix: 16) != nil
-        }
-        return UInt64(lower) != nil
+        UInt64(raw) != nil
     }
 
     private static func unrecognizedChoice(flag: String, value: String) -> String {
