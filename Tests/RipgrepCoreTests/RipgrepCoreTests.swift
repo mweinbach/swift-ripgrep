@@ -427,6 +427,8 @@ struct RipgrepSearcherTests {
                      ^^^^^^^^^
         error: Unicode not allowed here
         """])
+        #expect(try run(["--no-unicode", "-o", #"(?u:\pL+)"#, root.path("posix-alpha.txt")]) == ["abc", "ABC", "é", "π", "word", "word", "foo", "bar"])
+        #expect(try run(["--no-unicode", "-o", #"(?u)\w+"#, root.path("classes.txt")]) == ["café", "π", "_"])
         #expect(try run(["--no-unicode", "-i", "[[:alpha:]]+", root.path("ascii-case.txt")]) == ["ABC", "abc"])
         #expect(try runAllowingNoMatch(["--no-unicode", "-i", "Δ", root.path("ascii-case.txt")]) == [])
         #expect(try run(["--no-unicode", "--unicode", "-o", #"\w+"#, root.path("classes.txt")]) == ["café", "π", "_"])

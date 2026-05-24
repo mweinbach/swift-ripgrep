@@ -7,7 +7,9 @@ public struct PatternMatcher {
 
     public init(options: RipgrepOptions) throws {
         let patternSources = options.effectivePatterns
-        let usesByteSemantics = options.noUnicode || patternSources.contains(where: Self.hasInlineNoUnicodeOption)
+        let usesByteSemantics = options.fixedStrings
+            ? options.noUnicode
+            : patternSources.contains { Self.regexUsesByteSemantics(pattern: $0, options: options) }
 
         self.options = options
         self.usesByteSemantics = usesByteSemantics
@@ -64,7 +66,10 @@ public struct PatternMatcher {
                 do {
                     let sources = Self.regexPatterns(for: pattern, options: options)
                     return try sources.map { source in
-                        var regexOptions: NSRegularExpression.Options = options.effectiveIgnoreCase && !options.noUnicode ? [.caseInsensitive] : []
+                        var regexOptions: NSRegularExpression.Options = options.effectiveIgnoreCase
+                            && !Self.regexUsesByteSemantics(pattern: pattern, options: options)
+                            ? [.caseInsensitive]
+                            : []
                         if (options.multiline && !options.crlf) || (options.nullData && !options.crlf) {
                             regexOptions.insert(.anchorsMatchLines)
                         }
@@ -517,7 +522,7 @@ public struct PatternMatcher {
     }
 
     private static func regexPattern(for pattern: String, options: RipgrepOptions) -> String {
-        let hasInlineNoUnicode = hasInlineNoUnicodeOption(pattern)
+        let usesByteSemantics = regexUsesByteSemantics(pattern: pattern, options: options)
         var source = foundationNamedCapturePattern(for: pattern)
         source = foundationAnyClassPattern(for: source)
         source = scalarDotAllWildcardPattern(for: source, options: options)
@@ -534,17 +539,17 @@ public struct PatternMatcher {
         if source.isEmpty {
             source = "(?:)"
         }
-        if options.noUnicode || hasInlineNoUnicode {
+        if usesByteSemantics {
             source = asciiRegexPattern(for: source)
         }
-        if (options.noUnicode || hasInlineNoUnicode) && options.effectiveIgnoreCase {
+        if usesByteSemantics && options.effectiveIgnoreCase {
             source = asciiCaseInsensitivePattern(for: source)
         }
-        if options.noUnicode || hasInlineNoUnicode {
+        if usesByteSemantics {
             source = byteRegexLiteralPattern(for: source)
         }
         if options.wordRegexp {
-            source = wordRegexpPattern(for: source, options: options)
+            source = wordRegexpPattern(for: source, usesByteSemantics: usesByteSemantics)
         }
         if options.lineRegexp {
             source = "^(?:\(source))$"
@@ -565,8 +570,29 @@ public struct PatternMatcher {
         return source
     }
 
-    private static func wordRegexpPattern(for source: String, options: RipgrepOptions) -> String {
-        let wordClass = options.noUnicode || hasInlineNoUnicodeOption(source)
+    private static func regexUsesByteSemantics(pattern: String, options: RipgrepOptions) -> Bool {
+        if options.noUnicode {
+            return !wholePatternUnicodeEnabled(pattern) || hasInlineNoUnicodeOption(pattern)
+        }
+        return hasInlineNoUnicodeOption(pattern)
+    }
+
+    private static func wholePatternUnicodeEnabled(_ pattern: String) -> Bool {
+        guard pattern.hasPrefix("(?u") else {
+            return false
+        }
+        guard let flags = inlineUnicodeFlags(in: pattern, openingAt: pattern.startIndex),
+              flags.unicodeEnabled == true else {
+            return false
+        }
+        if flags.scoped {
+            return flags.end == pattern.endIndex
+        }
+        return flags.end < pattern.endIndex
+    }
+
+    private static func wordRegexpPattern(for source: String, usesByteSemantics: Bool) -> String {
+        let wordClass = usesByteSemantics
             ? "0-9A-Za-z_"
             : "\\p{L}\\p{M}\\p{N}_"
         return "(?<![\(wordClass)])(?:\(source))(?![\(wordClass)])"
@@ -2477,7 +2503,7 @@ public struct PatternMatcher {
         guard let character else {
             return false
         }
-        if options.noUnicode {
+        if usesByteSemantics {
             return character.isASCIIWordCharacter
         }
         return character.unicodeScalars.allSatisfy {
