@@ -2178,8 +2178,11 @@ struct RipgrepSearcherTests {
 
         let binaryOnlyOutput = try run(["--json", "-n", "tail", root.path("binary.txt")])
         let binaryOnlyMessages = try binaryOnlyOutput.map(jsonObject)
-        #expect(binaryOnlyMessages.map { $0["type"] as? String } == ["begin", "end", "summary"])
-        let binaryOnlyEnd = binaryOnlyMessages[1]["data"] as? [String: Any]
+        #expect(binaryOnlyMessages.map { $0["type"] as? String } == ["begin", "match", "end", "summary"])
+        let binaryOnlyMatch = binaryOnlyMessages[1]["data"] as? [String: Any]
+        let binaryOnlyLines = binaryOnlyMatch?["lines"] as? [String: String]
+        #expect(binaryOnlyLines?["text"] == "tail\n")
+        let binaryOnlyEnd = binaryOnlyMessages[2]["data"] as? [String: Any]
         #expect(binaryOnlyEnd?["binary_offset"] as? Int == 7)
 
         try root.write("test\r\n\n", to: "crlf-json.txt")
@@ -3267,6 +3270,24 @@ struct RipgrepSearcherTests {
         ])
         #expect(try run(["-c", "needle", root.path("bin.dat")]) == ["1"])
         #expect(pathBasenames(try run(["-l", "needle", root.path("bin.dat")])) == ["bin.dat"])
+
+        try root.write(Data("pre\nneedle before\n\0binary needle after\n".utf8), to: "binary-counts.dat")
+        #expect(try run(["-c", "needle", root.path("binary-counts.dat")]) == ["2"])
+        #expect(try run(["--count-matches", "needle", root.path("binary-counts.dat")]) == ["2"])
+        let jsonBinaryOutput = try run(["--json", "needle", root.path("binary-counts.dat")])
+        let jsonBinaryMessages = try jsonBinaryOutput.map(jsonObject)
+        #expect(jsonBinaryMessages.filter { $0["type"] as? String == "match" }.count == 2)
+        let jsonBinaryMatches = jsonBinaryMessages.compactMap { message -> [String: Any]? in
+            guard message["type"] as? String == "match" else { return nil }
+            return message["data"] as? [String: Any]
+        }
+        let jsonBinarySecondLines = jsonBinaryMatches[1]["lines"] as? [String: String]
+        let jsonBinarySecondSubmatches = jsonBinaryMatches[1]["submatches"] as? [[String: Any]]
+        #expect(jsonBinarySecondLines?["text"] == "binary needle after\n")
+        #expect(jsonBinarySecondSubmatches?.first?["start"] as? Int == 7)
+        let jsonBinaryEnd = jsonBinaryMessages.first { $0["type"] as? String == "end" }?["data"] as? [String: Any]
+        let jsonBinaryStats = jsonBinaryEnd?["stats"] as? [String: Any]
+        #expect(jsonBinaryStats?["matches"] as? Int == 2)
 
         let implicitBinary = try TemporaryDirectory()
         try implicitBinary.write(Data("needle\0tail\n".utf8), to: "bin.dat")

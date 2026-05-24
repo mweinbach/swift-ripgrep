@@ -252,9 +252,12 @@ public struct RipgrepSearcher {
             let visibleMatches = binaryDetectedBeforeSearch && !haystack.isExplicit
                 ? []
                 : matchesBeforeBinary(result.matches, binaryByteOffset: binaryByteOffset)
-            let emittedMatches = shouldCountSuppressedBinaryMatches(options)
+            let emittedMatches = shouldEmitSuppressedBinaryMatches(options, isExplicit: haystack.isExplicit)
                 ? result.matches
                 : visibleMatches
+            let displayMatches = options.json
+                ? jsonBinaryDisplayMatches(emittedMatches, options: options)
+                : emittedMatches
             if options.binaryMode == .automatic && !haystack.isExplicit && binaryDetectedBeforeSearch {
                 return FileSearchOutcome(result: SearchFileResult(
                     fileURL: fileURL,
@@ -269,7 +272,7 @@ public struct RipgrepSearcher {
             }
             return FileSearchOutcome(result: SearchFileResult(
                 fileURL: fileURL,
-                matches: emittedMatches,
+                matches: displayMatches,
                 lines: result.lines,
                 binaryByteOffset: binaryByteOffset,
                 hasBinaryMatch: result.hasMatch,
@@ -297,6 +300,45 @@ public struct RipgrepSearcher {
             bytesSearched: result.bytesSearched,
             searched: result.searched
         ))
+    }
+
+    private func jsonBinaryDisplayMatches(_ matches: [SearchMatch], options: RipgrepOptions) -> [SearchMatch] {
+        matches.map { match in
+            guard let nulIndex = match.line.firstIndex(of: "\0") else {
+                return match
+            }
+            let contentStart = match.line.index(after: nulIndex)
+            let prefix = String(match.line[..<contentStart])
+            let prefixBytes = byteCount(prefix, options: options)
+            let adjustedLine = String(match.line[contentStart...])
+            let adjustedRawLine = match.rawLine.map { rawLine in
+                guard let rawNulIndex = rawLine.firstIndex(of: "\0") else {
+                    return rawLine
+                }
+                return String(rawLine[rawLine.index(after: rawNulIndex)...])
+            }
+            let adjustedSpans = match.spans.map { span in
+                MatchSpan(
+                    startColumn: max(1, span.startColumn - prefixBytes),
+                    endColumn: max(1, span.endColumn - prefixBytes),
+                    startByte: max(0, span.startByte - prefixBytes),
+                    endByte: max(0, span.endByte - prefixBytes),
+                    text: span.text,
+                    replacement: span.replacement
+                )
+            }
+            return SearchMatch(
+                fileURL: match.fileURL,
+                lineNumber: match.lineNumber + 1,
+                column: match.column.map { max(1, $0 - prefixBytes) },
+                line: adjustedLine,
+                rawLine: adjustedRawLine,
+                lineTerminator: match.lineTerminator,
+                absoluteOffset: match.absoluteOffset + prefixBytes,
+                matchCount: match.matchCount,
+                spans: adjustedSpans
+            )
+        }
     }
 
     private func searchStdin(
@@ -337,9 +379,12 @@ public struct RipgrepSearcher {
         }
     }
 
-    private func shouldCountSuppressedBinaryMatches(_ options: RipgrepOptions) -> Bool {
-        guard options.binaryMode == .searchAndSuppress else {
+    private func shouldEmitSuppressedBinaryMatches(_ options: RipgrepOptions, isExplicit: Bool) -> Bool {
+        guard options.binaryMode == .searchAndSuppress || isExplicit else {
             return false
+        }
+        if options.json {
+            return true
         }
         switch options.printMode {
         case .count, .countMatches:
@@ -355,6 +400,7 @@ public struct RipgrepSearcher {
         options: RipgrepOptions
     ) -> Int {
         guard options.printMode == .matchingLines,
+              !options.json,
               let firstMatch = visibleMatches.first else {
             return dataCount
         }
