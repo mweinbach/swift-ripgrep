@@ -861,10 +861,16 @@ public struct StandardPrinter {
             selectedLineNumbers = result.lines.map(\.lineNumber)
         } else {
             let lineCount = result.lines.count
+            guard lineCount > 0 else {
+                return []
+            }
             let selected = result.matches.reduce(into: Set<Int>()) { lineNumbers, match in
                 let matchLineNumbers = multilineLineNumbers(for: match)
                 let lower = max(1, (matchLineNumbers.first ?? match.lineNumber) - options.beforeContext)
                 let upper = min(lineCount, (matchLineNumbers.last ?? match.lineNumber) + options.afterContext)
+                guard lower <= upper else {
+                    return
+                }
                 for lineNumber in lower...upper {
                     lineNumbers.insert(lineNumber)
                 }

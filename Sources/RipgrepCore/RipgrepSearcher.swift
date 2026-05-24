@@ -295,19 +295,23 @@ public struct RipgrepSearcher {
             let binaryDetectedBeforeSearch = binaryByteOffset < Self.binaryDetectionBufferSize
             let visibleMatches = binaryDetectedBeforeSearch && !haystack.isExplicit
                 ? []
-                : matchesBeforeBinary(result.matches, binaryByteOffset: binaryByteOffset, options: options)
+                : binaryVisibleMatches(result.matches, binaryByteOffset: binaryByteOffset, options: options)
             let emittedMatches = shouldEmitSuppressedBinaryMatches(options, isExplicit: haystack.isExplicit)
                 ? result.matches
                 : visibleMatches
             let lineNumberShifts = jsonBinaryLineNumberShifts(for: result.lines, options: options)
-            let displayMatches = options.json
+            var displayMatches = options.json
                 ? jsonBinaryDisplayMatches(emittedMatches, lineNumberShifts: lineNumberShifts, options: options)
                 : emittedMatches
             let hasBinaryMatch = hasBinaryMatchResult(
                 result: result,
                 visibleMatches: visibleMatches,
+                binaryByteOffset: binaryByteOffset,
                 options: options
             )
+            if shouldDropSuppressedBinaryContextMatches(hasBinaryMatch: hasBinaryMatch, options: options) {
+                displayMatches = []
+            }
             let displayLines: [SearchLine]
             if options.json {
                 displayLines = jsonBinaryDisplayLines(result.lines, lineNumberShifts: lineNumberShifts, options: options)
@@ -737,19 +741,23 @@ public struct RipgrepSearcher {
               let binaryByteOffset = data.firstIndex(of: 0) else {
             return result
         }
-        let visibleMatches = matchesBeforeBinary(result.matches, binaryByteOffset: binaryByteOffset, options: options)
+        let visibleMatches = binaryVisibleMatches(result.matches, binaryByteOffset: binaryByteOffset, options: options)
         let emittedMatches = shouldEmitSuppressedBinaryMatches(options, isExplicit: true)
             ? result.matches
             : visibleMatches
         let hasBinaryMatch = hasBinaryMatchResult(
             result: result,
             visibleMatches: visibleMatches,
+            binaryByteOffset: binaryByteOffset,
             options: options
         )
         let lineNumberShifts = jsonBinaryLineNumberShifts(for: result.lines, options: options)
-        let displayMatches = options.json
+        var displayMatches = options.json
             ? jsonBinaryDisplayMatches(emittedMatches, lineNumberShifts: lineNumberShifts, options: options)
             : emittedMatches
+        if shouldDropSuppressedBinaryContextMatches(hasBinaryMatch: hasBinaryMatch, options: options) {
+            displayMatches = []
+        }
         let displayLines = options.json
             ? jsonBinaryDisplayLines(result.lines, lineNumberShifts: lineNumberShifts, options: options)
             : hasBinaryMatch ? result.lines : []
@@ -786,6 +794,20 @@ public struct RipgrepSearcher {
         }
     }
 
+    private func binaryVisibleMatches(
+        _ matches: [SearchMatch],
+        binaryByteOffset: Int,
+        options: RipgrepOptions
+    ) -> [SearchMatch] {
+        let matches = matchesBeforeBinary(matches, binaryByteOffset: binaryByteOffset, options: options)
+        guard options.printMode == .matchingLines,
+              !options.json,
+              !(options.quiet && options.stats) else {
+            return matches
+        }
+        return Array(matches.prefix(1))
+    }
+
     private func shouldSplitStdinBinaryNUL(options: RipgrepOptions) -> Bool {
         switch options.printMode {
         case .count, .countMatches:
@@ -798,6 +820,7 @@ public struct RipgrepSearcher {
     private func hasBinaryMatchResult(
         result: SearchFileResult,
         visibleMatches: [SearchMatch],
+        binaryByteOffset: Int,
         options: RipgrepOptions
     ) -> Bool {
         guard result.hasMatch else {
@@ -808,7 +831,22 @@ public struct RipgrepSearcher {
               (options.beforeContext > 0 || options.passthru) else {
             return true
         }
-        return !visibleMatches.isEmpty
+        if options.effectivePatterns.contains(where: containsLineEndAnchor) {
+            return visibleMatches.contains { $0.absoluteOffset == 0 }
+        }
+        return visibleMatches.contains { match in
+            match.absoluteOffset + byteCount(match.lineWithTerminator, options: options) <= binaryByteOffset
+        }
+    }
+
+    private func shouldDropSuppressedBinaryContextMatches(
+        hasBinaryMatch: Bool,
+        options: RipgrepOptions
+    ) -> Bool {
+        options.printMode == .matchingLines
+            && !options.json
+            && !hasBinaryMatch
+            && (options.beforeContext > 0 || options.passthru)
     }
 
     private func shouldEmitSuppressedBinaryMatches(_ options: RipgrepOptions, isExplicit: Bool) -> Bool {
@@ -961,15 +999,19 @@ public struct RipgrepSearcher {
             return result
         }
         let binaryDetectedBeforeSearch = binaryByteOffset < Self.binaryDetectionBufferSize
-        let visibleMatches = matchesBeforeBinary(result.matches, binaryByteOffset: binaryByteOffset, options: options)
+        let visibleMatches = binaryVisibleMatches(result.matches, binaryByteOffset: binaryByteOffset, options: options)
         let emittedMatches = shouldEmitSuppressedBinaryMatches(options, isExplicit: isExplicit)
             ? result.matches
             : visibleMatches
         let hasBinaryMatch = hasBinaryMatchResult(
             result: result,
             visibleMatches: visibleMatches,
+            binaryByteOffset: binaryByteOffset,
             options: options
         )
+        let displayMatches = shouldDropSuppressedBinaryContextMatches(hasBinaryMatch: hasBinaryMatch, options: options)
+            ? []
+            : emittedMatches
         let displayLines = hasBinaryMatch ? result.lines : []
         if options.binaryMode == .automatic && !isExplicit && binaryDetectedBeforeSearch && visibleMatches.isEmpty {
             return SearchFileResult(
@@ -985,7 +1027,7 @@ public struct RipgrepSearcher {
         }
         return SearchFileResult(
             fileURL: result.fileURL,
-            matches: emittedMatches,
+            matches: displayMatches,
             lines: displayLines,
             binaryByteOffset: binaryByteOffset,
             hasBinaryMatch: hasBinaryMatch,

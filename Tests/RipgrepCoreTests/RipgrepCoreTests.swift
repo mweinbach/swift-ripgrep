@@ -5301,6 +5301,42 @@ struct RipgrepSearcherTests {
         #expect(binaryStats.contains("55 bytes printed"))
         #expect(binaryStats.contains("8 bytes searched"))
 
+        try countRoot.write(Data("pre\nneedle\0after\nneedle later\n".utf8), to: "multi-match-before-nul.dat")
+        let multiLineBeforeNULStats = try run(["--stats", #"[a-z]+"#, countRoot.path("multi-match-before-nul.dat")])
+        #expect(multiLineBeforeNULStats.contains("1 matches"))
+        #expect(multiLineBeforeNULStats.contains("1 matched lines"))
+        #expect(multiLineBeforeNULStats.contains("4 bytes searched"))
+        let quietMultiLineBeforeNULStats = try run([
+            "-q",
+            "--stats",
+            #"[a-z]+"#,
+            countRoot.path("multi-match-before-nul.dat"),
+        ])
+        #expect(quietMultiLineBeforeNULStats.contains("5 matches"))
+        #expect(quietMultiLineBeforeNULStats.contains("4 matched lines"))
+        #expect(try run(["--passthru", #"[a-z]+"#, countRoot.path("multi-match-before-nul.dat")]) == [
+            #"binary file matches (found "\0" byte around offset 10)"#,
+        ])
+        #expect(runWithExitCode(
+            ["--passthru", "needle$", countRoot.path("multi-match-before-nul.dat")],
+            expectedExitCode: 1
+        ).isEmpty)
+        #expect(runWithExitCode(
+            ["--passthru", "needle", countRoot.path("multi-match-before-nul.dat")],
+            expectedExitCode: 1
+        ).isEmpty)
+        #expect(runWithExitCode(
+            ["-B1", "needle", countRoot.path("multi-match-before-nul.dat")],
+            expectedExitCode: 1
+        ).isEmpty)
+        #expect(runWithExitCode(
+            ["-C1", "needle", countRoot.path("multi-match-before-nul.dat")],
+            expectedExitCode: 1
+        ).isEmpty)
+        #expect(try run(["-A1", "needle", countRoot.path("multi-match-before-nul.dat")]) == [
+            #"binary file matches (found "\0" byte around offset 10)"#,
+        ])
+
         let postNulStats = try run(["--stats", "tail", countRoot.path("file1.txt")])
         #expect(postNulStats.contains("1 matches"))
         #expect(postNulStats.contains("1 matched lines"))
