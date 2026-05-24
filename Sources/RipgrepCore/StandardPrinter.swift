@@ -209,10 +209,18 @@ public struct StandardPrinter {
             fields.append(OutputField("\(match.absoluteOffset)", colorTarget: nil))
         }
 
-        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(renderedLine(for: match))"
+        let prefixText = prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator)
+        let line = renderedLine(for: match)
+        if shouldEmitRawLineBytes(for: match) {
+            return rawByteLine(prefix: prefixText, text: line)
+        }
+        return "\(prefixText)\(line)"
     }
 
     private func formatSearchMatch(_ match: SearchMatch, showPath: Bool) -> [String] {
+        if shouldEmitRawLineBytes(for: match) {
+            return [format(match, showPath: showPath)]
+        }
         guard options.multiline, containsRenderedLineTerminator(match.line) else {
             return [format(match, showPath: showPath)]
         }
@@ -541,8 +549,12 @@ public struct StandardPrinter {
             if options.byteOffset {
                 fields.append(OutputField("\(match.absoluteOffset + replacementStartByte)", colorTarget: nil))
             }
+            let prefixText = prefix(path: path, fields: fields, fieldSeparator: separator)
             let text = onlyMatchingOutputText(span, in: match)
-            return ["\(prefix(path: path, fields: fields, fieldSeparator: separator))\(text)"]
+            if shouldEmitRawOnlyMatchingBytes(span, in: match) {
+                return [rawByteLine(prefix: prefixText, text: text)]
+            }
+            return ["\(prefixText)\(text)"]
         }
     }
 
@@ -568,6 +580,24 @@ public struct StandardPrinter {
             return String(String.UnicodeScalarView(text.unicodeScalars.dropLast()))
         }
         return "\(text)\(outputTerminator(match.lineTerminator, line: span.text, crlfMatchTerminator: true))"
+    }
+
+    private func shouldEmitRawLineBytes(for match: SearchMatch) -> Bool {
+        match.rawLine != nil && options.replacement == nil && !colors.isEnabled
+    }
+
+    private func shouldEmitRawLineBytes(for line: SearchLine) -> Bool {
+        line.rawLine != nil && !colors.isEnabled
+    }
+
+    private func shouldEmitRawOnlyMatchingBytes(_ span: MatchSpan, in match: SearchMatch) -> Bool {
+        match.rawLine != nil && span.replacement == nil && !colors.isEnabled
+    }
+
+    private func rawByteLine(prefix: String, text: String) -> String {
+        var bytes = Array(prefix.utf8)
+        bytes.append(contentsOf: text.rawByteData())
+        return .rawByteMarked(bytes)
     }
 
     private func nullDataLineStartOnlyMatchingText(_ span: MatchSpan, in match: SearchMatch) -> String? {
@@ -1292,7 +1322,12 @@ public struct StandardPrinter {
         let rendered = match.flatMap {
             limitedMatchedLine(text, match: $0, lineStartByte: lineStartByte)
         } ?? renderedLine(text)
-        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(rendered)\(outputTerminator(line.lineTerminator, line: text, forceCRLF: isColumnLimitedLine(text)))"
+        let prefixText = prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator)
+        let output = "\(rendered)\(outputTerminator(line.lineTerminator, line: text, forceCRLF: isColumnLimitedLine(text)))"
+        if shouldEmitRawLineBytes(for: line) {
+            return rawByteLine(prefix: prefixText, text: output)
+        }
+        return "\(prefixText)\(output)"
     }
 
     private func renderedLine(for match: SearchMatch) -> String {
@@ -1809,6 +1844,18 @@ private extension String {
 
     var rawOutputByteCount: Int {
         rawBytePayload?.unicodeScalars.count ?? utf8.count
+    }
+
+    func rawByteData() -> Data {
+        var data = Data()
+        for scalar in unicodeScalars {
+            if scalar.value <= UInt8.max {
+                data.append(UInt8(scalar.value))
+            } else {
+                data.append(contentsOf: String(scalar).utf8)
+            }
+        }
+        return data
     }
 
     func trimmingASCIIWhitespacePrefix() -> String {

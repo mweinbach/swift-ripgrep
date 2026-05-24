@@ -190,9 +190,6 @@ public enum RipgrepCLI {
     }
 
     private static func outputEncodingMode(for options: RipgrepOptions, results: SearchResults) -> EncodingMode? {
-        if carriesRawOutputLines(results) {
-            return .disabled
-        }
         return options.encodingMode
     }
 

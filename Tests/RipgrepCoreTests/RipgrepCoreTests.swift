@@ -1454,6 +1454,13 @@ struct RipgrepSearcherTests {
         #expect(invalidAutomaticLineOutput == Data([
             0x6E, 0x65, 0x65, 0x64, 0x6C, 0x65, 0x20, 0x63, 0x61, 0x66, 0xE9, 0x0A,
         ]))
+        try root.write("naïve needle\n", to: "utf8-mixed.txt")
+        let mixedAutomaticOutput = try runExecutableData(["needle", root.url.path], fixture: {})
+        #expect(mixedAutomaticOutput.contains(Data("utf8-mixed.txt:naïve needle\n".utf8)))
+        #expect(mixedAutomaticOutput.contains(Data([
+            0x6C, 0x61, 0x74, 0x69, 0x6E, 0x31, 0x2E, 0x74, 0x78, 0x74, 0x3A,
+            0x6E, 0x65, 0x65, 0x64, 0x6C, 0x65, 0x20, 0x63, 0x61, 0x66, 0xE9, 0x0A,
+        ])))
         #expect(try run(["--encoding", "latin1", "caf.", root.path("latin1.txt")]) == [
             "café",
             "needle café",
