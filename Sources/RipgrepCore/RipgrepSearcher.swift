@@ -72,7 +72,7 @@ public struct RipgrepSearcher {
     public func search(options: RipgrepOptions, stdin: String?) throws -> SearchResults {
         let matcher = try PatternMatcher(options: options)
         let walkResults = options.useStdin && options.roots.isEmpty
-            ? FileWalkResults(haystacks: [], messages: [])
+            ? FileWalkResults(haystacks: [], messages: [], warnings: explicitIgnoreFileLoadWarnings(options: options))
             : try FileWalker(fileManager: fileManager)
                 .withEnvironment(environment)
                 .haystacksWithMessages(for: options)
@@ -166,6 +166,26 @@ public struct RipgrepSearcher {
 
     private func shouldPreserveZeroMultilineBinaryMatchCount(options: RipgrepOptions) -> Bool {
         options.multiline && options.effectivePatterns.allSatisfy(isBareMultilineLineEndPattern)
+    }
+
+    private func explicitIgnoreFileLoadWarnings(options: RipgrepOptions) -> [String] {
+        guard !options.noIgnoreFiles, !options.noIgnoreMessages else {
+            return []
+        }
+        return zip(options.ignoreFiles, options.ignoreFileDisplayPaths).compactMap { fileURL, displayPath in
+            explicitIgnoreFileLoadWarning(fileURL: fileURL, displayPath: displayPath)
+        }
+    }
+
+    private func explicitIgnoreFileLoadWarning(fileURL: URL, displayPath: String) -> String? {
+        var isDirectory: ObjCBool = false
+        if fileManager.fileExists(atPath: fileURL.path, isDirectory: &isDirectory), isDirectory.boolValue {
+            return "\(displayPath): line 1: Is a directory (os error 21)"
+        }
+        if !fileManager.fileExists(atPath: fileURL.path) {
+            return "\(displayPath): No such file or directory (os error 2)"
+        }
+        return nil
     }
 
     private func preservesExplicitStdinPosition(options: RipgrepOptions) -> Bool {

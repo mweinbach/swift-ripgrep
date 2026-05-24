@@ -5127,6 +5127,19 @@ struct RipgrepSearcherTests {
         #expect(output == ["needle"])
         #expect(errors == ["rg: missing-ignore: No such file or directory (os error 2)"])
 
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--ignore-file", "missing-ignore", "."],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) },
+            stdin: "",
+            standardInputIsReadable: true
+        )
+        #expect(exitCode == 1)
+        #expect(output.isEmpty)
+        #expect(errors == ["rg: missing-ignore: No such file or directory (os error 2)"])
+
         let globstarRoot = try TemporaryDirectory()
         try globstarRoot.createDirectory(".git")
         try globstarRoot.write("**/**/*", to: ".gitignore")
