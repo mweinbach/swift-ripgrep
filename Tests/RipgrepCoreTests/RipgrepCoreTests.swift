@@ -1407,10 +1407,21 @@ struct RipgrepSearcherTests {
     func honorsCRLFAnchorMode() throws {
         let root = try TemporaryDirectory()
         try root.write("foo\r\nbar\rquux\nbaz\r\n", to: "crlf.txt")
+        try root.write("a\r\nb\r\n", to: "plain-crlf.txt")
         try root.write("\n", to: "lf-empty.txt")
         try root.write("first\nlast", to: "lf-no-final-newline.txt")
 
         #expect(try runAllowingNoMatch(["-n", "foo$", root.path("crlf.txt")]) == [])
+        let plainDotOutput = try runExecutableData(["-o", ".", root.path("plain-crlf.txt")]) {}
+        #expect(plainDotOutput == Data([
+            0x61, 0x0A,
+            0x0D, 0x0A,
+            0x62, 0x0A,
+            0x0D, 0x0A,
+        ]))
+        #expect(try run(["--count-matches", ".", root.path("plain-crlf.txt")]) == [
+            "4",
+        ])
         #expect(try run(["--crlf", "-n", "foo$", root.path("crlf.txt")]) == [
             "1:foo\r",
         ])

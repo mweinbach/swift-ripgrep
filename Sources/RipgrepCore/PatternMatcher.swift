@@ -504,10 +504,17 @@ public struct PatternMatcher {
     }
 
     private static func binaryWildcardPattern(for pattern: String, options: RipgrepOptions) -> String {
-        guard options.binaryMode != .asText,
-              !options.multilineDotall,
+        guard !options.multilineDotall,
               !hasInlineDotAllOption(pattern) else {
             return pattern
+        }
+        let replacement: String
+        if options.nullData {
+            replacement = "[^\\x{0}]"
+        } else if options.binaryMode == .asText {
+            replacement = "[^\\n]"
+        } else {
+            replacement = "[^\\n\\x{0}]"
         }
         var output = ""
         var escaped = false
@@ -535,7 +542,7 @@ public struct PatternMatcher {
                 continue
             }
             if !inClass, character == "." {
-                output += "(?!\\x{0})."
+                output += replacement
                 continue
             }
             output.append(character)
