@@ -80,6 +80,7 @@ private struct ParityCase {
 private func parityCases() -> [ParityCase] {
     existingParityCases()
         + binaryParityCases()
+        + multilineParityCases()
 }
 
 private func existingParityCases() -> [ParityCase] {
@@ -175,6 +176,23 @@ private func binaryParityCases() -> [ParityCase] {
         ParityCase(name: "binary::matching_files_inconsistent_with_count_count", fixture: matchingFilesInconsistentFixture, arguments: ["--sort=path", "-c", "cat"]),
         ParityCase(name: "binary::matching_files_inconsistent_with_count_binary", fixture: matchingFilesInconsistentFixture, arguments: ["--sort=path", "-c", "cat", "--binary"]),
         ParityCase(name: "binary::matching_files_inconsistent_with_count_text", fixture: matchingFilesInconsistentFixture, arguments: ["--sort=path", "-c", "cat", "--text"]),
+    ]
+}
+
+private func multilineParityCases() -> [ParityCase] {
+    let sherlockFixture: (URL) throws -> Void = { dir in
+        try write(SHERLOCK, to: "sherlock", in: dir)
+    }
+    let emptyFixture: (URL) throws -> Void = { _ in }
+    return [
+        ParityCase(name: "multiline::overlap1", fixture: { dir in try write("xxx\nabc\ndefxxxabc\ndefxxx\nxxx", to: "test", in: dir) }, arguments: ["-n", "-U", "abc\ndef", "test"]),
+        ParityCase(name: "multiline::overlap2", fixture: { dir in try write("xxx\nabc\ndefabc\ndefxxx\nxxx", to: "test", in: dir) }, arguments: ["-n", "-U", "abc\ndef", "test"]),
+        ParityCase(name: "multiline::dot_no_newline", fixture: sherlockFixture, arguments: ["-n", "-U", "of this world.+detective work", "sherlock"]),
+        ParityCase(name: "multiline::dot_all", fixture: sherlockFixture, arguments: ["-n", "-U", "--multiline-dotall", "of this world.+detective work", "sherlock"]),
+        ParityCase(name: "multiline::only_matching", fixture: sherlockFixture, arguments: ["-n", "-U", "--only-matching", #"Watson|Sherlock\p{Any}+?Holmes"#, "sherlock"]),
+        ParityCase(name: "multiline::vimgrep", fixture: sherlockFixture, arguments: ["-n", "-U", "--vimgrep", #"Watson|Sherlock\p{Any}+?Holmes"#, "sherlock"]),
+        ParityCase(name: "multiline::stdin", fixture: emptyFixture, arguments: ["-n", "-U", #"of this world\p{Any}+?detective work"#], stdin: Data(SHERLOCK.utf8)),
+        ParityCase(name: "multiline::context", fixture: sherlockFixture, arguments: ["-n", "-U", "-C1", #"detective work\p{Any}+?result of luck"#, "sherlock"]),
     ]
 }
 
