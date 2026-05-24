@@ -873,6 +873,9 @@ public struct StandardPrinter {
     }
 
     private func renderedText(for match: SearchMatch) -> String {
+        if let byteRendered = byteRenderedReplacementText(for: match) {
+            return byteRendered
+        }
         var line = match.line
         for span in match.spans.sorted(by: { $0.startByte > $1.startByte }) {
             guard let replacement = span.replacement,
@@ -882,6 +885,30 @@ public struct StandardPrinter {
             line.replaceSubrange(range, with: replacement)
         }
         return line
+    }
+
+    private func byteRenderedReplacementText(for match: SearchMatch) -> String? {
+        guard options.replacement != nil,
+              match.spans.contains(where: { $0.replacement != nil }),
+              match.spans.contains(where: { !hasStringBoundary(atByteOffset: $0.startByte, in: match.line) || !hasStringBoundary(atByteOffset: $0.endByte, in: match.line) }) else {
+            return nil
+        }
+        var bytes = Array(match.line.utf8)
+        for span in match.spans.sorted(by: { lhs, rhs in
+            if lhs.startByte == rhs.startByte {
+                return lhs.endByte > rhs.endByte
+            }
+            return lhs.startByte > rhs.startByte
+        }) {
+            guard let replacement = span.replacement,
+                  span.startByte >= 0,
+                  span.endByte >= span.startByte,
+                  span.endByte <= bytes.count else {
+                continue
+            }
+            bytes.replaceSubrange(span.startByte..<span.endByte, with: replacement.utf8)
+        }
+        return String.rawByteMarked(bytes)
     }
 
     private func displayLine(for match: SearchMatch) -> String {
@@ -1140,6 +1167,10 @@ public struct StandardPrinter {
         return lower..<upper
     }
 
+    private func hasStringBoundary(atByteOffset byteOffset: Int, in line: String) -> Bool {
+        stringIndex(in: line, atByteOffset: byteOffset) != nil
+    }
+
     private func stringIndex(in line: String, atByteOffset byteOffset: Int) -> String.Index? {
         guard byteOffset >= 0 else {
             return nil
@@ -1200,12 +1231,27 @@ public struct StandardPrinter {
 
     private func bytesPrinted(_ lines: [String]) -> Int {
         lines.reduce(0) { total, line in
-            total + line.utf8.count + 1
+            total + line.rawOutputByteCount + 1
         }
     }
 }
 
 private extension String {
+    static let rawByteMarkerScalar = UnicodeScalar(0xFDD0)!
+    static let rawByteMarker = String(rawByteMarkerScalar)
+
+    static func rawByteMarked(_ bytes: [UInt8]) -> String {
+        rawByteMarker + String(String.UnicodeScalarView(bytes.map { UnicodeScalar(Int($0))! }))
+    }
+
+    var rawBytePayload: String? {
+        hasPrefix(Self.rawByteMarker) ? String(dropFirst()) : nil
+    }
+
+    var rawOutputByteCount: Int {
+        rawBytePayload?.unicodeScalars.count ?? utf8.count
+    }
+
     func trimmingASCIIWhitespacePrefix() -> String {
         let firstNonWhitespace = firstIndex { character in
             character != " " && character != "\t" && character != "\r" && character != "\n"

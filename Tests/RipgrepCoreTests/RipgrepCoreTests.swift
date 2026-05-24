@@ -2530,6 +2530,35 @@ struct RipgrepSearcherTests {
             "af",
             "f",
         ])
+        try root.write("á\n", to: "utf8-empty-replace.txt")
+        let internalUTF8EmptyReplacement = try runExecutableData([
+            "--replace",
+            "X",
+            "x?",
+            root.path("utf8-empty-replace.txt"),
+        ]) {}
+        #expect(internalUTF8EmptyReplacement == Data([0x58, 0xC3, 0x58, 0xA1, 0x58, 0x0A]))
+        let internalUTF8OptionalLiteralReplacement = try runExecutableData([
+            "--replace",
+            "X",
+            "a?",
+            root.path("utf8-empty-replace.txt"),
+        ]) {}
+        #expect(internalUTF8OptionalLiteralReplacement == Data([0x58, 0xC3, 0x58, 0xA1, 0x58, 0x0A]))
+        let internalUTF8OnlyMatchingReplacement = try runExecutableData([
+            "-o",
+            "--replace",
+            "X",
+            "x?",
+            root.path("utf8-empty-replace.txt"),
+        ]) {}
+        #expect(internalUTF8OnlyMatchingReplacement == Data("X\nX\nX\n".utf8))
+        let internalUTF8ByteOffsets = try runExecutableData([
+            "-bo",
+            "x?",
+            root.path("utf8-empty-replace.txt"),
+        ]) {}
+        #expect(internalUTF8ByteOffsets == Data("0:\n1:\n2:\n".utf8))
         #expect(try run(["--replace", "${}_${bad-name}_${1}", #"([a-z]+)\d+"#, root.path("replace.txt")]) == [
             "${}_${bad-name}_abc ${}_${bad-name}_def",
         ])

@@ -163,13 +163,13 @@ public enum RipgrepCLI {
         suppressNewlineForTrailingNul: Bool = false
     ) {
         if let stdout {
-            stdout(line)
+            stdout(line.rawBytePayload ?? line)
             return
         }
         let output = suppressNewlineForTrailingNul && line.hasSuffix("\0") ? line : "\(line)\n"
-        let data = encodingMode == .disabled
+        let data = output.rawBytePayload.map { $0.rawByteData() } ?? (encodingMode == .disabled
             ? output.rawByteData()
-            : Data(output.utf8)
+            : Data(output.utf8))
         FileHandle.standardOutput.write(data)
     }
 
@@ -556,6 +556,12 @@ public enum RipgrepCLI {
 }
 
 private extension String {
+    static let rawByteMarker = String(UnicodeScalar(0xFDD0)!)
+
+    var rawBytePayload: String? {
+        hasPrefix(Self.rawByteMarker) ? String(dropFirst()) : nil
+    }
+
     func rawByteData() -> Data {
         var data = Data()
         for scalar in unicodeScalars {
