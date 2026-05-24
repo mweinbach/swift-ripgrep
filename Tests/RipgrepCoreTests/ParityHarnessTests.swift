@@ -83,6 +83,7 @@ private func parityCases() -> [ParityCase] {
         + multilineParityCases()
         + jsonParityCases()
         + miscParityCases()
+        + featureParityCases()
 }
 
 private func existingParityCases() -> [ParityCase] {
@@ -178,6 +179,78 @@ private func binaryParityCases() -> [ParityCase] {
         ParityCase(name: "binary::matching_files_inconsistent_with_count_count", fixture: matchingFilesInconsistentFixture, arguments: ["--sort=path", "-c", "cat"]),
         ParityCase(name: "binary::matching_files_inconsistent_with_count_binary", fixture: matchingFilesInconsistentFixture, arguments: ["--sort=path", "-c", "cat", "--binary"]),
         ParityCase(name: "binary::matching_files_inconsistent_with_count_text", fixture: matchingFilesInconsistentFixture, arguments: ["--sort=path", "-c", "cat", "--text"]),
+    ]
+}
+
+private func featureParityCases() -> [ParityCase] {
+    let sherlockFixture: (URL) throws -> Void = { dir in try write(SHERLOCK, to: "sherlock", in: dir) }
+    let crlfFixture: (URL) throws -> Void = { dir in try write(SHERLOCK_CRLF, to: "sherlock", in: dir) }
+    let sortingFixture: (URL) throws -> Void = { dir in
+        try write("test", to: "foo", in: dir)
+        try write("test", to: "abc", in: dir)
+        try write("test", to: "zoo", in: dir)
+        try write("test", to: "bar", in: dir)
+    }
+    let passthruFixture: (URL) throws -> Void = { dir in
+        try write("\nfoo\nbar\nfoobar\n\nbaz\n", to: "file", in: dir)
+        try write("foo\nbar\n", to: "patterns", in: dir)
+    }
+    let trimSherlock = """
+zzz
+    For the Doctor Watsons of this world, as opposed to the Sherlock
+  Holmeses, success in the province of detective work must always
+	be, to a very large extent, the result of luck. Sherlock Holmes
+     can extract a clew from a wisp of straw or a flake of cigar ash;
+but Doctor Watson has to have it taken out for him and dusted,
+ and exhibited clearly, with a label attached.
+"""
+    return [
+        ParityCase(name: "feature::f1_sjis", fixture: { dir in try write(Data([0x84, 0x59, 0x84, 0x75, 0x84, 0x82, 0x84, 0x7C, 0x84, 0x80, 0x84, 0x7B, 0x20, 0x84, 0x56, 0x84, 0x80, 0x84, 0x7C, 0x84, 0x7D, 0x84, 0x83]), to: "foo", in: dir) }, arguments: ["-Esjis", "Шерлок Холмс"]),
+        ParityCase(name: "feature::f1_utf16_auto", fixture: { dir in try write(Data([0xff, 0xfe, 0x28, 0x04, 0x35, 0x04, 0x40, 0x04, 0x3b, 0x04, 0x3e, 0x04, 0x3a, 0x04, 0x20, 0x00, 0x25, 0x04, 0x3e, 0x04, 0x3b, 0x04, 0x3c, 0x04, 0x41, 0x04]), to: "foo", in: dir) }, arguments: ["Шерлок Холмс"]),
+        ParityCase(name: "feature::f1_utf16_explicit", fixture: { dir in try write(Data([0xff, 0xfe, 0x28, 0x04, 0x35, 0x04, 0x40, 0x04, 0x3b, 0x04, 0x3e, 0x04, 0x3a, 0x04, 0x20, 0x00, 0x25, 0x04, 0x3e, 0x04, 0x3b, 0x04, 0x3c, 0x04, 0x41, 0x04]), to: "foo", in: dir) }, arguments: ["-Eutf-16le", "Шерлок Холмс"]),
+        ParityCase(name: "feature::f1_eucjp", fixture: { dir in try write(Data([0xa7, 0xba, 0xa7, 0xd6, 0xa7, 0xe2, 0xa7, 0xdd, 0xa7, 0xe0, 0xa7, 0xdc, 0x20, 0xa7, 0xb7, 0xa7, 0xe0, 0xa7, 0xdd, 0xa7, 0xde, 0xa7, 0xe3]), to: "foo", in: dir) }, arguments: ["-Eeuc-jp", "Шерлок Холмс"]),
+        ParityCase(name: "feature::f1_unknown_encoding", fixture: { _ in }, arguments: ["-Efoobar"]),
+        ParityCase(name: "feature::f1_replacement_encoding", fixture: { _ in }, arguments: ["-Ecsiso2022kr"]),
+        ParityCase(name: "feature::f7", fixture: { dir in try write(SHERLOCK, to: "sherlock", in: dir); try write("Sherlock\nHolmes", to: "pat", in: dir) }, arguments: ["-fpat", "sherlock"]),
+        ParityCase(name: "feature::f7_stdin", fixture: sherlockFixture, arguments: ["-f-"], stdin: Data("Sherlock".utf8)),
+        ParityCase(name: "feature::f20_no_filename", fixture: sherlockFixture, arguments: ["--no-filename", "Sherlock"]),
+        ParityCase(name: "feature::f34_only_matching", fixture: sherlockFixture, arguments: ["-o", "Sherlock"]),
+        ParityCase(name: "feature::f34_only_matching_line_column", fixture: sherlockFixture, arguments: ["-o", "--column", "-n", "Sherlock"]),
+        ParityCase(name: "feature::f45_precedence_with_others", fixture: { dir in try write("*.log", to: ".not-an-ignore", in: dir); try write("!imp.log", to: ".ignore", in: dir); try write("test", to: "imp.log", in: dir); try write("test", to: "wat.log", in: dir) }, arguments: ["--ignore-file", ".not-an-ignore", "test"]),
+        ParityCase(name: "feature::f45_precedence_internal", fixture: { dir in try write("*.log", to: ".not-an-ignore1", in: dir); try write("!imp.log", to: ".not-an-ignore2", in: dir); try write("test", to: "imp.log", in: dir); try write("test", to: "wat.log", in: dir) }, arguments: ["--ignore-file", ".not-an-ignore1", "--ignore-file", ".not-an-ignore2", "test"]),
+        ParityCase(name: "feature::f68_no_ignore_vcs", fixture: { dir in try createDirectory(".git", in: dir); try write("foo", to: ".gitignore", in: dir); try write("bar", to: ".ignore", in: dir); try write("test", to: "foo", in: dir); try write("test", to: "bar", in: dir) }, arguments: ["--no-ignore-vcs", "test"]),
+        ParityCase(name: "feature::f70_smart_case", fixture: sherlockFixture, arguments: ["-S", "sherlock"]),
+        ParityCase(name: "feature::f89_files_with_matches", fixture: sherlockFixture, arguments: ["--null", "--files-with-matches", "Sherlock"]),
+        ParityCase(name: "feature::f89_files_without_match", fixture: { dir in try write(SHERLOCK, to: "sherlock", in: dir); try write("foo", to: "file.py", in: dir) }, arguments: ["--null", "--files-without-match", "Sherlock"]),
+        ParityCase(name: "feature::f89_count", fixture: sherlockFixture, arguments: ["--null", "--count", "Sherlock"]),
+        ParityCase(name: "feature::f89_files", fixture: sherlockFixture, arguments: ["--null", "--files"]),
+        ParityCase(name: "feature::f89_match", fixture: sherlockFixture, arguments: ["--null", "-C1", "Sherlock"]),
+        ParityCase(name: "feature::f109_max_depth", fixture: { dir in try write("far", to: "one/pass", in: dir); try write("far", to: "one/too/many", in: dir) }, arguments: ["--maxdepth", "2", "far"]),
+        ParityCase(name: "feature::f109_case_sensitive_part1", fixture: { dir in try write("tEsT", to: "foo", in: dir) }, arguments: ["--smart-case", "--case-sensitive", "test"]),
+        ParityCase(name: "feature::f109_case_sensitive_part2", fixture: { dir in try write("tEsT", to: "foo", in: dir) }, arguments: ["--ignore-case", "--case-sensitive", "test"]),
+        ParityCase(name: "feature::f129_matches", fixture: { dir in try write("test\ntest abcdefghijklmnopqrstuvwxyz test", to: "foo", in: dir) }, arguments: ["-M26", "test"]),
+        ParityCase(name: "feature::f129_context", fixture: { dir in try write("test\nabcdefghijklmnopqrstuvwxyz", to: "foo", in: dir) }, arguments: ["-M20", "-C1", "test"]),
+        ParityCase(name: "feature::f129_replace", fixture: { dir in try write("test\ntest abcdefghijklmnopqrstuvwxyz test", to: "foo", in: dir) }, arguments: ["-M26", "-rfoo", "test"]),
+        ParityCase(name: "feature::f159_max_count", fixture: { dir in try write("test\ntest", to: "foo", in: dir) }, arguments: ["-m1", "test"]),
+        ParityCase(name: "feature::f159_max_count_zero", fixture: { dir in try write("test\ntest", to: "foo", in: dir) }, arguments: ["-m0", "test"]),
+        ParityCase(name: "feature::f243_column_line", fixture: { dir in try write("test", to: "foo", in: dir) }, arguments: ["--column", "test"]),
+        ParityCase(name: "feature::f263_sort_files", fixture: sortingFixture, arguments: ["--sort-files", "test"]),
+        ParityCase(name: "feature::f263_sort_files_reverse", fixture: sortingFixture, arguments: ["--sortr=path", "test"]),
+        ParityCase(name: "feature::f275_pathsep", fixture: { dir in try write("test", to: "foo/bar", in: dir) }, arguments: ["test", "--path-separator", "Z"]),
+        ParityCase(name: "feature::f362_dfa_size_limit", fixture: sherlockFixture, arguments: ["--dfa-size-limit", "10", "For\\s", "sherlock"]),
+        ParityCase(name: "feature::f362_exceeds_regex_size_limit", fixture: { _ in }, arguments: ["--regex-size-limit", "10K", "[0-9]\\w+"]),
+        ParityCase(name: "feature::f416_crlf", fixture: crlfFixture, arguments: ["--crlf", #"Sherlock$"#, "sherlock"]),
+        ParityCase(name: "feature::f416_crlf_multiline", fixture: crlfFixture, arguments: ["--crlf", "-U", #"Sherlock$"#, "sherlock"]),
+        ParityCase(name: "feature::f416_crlf_only_matching", fixture: crlfFixture, arguments: ["--crlf", "-o", #"Sherlock$"#, "sherlock"]),
+        ParityCase(name: "feature::f419_zero_as_shortcut_for_null", fixture: sherlockFixture, arguments: ["-0", "--count", "Sherlock"]),
+        ParityCase(name: "feature::f740_passthru_single", fixture: passthruFixture, arguments: ["-n", "--passthru", "foo", "file"]),
+        ParityCase(name: "feature::f740_passthru_multiple_e", fixture: passthruFixture, arguments: ["-n", "--passthru", "-e", "foo", "-e", "bar", "file"]),
+        ParityCase(name: "feature::f740_passthru_multiple_f", fixture: passthruFixture, arguments: ["-n", "--passthru", "-f", "patterns", "file"]),
+        ParityCase(name: "feature::f740_passthru_count_override", fixture: passthruFixture, arguments: ["-n", "--passthru", "-c", "foo", "file"]),
+        ParityCase(name: "feature::f740_passthru_only_matching", fixture: passthruFixture, arguments: ["-n", "--passthru", "-o", "foo", "file"]),
+        ParityCase(name: "feature::f740_passthru_replace", fixture: passthruFixture, arguments: ["-n", "--passthru", "-r", "wat", "foo", "file"]),
+        ParityCase(name: "feature::f917_trim", fixture: { dir in try write(trimSherlock, to: "sherlock", in: dir) }, arguments: ["-n", "-B1", "-A2", "--trim", "Holmeses", "sherlock"]),
+        ParityCase(name: "feature::f917_trim_match", fixture: { dir in try write(trimSherlock, to: "sherlock", in: dir) }, arguments: ["-n", "-B1", "-A2", "--trim", "\\s+Holmeses", "sherlock"]),
     ]
 }
 
@@ -339,6 +412,13 @@ private final class IsolatedParityDirectory {
 
 private func write(_ contents: String, to relativePath: String, in dir: URL) throws {
     try write(Data(contents.utf8), to: relativePath, in: dir)
+}
+
+private func createDirectory(_ relativePath: String, in dir: URL) throws {
+    try FileManager.default.createDirectory(
+        at: dir.appendingPathComponent(relativePath, isDirectory: true),
+        withIntermediateDirectories: true
+    )
 }
 
 private func write(_ data: Data, to relativePath: String, in dir: URL) throws {
