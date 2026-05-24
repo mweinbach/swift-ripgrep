@@ -247,6 +247,9 @@ public struct StandardPrinter {
     }
 
     private func formatVimgrep(_ match: SearchMatch, showPath: Bool) -> [String] {
+        if match.spans.isEmpty {
+            return [formatVimgrepPreservedLine(match, showPath: showPath)]
+        }
         let replacementLine = options.replacement == nil ? nil : firstRenderedLine(renderedText(for: match))
         let replacementOffsets = replacementStartOffsetsByIndex(for: match)
         return match.spans.enumerated().compactMap { index, span in
@@ -299,6 +302,24 @@ public struct StandardPrinter {
             let path = renderPath(for: match.fileURL, line: lineNumber, column: column)
             return "\(path)\(matchPathFieldSeparator())\(fields.joined(separator: options.fieldMatchSeparator))\(terminator)"
         }
+    }
+
+    private func formatVimgrepPreservedLine(_ match: SearchMatch, showPath: Bool) -> String {
+        var fields: [String] = []
+        if !options.noLineNumber {
+            fields.append(colors.apply(.line, to: "\(match.lineNumber)"))
+        }
+        fields.append(vimgrepLineText(for: match))
+        let terminator = outputTerminator(
+            match.lineTerminator,
+            line: match.line,
+            forceCRLF: isColumnLimitedVimgrepLine(match: match, replacementLine: nil)
+        )
+        guard showPath else {
+            return "\(fields.joined(separator: options.fieldMatchSeparator))\(terminator)"
+        }
+        let path = renderPath(for: match.fileURL, line: match.lineNumber)
+        return "\(path)\(matchPathFieldSeparator())\(fields.joined(separator: options.fieldMatchSeparator))\(terminator)"
     }
 
     private struct VimgrepSpanProjection {

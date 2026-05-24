@@ -2399,6 +2399,14 @@ struct RipgrepSearcherTests {
             "1:foo\r",
             "2:bar\r",
         ])
+        #expect(try run(["--vimgrep", "$", root.path("crlf-no-final-newline.txt")]) == [
+            "\(root.path("crlf-no-final-newline.txt")):1:5:foo\r",
+            "\(root.path("crlf-no-final-newline.txt")):2:bar",
+        ])
+        #expect(try run(["--crlf", "--vimgrep", "$", root.path("crlf-no-final-newline.txt")]) == [
+            "\(root.path("crlf-no-final-newline.txt")):1:4:foo\r",
+            "\(root.path("crlf-no-final-newline.txt")):2:bar\r",
+        ])
         #expect(try run(["-U", "--count-matches", "$", root.path("crlf-no-final-newline.txt")]) == [
             "1",
         ])
