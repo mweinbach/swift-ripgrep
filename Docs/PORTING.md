@@ -13,7 +13,14 @@ one test target. It maps most of ripgrep's public CLI flags into
 `RipgrepOptions`, carries generated help/man/completion resources, and uses a
 test suite that mirrors the Rust upstream split (`BinaryTests`, `FeatureTests`,
 `JSONTests`, `MiscTests`, `MultilineTests`, `RegressionTests`, plus
-`ParityHarnessTests` and `RipgrepTestSupport`).
+`HaystackReaderTests`, `ParityHarnessTests` and `RipgrepTestSupport`).
+
+File input flows through `HaystackReader` (mmap for regular files ≥ 16 KiB or
+when `--mmap` is forced, chunked 64 KiB buffered reads otherwise, stdin always
+buffered). Per-haystack searches run inside a bounded Swift Concurrency
+`TaskGroup` driven by `--threads` (default `min(activeProcessorCount, 12)`,
+Rust's cap). Stdout buffering honours `--line-buffered` / `--block-buffered`
+via `setvbuf`, with the same TTY-based default that Rust ripgrep uses.
 
 Compared with Rust ripgrep, the port still collapses the upstream workspace
 into a much smaller implementation:
@@ -50,6 +57,16 @@ into a much smaller implementation:
   `windows-1251`, `iso-8859-7`, and the rest of the Encoding Standard alias
   table decode correctly; unknown labels produce
   `error parsing flag --encoding: grep config error: unknown encoding: <label>`.
+- `HaystackReader` provides the mmap + chunked-buffered file I/O paths. `--mmap`
+  forces mmap (and surfaces the underlying mmap error if the kernel rejects),
+  `--no-mmap` forces the chunked path, automatic mode picks based on file size
+  and regular-file status. Stdin streams in 64 KiB chunks.
+- A bounded `TaskGroup`-based worker pool fans out per-file search work.
+  `--threads N` drives the worker count (`N == 1` falls back to the prior
+  sequential `.map` path so single-threaded behaviour stays byte-identical).
+  Output ordering is deterministic by walk position even at high thread counts.
+- `--line-buffered` / `--block-buffered` wire to `setvbuf(stdout, ...)` and
+  fall back to explicit flushes for non-stdio writers.
 
 ## High-priority missing parity
 
@@ -64,19 +81,17 @@ into a much smaller implementation:
    `Sources/RipgrepCore/EncodingLabels.swift` and the `TextEncoding` decoder
    plumbed through `Haystack.swift` and the stdin path.
 
-4. Streaming, mmap and parallel search architecture. **(Still open)**
+4. **(Done 2026-05-24)** Streaming, mmap and parallel search architecture.
+   `HaystackReader` provides mmap-vs-buffered selection, the per-haystack
+   loop runs through a bounded `TaskGroup` worker pool wired to `--threads`,
+   and stdout buffering honours `--line-buffered` / `--block-buffered`. The
+   sequential path (`--threads 1`) is preserved bit-for-bit so existing tests
+   remain green. The only piece of Rust's architecture that is *not* mirrored
+   is a true streaming line buffer that hands matcher chunks rather than the
+   full file — that's a Wave 3 optimisation, not a correctness gap, because
+   mmap already avoids any actual heap copy of the file body.
 
-   Swift reads each file into memory before searching and then walks/searches
-   with ordinary array maps. Rust ripgrep has a streaming line buffer, mmap
-   selection, heap limits and parallel traversal/search machinery. In Swift,
-   `--threads`, `--mmap`, `--line-buffered` and `--block-buffered` are still
-   mostly accepted as CLI compatibility flags rather than implemented runtime
-   controls. This is the next major slice and is large enough to warrant its
-   own multi-session plan — split into a `BufferReader`/line-buffer layer, an
-   mmap-vs-buffered selection policy, a per-thread search worker pool, and
-   then wire the four CLI flags to those subsystems.
-
-5. Regex engine fidelity beyond covered cases. **(Still open)**
+5. Regex engine fidelity beyond covered cases. **(Open backlog)**
 
    The Swift matcher translates selected Rust regex behavior onto
    `NSRegularExpression` plus bespoke edge-case handling. The Rust implementation
@@ -85,7 +100,22 @@ into a much smaller implementation:
    accounting. The Swift tests cover many patched cases, but the architecture is
    still more likely to drift on regex syntax and pathological edge cases. The
    auto-hybrid fallback (item 1) reduces the impact in practice because patterns
-   the default engine cannot handle now degrade gracefully to PCRE2.
+   the default engine cannot handle now degrade gracefully to PCRE2. This is
+   best driven by running upstream regex fixture suites against the Swift
+   binary and folding the diffs back into `PatternMatcher.swift` — an ongoing
+   quality effort rather than a finite porting slice.
+
+## Wave 3 — remaining structural work (deferred)
+
+- True streaming line buffer that hands matcher chunks rather than the full
+  haystack. mmap already avoids a heap copy of file bodies, so this is a
+  matcher-side optimisation, not a correctness gap. Worth doing once we have
+  a perf smoke test that demonstrates a regression at multi-GiB inputs.
+- Heap limit enforcement on the buffered I/O path (Rust's `--max-filesize`
+  is already honoured by the walker; Rust also caps the in-memory buffer
+  growth — the Swift chunked reader currently grows unboundedly).
+- Wider parity-harness fixture coverage (more encodings, more compressed
+  inputs, more pathological regex cases).
 
 ## Medium-priority improvements
 
