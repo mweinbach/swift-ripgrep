@@ -152,8 +152,12 @@ public struct JSONPrinter {
     }
 
     private func submatchObject(_ span: MatchSpan) -> JSONValue {
+        let rawByteLength = span.endByte - span.startByte
         var fields: [(String, JSONValue)] = [
-            ("match", dataObject(span.text, rawWhenEncodingDisabled: options.encodingMode == .disabled)),
+            ("match", dataObject(
+                span.text,
+                rawWhenEncodingDisabled: options.encodingMode == .disabled || rawByteLength != span.text.utf8.count
+            )),
         ]
         if let replacement = span.replacement {
             fields.append(("replacement", dataObject(replacement)))
@@ -207,9 +211,10 @@ public struct JSONPrinter {
     private func dataObject(_ text: String, rawWhenEncodingDisabled: Bool = false) -> JSONValue {
         if rawWhenEncodingDisabled {
             let data = text.rawByteData()
-            if String(data: data, encoding: .utf8) == nil {
-                return .object([("bytes", .string(data.base64EncodedString()))])
+            if let decoded = String(data: data, encoding: .utf8) {
+                return .object([("text", .string(decoded))])
             }
+            return .object([("bytes", .string(data.base64EncodedString()))])
         }
         return .object([("text", .string(text))])
     }

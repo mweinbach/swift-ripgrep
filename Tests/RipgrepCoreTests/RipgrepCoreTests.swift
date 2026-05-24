@@ -319,9 +319,28 @@ struct RipgrepSearcherTests {
         #expect(try run(["-w", "x", root.path("words.txt")]) == ["x"])
         #expect(try run(["-won", "x", root.path("words.txt")]) == ["3:x"])
         #expect(try run(["-won", "", root.path("empty-word.txt")]) == ["1:", "2:", "2:", "2:"])
-        #expect(try run(["--no-unicode", "-w", "x", root.path("words.txt")]) == ["éx", "xé", "x"])
+        let noUnicodeWordOutput = try runExecutableData(["--no-unicode", "-w", "x", root.path("words.txt")], fixture: {})
+        #expect(noUnicodeWordOutput == Data("éx\nxé\nx\n".utf8))
         #expect(try run(["-F", "-i", "σ", root.path("casefold.txt")]) == ["Σ", "σ"])
-        #expect(try run(["--no-unicode", "-F", "-i", "σ", root.path("casefold.txt")]) == ["σ"])
+        let noUnicodeFixedOutput = try runExecutableData([
+            "--no-unicode",
+            "-F",
+            "-i",
+            "σ",
+            root.path("casefold.txt"),
+        ], fixture: {})
+        #expect(noUnicodeFixedOutput == Data("σ\n".utf8))
+        let noUnicodeRegexLiteralOutput = try runExecutableData([
+            "--no-unicode",
+            "σ",
+            root.path("casefold.txt"),
+        ], fixture: {})
+        #expect(noUnicodeRegexLiteralOutput == Data("σ\n".utf8))
+        let inlineNoUnicodeRegexLiteralOutput = try runExecutableData([
+            "(?-u)σ",
+            root.path("casefold.txt"),
+        ], fixture: {})
+        #expect(inlineNoUnicodeRegexLiteralOutput == Data("σ\n".utf8))
         #expect(try run(["--no-unicode", "-i", "abc", root.path("ascii-case.txt")]) == ["ABC", "abc"])
         #expect(try run(["--no-unicode", "-i", "[a-z]+", root.path("ascii-case.txt")]) == ["ABC", "abc"])
         #expect(try run(["-o", "[[:alpha:]]+", root.path("posix-alpha.txt")]) == ["abc", "ABC", "word", "word", "foo", "bar"])
@@ -992,6 +1011,42 @@ struct RipgrepSearcherTests {
         #expect(try run(["-a", "--column", "foo", root.path("invalid-utf8.txt")]) == [
             "2:2:\u{FF}foo",
         ])
+        try root.write(Data([0x66, 0x6F, 0x6F, 0xFF, 0x62, 0x61, 0x72, 0x0A]), to: "byte-regex.txt")
+        let byteRegexOutput = try runExecutableData([#"(?-u)\xFF"#, root.path("byte-regex.txt")], fixture: {})
+        #expect(byteRegexOutput == Data([0x66, 0x6F, 0x6F, 0xFF, 0x62, 0x61, 0x72, 0x0A]))
+        let noUnicodeByteRegexOutput = try runExecutableData([
+            "--no-unicode",
+            #"\xFF"#,
+            root.path("byte-regex.txt"),
+        ], fixture: {})
+        #expect(noUnicodeByteRegexOutput == Data([0x66, 0x6F, 0x6F, 0xFF, 0x62, 0x61, 0x72, 0x0A]))
+        let onlyMatchingByteRegexOutput = try runExecutableData(["-o", #"(?-u)."#, root.path("byte-regex.txt")], fixture: {})
+        #expect(onlyMatchingByteRegexOutput == Data([
+            0x66, 0x0A,
+            0x6F, 0x0A,
+            0x6F, 0x0A,
+            0xFF, 0x0A,
+            0x62, 0x0A,
+            0x61, 0x0A,
+            0x72, 0x0A,
+        ]))
+        try root.write("é\n", to: "utf8-byte-regex.txt")
+        let noUnicodeDotOutput = try runExecutableData([
+            "--no-unicode",
+            "-o",
+            ".",
+            root.path("utf8-byte-regex.txt"),
+        ], fixture: {})
+        #expect(noUnicodeDotOutput == Data([0xC3, 0x0A, 0xA9, 0x0A]))
+        let byteRegexJsonOutput = try run(["--json", #"(?-u)\xFF"#, root.path("byte-regex.txt")])
+        let byteRegexJsonMatch = try byteRegexJsonOutput.map(jsonObject)
+            .first { $0["type"] as? String == "match" }?["data"] as? [String: Any]
+        let byteRegexJsonLines = byteRegexJsonMatch?["lines"] as? [String: String]
+        let byteRegexJsonSubmatches = byteRegexJsonMatch?["submatches"] as? [[String: Any]]
+        #expect(byteRegexJsonLines?["bytes"] == "Zm9v/2Jhcgo=")
+        #expect((byteRegexJsonSubmatches?.first?["match"] as? [String: String])?["bytes"] == "/w==")
+        #expect(byteRegexJsonSubmatches?.first?["start"] as? Int == 3)
+        #expect(byteRegexJsonSubmatches?.first?["end"] as? Int == 4)
         let jsonOutput = try run(["--json", "--encoding", "none", "-a", #"\x00"#, root.path("raw-bytes.txt")])
         let jsonMatch = try jsonOutput.map(jsonObject).first { $0["type"] as? String == "match" }?["data"] as? [String: Any]
         let jsonLines = jsonMatch?["lines"] as? [String: String]

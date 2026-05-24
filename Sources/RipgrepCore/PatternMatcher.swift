@@ -3,17 +3,21 @@ import Foundation
 public struct PatternMatcher {
     private let options: RipgrepOptions
     private let patterns: [CompiledPattern]
+    public let usesByteSemantics: Bool
 
     public init(options: RipgrepOptions) throws {
         let patternSources = options.effectivePatterns
+        let usesByteSemantics = options.noUnicode || patternSources.contains(where: Self.hasInlineNoUnicodeOption)
 
         self.options = options
+        self.usesByteSemantics = usesByteSemantics
         self.patterns = try patternSources.map { pattern in
             if options.wordRegexp && pattern.isEmpty {
                 return .emptyWordBoundary
             }
             if options.fixedStrings {
-                return .literal(options.effectiveIgnoreCase ? Self.foldedCase(pattern, options: options) : pattern)
+                let literal = options.effectiveIgnoreCase ? Self.foldedCase(pattern, options: options) : pattern
+                return .literal(usesByteSemantics ? Self.bytePattern(literal) : literal)
             } else {
                 if options.engineMode == .pcre2 {
                     throw RipgrepError.message("PCRE2 is not available in this build of ripgrep")
@@ -321,6 +325,9 @@ public struct PatternMatcher {
         if options.noUnicode && options.effectiveIgnoreCase {
             source = asciiCaseInsensitivePattern(for: source)
         }
+        if options.noUnicode || hasInlineNoUnicodeOption(pattern) {
+            source = byteRegexLiteralPattern(for: source)
+        }
         if options.wordRegexp && !isEmptyPattern {
             source = options.noUnicode
                 ? "(?<![0-9A-Za-z_])(?:\(source))(?![0-9A-Za-z_])"
@@ -339,6 +346,75 @@ public struct PatternMatcher {
             source = strictLineEndPattern(for: source)
         }
         return source
+    }
+
+    private static func byteRegexLiteralPattern(for pattern: String) -> String {
+        var output = ""
+        var escaped = false
+
+        for character in pattern {
+            if escaped {
+                output.append("\\")
+                output.append(character)
+                escaped = false
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                continue
+            }
+            if character.isASCII {
+                output.append(character)
+                continue
+            }
+            output += character.utf8.map { byte in
+                "\\x{\(String(byte, radix: 16, uppercase: true))}"
+            }.joined()
+        }
+        if escaped {
+            output.append("\\")
+        }
+        return output
+    }
+
+    private static func hasInlineNoUnicodeOption(_ pattern: String) -> Bool {
+        var escaped = false
+        var inClass = false
+        var index = pattern.startIndex
+
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                escaped = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "[" {
+                inClass = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "]" {
+                inClass = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if !inClass,
+               pattern[index...].hasPrefix("(?-u)") || pattern[index...].hasPrefix("(?-u:") {
+                return true
+            }
+            index = pattern.index(after: index)
+        }
+        return false
+    }
+
+    private static func bytePattern(_ pattern: String) -> String {
+        String(String.UnicodeScalarView(pattern.utf8.map { UnicodeScalar($0) }))
     }
 
     private static func foundationNamedCapturePattern(for pattern: String) -> String {
@@ -1058,6 +1134,11 @@ public struct PatternMatcher {
                 continue
             }
             if character == "\\" {
+                if let escapeEnd = regexEscapeEnd(in: pattern, backslashAt: index) {
+                    output += pattern[index..<escapeEnd]
+                    index = escapeEnd
+                    continue
+                }
                 escaped = true
                 index = pattern.index(after: index)
                 continue
@@ -1092,6 +1173,52 @@ public struct PatternMatcher {
             output.append("\\")
         }
         return output
+    }
+
+    private static func regexEscapeEnd(in pattern: String, backslashAt backslash: String.Index) -> String.Index? {
+        let marker = pattern.index(after: backslash)
+        guard marker < pattern.endIndex else {
+            return nil
+        }
+        switch pattern[marker] {
+        case "x":
+            let first = pattern.index(after: marker)
+            guard first < pattern.endIndex else {
+                return nil
+            }
+            if pattern[first] == "{" {
+                guard let close = pattern[first...].firstIndex(of: "}") else {
+                    return nil
+                }
+                return pattern.index(after: close)
+            }
+            let second = pattern.index(after: first)
+            guard second < pattern.endIndex else {
+                return nil
+            }
+            return pattern.index(after: second)
+        case "u":
+            let first = pattern.index(after: marker)
+            guard first < pattern.endIndex else {
+                return nil
+            }
+            if pattern[first] == "{" {
+                guard let close = pattern[first...].firstIndex(of: "}") else {
+                    return nil
+                }
+                return pattern.index(after: close)
+            }
+            var cursor = first
+            for _ in 0..<4 {
+                guard cursor < pattern.endIndex else {
+                    return nil
+                }
+                cursor = pattern.index(after: cursor)
+            }
+            return cursor
+        default:
+            return nil
+        }
     }
 
     private static func regexSyntaxGroupPrefixEnd(in pattern: String, openingAt opening: String.Index) -> String.Index? {
@@ -1497,6 +1624,9 @@ public struct PatternMatcher {
 
     private func byteOffset(for index: String.Index, in line: String) -> Int {
         let prefix = line[line.startIndex..<index]
+        if usesByteSemantics {
+            return prefix.unicodeScalars.count
+        }
         return prefix.utf8.count
     }
 
@@ -1512,7 +1642,9 @@ public struct PatternMatcher {
             if bytes == byteOffset {
                 return index
             }
-            bytes += String(line[index]).utf8.count
+            bytes += usesByteSemantics
+                ? String(line[index]).unicodeScalars.count
+                : String(line[index]).utf8.count
         }
         return bytes == byteOffset ? line.endIndex : nil
     }

@@ -243,8 +243,8 @@ public struct RipgrepSearcher {
             let contents = decode(data, options: options)
             let result = searchContents(
                 contents,
-                rawData: rawDataForOutput(data, options: options),
-                rawDataForMatching: rawDataForMatching(data, options: options),
+                rawData: rawDataForOutput(data, options: options, matcher: matcher),
+                rawDataForMatching: rawDataForMatching(data, options: options, matcher: matcher),
                 fileURL: fileURL,
                 matcher: matcher,
                 options: options,
@@ -306,8 +306,8 @@ public struct RipgrepSearcher {
         let contents = decode(data, options: options)
         let result = searchContents(
             contents,
-            rawData: rawDataForOutput(data, options: options),
-            rawDataForMatching: rawDataForMatching(data, options: options),
+            rawData: rawDataForOutput(data, options: options, matcher: matcher),
+            rawDataForMatching: rawDataForMatching(data, options: options, matcher: matcher),
             fileURL: fileURL,
             matcher: matcher,
             options: options,
@@ -499,8 +499,8 @@ public struct RipgrepSearcher {
         let contents = decode(data, options: options)
         let result = searchContents(
             contents,
-            rawData: rawDataForOutput(data, options: options),
-            rawDataForMatching: rawDataForMatching(data, options: options),
+            rawData: rawDataForOutput(data, options: options, matcher: matcher),
+            rawDataForMatching: rawDataForMatching(data, options: options, matcher: matcher),
             fileURL: fileURL,
             matcher: matcher,
             options: options
@@ -671,8 +671,8 @@ public struct RipgrepSearcher {
             let contents = decode(data, options: options)
             let result = searchContents(
                 contents,
-                rawData: rawDataForOutput(data, options: options),
-                rawDataForMatching: rawDataForMatching(data, options: options),
+                rawData: rawDataForOutput(data, options: options, matcher: matcher),
+                rawDataForMatching: rawDataForMatching(data, options: options, matcher: matcher),
                 fileURL: fileURL,
                 matcher: matcher,
                 options: options
@@ -726,8 +726,8 @@ public struct RipgrepSearcher {
             let contents = decode(data, options: options)
             let result = searchContents(
                 contents,
-                rawData: rawDataForOutput(data, options: options),
-                rawDataForMatching: rawDataForMatching(data, options: options),
+                rawData: rawDataForOutput(data, options: options, matcher: matcher),
+                rawDataForMatching: rawDataForMatching(data, options: options, matcher: matcher),
                 fileURL: fileURL,
                 matcher: matcher,
                 options: options
@@ -868,14 +868,16 @@ public struct RipgrepSearcher {
             let line = splitLine.text
             let rawLine = rawLines?[safe: offset]?.text
             let matchingRawLine = matchingRawLines?[safe: offset]?.text
+            let lineForMatching = matcher.usesByteSemantics ? (matchingRawLine ?? line) : line
+            let rawLineForSpanAdjustment = matcher.usesByteSemantics ? nil : matchingRawLine
             let lineNumber = offset + 1
             let lineByteCount = matchingRawLines?[safe: offset].map {
                 $0.text.unicodeScalars.count + $0.terminator.unicodeScalars.count
             } ?? byteCount(splitLine.text, options: options) + byteCount(splitLine.terminator, options: options)
             let positiveSpans = nullDataLineAnchorSpans(
                 adjustedSpans(
-                    matcher.positiveSpans(in: line),
-                    rawLine: matchingRawLine,
+                    matcher.positiveSpans(in: lineForMatching),
+                    rawLine: rawLineForSpanAdjustment,
                     options: options
                 ),
                 line: line,
@@ -897,8 +899,8 @@ public struct RipgrepSearcher {
 
             let spans = nullDataLineAnchorSpans(
                 adjustedSpans(
-                    matcher.spans(in: line),
-                    rawLine: matchingRawLine,
+                    matcher.spans(in: lineForMatching),
+                    rawLine: rawLineForSpanAdjustment,
                     options: options
                 ),
                 line: line,
@@ -1251,14 +1253,17 @@ public struct RipgrepSearcher {
         )
     }
 
-    private func rawDataForOutput(_ data: Data, options: RipgrepOptions) -> Data? {
-        if options.emitsRawBytes || (options.json && options.encodingMode == .automatic) {
+    private func rawDataForOutput(_ data: Data, options: RipgrepOptions, matcher: PatternMatcher) -> Data? {
+        if options.emitsRawBytes || matcher.usesByteSemantics || (options.json && options.encodingMode == .automatic) {
             return data
         }
         return usesLossyAutomaticUTF8Decode(data, options: options) ? data : nil
     }
 
-    private func rawDataForMatching(_ data: Data, options: RipgrepOptions) -> Data? {
+    private func rawDataForMatching(_ data: Data, options: RipgrepOptions, matcher: PatternMatcher) -> Data? {
+        if matcher.usesByteSemantics {
+            return data
+        }
         switch options.encodingMode {
         case .automatic:
             return usesLossyAutomaticUTF8Decode(data, options: options) ? data : nil
