@@ -2198,6 +2198,19 @@ struct RipgrepSearcherTests {
             "--trim",
             "--max-columns-preview",
             "-M8",
+            "--color=always",
+            "--colors=path:none",
+            "--no-filename",
+            #"a\n?bc"#,
+            root.path("trim-columns.txt"),
+        ]) == [
+            "01234567 [... 1 more match]",
+        ])
+        #expect(try run([
+            "-U",
+            "--trim",
+            "--max-columns-preview",
+            "-M8",
             "-o",
             "--no-filename",
             #".*a\n?bc.*"#,

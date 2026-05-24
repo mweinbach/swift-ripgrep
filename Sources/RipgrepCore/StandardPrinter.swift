@@ -216,13 +216,16 @@ public struct StandardPrinter {
         }
 
         let text = options.replacement == nil ? match.lineWithTerminator : renderedText(for: match)
-        return splitRenderedLines(text).enumerated().map { offset, line in
+        let lines = splitRenderedLines(text)
+        var lineStartByte = 0
+        return lines.enumerated().map { offset, line in
             var fields: [OutputField] = []
             let path = showPath ? renderPath(for: match.fileURL, line: match.lineNumber + offset) : nil
             if options.wantsLineNumber {
                 fields.append(OutputField("\(match.lineNumber + offset)", colorTarget: .line))
             }
-            let rendered = renderedLine(line)
+            let rendered = limitedMatchedLine(line, match: match, lineStartByte: lineStartByte) ?? renderedLine(line)
+            lineStartByte += line.utf8.count + renderedLineTerminatorByteCount()
             return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(rendered)"
         }
     }
@@ -1137,7 +1140,11 @@ public struct StandardPrinter {
         }
 
         let text = displayLine(for: line)
-        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(renderedLine(text))\(outputTerminator(line.lineTerminator, line: text, forceCRLF: isColumnLimitedLine(text)))"
+        let lineStartByte = match.map { max(0, line.absoluteOffset - $0.absoluteOffset) } ?? 0
+        let rendered = match.flatMap {
+            limitedMatchedLine(text, match: $0, lineStartByte: lineStartByte)
+        } ?? renderedLine(text)
+        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(rendered)\(outputTerminator(line.lineTerminator, line: text, forceCRLF: isColumnLimitedLine(text)))"
     }
 
     private func renderedLine(for match: SearchMatch) -> String {
@@ -1160,6 +1167,10 @@ public struct StandardPrinter {
     }
 
     private func limitedMatchedLine(_ line: String, match: SearchMatch) -> String? {
+        limitedMatchedLine(line, match: match, lineStartByte: 0)
+    }
+
+    private func limitedMatchedLine(_ line: String, match: SearchMatch, lineStartByte: Int) -> String? {
         guard let maxColumns = options.maxColumns,
               line.utf8.count >= maxColumns else {
             return nil
@@ -1170,7 +1181,11 @@ public struct StandardPrinter {
             guard options.maxColumnsPreview else {
                 return "[Omitted long line with \(match.matchCount) matches]"
             }
-            let remainingMatches = match.spans.filter { $0.startByte >= trimOffset + maxColumns }.count
+            let lineEndByte = lineStartByte + line.utf8.count
+            let previewStartByte = lineStartByte + trimOffset + maxColumns
+            let remainingMatches = match.spans.filter {
+                $0.startByte >= previewStartByte && $0.startByte <= lineEndByte
+            }.count
             return previewLineSuffix(rendered, maxColumns: maxColumns, remainingMatches: remainingMatches)
         }
         return nil
@@ -1498,6 +1513,10 @@ public struct StandardPrinter {
 
     private func renderedLineTerminator() -> UnicodeScalar {
         options.nullData ? "\0" : "\n"
+    }
+
+    private func renderedLineTerminatorByteCount() -> Int {
+        String(renderedLineTerminator()).utf8.count
     }
 
     private func indexRange(startColumn: Int, endColumn: Int, in line: String) -> Range<String.Index>? {
