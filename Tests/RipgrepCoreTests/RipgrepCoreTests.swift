@@ -3618,6 +3618,25 @@ struct RipgrepSearcherTests {
             "4:1:needle2",
             "5-omega",
         ])
+        let vimgrepContextRoot = try TemporaryDirectory()
+        try vimgrepContextRoot.write("needle tail\nNeedle\nhay\nneedle tail again\n", to: "a.txt")
+        try vimgrepContextRoot.write("needle tail\n", to: "b.foo")
+        #expect(try run([
+            "--sort",
+            "path",
+            "--multiline-dotall",
+            "--vimgrep",
+            "-C1",
+            #"needle\s+tail"#,
+            vimgrepContextRoot.url.path,
+        ]) == [
+            "\(vimgrepContextRoot.path("a.txt")):1:1:needle tail",
+            "\(vimgrepContextRoot.path("a.txt"))-2-Needle",
+            "\(vimgrepContextRoot.path("a.txt"))-3-hay",
+            "\(vimgrepContextRoot.path("a.txt")):4:1:needle tail again",
+            "--",
+            "\(vimgrepContextRoot.path("b.foo")):1:1:needle tail",
+        ])
     }
 
     @Test("prints pretty and ANSI color modes")

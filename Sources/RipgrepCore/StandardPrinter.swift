@@ -37,15 +37,7 @@ public struct StandardPrinter {
         switch options.printMode {
         case .matchingLines:
             if options.vimgrep {
-                return results.files.flatMap { result in
-                    if let binaryLine = formatBinaryMatch(result, showPath: options.withFilename != false) {
-                        return [binaryLine]
-                    }
-                    if options.passthru || options.beforeContext > 0 || options.afterContext > 0 {
-                        return vimgrepContextLines(for: result, showPath: options.withFilename != false)
-                    }
-                    return formatVimgrep(result, showPath: options.withFilename != false)
-                }
+                return vimgrepLines(for: results, showPath: options.withFilename != false)
             }
             if options.heading == true {
                 return headingLines(for: results)
@@ -1126,6 +1118,36 @@ public struct StandardPrinter {
             }
         }
         return output
+    }
+
+    private func vimgrepLines(for results: SearchResults, showPath: Bool) -> [String] {
+        let shouldSeparateFiles = !options.passthru
+            && (options.beforeContext > 0 || options.afterContext > 0)
+        var output: [String] = []
+        for result in results.files {
+            let lines = vimgrepLines(for: result, showPath: showPath)
+            guard !lines.isEmpty else {
+                continue
+            }
+            if shouldSeparateFiles,
+               !output.isEmpty,
+               !isBinaryOnlyContextResult(result),
+               let contextSeparator = options.contextSeparator {
+                output.append(contextSeparator)
+            }
+            output.append(contentsOf: lines)
+        }
+        return output
+    }
+
+    private func vimgrepLines(for result: SearchFileResult, showPath: Bool) -> [String] {
+        if let binaryLine = formatBinaryMatch(result, showPath: showPath) {
+            return [binaryLine]
+        }
+        if options.passthru || options.beforeContext > 0 || options.afterContext > 0 {
+            return vimgrepContextLines(for: result, showPath: showPath)
+        }
+        return formatVimgrep(result, showPath: showPath)
     }
 
     private func vimgrepSelectedContextLineNumbers(for result: SearchFileResult) -> [Int] {
