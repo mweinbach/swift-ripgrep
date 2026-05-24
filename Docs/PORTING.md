@@ -192,11 +192,67 @@ files under `Sources/`.
       and `SWIFT_RIPGREP_PARITY=1 swift test --filter ParityHarnessTests`
       locally to sanity-check the harness against installed `rg`.
 
-### Wave 2 (deferred — explicitly out of scope this batch)
-- Streaming line buffer, mmap selection, per-thread search workers and
-  `--threads`/`--mmap`/`--line-buffered`/`--block-buffered` runtime wiring.
-  This is the largest remaining slice from "High-priority missing parity"
-  item 4 and should be its own multi-step plan.
+### Wave 2 — Streaming + mmap + workers + buffering (active 2026-05-24)
+
+The remaining high-priority architectural slice. Two sequential agents so
+they don't fight over `RipgrepSearcher.swift`.
+
+#### Wave 2A — Streaming + mmap reader
+Owner: pair-agent-D. Touches: new
+`Sources/RipgrepCore/HaystackReader.swift`,
+`Sources/RipgrepCore/RipgrepSearcher.swift` (`searchFile` body and the stdin
+path — leave the per-file loop alone for 2B).
+
+- [ ] Add a `HaystackReader` (or equivalent) abstraction with two read paths:
+      1. mmap via Darwin `mmap`/`munmap` for regular files — choose mmap when
+         the file is at least ~16 KiB *and* `options.mmapMode != .never` *and*
+         the file is a regular file (`stat.st_mode & S_IFREG`).
+      2. Chunked buffered read via `FileHandle.read(upToCount:)` (8–64 KiB
+         chunks) otherwise. Honour `options.mmapMode == .always` by forcing
+         mmap and surfacing a useful error if mmap fails.
+- [ ] Replace the `Data(contentsOf: fileURL)` whole-file read at
+      `RipgrepSearcher.swift` line ~282 with `HaystackReader.read(haystack,
+      options:)`. Behaviour for downstream code (binary detection, decode,
+      `searchContents(...)`) must be identical for already-passing tests.
+- [ ] Stream stdin the same way — replace
+      `FileHandle.standardInput.readDataToEndOfFile()` at line ~92 with a
+      chunked reader. Stdin always uses the buffered path.
+- [ ] Honour `--max-filesize` before the mmap/buffered branch (skip oversized
+      files cleanly the same way the current code does).
+- [ ] Tests: add a small `HaystackReaderTests.swift` covering large vs small
+      files, `--mmap`/`--no-mmap` forced paths, mmap-fallback when the OS
+      rejects mmap (use `/dev/null` or an anonymous pipe), and chunk-boundary
+      determinism for multiline patterns. Existing tests must remain green.
+
+#### Wave 2B — Worker pool + line/block buffering
+Owner: pair-agent-E (dispatched only after 2A lands). Touches:
+`Sources/RipgrepCore/RipgrepSearcher.swift` (the per-haystack loop near the
+top of `search(options:stdin:)`), `Sources/RipgrepCore/RipgrepCLI.swift`
+(stdout flush wiring).
+
+- [ ] Drive the per-haystack loop with a bounded `TaskGroup`. Default the
+      worker count to `min(ProcessInfo.processInfo.activeProcessorCount, 12)`
+      (matching the Rust ripgrep cap) and let `--threads N` override it
+      (clamped to ≥1). When `N == 1`, fall back to the existing sequential
+      path so behaviour is unchanged.
+- [ ] Preserve deterministic per-walk-order output: collect results into an
+      array indexed by walk position and emit in that order. The existing
+      tests assume stable ordering.
+- [ ] Wire `--line-buffered` / `--block-buffered` to the stdout flush policy
+      in `RipgrepCLI`. Default to line buffering when stdout is a TTY
+      (`isatty(STDOUT_FILENO)`), block otherwise. Use `setvbuf` (line `_IOLBF`
+      or block `_IOFBF`) — fall back to manual `fflush` after each match line
+      if `setvbuf` is impractical.
+- [ ] Tests: extend `ParityHarnessTests` with a `--threads 4` and a
+      `--threads 1` invocation to prove output is byte-identical. Add a
+      determinism test that runs the same search 8x with `--threads 8` and
+      asserts identical stdout each time.
+
+#### Wave 2 — wrap-up
+- [ ] Refresh PORTING.md (mark items 4 and the streaming sub-list done; flag
+      item 5 / regex-engine-fidelity as the remaining backlog).
+- [ ] Final parity probes from "Verification commands" against installed
+      `rg`, plus the new probes for `--threads`, `--mmap`, and `--no-mmap`.
 
 ## Verification commands
 
