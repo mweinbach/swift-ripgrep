@@ -2222,11 +2222,13 @@ public enum RipgrepArgumentParser {
                 knownFlag.hasPrefix(flag) || commonPrefixLength(flag, knownFlag) >= 8
             }
         }
-        return knownLongFlags.filter { knownFlag in
+        var suggestions = knownLongFlags.filter { knownFlag in
             flag == knownFlag
-                || knownFlag.hasPrefix(flag)
+                || (flag.count >= 7 && knownFlag.hasPrefix(flag))
                 || commonPrefixLength(flag, knownFlag) >= 9
         }
+        suggestions.append(contentsOf: flagSuggestionExtras[flag] ?? [])
+        return suggestions.uniqued()
     }
 
     private static func commonPrefixLength(_ lhs: String, _ rhs: String) -> Int {
@@ -2296,6 +2298,7 @@ public enum RipgrepArgumentParser {
         "--max-columns-preview",
         "--max-count",
         "--max-depth",
+        "--maxdepth",
         "--max-filesize",
         "--mmap",
         "--multiline",
@@ -2375,6 +2378,10 @@ public enum RipgrepArgumentParser {
         "--no-count": ["--max-count"],
         "--no-files": ["--no-filename", "--sort-files", "--no-sort-files"],
         "--no-regexp": ["--line-regexp", "--word-regexp"],
+    ]
+
+    private static let flagSuggestionExtras = [
+        "--max-depthh": ["--maxdepth"],
     ]
 }
 

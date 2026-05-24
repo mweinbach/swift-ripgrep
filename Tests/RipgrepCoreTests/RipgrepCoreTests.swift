@@ -3558,6 +3558,18 @@ struct RipgrepSearcherTests {
                 ["--no-max-filesize"],
                 "rg: unrecognized flag --no-max-filesize\n\nsimilar flags that are available: --max-filesize"
             ),
+            (
+                ["--no-maxdepth"],
+                "rg: unrecognized flag --no-maxdepth\n\nsimilar flags that are available: --maxdepth"
+            ),
+            (
+                ["--maxde"],
+                "rg: unrecognized flag --maxde\n\nsimilar flags that are available: --maxdepth"
+            ),
+            (
+                ["--max-depthh"],
+                "rg: unrecognized flag --max-depthh\n\nsimilar flags that are available: --max-depth, --maxdepth"
+            ),
             (["-inZ"], "rg: unrecognized flag -Z"),
             (["-hZ"], "rg: unrecognized flag -Z"),
         ] {
