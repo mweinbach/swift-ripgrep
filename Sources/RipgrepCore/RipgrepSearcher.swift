@@ -1310,7 +1310,7 @@ public struct RipgrepSearcher {
         splitBinaryNUL: Bool = false
     ) -> SearchFileResult {
         let shouldSplitBinaryNUL = splitBinaryNUL && !options.disablesBinaryDetection
-        if options.multiline && !options.invertMatch {
+        if options.multiline {
             let shouldSplitMultilineBinaryNUL = shouldSplitBinaryNUL
                 && (options.printMode == .count || options.printMode == .countMatches)
                 && !options.effectivePatterns.contains(where: containsLineAnchor)
@@ -2307,14 +2307,17 @@ public struct RipgrepSearcher {
 
         let spans = multilineCRLFLineStartTrimmedSpans(
             adjustedSpans(
-                matcher.spans(in: matchingContents),
+                options.invertMatch
+                    ? matcher.positiveSpans(in: matchingContents)
+                    : matcher.spans(in: matchingContents),
                 rawLine: rawContentsForSpanAdjustment,
                 options: options
             ),
             in: matchingContents,
             options: options
         )
-        if spans.isEmpty,
+        if !options.invertMatch,
+           spans.isEmpty,
            let preserved = multilineBinaryEndAnchorMatch(
                contents: matchingContents,
                fileURL: fileURL,
@@ -2348,6 +2351,16 @@ public struct RipgrepSearcher {
                 lineTerminator: line.lineTerminator,
                 absoluteOffset: line.absoluteOffset,
                 positiveSpans: positiveSpansByLine[line.lineNumber] ?? []
+            )
+        }
+        if options.invertMatch {
+            return invertedMultilineSearchResult(
+                fileURL: fileURL,
+                lines: searchLinesWithPositiveSpans,
+                positiveSpans: spans,
+                lineStartOffsets: lineStartOffsets,
+                totalBytes: absoluteOffset,
+                options: options
             )
         }
         let limitedSpans = Array(spans.prefix(options.maxCount ?? Int.max))
@@ -2557,6 +2570,67 @@ public struct RipgrepSearcher {
                 options: options
             )
         )
+    }
+
+    private func invertedMultilineSearchResult(
+        fileURL: URL,
+        lines: [SearchLine],
+        positiveSpans: [MatchSpan],
+        lineStartOffsets: [Int],
+        totalBytes: Int,
+        options: RipgrepOptions
+    ) -> SearchFileResult {
+        let positiveLineNumbers = Set(positiveSpans.flatMap { span -> [Int] in
+            guard let startLineIndex = lineIndex(containingByteOffset: span.startByte, lineStartOffsets: lineStartOffsets),
+                  let endLineIndex = invertedMultilineEndLineIndex(for: span, lineStartOffsets: lineStartOffsets) else {
+                return []
+            }
+            return Array((startLineIndex + 1)...(endLineIndex + 1))
+        })
+        let maxCount = options.maxCount ?? Int.max
+        let matches = lines.compactMap { line -> SearchMatch? in
+            guard !positiveLineNumbers.contains(line.lineNumber) else {
+                return nil
+            }
+            return SearchMatch(
+                fileURL: fileURL,
+                lineNumber: line.lineNumber,
+                column: nil,
+                line: line.line,
+                rawLine: line.rawLine,
+                lineTerminator: line.lineTerminator,
+                absoluteOffset: line.absoluteOffset,
+                matchCount: 1,
+                spans: [
+                    MatchSpan(
+                        startColumn: 1,
+                        endColumn: 1,
+                        startByte: 0,
+                        endByte: 0,
+                        text: "",
+                        replacement: nil
+                    ),
+                ]
+            )
+        }.prefix(maxCount)
+
+        return SearchFileResult(
+            fileURL: fileURL,
+            matches: Array(matches),
+            lines: lines,
+            bytesSearched: totalBytes
+        )
+    }
+
+    private func invertedMultilineEndLineIndex(for span: MatchSpan, lineStartOffsets: [Int]) -> Int? {
+        if span.endByte > span.startByte,
+           lineStartOffsets.contains(span.endByte) {
+            return lineIndex(
+                containingByteOffset: max(span.endByte - 1, span.startByte),
+                lineStartOffsets: lineStartOffsets
+            )
+        }
+        return endLineIndex(for: span, lineStartOffsets: lineStartOffsets)
     }
 
     private func multilineStandardLineEndColumn(

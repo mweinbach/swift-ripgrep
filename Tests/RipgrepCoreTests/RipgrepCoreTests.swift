@@ -1776,6 +1776,32 @@ struct RipgrepSearcherTests {
             "foo",
             "bar",
         ])
+        try root.write("a\nneedle\nmid\nneedle\nz\n", to: "multiline-invert.txt")
+        #expect(try run(["-U", "-v", #"needle\nmid"#, root.path("multiline-invert.txt")]) == [
+            "a",
+            "needle",
+            "z",
+        ])
+        #expect(try run(["-U", "-v", #"(?s)needle.*z"#, root.path("multiline-invert.txt")]) == [
+            "a",
+        ])
+        #expect(try run(["-U", "-v", "--count-matches", "needle", root.path("multiline-invert.txt")]) == [
+            "3",
+        ])
+        let multilineInvertJSONOutput = try run([
+            "-U",
+            "-v",
+            "--json",
+            "needle",
+            root.path("multiline-invert.txt"),
+        ])
+        let multilineInvertJSONMessages = try multilineInvertJSONOutput.map(jsonObject)
+        let multilineInvertJSONMatches = multilineInvertJSONMessages.filter { $0["type"] as? String == "match" }
+        let multilineInvertJSONEnd = multilineInvertJSONMessages.first { $0["type"] as? String == "end" }?["data"] as? [String: Any]
+        let multilineInvertJSONStats = multilineInvertJSONEnd?["stats"] as? [String: Any]
+        #expect(multilineInvertJSONMatches.count == 3)
+        #expect(multilineInvertJSONStats?["matched_lines"] as? Int == 3)
+        #expect(multilineInvertJSONStats?["matches"] as? Int == 0)
         let multilineDisabledError = """
         rg: the literal "\\n" is not allowed in a regex
 
