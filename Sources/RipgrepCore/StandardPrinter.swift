@@ -91,11 +91,11 @@ public struct StandardPrinter {
         case .filesWithMatches:
             return results.files
                 .filter(\.hasMatch)
-                .map { "\(renderPath(for: $0.fileURL))\(pathTerminator())" }
+                .map { "\(renderPath(for: $0.fileURL))\(searchPathTerminator())" }
         case .filesWithoutMatch:
             return results.files
                 .filter { $0.searched && !$0.hasMatch && !$0.stoppedBinaryAfterMatch }
-                .map { "\(renderPath(for: $0.fileURL))\(pathTerminator())" }
+                .map { "\(renderPath(for: $0.fileURL))\(searchPathTerminator())" }
         }
     }
 
@@ -359,10 +359,10 @@ public struct StandardPrinter {
                 continue
             }
             if !output.isEmpty {
-                output.append("")
+                output.append(options.nullData ? "\0" : "")
             }
             if showPath {
-                output.append(renderPath(for: result.fileURL))
+                output.append("\(renderPath(for: result.fileURL))\(searchPathTerminator())")
             }
             output.append(contentsOf: lines)
         }
@@ -653,6 +653,9 @@ public struct StandardPrinter {
             if let rendered = limitedMatchedLine(line, match: match) {
                 return "\(rendered)\(outputTerminator(match.lineTerminator, line: line))"
             }
+            if let rendered = limitedColumnMatchedLine(line, match: match) {
+                return "\(rendered)\(outputTerminator(match.lineTerminator, line: line))"
+            }
             return "\(renderedLine(line, spans: match.rawLine == nil ? match.spans : []))\(outputTerminator(match.lineTerminator, line: line))"
         }
         let originalLine = match.line
@@ -674,6 +677,17 @@ public struct StandardPrinter {
         let trimOffset = line.utf8.count - rendered.utf8.count
         let remainingMatches = match.spans.filter { $0.startByte >= trimOffset + maxColumns }.count
         return previewLineSuffix(rendered, maxColumns: maxColumns, remainingMatches: remainingMatches)
+    }
+
+    private func limitedColumnMatchedLine(_ line: String, match: SearchMatch) -> String? {
+        let rendered = options.trim ? line.trimmingASCIIWhitespacePrefix() : line
+        guard options.column,
+              let maxColumns = options.maxColumns,
+              rendered.utf8.count >= maxColumns,
+              !options.maxColumnsPreview else {
+            return nil
+        }
+        return "[Omitted long line with \(match.matchCount) matches]"
     }
 
     private func renderedText(for match: SearchMatch) -> String {
@@ -708,10 +722,30 @@ public struct StandardPrinter {
     }
 
     private func renderedLine(_ line: String, spans: [MatchSpan]) -> String {
-        guard colors.isEnabled, !options.trim, options.maxColumns == nil, !spans.isEmpty else {
+        guard colors.isEnabled, options.maxColumns == nil, !spans.isEmpty else {
             return renderedLine(line)
         }
-        return colors.colorMatches(in: line, spans: spans)
+        guard options.trim else {
+            return colors.colorMatches(in: line, spans: spans)
+        }
+        let trimmed = line.trimmingASCIIWhitespacePrefix()
+        let trimOffset = line.utf8.count - trimmed.utf8.count
+        let trimmedSpans = spans.compactMap { span -> MatchSpan? in
+            guard span.endByte > trimOffset else {
+                return nil
+            }
+            let startByte = max(0, span.startByte - trimOffset)
+            let endByte = max(startByte, span.endByte - trimOffset)
+            return MatchSpan(
+                startColumn: span.startColumn,
+                endColumn: span.endColumn,
+                startByte: startByte,
+                endByte: endByte,
+                text: span.text,
+                replacement: span.replacement
+            )
+        }
+        return colors.colorMatches(in: trimmed, spans: trimmedSpans)
     }
 
     private func outputTerminator(_ terminator: String, line: String? = nil, crlfMatchTerminator: Bool = false) -> String {
@@ -729,6 +763,10 @@ public struct StandardPrinter {
 
     private func pathTerminator() -> String {
         options.nullPathTerminator ? "\0" : ""
+    }
+
+    private func searchPathTerminator() -> String {
+        options.nullPathTerminator || options.nullData ? "\0" : ""
     }
 
     private func pathFieldSeparator() -> String {

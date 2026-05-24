@@ -141,7 +141,7 @@ public struct JSONPrinter {
         .object([
             ("path", dataObject(path)),
             ("lines", dataObject(rawText ?? text, rawWhenEncodingDisabled: rawText != nil || options.encodingMode == .disabled)),
-            ("line_number", .int(lineNumber)),
+            ("line_number", options.noLineNumber ? .null : .int(lineNumber)),
             ("absolute_offset", .int(absoluteOffset)),
             ("submatches", .array(submatches.map(submatchObject))),
         ])

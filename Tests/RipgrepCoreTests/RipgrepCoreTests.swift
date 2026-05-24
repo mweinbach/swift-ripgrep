@@ -499,6 +499,8 @@ struct RipgrepSearcherTests {
         ])
         let executableOutput = try runExecutableData(["-l", "--null", "needle", root.url.path]) {}
         #expect(executableOutput == Data("\(root.path("dir/one.txt"))\0".utf8))
+        let nullDataFilesWithMatches = try runExecutableData(["-l", "--null-data", "needle", root.url.path]) {}
+        #expect(nullDataFilesWithMatches == Data("\(root.path("dir/one.txt"))\0".utf8))
         #expect(Set(try run(["--files", "--null", root.url.path])) == Set([
             "\(root.path("dir/one.txt"))\0",
             "\(root.path("dir/two.txt"))\0",
@@ -680,6 +682,10 @@ struct RipgrepSearcherTests {
         ]) == [
             "1:7:needle",
             "2:10:needle",
+        ])
+        #expect(try run(["--column", "--max-columns", "12", "needle", root.path("columns.txt")]) == [
+            "1:7:[Omitted long line with 1 matches]",
+            "2:10:[Omitted long line with 1 matches]",
         ])
         #expect(try run([
             "-o",
@@ -2049,6 +2055,26 @@ struct RipgrepSearcherTests {
             "\(root.path("b.txt"))",
             "1:xx needle",
         ])
+        let nullHeadingOutput = try runExecutableData([
+            "--heading",
+            "--null",
+            "--sort=path",
+            "needle",
+            root.url.path,
+        ]) {}
+        #expect(nullHeadingOutput == Data(
+            "\(root.path("a.txt"))\0  needle one needle\n\n\(root.path("b.txt"))\0xx needle\n".utf8
+        ))
+        let nullDataHeadingOutput = try runExecutableData([
+            "--heading",
+            "--null-data",
+            "--sort=path",
+            "needle",
+            root.url.path,
+        ]) {}
+        #expect(nullDataHeadingOutput == Data(
+            "\(root.path("a.txt"))\0  needle one needle\n  no\n\0\0\(root.path("b.txt"))\0xx needle\n\0".utf8
+        ))
         #expect(try run(["--heading", "--no-filename", "--sort=path", "needle", root.url.path]) == [
             "  needle one needle",
             "",
@@ -2091,6 +2117,9 @@ struct RipgrepSearcherTests {
 
         #expect(try run(["--color=always", "-n", "needle", root.path("a.txt")]) == [
             "\(reset)\(green)1\(reset):alpha \(reset)\(redBold)needle\(reset) beta",
+        ])
+        #expect(try run(["--trim", "--color=always", "needle", root.path("a.txt")]) == [
+            "alpha \(reset)\(redBold)needle\(reset) beta",
         ])
         #expect(try run(["--pretty", "--color=never", "--sort=path", "needle", root.url.path]) == [
             "\(root.path("a.txt"))",
@@ -2329,6 +2358,13 @@ struct RipgrepSearcherTests {
         #expect(invertedStats?["matched_lines"] as? Int == 2)
         #expect(invertedStats?["matches"] as? Int == 0)
         #expect(invertedSummaryStats?["matches"] as? Int == 0)
+
+        let noLineNumberOutput = try run(["--json", "-N", "-C1", "needle", root.path("json.txt")])
+        let noLineNumberMessages = try noLineNumberOutput.map(jsonObject)
+        let noLineNumberContext = noLineNumberMessages[1]["data"] as? [String: Any]
+        let noLineNumberMatch = noLineNumberMessages[2]["data"] as? [String: Any]
+        #expect(noLineNumberContext?["line_number"] is NSNull)
+        #expect(noLineNumberMatch?["line_number"] is NSNull)
 
         let binaryOutput = try run(["--json", "-n", "needle", root.path("binary.txt")])
         let binaryMessages = try binaryOutput.map(jsonObject)
