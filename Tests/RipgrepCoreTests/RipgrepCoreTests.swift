@@ -1113,9 +1113,31 @@ struct RipgrepSearcherTests {
         ])
         try root.write(Data("foo\0bar\0foo bar\0end\0".utf8), to: "nul-inline-m.txt")
         try root.write(Data("foo\0bar".utf8), to: "nul-inline-m-no-final.txt")
+        try root.write(Data("foo\0bar\0foo bar\0end\0bar".utf8), to: "nul-inline-m-final-bar.txt")
         #expect(try runAllowingNoMatch(["--null-data", #"(?-m)bar$"#, root.path("nul-inline-m.txt")]) == [])
         #expect(try run(["--null-data", #"(?-m)^bar"#, root.path("nul-inline-m.txt")]) == ["bar\0"])
         #expect(try run(["--null-data", #"(?-m)bar$"#, root.path("nul-inline-m-no-final.txt")]) == ["bar\0"])
+        let nullDataInlineAlternationOutput = try runExecutableData([
+            "--null-data",
+            "-o",
+            #"(?-m:bar$)|foo"#,
+            root.path("nul-inline-m-final-bar.txt"),
+        ], fixture: {})
+        #expect(nullDataInlineAlternationOutput == Data("foo\0foo\0bar\0bar\0".utf8))
+        let nullDataInlineOnlyFinalOutput = try runExecutableData([
+            "--null-data",
+            "-o",
+            #"(?-m:bar$)|xxx"#,
+            root.path("nul-inline-m-final-bar.txt"),
+        ], fixture: {})
+        #expect(nullDataInlineOnlyFinalOutput == Data("bar\0".utf8))
+        let nullDataUnanchoredAlternativeOutput = try runExecutableData([
+            "--null-data",
+            "-o",
+            #"bar|(?-m:bar$)"#,
+            root.path("nul-inline-m-final-bar.txt"),
+        ], fixture: {})
+        #expect(nullDataUnanchoredAlternativeOutput == Data("bar\0bar\0bar\0".utf8))
         let anchorOutput = try run(["--json", "--null-data", "^needle", root.path("nul-anchors.txt")])
         let anchorMessages = try anchorOutput.map(jsonObject)
         let anchorMatch = anchorMessages.first { $0["type"] as? String == "match" }?["data"] as? [String: Any]

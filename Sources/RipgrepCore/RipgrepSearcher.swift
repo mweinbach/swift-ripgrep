@@ -1383,9 +1383,12 @@ public struct RipgrepSearcher {
             return (spans, false)
         }
         if !terminator.isEmpty,
-           options.effectivePatterns.allSatisfy(isPlainDisabledMultilineLineEndAnchorPattern) {
+           options.effectivePatterns.contains(where: containsRecordEndConstrainedAnchor) {
             let recordEnd = byteCount(matchingLine, options: options)
-            let filtered = spans.filter { $0.endByte < recordEnd }
+            let filtered = spans.filter {
+                $0.endByte < recordEnd
+                    || canMatchNonFinalNullDataRecordEnd(matchingLine, options: options)
+            }
             return (filtered, false)
         }
         if terminator.isEmpty,
@@ -1656,8 +1659,58 @@ public struct RipgrepSearcher {
         containsDisabledMultilineLineEndAnchor(in: pattern, multilineEnabled: true)
     }
 
-    private func isPlainDisabledMultilineLineEndAnchorPattern(_ pattern: String) -> Bool {
-        containsDisabledMultilineLineEndAnchor(pattern) && !containsTopLevelAlternation(pattern)
+    private func containsRecordEndConstrainedAnchor(_ pattern: String) -> Bool {
+        containsDisabledMultilineLineEndAnchor(pattern) || containsAbsoluteEndAnchor(pattern)
+    }
+
+    private func canMatchNonFinalNullDataRecordEnd(_ matchingLine: String, options: RipgrepOptions) -> Bool {
+        options.effectivePatterns.contains { pattern in
+            topLevelAlternatives(in: pattern).contains { alternative in
+                guard !containsRecordEndConstrainedAnchor(alternative),
+                      !containsLineEndAnchor(alternative) else {
+                    return false
+                }
+                return alternativeMatches(alternative, in: matchingLine, options: options)
+            }
+        }
+    }
+
+    private func alternativeMatches(_ alternative: String, in text: String, options: RipgrepOptions) -> Bool {
+        var alternativeOptions = options
+        alternativeOptions.pattern = alternative
+        alternativeOptions.patterns = []
+        alternativeOptions.invertMatch = false
+        alternativeOptions.replacement = nil
+        guard let matcher = try? PatternMatcher(options: alternativeOptions) else {
+            return false
+        }
+        return !matcher.spans(in: text).isEmpty
+    }
+
+    private func containsAbsoluteEndAnchor(_ pattern: String) -> Bool {
+        var escaped = false
+        var inClass = false
+        for character in pattern {
+            if escaped {
+                if !inClass && character == "z" {
+                    return true
+                }
+                escaped = false
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                continue
+            }
+            if character == "[" {
+                inClass = true
+                continue
+            }
+            if character == "]" {
+                inClass = false
+            }
+        }
+        return false
     }
 
     private func containsDisabledMultilineLineEndAnchor(in pattern: String, multilineEnabled: Bool) -> Bool {
@@ -1712,46 +1765,6 @@ public struct RipgrepSearcher {
                 return true
             }
             index = pattern.index(after: index)
-        }
-        return false
-    }
-
-    private func containsTopLevelAlternation(_ pattern: String) -> Bool {
-        var escaped = false
-        var inClass = false
-        var depth = 0
-
-        for character in pattern {
-            if escaped {
-                escaped = false
-                continue
-            }
-            if character == "\\" {
-                escaped = true
-                continue
-            }
-            if character == "[" {
-                inClass = true
-                continue
-            }
-            if character == "]" {
-                inClass = false
-                continue
-            }
-            if inClass {
-                continue
-            }
-            if character == "(" {
-                depth += 1
-                continue
-            }
-            if character == ")" {
-                depth = max(0, depth - 1)
-                continue
-            }
-            if character == "|", depth == 0 {
-                return true
-            }
         }
         return false
     }
