@@ -712,7 +712,8 @@ public struct StandardPrinter {
         guard options.maxColumnsPreview else {
             return OmittedLineKind.matching.message
         }
-        return previewLineSuffix(text, maxColumns: maxColumns, remainingMatches: 0)
+        let remainingMatches = span.replacement == nil && span.startByte == maxColumns ? 1 : 0
+        return previewLineSuffix(text, maxColumns: maxColumns, remainingMatches: remainingMatches)
     }
 
     private func rawOnlyMatchingText(_ span: MatchSpan, in match: SearchMatch) -> String? {

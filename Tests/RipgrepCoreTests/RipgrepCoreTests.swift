@@ -664,6 +664,16 @@ struct RipgrepSearcherTests {
             "1:7:needl [... 0 more matches]",
             "2:10:needl [... 0 more matches]",
         ])
+        try root.write("long needle line here\n", to: "only-preview-cutoff.txt")
+        #expect(try run([
+            "-o",
+            "-M5",
+            "--max-columns-preview",
+            "needle",
+            root.path("only-preview-cutoff.txt"),
+        ]) == [
+            "needl [... 1 more match]",
+        ])
         #expect(try run(["-M", "12", "--replace", "PIN", "needle", root.path("columns.txt")]) == [
             "[Omitted long line with 1 match]",
             "[Omitted long line with 1 match]",
