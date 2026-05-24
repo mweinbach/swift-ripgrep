@@ -536,18 +536,21 @@ public struct RipgrepSearcher {
             let segmentText = String(text[segmentStart..<end])
             let segmentEndByte = segmentStartByte + byteCount(segmentText, options: options)
             let segmentSpans = spans.compactMap { span -> MatchSpan? in
-                guard span.startByte >= segmentStartByte,
-                      span.endByte <= segmentEndByte else {
+                let clippedStartByte = max(span.startByte, segmentStartByte)
+                let clippedEndByte = min(span.endByte, segmentEndByte)
+                guard clippedStartByte < clippedEndByte,
+                      span.startByte < segmentEndByte,
+                      span.endByte > segmentStartByte else {
                     return nil
                 }
-                let startByte = span.startByte - segmentStartByte
-                let endByte = span.endByte - segmentStartByte
+                let startByte = clippedStartByte - segmentStartByte
+                let endByte = clippedEndByte - segmentStartByte
                 return MatchSpan(
                     startColumn: column(in: segmentText, byteOffset: startByte, options: options),
                     endColumn: column(in: segmentText, byteOffset: endByte, options: options),
                     startByte: startByte,
                     endByte: endByte,
-                    text: span.text,
+                    text: byteSlice(in: segmentText, start: startByte, end: endByte, options: options),
                     replacement: span.replacement
                 )
             }
@@ -592,6 +595,29 @@ public struct RipgrepSearcher {
         }
         segments.append(String(rawText[start..<rawText.endIndex]))
         return segments
+    }
+
+    private func byteSlice(in text: String, start: Int, end: Int, options: RipgrepOptions) -> String {
+        guard start > 0 || end < byteCount(text, options: options) else {
+            return text
+        }
+        var lower = text.startIndex
+        var upper = text.endIndex
+        var bytes = 0
+        var index = text.startIndex
+        while index < text.endIndex {
+            if bytes == start {
+                lower = index
+            }
+            let next = text.index(after: index)
+            bytes += byteCount(String(text[index]), options: options)
+            if bytes == end {
+                upper = next
+                break
+            }
+            index = next
+        }
+        return String(text[lower..<upper])
     }
 
     private func searchStdin(
@@ -1465,11 +1491,7 @@ public struct RipgrepSearcher {
     }
 
     private func isMultilineBinaryBoundaryPattern(_ pattern: String) -> Bool {
-        containsLineAnchor(pattern) || containsLineTerminatorPattern(pattern)
-    }
-
-    private func containsLineTerminatorPattern(_ pattern: String) -> Bool {
-        pattern.contains("\n") || pattern.contains(#"\n"#)
+        containsLineAnchor(pattern) || containsLineTerminatorOutsideCharacterClass(pattern)
     }
 
     private func containsLineTerminatorOutsideCharacterClass(_ pattern: String) -> Bool {

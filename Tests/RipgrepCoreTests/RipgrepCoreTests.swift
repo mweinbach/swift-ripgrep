@@ -5181,6 +5181,17 @@ struct RipgrepSearcherTests {
             "end",
             "summary",
         ])
+        let multilineBinaryClassJSONOutput = try run(["-U", "--json", #"[^\n]+"#, root.path("binary-multiline-records.dat")])
+        let multilineBinaryClassJSONMessages = try multilineBinaryClassJSONOutput.map(jsonObject)
+        let multilineBinaryClassJSONMatches = multilineBinaryClassJSONMessages.compactMap { message -> [String: Any]? in
+            guard message["type"] as? String == "match" else { return nil }
+            return message["data"] as? [String: Any]
+        }
+        #expect(multilineBinaryClassJSONMatches.compactMap { ($0["lines"] as? [String: String])?["text"] } == [
+            "needle\n",
+            "tail\n",
+            "needle tail\n",
+        ])
 
         let multilineBinaryAnchorJSONOutput = try run(["-U", "--json", "^", root.path("binary-multiline-json.dat")])
         let multilineBinaryAnchorJSONMessages = try multilineBinaryAnchorJSONOutput.map(jsonObject)
