@@ -78,6 +78,11 @@ private struct ParityCase {
 }
 
 private func parityCases() -> [ParityCase] {
+    existingParityCases()
+        + binaryParityCases()
+}
+
+private func existingParityCases() -> [ParityCase] {
     [
         ParityCase(
             name: "recursive sorted text search honors ignore files",
@@ -130,6 +135,73 @@ private func existingParityFixture(in dir: URL) throws {
     try write("one line\ntwo line\n", to: "multiline.txt", in: dir)
     try write(Data([0x62, 0x69, 0x6E, 0x61, 0x72, 0x79, 0x00, 0x74, 0x65, 0x78, 0x74, 0x0A]), to: "binary.bin", in: dir)
     try write(Data("hello\n".utf16LittleEndianBytes), to: "utf16le.txt", in: dir)
+}
+
+private func binaryParityCases() -> [ParityCase] {
+    let hayFixture: (URL) throws -> Void = { dir in
+        try write(try binaryHaystack(), to: "hay", in: dir)
+    }
+    let emptyFixture: (URL) throws -> Void = { _ in }
+    return [
+        ParityCase(name: "binary::mmap_match_implicit", fixture: hayFixture, arguments: ["--mmap", "-n", "Project Gutenberg EBook", "-g", "hay"]),
+        ParityCase(name: "binary::mmap_match_explicit", fixture: hayFixture, arguments: ["--mmap", "-n", "Project Gutenberg EBook", "hay"]),
+        ParityCase(name: "binary::mmap_match_near_nul", fixture: hayFixture, arguments: ["--mmap", "-n", "abcdef", "hay"]),
+        ParityCase(name: "binary::mmap_match_count", fixture: hayFixture, arguments: ["--mmap", "-c", "Project Gutenberg EBook|Heaven", "hay"]),
+        ParityCase(name: "binary::mmap_match_multiple", fixture: hayFixture, arguments: ["--mmap", "-n", "Project Gutenberg EBook|Heaven", "hay"]),
+        ParityCase(name: "binary::mmap_binary_flag", fixture: hayFixture, arguments: ["--mmap", "-n", "--binary", "Heaven", "-g", "hay"]),
+        ParityCase(name: "binary::mmap_text_flag", fixture: hayFixture, arguments: ["--mmap", "-n", "--text", "Heaven", "-g", "hay"]),
+        ParityCase(name: "binary::mmap_after_nul_match", fixture: hayFixture, arguments: ["--mmap", "-n", "medical student", "hay"]),
+        ParityCase(name: "binary::after_match1_implicit", fixture: hayFixture, arguments: ["--no-mmap", "-n", "Project Gutenberg EBook", "-g", "hay"]),
+        ParityCase(name: "binary::after_match1_explicit", fixture: hayFixture, arguments: ["--no-mmap", "-n", "Project Gutenberg EBook", "hay"]),
+        ParityCase(name: "binary::after_match1_stdin", fixture: emptyFixture, arguments: ["--no-mmap", "-n", "Project Gutenberg EBook"], stdin: try? binaryHaystack()),
+        ParityCase(name: "binary::after_match1_implicit_binary", fixture: hayFixture, arguments: ["--no-mmap", "-n", "--binary", "Project Gutenberg EBook", "-g", "hay"]),
+        ParityCase(name: "binary::after_match1_implicit_text", fixture: hayFixture, arguments: ["--no-mmap", "-n", "--text", "Project Gutenberg EBook", "-g", "hay"]),
+        ParityCase(name: "binary::after_match1_explicit_text", fixture: hayFixture, arguments: ["--no-mmap", "-n", "--text", "Project Gutenberg EBook", "hay"]),
+        ParityCase(name: "binary::after_match1_implicit_path", fixture: hayFixture, arguments: ["--no-mmap", "-l", "Project Gutenberg EBook", "-g", "hay"]),
+        ParityCase(name: "binary::after_match1_implicit_quiet", fixture: hayFixture, arguments: ["--no-mmap", "-q", "Project Gutenberg EBook", "-g", "hay"]),
+        ParityCase(name: "binary::after_match1_implicit_count", fixture: hayFixture, arguments: ["--no-mmap", "-c", "Project Gutenberg EBook", "-g", "hay"]),
+        ParityCase(name: "binary::after_match1_implicit_count_binary", fixture: hayFixture, arguments: ["--no-mmap", "-c", "--binary", "Project Gutenberg EBook", "-g", "hay"]),
+        ParityCase(name: "binary::after_match1_explicit_count", fixture: hayFixture, arguments: ["--no-mmap", "-c", "Project Gutenberg EBook", "hay"]),
+        ParityCase(name: "binary::after_match2_implicit", fixture: hayFixture, arguments: ["--no-mmap", "-n", "Project Gutenberg EBook|a medical student", "-g", "hay"]),
+        ParityCase(name: "binary::after_match2_implicit_text", fixture: hayFixture, arguments: ["--no-mmap", "-n", "--text", "Project Gutenberg EBook|a medical student", "-g", "hay"]),
+        ParityCase(name: "binary::before_match1_implicit", fixture: hayFixture, arguments: ["--no-mmap", "-n", "Heaven", "-g", "hay"]),
+        ParityCase(name: "binary::before_match1_explicit", fixture: hayFixture, arguments: ["--no-mmap", "-n", "Heaven", "hay"]),
+        ParityCase(name: "binary::before_match1_implicit_binary", fixture: hayFixture, arguments: ["--no-mmap", "-n", "--binary", "Heaven", "-g", "hay"]),
+        ParityCase(name: "binary::before_match1_implicit_text", fixture: hayFixture, arguments: ["--no-mmap", "-n", "--text", "Heaven", "-g", "hay"]),
+        ParityCase(name: "binary::before_match2_implicit", fixture: hayFixture, arguments: ["--no-mmap", "-n", "a medical student", "-g", "hay"]),
+        ParityCase(name: "binary::before_match2_explicit", fixture: hayFixture, arguments: ["--no-mmap", "-n", "a medical student", "hay"]),
+        ParityCase(name: "binary::before_match2_implicit_text", fixture: hayFixture, arguments: ["--no-mmap", "-n", "--text", "a medical student", "-g", "hay"]),
+        ParityCase(name: "binary::matching_files_inconsistent_with_count_files", fixture: matchingFilesInconsistentFixture, arguments: ["--sort=path", "-l", "cat"]),
+        ParityCase(name: "binary::matching_files_inconsistent_with_count_count", fixture: matchingFilesInconsistentFixture, arguments: ["--sort=path", "-c", "cat"]),
+        ParityCase(name: "binary::matching_files_inconsistent_with_count_binary", fixture: matchingFilesInconsistentFixture, arguments: ["--sort=path", "-c", "cat", "--binary"]),
+        ParityCase(name: "binary::matching_files_inconsistent_with_count_text", fixture: matchingFilesInconsistentFixture, arguments: ["--sort=path", "-c", "cat", "--text"]),
+    ]
+}
+
+private func binaryHaystack() throws -> Data {
+    let upstream = URL(fileURLWithPath: "/Users/mweinbach/Projects/swift-harness/ripgrep/tests/data/sherlock-nul.txt")
+    if FileManager.default.fileExists(atPath: upstream.path) {
+        return try Data(contentsOf: upstream)
+    }
+
+    var fallback = Data()
+    fallback.append(contentsOf: "The Project Gutenberg EBook of A Study In Scarlet, by Arthur Conan Doyle\n".utf8)
+    for index in 0..<1_500 {
+        fallback.append(contentsOf: "padding line \(index)\n".utf8)
+    }
+    fallback.append(0)
+    fallback.append(contentsOf: "abcdef\n\"No. Heaven knows what the objects of his studies are. But here we\n\"And yet you say he is not a medical student?\"\n".utf8)
+    return fallback
+}
+
+private func matchingFilesInconsistentFixture(in dir: URL) throws {
+    var file1 = "cat here\n"
+    for _ in 0..<150_000 {
+        file1 += "padding line\n"
+    }
+    file1 += "\0"
+    try write(file1, to: "file1.txt", in: dir)
+    try write("cat here", to: "file2.txt", in: dir)
 }
 
 private struct ProcessResult {
