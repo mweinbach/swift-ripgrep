@@ -3603,6 +3603,18 @@ struct RipgrepSearcherTests {
         output = []
         errors = []
         exitCode = RipgrepCLI.run(
+            arguments: ["--type-clear", "rust", "-t", "rust", "needle"],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) },
+            standardInputIsReadable: true
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["rg: unrecognized file type: rust"])
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
             arguments: ["--type-add", "bad-definition", "needle", root.url.path],
             stdout: { output.append($0) },
             stderr: { errors.append($0) }

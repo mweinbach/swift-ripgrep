@@ -56,6 +56,7 @@ public enum RipgrepCLI {
                         stderr("rg: \(warning)")
                     }
                 }
+                try validateTypeChanges(options.typeChanges)
                 if shouldSearchImplicitStdin(
                     options: options,
                     stdinProvided: stdin != nil,
@@ -204,6 +205,13 @@ public enum RipgrepCLI {
             && options.roots.count == 1
             && options.roots[0].path == FileManager.default.currentDirectoryPath
             && (stdinProvided || standardInputIsReadable)
+    }
+
+    private static func validateTypeChanges(_ changes: [TypeChange]) throws {
+        var registry = FileTypeRegistry()
+        if let error = registry.apply(changes).first {
+            throw RipgrepError.message(error)
+        }
     }
 
     private static func shouldPrintNothingSearchedWarning(results: SearchResults, options: RipgrepOptions) -> Bool {
