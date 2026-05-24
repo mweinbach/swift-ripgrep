@@ -597,6 +597,22 @@ struct RipgrepSearcherTests {
             In some shells on Windows '/' is automatically expanded. Use '//' instead.
             """,
         ])
+
+        output = []
+        errors = []
+        let overEscapedExitCode = RipgrepCLI.run(
+            arguments: ["--path-separator", #"\\x00"#, "needle", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(overEscapedExitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == [
+            #"""
+            rg: error parsing flag --path-separator: A path separator must be exactly one byte, but the given separator is 4 bytes: \\x00
+            In some shells on Windows '/' is automatically expanded. Use '//' instead.
+            """#,
+        ])
     }
 
     @Test("limits matching lines per file")

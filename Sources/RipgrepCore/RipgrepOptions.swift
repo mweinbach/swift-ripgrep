@@ -1985,7 +1985,7 @@ public enum RipgrepArgumentParser {
         let value = parseEscapedSeparator(raw)
         let byteCount = value.utf8.count
         return """
-        error parsing flag --path-separator: A path separator must be exactly one byte, but the given separator is \(byteCount) bytes: \(value)
+        error parsing flag --path-separator: A path separator must be exactly one byte, but the given separator is \(byteCount) bytes: \(raw)
         In some shells on Windows '/' is automatically expanded. Use '//' instead.
         """
     }
