@@ -5171,6 +5171,26 @@ struct RipgrepSearcherTests {
         let multilineBinaryJSONSecondSubmatches = multilineBinaryJSONMatches[1]["submatches"] as? [[String: Any]]
         #expect(multilineBinaryJSONSecondSubmatches?.first?["start"] as? Int == 5)
         #expect(multilineBinaryJSONSecondSubmatches?.first?["end"] as? Int == 11)
+        let multilineBinaryDotAllJSONOutput = try run([
+            "-U",
+            "--multiline-dotall",
+            "--json",
+            "needle.post",
+            root.path("binary-multiline-json.dat"),
+        ])
+        let multilineBinaryDotAllJSONMessages = try multilineBinaryDotAllJSONOutput.map(jsonObject)
+        let multilineBinaryDotAllJSONMatch = multilineBinaryDotAllJSONMessages.first {
+            $0["type"] as? String == "match"
+        }?["data"] as? [String: Any]
+        let multilineBinaryDotAllJSONLines = multilineBinaryDotAllJSONMatch?["lines"] as? [String: String]
+        let multilineBinaryDotAllJSONEnd = multilineBinaryDotAllJSONMessages.first {
+            $0["type"] as? String == "end"
+        }?["data"] as? [String: Any]
+        let multilineBinaryDotAllJSONStats = multilineBinaryDotAllJSONEnd?["stats"] as? [String: Any]
+        #expect(multilineBinaryDotAllJSONMatch?["line_number"] as? Int == 1)
+        #expect(multilineBinaryDotAllJSONMatch?["absolute_offset"] as? Int == 0)
+        #expect(multilineBinaryDotAllJSONLines?["text"] == "bin\0needle\npost\0tail needle\n")
+        #expect(multilineBinaryDotAllJSONStats?["bytes_searched"] as? Int == 3)
 
         try root.write(Data("needle\0tail\0needle tail\0".utf8), to: "binary-multiline-records.dat")
         let multilineBinaryRecordsJSONOutput = try run(["-U", "--json", "needle", root.path("binary-multiline-records.dat")])

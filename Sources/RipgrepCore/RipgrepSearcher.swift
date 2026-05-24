@@ -439,7 +439,89 @@ public struct RipgrepSearcher {
     private func shouldSplitJSONBinaryDisplayLines(options: RipgrepOptions) -> Bool {
         options.json
             && !options.effectivePatterns.contains(where: containsNULPattern)
+            && !options.effectivePatterns.contains { usesMultilineDotAllWildcard($0, options: options) }
             && (!options.multiline || !options.effectivePatterns.contains(where: isMultilineBinaryBoundaryPattern))
+    }
+
+    private func usesMultilineDotAllWildcard(_ pattern: String, options: RipgrepOptions) -> Bool {
+        (options.multilineDotall || containsInlineDotAllOption(pattern))
+            && containsDotWildcardOutsideCharacterClass(pattern)
+    }
+
+    private func containsDotWildcardOutsideCharacterClass(_ pattern: String) -> Bool {
+        var escaped = false
+        var inClass = false
+        for character in pattern {
+            if escaped {
+                escaped = false
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                continue
+            }
+            if character == "[" {
+                inClass = true
+                continue
+            }
+            if character == "]" {
+                inClass = false
+                continue
+            }
+            if !inClass, character == "." {
+                return true
+            }
+        }
+        return false
+    }
+
+    private func containsInlineDotAllOption(_ pattern: String) -> Bool {
+        var escaped = false
+        var inClass = false
+        var index = pattern.startIndex
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                escaped = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "[" {
+                inClass = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "]" {
+                inClass = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if !inClass, pattern[index...].hasPrefix("(?") {
+                var optionIndex = pattern.index(index, offsetBy: 2)
+                var enablesDotAll = false
+                var disabling = false
+                while optionIndex < pattern.endIndex {
+                    let option = pattern[optionIndex]
+                    if option == ")" || option == ":" {
+                        return enablesDotAll
+                    }
+                    if option == "-" {
+                        disabling = true
+                    } else if option == "s" {
+                        enablesDotAll = !disabling
+                    }
+                    optionIndex = pattern.index(after: optionIndex)
+                }
+                return false
+            }
+            index = pattern.index(after: index)
+        }
+        return false
     }
 
     private func containsNULPattern(_ pattern: String) -> Bool {
@@ -760,7 +842,8 @@ public struct RipgrepSearcher {
         if options.json,
            options.multiline,
            (options.effectivePatterns.contains(where: isMultilineBinaryBoundaryPattern)
-            || options.effectivePatterns.contains(where: containsNULPattern)) {
+            || options.effectivePatterns.contains(where: containsNULPattern)
+            || options.effectivePatterns.contains { usesMultilineDotAllWildcard($0, options: options) }) {
             return binaryByteOffset
         }
         guard options.printMode == .matchingLines,
