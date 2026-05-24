@@ -37,6 +37,11 @@ private struct LoadedIgnoreMatcher {
     let messages: [String]
 }
 
+private struct DirectoryVisit {
+    let logicalURL: URL
+    let physicalPath: String
+}
+
 public struct FileWalker {
     private let fileManager: FileManager
     private let environment: [String: String]
@@ -131,6 +136,7 @@ public struct FileWalker {
                 physicalURL: nil,
                 isExplicit: true,
                 depth: 0,
+                ancestors: [],
                 rootBase: rootBase,
                 rootVolume: rootVolume,
                 messages: &messages,
@@ -174,6 +180,7 @@ public struct FileWalker {
         physicalURL: URL?,
         isExplicit: Bool,
         depth: Int,
+        ancestors: [DirectoryVisit],
         rootBase: URL,
         rootVolume: String?,
         messages: inout [String],
@@ -232,11 +239,23 @@ public struct FileWalker {
         let resolvedURL = values.isSymbolicLink == true && (options.followSymlinks || isExplicit)
             ? url.resolvingSymlinksInPath()
             : metadataURL
-        let resolvedValues = try resolvedURL.resourceValues(forKeys: [
-            .isDirectoryKey,
-            .isRegularFileKey,
-            .nameKey,
-        ])
+        if values.isSymbolicLink == true,
+           (options.followSymlinks || isExplicit),
+           !fileManager.fileExists(atPath: resolvedURL.path) {
+            messages.append(fileSystemMessage(for: url, errno: ENOENT))
+            return []
+        }
+        let resolvedValues: URLResourceValues
+        do {
+            resolvedValues = try resolvedURL.resourceValues(forKeys: [
+                .isDirectoryKey,
+                .isRegularFileKey,
+                .nameKey,
+            ])
+        } catch {
+            messages.append(fileSystemMessage(for: url, error: error))
+            return []
+        }
 
         if resolvedValues.isRegularFile == true {
             if !isExplicit,
@@ -250,6 +269,11 @@ public struct FileWalker {
         }
 
         guard resolvedValues.isDirectory == true else {
+            return []
+        }
+        let resolvedDirectoryPath = resolvedURL.standardizedFileURL.path
+        if let ancestor = ancestors.last(where: { $0.physicalPath == resolvedDirectoryPath }) {
+            messages.append("File system loop found: \(url.path) points to an ancestor \(ancestor.logicalURL.path)")
             return []
         }
         if !isExplicit,
@@ -277,6 +301,10 @@ public struct FileWalker {
             )
         }
 
+        let childAncestors = ancestors + [DirectoryVisit(
+            logicalURL: url,
+            physicalPath: resolvedDirectoryPath
+        )]
         let children = try fileManager.contentsOfDirectory(
             at: resolvedURL,
             includingPropertiesForKeys: [
@@ -296,6 +324,7 @@ public struct FileWalker {
                 physicalURL: child,
                 isExplicit: false,
                 depth: depth + 1,
+                ancestors: childAncestors,
                 rootBase: rootBase,
                 rootVolume: rootVolume,
                 messages: &messages,
@@ -309,6 +338,29 @@ public struct FileWalker {
             ))
         }
         return haystacks
+    }
+
+    private func fileSystemMessage(for url: URL, error: Error) -> String {
+        if let cocoaError = error as? CocoaError,
+           let underlying = cocoaError.userInfo[NSUnderlyingErrorKey] as? NSError,
+           underlying.domain == NSPOSIXErrorDomain,
+           underlying.code == ENOENT {
+            return fileSystemMessage(for: url, errno: ENOENT)
+        }
+        let nsError = error as NSError
+        if nsError.domain == NSPOSIXErrorDomain, nsError.code == ENOENT {
+            return fileSystemMessage(for: url, errno: ENOENT)
+        }
+        return "\(url.path): \(error)"
+    }
+
+    private func fileSystemMessage(for url: URL, errno: Int32) -> String {
+        switch errno {
+        case ENOENT:
+            return "\(url.path): IO error for operation on \(url.path): No such file or directory (os error 2)"
+        default:
+            return "\(url.path): IO error for operation on \(url.path): \(String(cString: strerror(errno))) (os error \(errno))"
+        }
     }
 
     private func debug(_ message: String, options: RipgrepOptions, diagnostics: inout [String]) {

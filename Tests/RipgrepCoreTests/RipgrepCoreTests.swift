@@ -3982,6 +3982,62 @@ struct RipgrepSearcherTests {
         #expect(try run(["--no-ignore", "--follow", "needle", root.path("loglink")]) == [
             "\(root.path("loglink/skip.log")):needle",
         ])
+
+        let loopRoot = try TemporaryDirectory()
+        try loopRoot.createDirectory("dir")
+        try loopRoot.write("needle\n", to: "dir/file.txt")
+        try FileManager.default.createSymbolicLink(
+            at: loopRoot.url.appendingPathComponent("link-file"),
+            withDestinationURL: loopRoot.url.appendingPathComponent("dir/file.txt")
+        )
+        try FileManager.default.createSymbolicLink(
+            at: loopRoot.url.appendingPathComponent("link-dir"),
+            withDestinationURL: loopRoot.url.appendingPathComponent("dir")
+        )
+        try FileManager.default.createSymbolicLink(
+            at: loopRoot.url.appendingPathComponent("broken"),
+            withDestinationURL: loopRoot.url.appendingPathComponent("missing")
+        )
+        try FileManager.default.createSymbolicLink(
+            at: loopRoot.url.appendingPathComponent("self"),
+            withDestinationURL: loopRoot.url
+        )
+
+        output = []
+        errors = []
+        let loopExitCode = RipgrepCLI.run(
+            arguments: ["--sort", "path", "--follow", "needle", loopRoot.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(loopExitCode == 2)
+        #expect(output == [
+            "\(loopRoot.path("dir/file.txt")):needle",
+            "\(loopRoot.path("link-dir/file.txt")):needle",
+            "\(loopRoot.path("link-file")):needle",
+        ])
+        #expect(errors == [
+            "rg: \(loopRoot.path("broken")): IO error for operation on \(loopRoot.path("broken")): No such file or directory (os error 2)",
+            "rg: File system loop found: \(loopRoot.path("self")) points to an ancestor \(loopRoot.url.path)",
+        ])
+
+        output = []
+        errors = []
+        let filesLoopExitCode = RipgrepCLI.run(
+            arguments: ["--sort", "path", "--files", "--follow", loopRoot.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(filesLoopExitCode == 2)
+        #expect(output == [
+            loopRoot.path("dir/file.txt"),
+            loopRoot.path("link-dir/file.txt"),
+            loopRoot.path("link-file"),
+        ])
+        #expect(errors == [
+            "rg: \(loopRoot.path("broken")): IO error for operation on \(loopRoot.path("broken")): No such file or directory (os error 2)",
+            "rg: File system loop found: \(loopRoot.path("self")) points to an ancestor \(loopRoot.url.path)",
+        ])
     }
 
     @Test("honors ignore files and no ignore")
