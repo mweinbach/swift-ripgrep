@@ -309,6 +309,8 @@ struct RipgrepSearcherTests {
         #expect(try run(["--no-unicode", "-i", "abc", root.path("ascii-case.txt")]) == ["ABC", "abc"])
         #expect(try run(["--no-unicode", "-i", "[a-z]+", root.path("ascii-case.txt")]) == ["ABC", "abc"])
         #expect(try run(["-o", "[[:alpha:]]+", root.path("posix-alpha.txt")]) == ["abc", "ABC", "word", "word", "foo", "bar"])
+        #expect(try run(["-o", #"\pL+"#, root.path("posix-alpha.txt")]) == ["abc", "ABC", "é", "π", "word", "word", "foo", "bar"])
+        #expect(try run(["-o", #"\PL+"#, root.path("posix-alpha.txt")]) == [" ", " 123 _ ", " ", "-", " "])
         #expect(try run(["--no-unicode", "-i", "[[:alpha:]]+", root.path("ascii-case.txt")]) == ["ABC", "abc"])
         #expect(try runAllowingNoMatch(["--no-unicode", "-i", "Δ", root.path("ascii-case.txt")]) == [])
         #expect(try run(["--no-unicode", "--unicode", "-o", #"\w+"#, root.path("classes.txt")]) == ["café", "π", "_"])

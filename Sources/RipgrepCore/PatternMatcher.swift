@@ -301,6 +301,7 @@ public struct PatternMatcher {
     private static func regexPattern(for pattern: String, options: RipgrepOptions) -> String {
         var source = foundationNamedCapturePattern(for: pattern)
         source = foundationAnyClassPattern(for: source)
+        source = foundationUnicodePropertyShorthandPattern(for: source)
         source = foundationScalarEscapePattern(for: source)
         source = asciiPOSIXClasses(for: source)
         if source == ")(" {
@@ -408,6 +409,52 @@ public struct PatternMatcher {
                 inClass = true
             } else if character == "]" {
                 inClass = false
+            }
+            output.append(character)
+            index = pattern.index(after: index)
+        }
+        if escaped {
+            output.append("\\")
+        }
+        return output
+    }
+
+    private static func foundationUnicodePropertyShorthandPattern(for pattern: String) -> String {
+        var output = ""
+        var escaped = false
+        var index = pattern.startIndex
+
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                if character == "p" || character == "P" {
+                    let propertyStart = pattern.index(after: index)
+                    if propertyStart < pattern.endIndex,
+                       pattern[propertyStart].isASCII,
+                       pattern[propertyStart].isLetter {
+                        output.append("\\")
+                        output.append(character)
+                        output.append("{")
+                        output.append(pattern[propertyStart])
+                        output.append("}")
+                        index = pattern.index(after: propertyStart)
+                    } else {
+                        output.append("\\")
+                        output.append(character)
+                        index = propertyStart
+                    }
+                } else {
+                    output.append("\\")
+                    output.append(character)
+                    index = pattern.index(after: index)
+                }
+                escaped = false
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                index = pattern.index(after: index)
+                continue
             }
             output.append(character)
             index = pattern.index(after: index)
