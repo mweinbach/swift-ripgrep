@@ -2315,7 +2315,7 @@ public struct RipgrepSearcher {
                     column: options.column ? standardLineEndColumn ?? adjustedSpans.first?.startColumn : nil,
                     line: blockText,
                     rawLine: rawBlockText,
-                    lineTerminator: "",
+                    lineTerminator: searchLines[endLineIndex].lineTerminator,
                     absoluteOffset: blockOffset,
                     matchCount: multilineMatchCount(
                         for: group,

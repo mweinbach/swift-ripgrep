@@ -1012,6 +1012,13 @@ public struct StandardPrinter {
         let matchedLineNumbers = multilineMatchedLineNumbers(for: result)
         let startMatchesByLine = firstMatchesByLine(for: result)
         let matchesByLine = matchesGroupedByLine(for: result)
+        let replacementContinuationLineNumbers: Set<Int>
+        if options.replacement != nil, options.multiline {
+            let startLineNumbers = Set(result.matches.map(\.lineNumber))
+            replacementContinuationLineNumbers = matchedLineNumbers.subtracting(startLineNumbers)
+        } else {
+            replacementContinuationLineNumbers = []
+        }
         let selectedLineNumbers: [Int]
         if options.passthru {
             selectedLineNumbers = result.lines.map(\.lineNumber)
@@ -1067,7 +1074,14 @@ public struct StandardPrinter {
                 previous = lineNumber
                 continue
             } else if let match = startMatchesByLine[lineNumber], shouldUseWholeMatchFormatter(match) {
-                output.append(format(match, showPath: showPath))
+                if options.replacement != nil {
+                    output.append(contentsOf: formatSearchMatch(match, showPath: showPath))
+                } else {
+                    output.append(format(match, showPath: showPath))
+                }
+            } else if replacementContinuationLineNumbers.contains(lineNumber) {
+                previous = lineNumber
+                continue
             } else if matchedLineNumbers.contains(lineNumber)
                         || (!options.passthru && !options.invertMatch && !line.positiveSpans.isEmpty) {
                 output.append(formatMatchedLine(
@@ -1087,6 +1101,13 @@ public struct StandardPrinter {
     private func vimgrepContextLines(for result: SearchFileResult, showPath: Bool) -> [String] {
         let matchesByLine = result.matches.reduce(into: [Int: [SearchMatch]]()) { grouped, match in
             grouped[match.lineNumber, default: []].append(match)
+        }
+        let continuationLineNumbers: Set<Int>
+        if options.passthru, options.multiline {
+            let startLineNumbers = Set(result.matches.map(\.lineNumber))
+            continuationLineNumbers = multilineMatchedLineNumbers(for: result).subtracting(startLineNumbers)
+        } else {
+            continuationLineNumbers = []
         }
         let selectedLineNumbers: [Int]
         if options.passthru {
@@ -1108,6 +1129,9 @@ public struct StandardPrinter {
             }
             if let matches = matchesByLine[lineNumber] {
                 output.append(contentsOf: matches.flatMap { formatVimgrep($0, showPath: showPath) })
+            } else if continuationLineNumbers.contains(lineNumber) {
+                previous = lineNumber
+                continue
             } else if !options.passthru, !options.invertMatch, !line.positiveSpans.isEmpty {
                 let positiveMatch = SearchMatch(
                     fileURL: result.fileURL,
@@ -1212,7 +1236,7 @@ public struct StandardPrinter {
     }
 
     private func shouldUseWholeMatchFormatter(_ match: SearchMatch) -> Bool {
-        !options.multiline || (options.replacement != nil && multilineLineNumbers(for: match).count == 1)
+        !options.multiline || options.replacement != nil
     }
 
     private func multilineMatchLines(for result: SearchFileResult, showPath: Bool) -> [String] {

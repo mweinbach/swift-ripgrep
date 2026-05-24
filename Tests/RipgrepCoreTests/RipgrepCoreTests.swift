@@ -3080,6 +3080,45 @@ struct RipgrepSearcherTests {
             "3-ctx",
             "4:needle",
         ])
+        try root.write("foo\nbar\nxxx\nfoo bar\n", to: "vimgrep-multiline-passthru.txt")
+        #expect(try run([
+            "--vimgrep",
+            "-U",
+            "-m1",
+            "--passthru",
+            "foo\nbar",
+            root.path("vimgrep-multiline-passthru.txt"),
+        ]) == [
+            "\(root.path("vimgrep-multiline-passthru.txt")):1:1:foo",
+            "\(root.path("vimgrep-multiline-passthru.txt"))-3-xxx",
+            "\(root.path("vimgrep-multiline-passthru.txt"))-4-foo bar",
+        ])
+        #expect(try run([
+            "-U",
+            "--replace",
+            "X",
+            "--passthru",
+            "foo\nbar",
+            root.path("vimgrep-multiline-passthru.txt"),
+        ]) == [
+            "X",
+            "xxx",
+            "foo bar",
+        ])
+        try root.write("pre\nfoo\nbar\npost\n", to: "replacement-multiline-context.txt")
+        #expect(try run([
+            "-H",
+            "-U",
+            "--replace",
+            "<$0>",
+            "-A1",
+            "foo\nbar",
+            root.path("replacement-multiline-context.txt"),
+        ]) == [
+            "\(root.path("replacement-multiline-context.txt")):<foo",
+            "\(root.path("replacement-multiline-context.txt")):bar>",
+            "\(root.path("replacement-multiline-context.txt"))-post",
+        ])
         #expect(try run(["-n", "--passthru", "match", root.path("context.txt")]) == [
             "1-one",
             "2-two",
