@@ -855,6 +855,17 @@ struct RipgrepSearcherTests {
         #expect(crlfOmitted == Data(
             "[Omitted long matching line]\r\n[Omitted long matching line]\r\n".utf8
         ))
+        try root.write(Data("one\r\nneedle\r\ntwo\r\n".utf8), to: "source-crlf-columns.txt")
+        let sourceCRLFOmitted = try runExecutableData([
+            "--crlf",
+            "--max-columns",
+            "5",
+            #"[a-z]+\d*"#,
+            root.path("source-crlf-columns.txt"),
+        ]) {}
+        #expect(sourceCRLFOmitted == Data(
+            "one\r\n[Omitted long matching line]\r\ntwo\r\n".utf8
+        ))
         let crlfPreview = try runExecutableData([
             "--crlf",
             "--max-columns",
@@ -2917,6 +2928,21 @@ struct RipgrepSearcherTests {
             "\(multiRoot.path("b.txt")):needle",
             "\(multiRoot.path("b.txt"))-after",
         ])
+        let crlfContextOutput = try runExecutableData([
+            "--sort",
+            "path",
+            "--crlf",
+            "-A1",
+            "needle",
+            multiRoot.url.path,
+        ]) {}
+        #expect(crlfContextOutput == Data((
+            "\(multiRoot.path("a.txt")):needle\n" +
+            "\(multiRoot.path("a.txt"))-after\n" +
+            "--\r\n" +
+            "\(multiRoot.path("b.txt")):needle\n" +
+            "\(multiRoot.path("b.txt"))-after\n"
+        ).utf8))
         let nullContextRoot = try TemporaryDirectory()
         try nullContextRoot.write(Data("needle\0after\0".utf8), to: "a.txt")
         try nullContextRoot.write(Data("needle\0after\0".utf8), to: "b.txt")

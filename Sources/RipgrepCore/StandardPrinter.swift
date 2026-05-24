@@ -1548,8 +1548,11 @@ public struct StandardPrinter {
         if options.nullData {
             return "\0"
         }
+        if options.crlf, forceCRLF {
+            return "\r"
+        }
         if options.crlf,
-           (forceCRLF || terminator.isEmpty || colors.isEnabled || crlfMatchTerminator),
+           (terminator.isEmpty || colors.isEnabled || crlfMatchTerminator),
            line?.hasSuffix("\r") != true {
             return "\r"
         }
@@ -1596,7 +1599,10 @@ public struct StandardPrinter {
     }
 
     private func contextSeparatorLine(_ separator: String) -> String {
-        options.nullData ? "\(separator)\0" : separator
+        if options.nullData {
+            return "\(separator)\0"
+        }
+        return options.crlf ? "\(separator)\r" : separator
     }
 
     private func pathFieldSeparator() -> String {
