@@ -222,7 +222,10 @@ public struct StandardPrinter {
                 return nil
             }
             let replacementStartByte = replacementOffsets[index]
-            let lineText = replacementLine.map { vimgrepReplacementLineText($0, match: match) } ?? vimgrepLineText(for: match)
+            let projection = vimgrepSpanProjection(for: span, in: match)
+            let lineText = replacementLine.map { vimgrepReplacementLineText($0, match: match) }
+                ?? projection?.renderedLine
+                ?? vimgrepLineText(for: match)
             let rawText = options.onlyMatching
                 ? (span.replacement ?? span.text)
                 : lineText
@@ -234,26 +237,81 @@ public struct StandardPrinter {
                 replacementStartByte: replacementStartByte
             )
             let column = span.replacement == nil
-                ? span.startColumn
+                ? projection?.column ?? span.startColumn
                 : column(in: replacementLine ?? match.line, byteOffset: replacementStartByte)
+            let lineNumber = projection?.lineNumber ?? match.lineNumber
+            let byteOffset = options.byteOffset
+                ? match.absoluteOffset + (projection?.lineStartByte ?? replacementStartByte)
+                : nil
             let fields = vimgrepFields(
-                lineNumber: match.lineNumber,
+                lineNumber: lineNumber,
                 column: column,
-                byteOffset: options.byteOffset ? match.absoluteOffset + replacementStartByte : nil,
+                byteOffset: byteOffset,
                 text: text
             )
             let terminator = outputTerminator(
                 match.lineTerminator,
-                line: options.onlyMatching ? span.text : (replacementLine ?? match.line),
+                line: options.onlyMatching ? span.text : (replacementLine ?? projection?.line ?? match.line),
                 crlfMatchTerminator: options.onlyMatching,
-                forceCRLF: isColumnLimitedVimgrepLine(match: match, replacementLine: replacementLine)
+                forceCRLF: isColumnLimitedVimgrepLine(match: match, replacementLine: replacementLine, projectedLine: projection?.line)
             )
             guard showPath else {
                 return "\(fields.joined(separator: options.fieldMatchSeparator))\(terminator)"
             }
-            let path = renderPath(for: match.fileURL, line: match.lineNumber, column: column)
+            let path = renderPath(for: match.fileURL, line: lineNumber, column: column)
             return "\(path)\(matchPathFieldSeparator())\(fields.joined(separator: options.fieldMatchSeparator))\(terminator)"
         }
+    }
+
+    private struct VimgrepSpanProjection {
+        let lineNumber: Int
+        let column: Int
+        let lineStartByte: Int
+        let line: String
+        let renderedLine: String
+    }
+
+    private func vimgrepSpanProjection(for span: MatchSpan, in match: SearchMatch) -> VimgrepSpanProjection? {
+        guard options.multiline,
+              options.replacement == nil,
+              !options.nullData,
+              containsRenderedLineTerminator(match.line) else {
+            return nil
+        }
+        var lineStartByte = 0
+        var lineNumber = match.lineNumber
+        var current = String.UnicodeScalarView()
+
+        for scalar in match.line.unicodeScalars {
+            let scalarText = String(scalar)
+            let scalarBytes = scalarText.utf8.count
+            if scalar == "\n" {
+                let line = String(current)
+                if span.startByte < lineStartByte + line.utf8.count + scalarBytes {
+                    return VimgrepSpanProjection(
+                        lineNumber: lineNumber,
+                        column: column(in: line, byteOffset: max(0, span.startByte - lineStartByte)),
+                        lineStartByte: lineStartByte,
+                        line: line,
+                        renderedLine: renderedLine(line)
+                    )
+                }
+                lineStartByte += line.utf8.count + scalarBytes
+                lineNumber += 1
+                current.removeAll(keepingCapacity: true)
+            } else {
+                current.append(scalar)
+            }
+        }
+
+        let line = String(current)
+        return VimgrepSpanProjection(
+            lineNumber: lineNumber,
+            column: column(in: line, byteOffset: max(0, span.startByte - lineStartByte)),
+            lineStartByte: lineStartByte,
+            line: line,
+            renderedLine: renderedLine(line)
+        )
     }
 
     private func vimgrepFields(lineNumber: Int, column: Int, byteOffset: Int?, text: String) -> [String] {
@@ -1013,9 +1071,12 @@ public struct StandardPrinter {
         return ""
     }
 
-    private func isColumnLimitedVimgrepLine(match: SearchMatch, replacementLine: String?) -> Bool {
+    private func isColumnLimitedVimgrepLine(match: SearchMatch, replacementLine: String?, projectedLine: String? = nil) -> Bool {
         if let replacementLine {
             return isColumnLimitedLine(replacementLine, originalLine: match.line)
+        }
+        if let projectedLine {
+            return isColumnLimitedLine(projectedLine)
         }
         return isColumnLimitedLine(options.nullData ? match.line : firstRenderedLine(match.line))
     }

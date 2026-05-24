@@ -1640,6 +1640,36 @@ struct RipgrepSearcherTests {
             "\(root.path("vimgrep.txt")):1:1:foobar",
             "\(root.path("vimgrep.txt")):3:5:foo quux",
         ])
+        #expect(try run(["-U", "--vimgrep", #"(?s).."#, root.path("multi.txt")]) == [
+            "\(root.path("multi.txt")):1:1:foo",
+            "\(root.path("multi.txt")):1:3:foo",
+            "\(root.path("multi.txt")):2:1:bar",
+            "\(root.path("multi.txt")):2:3:bar",
+            "\(root.path("multi.txt")):3:1:baz",
+            "\(root.path("multi.txt")):3:3:baz",
+        ])
+        #expect(try run(["-U", "--vimgrep", #"(?s).+?"#, root.path("multi.txt")]) == [
+            "\(root.path("multi.txt")):1:1:foo",
+            "\(root.path("multi.txt")):1:2:foo",
+            "\(root.path("multi.txt")):1:3:foo",
+            "\(root.path("multi.txt")):1:4:foo",
+            "\(root.path("multi.txt")):2:1:bar",
+            "\(root.path("multi.txt")):2:2:bar",
+            "\(root.path("multi.txt")):2:3:bar",
+            "\(root.path("multi.txt")):2:4:bar",
+            "\(root.path("multi.txt")):3:1:baz",
+            "\(root.path("multi.txt")):3:2:baz",
+            "\(root.path("multi.txt")):3:3:baz",
+            "\(root.path("multi.txt")):3:4:baz",
+        ])
+        #expect(try run(["-U", "--vimgrep", "--byte-offset", #"(?s).."#, root.path("multi.txt")]) == [
+            "\(root.path("multi.txt")):1:1:0:foo",
+            "\(root.path("multi.txt")):1:3:0:foo",
+            "\(root.path("multi.txt")):2:1:4:bar",
+            "\(root.path("multi.txt")):2:3:4:bar",
+            "\(root.path("multi.txt")):3:1:8:baz",
+            "\(root.path("multi.txt")):3:3:8:baz",
+        ])
         try root.write("pre\naaa\nbbb\nctx\naaa\nbbb\npost\naaa\nbbb\n", to: "multi-context.txt")
         #expect(try run(["-U", "-n", "-m1", "-o", "-A2", #"aaa\nbbb"#, root.path("multi-context.txt")]) == [
             "2:aaa",
