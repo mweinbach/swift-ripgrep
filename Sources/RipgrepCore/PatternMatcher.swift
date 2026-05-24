@@ -539,6 +539,13 @@ public struct PatternMatcher {
         if source.isEmpty {
             source = "(?:)"
         }
+        if !usesByteSemantics {
+            source = scopedByteRegexPattern(
+                for: source,
+                defaultUnicodeEnabled: !options.noUnicode,
+                caseInsensitive: options.effectiveIgnoreCase
+            )
+        }
         if usesByteSemantics {
             source = asciiRegexPattern(for: source)
         }
@@ -572,9 +579,9 @@ public struct PatternMatcher {
 
     private static func regexUsesByteSemantics(pattern: String, options: RipgrepOptions) -> Bool {
         if options.noUnicode {
-            return !wholePatternUnicodeEnabled(pattern) || hasInlineNoUnicodeOption(pattern)
+            return !wholePatternUnicodeEnabled(pattern) && !hasInlineUnicodeEnableOption(pattern)
         }
-        return hasInlineNoUnicodeOption(pattern)
+        return hasInlineNoUnicodeOption(pattern) && !hasInlineUnicodeEnableOption(pattern)
     }
 
     private static func wholePatternUnicodeEnabled(_ pattern: String) -> Bool {
@@ -890,6 +897,47 @@ public struct PatternMatcher {
             if !inClass,
                pattern[index...].hasPrefix("(?-u)") || pattern[index...].hasPrefix("(?-u:") {
                 return true
+            }
+            index = pattern.index(after: index)
+        }
+        return false
+    }
+
+    private static func hasInlineUnicodeEnableOption(_ pattern: String) -> Bool {
+        var escaped = false
+        var inClass = false
+        var index = pattern.startIndex
+
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                escaped = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "[" {
+                inClass = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "]" {
+                inClass = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if !inClass,
+               character == "(",
+               let flags = inlineUnicodeFlags(in: pattern, openingAt: index) {
+                if flags.unicodeEnabled == true {
+                    return true
+                }
+                index = flags.end
+                continue
             }
             index = pattern.index(after: index)
         }
@@ -1721,6 +1769,92 @@ public struct PatternMatcher {
         if escaped {
             output.append("\\")
         }
+        return output
+    }
+
+    private static func scopedByteRegexPattern(
+        for pattern: String,
+        defaultUnicodeEnabled: Bool,
+        caseInsensitive: Bool
+    ) -> String {
+        var output = ""
+        var chunk = ""
+        var currentUnicodeEnabled = defaultUnicodeEnabled
+        var escaped = false
+        var inClass = false
+        var index = pattern.startIndex
+
+        func flushChunk() {
+            guard !chunk.isEmpty else {
+                return
+            }
+            if currentUnicodeEnabled {
+                output += chunk
+            } else {
+                var transformed = asciiRegexPattern(for: chunk)
+                if caseInsensitive {
+                    transformed = asciiCaseInsensitivePattern(for: transformed)
+                }
+                output += byteRegexLiteralPattern(for: transformed)
+            }
+            chunk = ""
+        }
+
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                chunk.append(character)
+                escaped = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "\\" {
+                chunk.append(character)
+                escaped = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "[" {
+                inClass = true
+                chunk.append(character)
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "]" {
+                inClass = false
+                chunk.append(character)
+                index = pattern.index(after: index)
+                continue
+            }
+            if !inClass,
+               character == "(",
+               let flags = inlineUnicodeFlags(in: pattern, openingAt: index) {
+                flushChunk()
+                if flags.scoped, let close = flags.close {
+                    let prefix = pattern[index..<flags.bodyStart]
+                    let body = pattern[flags.bodyStart..<close]
+                    let unicodeEnabled = flags.unicodeEnabled ?? currentUnicodeEnabled
+                    output += prefix
+                    output += scopedByteRegexPattern(
+                        for: String(body),
+                        defaultUnicodeEnabled: unicodeEnabled,
+                        caseInsensitive: caseInsensitive
+                    )
+                    output.append(")")
+                    index = flags.end
+                    continue
+                }
+                output += pattern[index..<flags.end]
+                if let unicodeEnabled = flags.unicodeEnabled {
+                    currentUnicodeEnabled = unicodeEnabled
+                }
+                index = flags.end
+                continue
+            }
+            chunk.append(character)
+            index = pattern.index(after: index)
+        }
+        flushChunk()
         return output
     }
 
