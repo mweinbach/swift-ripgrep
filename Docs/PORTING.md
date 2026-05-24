@@ -2,22 +2,25 @@
 
 Baseline checked: `/Users/mweinbach/Projects/swift-harness/ripgrep` at
 `4519153e5e` (`ripgrep 15.1.0`). The Swift binary reports the same upstream
-revision and currently advertises `features:-pcre2`.
+revision and, after the 2026-05-24 orchestration, advertises `features:+pcre2`
+when the linked libpcre2-8 is available.
 
 ## Current shape
 
-The Swift port is a compact SwiftPM package: one library target, one executable
-target and one test target. It maps most of ripgrep's public CLI flags into
-`RipgrepOptions`, carries generated help/man/completion resources, and has a
-large single-file test suite covering search, output formats, ignore rules,
-file types, stdin, encodings, binary handling and parser diagnostics.
+The Swift port is a SwiftPM package with one library target, one executable
+target, one system-module target (`CPCRE2`, wrapping Homebrew libpcre2-8) and
+one test target. It maps most of ripgrep's public CLI flags into
+`RipgrepOptions`, carries generated help/man/completion resources, and uses a
+test suite that mirrors the Rust upstream split (`BinaryTests`, `FeatureTests`,
+`JSONTests`, `MiscTests`, `MultilineTests`, `RegressionTests`, plus
+`ParityHarnessTests` and `RipgrepTestSupport`).
 
-Compared with Rust ripgrep, the port has intentionally collapsed the upstream
-workspace into a much smaller implementation:
+Compared with Rust ripgrep, the port still collapses the upstream workspace
+into a much smaller implementation:
 
 - Rust: `grep`, `regex`, `searcher`, `ignore`, `globset`, `printer`, `cli`,
   `matcher`, `pcre2` and the `rg` core binary.
-- Swift: `RipgrepCore` plus `ripgrep`.
+- Swift: `RipgrepCore` (plus `CPCRE2`) and the `ripgrep` executable.
 
 ## Verified working areas
 
@@ -35,61 +38,75 @@ workspace into a much smaller implementation:
   `.gitignore`, `.git/info/exclude`, global git ignore files, override globs
   and default file types.
 - `--search-zip` works for the checked `.xz` probe when `xz` is available.
+- Real PCRE2 backend via `CPCRE2`/libpcre2-8 powers `-P`, `--engine=pcre2`,
+  `--engine=auto` (auto-hybrid fallback), `--pcre2-version`, and the
+  `--pcre2-unicode`/`--no-pcre2-unicode` UCP/UTF toggles.
+- Default-engine size accounting honours `--regex-size-limit` and emits the
+  Rust-compatible `compiled regex exceeds size limit of <N>` diagnostic when
+  the budget is exceeded. `--dfa-size-limit` is plumbed in for the same
+  failure path.
+- Full WHATWG Encoding Standard label support via `EncodingLabels.swift` and
+  the new `TextEncoding` wrapper. `--encoding gbk`, `big5`, `koi8-r`,
+  `windows-1251`, `iso-8859-7`, and the rest of the Encoding Standard alias
+  table decode correctly; unknown labels produce
+  `error parsing flag --encoding: grep config error: unknown encoding: <label>`.
 
 ## High-priority missing parity
 
-1. Real PCRE2 and auto-hybrid regex support.
+1. **(Done 2026-05-24)** Real PCRE2 and auto-hybrid regex support — see
+   `Sources/CPCRE2/`, `Sources/RipgrepCore/PCRE2Matcher.swift`, and the PCRE2
+   integration in `Sources/RipgrepCore/PatternMatcher.swift`.
 
-   Rust ripgrep can use PCRE2 when built with the `pcre2` feature. The installed
-   Rust `rg` accepts `-P -o '(?<=a)b'` and `--engine=auto -o '(?<=a)b'`; the
-   Swift port returns `PCRE2 is not available in this build of ripgrep`.
+2. **(Done 2026-05-24)** Enforced regex resource limits — see the size-budget
+   guard in `Sources/RipgrepCore/PatternMatcher.swift`.
 
-2. Enforced regex resource limits.
+3. **(Done 2026-05-24)** Full Encoding Standard label support — see
+   `Sources/RipgrepCore/EncodingLabels.swift` and the `TextEncoding` decoder
+   plumbed through `Haystack.swift` and the stdin path.
 
-   Swift parses `--regex-size-limit` and `--dfa-size-limit`, but the current
-   matcher uses `NSRegularExpression` and does not enforce Rust's automata
-   limits. A direct probe with `--regex-size-limit=0 '[a-z]'` errors in Rust
-   with `compiled regex exceeds size limit of 0`; Swift still matches.
-
-3. Full Encoding Standard label support.
-
-   Rust's searcher delegates labels to `encoding_rs`; Swift currently recognizes
-   a small hard-coded set: UTF-8, UTF-16 variants, Latin-1/Windows-1252,
-   Shift-JIS and EUC-JP. A direct probe with `--encoding gbk` works in Rust
-   and fails at parse time in Swift.
-
-4. Streaming, mmap and parallel search architecture.
+4. Streaming, mmap and parallel search architecture. **(Still open)**
 
    Swift reads each file into memory before searching and then walks/searches
    with ordinary array maps. Rust ripgrep has a streaming line buffer, mmap
    selection, heap limits and parallel traversal/search machinery. In Swift,
-   `--threads`, `--mmap`, `--line-buffered`, `--block-buffered`,
-   `--dfa-size-limit` and `--regex-size-limit` are mostly accepted as CLI
-   compatibility flags rather than implemented runtime controls.
+   `--threads`, `--mmap`, `--line-buffered` and `--block-buffered` are still
+   mostly accepted as CLI compatibility flags rather than implemented runtime
+   controls. This is the next major slice and is large enough to warrant its
+   own multi-session plan — split into a `BufferReader`/line-buffer layer, an
+   mmap-vs-buffered selection policy, a per-thread search worker pool, and
+   then wire the four CLI flags to those subsystems.
 
-5. Regex engine fidelity beyond covered cases.
+5. Regex engine fidelity beyond covered cases. **(Still open)**
 
    The Swift matcher translates selected Rust regex behavior onto
    `NSRegularExpression` plus bespoke edge-case handling. The Rust implementation
    builds configured HIR and regex-automata matchers with literal extraction,
    Unicode/no-Unicode transforms, CRLF handling, line terminator bans and size
    accounting. The Swift tests cover many patched cases, but the architecture is
-   still more likely to drift on regex syntax and pathological edge cases.
+   still more likely to drift on regex syntax and pathological edge cases. The
+   auto-hybrid fallback (item 1) reduces the impact in practice because patterns
+   the default engine cannot handle now degrade gracefully to PCRE2.
 
 ## Medium-priority improvements
 
-- Add a parity harness that can run selected upstream integration fixtures
-  against `.build/debug/ripgrep` and installed Rust `rg`, then compare stdout,
-  stderr and exit status.
-- Split `Tests/RipgrepCoreTests/RipgrepCoreTests.swift` by upstream area
-  (`binary`, `feature`, `json`, `misc`, `multiline`, `regression`) so future
-  porting slices can map back to Rust test files.
+- **(Done 2026-05-24)** Parity harness gated on `SWIFT_RIPGREP_PARITY=1`
+  in `Tests/RipgrepCoreTests/ParityHarnessTests.swift` (fixtures under
+  `Tests/Fixtures/parity/`). When the env var is unset the test skips so CI
+  stays green; when set it diffs stdout/stderr/exit between
+  `.build/debug/ripgrep` and the installed `rg`.
+- **(Done 2026-05-24)** Test split mirroring the Rust upstream layout —
+  `BinaryTests`, `FeatureTests`, `JSONTests`, `MiscTests`, `MultilineTests`,
+  `RegressionTests`, plus `RipgrepTestSupport` for shared helpers.
 - Automate generated asset refresh for `rg.help.*`, `rg.1` and shell
   completions from the Rust checkout, or at least add a drift check.
 - Add performance smoke tests for large files, many files, binary detection and
   compressed input before changing the search architecture.
-- Keep the next slices narrow and checkpointable: PCRE2/auto-hybrid behavior,
-  regex limit enforcement, Encoding Standard labels, and then streaming search.
+- Grow the parity harness fixture set — current coverage is text, binary,
+  gitignored, multiline and UTF-16LE; extend with more encodings, more
+  compressed inputs, and a few of the regex pathological cases.
+- Keep the next slices narrow and checkpointable: streaming/mmap/parallel
+  architecture (high-priority item 4), then asset-refresh automation and
+  perf smoke tests.
 
 ## Active porting work plan (2026-05-24 orchestration)
 
@@ -102,27 +119,27 @@ Owner: pair-agent-A. Touches: `Package.swift`, new
 `Sources/CPCRE2/*` (system module) and `Sources/RipgrepCore/PCRE2*.swift`,
 `Sources/RipgrepCore/PatternMatcher.swift`, `Sources/RipgrepCore/RipgrepCLI.swift`.
 
-- [ ] Add a `CPCRE2` system module target wrapping libpcre2-8 from Homebrew
+- [x] Add a `CPCRE2` system module target wrapping libpcre2-8 from Homebrew
       (`/opt/homebrew/opt/pcre2`, header `pcre2.h`, lib `pcre2-8`). Use
       `PCRE2_CODE_UNIT_WIDTH=8`. Make the link/include paths work when the
       Homebrew prefix is `/opt/homebrew` (Apple silicon) or `/usr/local`
       (Intel) via `unsafeFlags` driven by `pcre2-config` or a small fallback.
-- [ ] Replace the "PCRE2 is not available" error path in
+- [x] Replace the "PCRE2 is not available" error path in
       `PatternMatcher` with a real PCRE2-backed `CompiledPattern` case.
       Implement `--engine=pcre2`, `-P`, `--engine=auto` (auto must try the
       default engine first and fall back to PCRE2 when the default rejects the
       pattern with the auto-hybrid diagnostic).
-- [ ] Wire `--no-pcre2-unicode` / `--pcre2-unicode` into PCRE2 compile
+- [x] Wire `--no-pcre2-unicode` / `--pcre2-unicode` into PCRE2 compile
       options (UCP/UTF flags) and `--pcre2-version` to return the real linked
       PCRE2 version string. Update `RipgrepCLI` `features:-pcre2` to
       `features:+pcre2` when PCRE2 is linked.
-- [ ] Enforce `--regex-size-limit` for the default (NSRegularExpression)
+- [x] Enforce `--regex-size-limit` for the default (NSRegularExpression)
       engine using a heuristic that mirrors Rust's behaviour: refuse to
       compile when the estimated regex program size exceeds the limit, and
       surface Rust's exact error string `compiled regex exceeds size limit of
       <N>`. Map `--dfa-size-limit` to a guard that produces Rust's
       `dfa size limit exceeded` style error when triggered.
-- [ ] Tests in `Tests/RipgrepCoreTests/` covering all of the above
+- [x] Tests in `Tests/RipgrepCoreTests/` covering all of the above
       (PCRE2 lookaround, PCRE2 backrefs, auto-hybrid fallback, size-limit
       rejection messages, `--pcre2-version` output). Run `swift test`.
 
