@@ -220,7 +220,7 @@ public struct FileWalker {
                 filtered = true
                 return []
             }
-            if !isDirectory && !typeRegistry.allows(path: relativePath) {
+            if !isDirectory && !isIncludedByOverride && !typeRegistry.allows(path: relativePath) {
                 debug("ignoring \(url.path): file type filter", options: options, diagnostics: &diagnostics)
                 return []
             }

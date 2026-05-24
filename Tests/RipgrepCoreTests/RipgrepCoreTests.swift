@@ -3066,6 +3066,10 @@ struct RipgrepSearcherTests {
             "main.rs",
             "main.swift",
         ])
+        #expect(pathBasenames(try run(["--sort", "path", "-tmd", "-g", "*.swift", "needle", root.url.path])) == [
+            ".hidden.swift",
+            "main.swift",
+        ])
 
         try root.write("needle\n", to: "OnlyMarkdown/README.md")
         var output: [String] = []
