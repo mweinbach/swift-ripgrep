@@ -3317,6 +3317,7 @@ struct RipgrepSearcherTests {
         let root = try TemporaryDirectory()
         try root.write(Data("needle\0tail\n".utf8), to: "bin.dat")
         try root.write(Data("needle\n\0tail\n".utf8), to: "before-nul.dat")
+        try root.write(Data("foo\0needle\0bar\0".utf8), to: "nul-anchors.dat")
 
         #expect(try runAllowingNoMatch(["-n", "needle", root.url.path]) == [])
         #expect(try runAllowingNoMatch(["tail", root.url.path]) == [])
@@ -3338,8 +3339,32 @@ struct RipgrepSearcherTests {
         #expect(try run(["-0", "-A1", "needle", root.path("before-nul.dat")]) == [
             #"binary file matches (found "\0" byte around offset 7)"#,
         ])
+        #expect(try run(["^needle", root.path("nul-anchors.dat")]) == [
+            #"binary file matches (found "\0" byte around offset 3)"#,
+        ])
+        #expect(try run(["foo$", root.path("nul-anchors.dat")]) == [
+            #"binary file matches (found "\0" byte around offset 3)"#,
+        ])
+        #expect(try run(["-A1", "^needle", root.path("nul-anchors.dat")]) == [
+            #"binary file matches (found "\0" byte around offset 3)"#,
+        ])
+        #expect(try runAllowingNoMatch(["-B1", "^needle", root.path("nul-anchors.dat")]) == [])
+        #expect(try runAllowingNoMatch(["-C1", "^needle", root.path("nul-anchors.dat")]) == [])
+        #expect(try run(["-B1", "foo$", root.path("nul-anchors.dat")]) == [
+            #"binary file matches (found "\0" byte around offset 3)"#,
+        ])
+        #expect(try runAllowingNoMatch(["--passthru", "^needle", root.path("nul-anchors.dat")]) == [])
+        #expect(try run(["--passthru", "foo$", root.path("nul-anchors.dat")]) == [
+            #"binary file matches (found "\0" byte around offset 3)"#,
+        ])
+        #expect(try runAllowingNoMatch(["-v", "[a-z]+", root.path("nul-anchors.dat")]) == [])
+        #expect(try runAllowingNoMatch(["--text", "^needle", root.path("nul-anchors.dat")]) == [])
         #expect(try run(["-c", "needle", root.path("before-nul.dat")]) == ["1"])
-        #expect(pathBasenames(try run(["--sort=path", "--binary", "needle", root.url.path])) == ["before-nul.dat", "bin.dat"])
+        #expect(pathBasenames(try run(["--sort=path", "--binary", "needle", root.url.path])) == [
+            "before-nul.dat",
+            "bin.dat",
+            "nul-anchors.dat",
+        ])
 
         let countRoot = try TemporaryDirectory()
         try countRoot.write(Data("cat cat\npadding\n\0tail cat\n".utf8), to: "file1.txt")

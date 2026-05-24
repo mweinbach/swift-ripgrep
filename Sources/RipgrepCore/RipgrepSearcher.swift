@@ -244,12 +244,13 @@ public struct RipgrepSearcher {
                 rawData: rawDataForOutput(data, options: options),
                 fileURL: fileURL,
                 matcher: matcher,
-                options: options
+                options: options,
+                splitBinaryNUL: true
             )
             let binaryDetectedBeforeSearch = binaryByteOffset < Self.binaryDetectionBufferSize
             let visibleMatches = binaryDetectedBeforeSearch && !haystack.isExplicit
                 ? []
-                : matchesBeforeBinary(result.matches, binaryByteOffset: binaryByteOffset)
+                : matchesBeforeBinary(result.matches, binaryByteOffset: binaryByteOffset, options: options)
             let emittedMatches = shouldEmitSuppressedBinaryMatches(options, isExplicit: haystack.isExplicit)
                 ? result.matches
                 : visibleMatches
@@ -257,9 +258,17 @@ public struct RipgrepSearcher {
             let displayMatches = options.json
                 ? jsonBinaryDisplayMatches(emittedMatches, lineNumberShifts: lineNumberShifts, options: options)
                 : emittedMatches
-            let displayLines = options.json
-                ? jsonBinaryDisplayLines(result.lines, lineNumberShifts: lineNumberShifts, options: options)
-                : result.lines
+            let hasBinaryMatch = hasBinaryMatchResult(
+                result: result,
+                visibleMatches: visibleMatches,
+                options: options
+            )
+            let displayLines: [SearchLine]
+            if options.json {
+                displayLines = jsonBinaryDisplayLines(result.lines, lineNumberShifts: lineNumberShifts, options: options)
+            } else {
+                displayLines = hasBinaryMatch ? result.lines : []
+            }
             if options.binaryMode == .automatic && !haystack.isExplicit && binaryDetectedBeforeSearch {
                 return FileSearchOutcome(result: SearchFileResult(
                     fileURL: fileURL,
@@ -277,7 +286,7 @@ public struct RipgrepSearcher {
                 matches: displayMatches,
                 lines: displayLines,
                 binaryByteOffset: binaryByteOffset,
-                hasBinaryMatch: result.hasMatch,
+                hasBinaryMatch: hasBinaryMatch,
                 stoppedBinaryAfterMatch: options.binaryMode == .automatic && !haystack.isExplicit,
                 bytesSearched: suppressedBinaryBytesSearched(
                     dataCount: data.count,
@@ -295,7 +304,8 @@ public struct RipgrepSearcher {
             rawData: rawDataForOutput(data, options: options),
             fileURL: fileURL,
             matcher: matcher,
-            options: options
+            options: options,
+            splitBinaryNUL: true
         )
         return FileSearchOutcome(result: SearchFileResult(
             fileURL: result.fileURL,
@@ -496,7 +506,7 @@ public struct RipgrepSearcher {
         let binaryDetectedBeforeSearch = binaryByteOffset < Self.binaryDetectionBufferSize
         let visibleMatches = binaryDetectedBeforeSearch
             ? []
-            : matchesBeforeBinary(result.matches, binaryByteOffset: binaryByteOffset)
+            : matchesBeforeBinary(result.matches, binaryByteOffset: binaryByteOffset, options: options)
         let emittedMatches = shouldEmitSuppressedBinaryMatches(options, isExplicit: true)
             ? result.matches
             : visibleMatches
@@ -519,10 +529,31 @@ public struct RipgrepSearcher {
         )
     }
 
-    private func matchesBeforeBinary(_ matches: [SearchMatch], binaryByteOffset: Int) -> [SearchMatch] {
+    private func matchesBeforeBinary(
+        _ matches: [SearchMatch],
+        binaryByteOffset: Int,
+        options: RipgrepOptions
+    ) -> [SearchMatch] {
         matches.filter { match in
-            match.absoluteOffset + match.lineWithTerminator.utf8.count <= binaryByteOffset
+            let matchEnd = match.spans.map(\.endByte).max() ?? byteCount(match.line, options: options)
+            return match.absoluteOffset + matchEnd <= binaryByteOffset
         }
+    }
+
+    private func hasBinaryMatchResult(
+        result: SearchFileResult,
+        visibleMatches: [SearchMatch],
+        options: RipgrepOptions
+    ) -> Bool {
+        guard result.hasMatch else {
+            return false
+        }
+        guard options.printMode == .matchingLines,
+              !options.json,
+              (options.beforeContext > 0 || options.passthru) else {
+            return true
+        }
+        return !visibleMatches.isEmpty
     }
 
     private func shouldEmitSuppressedBinaryMatches(_ options: RipgrepOptions, isExplicit: Bool) -> Bool {
@@ -778,15 +809,17 @@ public struct RipgrepSearcher {
         rawData: Data? = nil,
         fileURL: URL,
         matcher: PatternMatcher,
-        options: RipgrepOptions
+        options: RipgrepOptions,
+        splitBinaryNUL: Bool = false
     ) -> SearchFileResult {
         if options.multiline && !options.invertMatch {
             return searchMultilineContents(contents, fileURL: fileURL, matcher: matcher, options: options)
         }
 
         var matches: [SearchMatch] = []
-        let lines = splitLines(contents, options: options)
-        let rawLines = rawData.map { splitRawLines($0, options: options) }
+        let shouldSplitBinaryNUL = splitBinaryNUL && options.binaryMode != .asText && !options.nullData
+        let lines = splitLines(contents, options: options, splitBinaryNUL: shouldSplitBinaryNUL)
+        let rawLines = rawData.map { splitRawLines($0, options: options, splitBinaryNUL: shouldSplitBinaryNUL) }
         var searchLines: [SearchLine] = []
         var absoluteOffset = 0
         let maxCount = options.maxCount ?? Int.max
@@ -1379,7 +1412,11 @@ public struct RipgrepSearcher {
         String(data: data, encoding: encoding) ?? String(decoding: data, as: UTF8.self)
     }
 
-    private func splitLines(_ contents: String, options: RipgrepOptions) -> [(text: String, terminator: String)] {
+    private func splitLines(
+        _ contents: String,
+        options: RipgrepOptions,
+        splitBinaryNUL: Bool = false
+    ) -> [(text: String, terminator: String)] {
         if options.nullData {
             return splitNulDelimited(contents)
         }
@@ -1388,7 +1425,7 @@ public struct RipgrepSearcher {
         var current = String.UnicodeScalarView()
 
         for scalar in contents.unicodeScalars {
-            if scalar == "\n" {
+            if scalar == "\n" || (splitBinaryNUL && scalar == "\0") {
                 lines.append((String(current), "\n"))
                 current.removeAll(keepingCapacity: true)
             } else {
@@ -1396,7 +1433,7 @@ public struct RipgrepSearcher {
             }
         }
 
-        if !current.isEmpty || !lastScalar(in: contents, equals: "\n") {
+        if !current.isEmpty || !lastScalarIsTerminator(in: contents, splitBinaryNUL: splitBinaryNUL) {
             lines.append((String(current), ""))
         }
         return lines
@@ -1419,24 +1456,33 @@ public struct RipgrepSearcher {
         return lines
     }
 
-    private func splitRawLines(_ data: Data, options: RipgrepOptions) -> [(text: String, terminator: String)] {
+    private func splitRawLines(
+        _ data: Data,
+        options: RipgrepOptions,
+        splitBinaryNUL: Bool = false
+    ) -> [(text: String, terminator: String)] {
         let separator: UInt8 = options.nullData ? 0 : UInt8(ascii: "\n")
         var lines: [(String, String)] = []
         var current = String.UnicodeScalarView()
 
         for byte in data {
-            if byte == separator {
-                lines.append((String(current), String(UnicodeScalar(separator))))
+            if byte == separator || (splitBinaryNUL && byte == 0) {
+                lines.append((String(current), options.nullData ? String(UnicodeScalar(separator)) : "\n"))
                 current.removeAll(keepingCapacity: true)
             } else {
                 current.append(UnicodeScalar(byte))
             }
         }
 
-        if !current.isEmpty || data.last != separator {
+        let lastByteIsTerminator = data.last == separator || (splitBinaryNUL && data.last == 0)
+        if !current.isEmpty || !lastByteIsTerminator {
             lines.append((String(current), ""))
         }
         return lines
+    }
+
+    private func lastScalarIsTerminator(in contents: String, splitBinaryNUL: Bool) -> Bool {
+        lastScalar(in: contents, equals: "\n") || (splitBinaryNUL && lastScalar(in: contents, equals: "\0"))
     }
 
     private func lastScalar(in contents: String, equals expected: UnicodeScalar) -> Bool {
