@@ -877,14 +877,19 @@ public struct RipgrepSearcher {
                 $0.text.unicodeScalars.count + $0.terminator.unicodeScalars.count
             } ?? byteCount(splitLine.text, options: options) + byteCount(splitLine.terminator, options: options)
             let positiveSpans = syntheticBinarySplitSpans(
-                nullDataLineAnchorSpans(
-                    adjustedSpans(
-                        matcher.positiveSpans(in: lineForMatching),
-                        rawLine: rawLineForSpanAdjustment,
+                syntheticInlineCRLFBoundarySpans(
+                    nullDataLineAnchorSpans(
+                        adjustedSpans(
+                            matcher.positiveSpans(in: lineForMatching),
+                            rawLine: rawLineForSpanAdjustment,
+                            options: options
+                        ),
+                        line: line,
+                        absoluteOffset: absoluteOffset,
+                        terminator: splitLine.terminator,
                         options: options
                     ),
                     line: line,
-                    absoluteOffset: absoluteOffset,
                     terminator: splitLine.terminator,
                     options: options
                 ),
@@ -906,14 +911,19 @@ public struct RipgrepSearcher {
                 continue
             }
 
-            let rawSpans = nullDataLineAnchorSpans(
-                adjustedSpans(
-                    matcher.spans(in: lineForMatching),
-                    rawLine: rawLineForSpanAdjustment,
+            let rawSpans = syntheticInlineCRLFBoundarySpans(
+                nullDataLineAnchorSpans(
+                    adjustedSpans(
+                        matcher.spans(in: lineForMatching),
+                        rawLine: rawLineForSpanAdjustment,
+                        options: options
+                    ),
+                    line: line,
+                    absoluteOffset: absoluteOffset,
+                    terminator: splitLine.terminator,
                     options: options
                 ),
                 line: line,
-                absoluteOffset: absoluteOffset,
                 terminator: splitLine.terminator,
                 options: options
             )
@@ -1047,6 +1057,33 @@ public struct RipgrepSearcher {
         return output
     }
 
+    private func syntheticInlineCRLFBoundarySpans(
+        _ spans: [MatchSpan],
+        line: String,
+        terminator: String,
+        options: RipgrepOptions
+    ) -> [MatchSpan] {
+        guard !options.multiline,
+              line.hasSuffix("\r"),
+              terminator == "\n",
+              options.effectivePatterns.contains(where: isBareInlineCRLFLineAnchorPattern) else {
+            return spans
+        }
+        let lineEnd = byteCount(line, options: options)
+        guard !spans.contains(where: { $0.startByte == lineEnd && $0.endByte == lineEnd }) else {
+            return spans
+        }
+        return spans + [
+            MatchSpan(
+                startColumn: lineEnd + 1,
+                endColumn: lineEnd + 1,
+                startByte: lineEnd,
+                endByte: lineEnd,
+                text: ""
+            ),
+        ]
+    }
+
     private func syntheticBinarySplitSpans(
         _ spans: [MatchSpan],
         line: String,
@@ -1086,6 +1123,28 @@ public struct RipgrepSearcher {
 
     private func containsLineAnchor(_ pattern: String) -> Bool {
         containsAnchor("^", in: pattern) || containsAnchor("$", in: pattern)
+    }
+
+    private func isBareInlineCRLFLineAnchorPattern(_ pattern: String) -> Bool {
+        if pattern.hasPrefix("(?"),
+           let close = pattern.firstIndex(of: ")") {
+            let flagStart = pattern.index(pattern.startIndex, offsetBy: 2)
+            let flags = pattern[flagStart..<close]
+            let rest = pattern[pattern.index(after: close)...]
+            if flags.contains("R"), rest == "^" || rest == "$" {
+                return true
+            }
+        }
+        guard pattern.hasPrefix("(?"),
+              pattern.hasSuffix(")"),
+              let colon = pattern.firstIndex(of: ":") else {
+            return false
+        }
+        let flagStart = pattern.index(pattern.startIndex, offsetBy: 2)
+        let flags = pattern[flagStart..<colon]
+        let bodyStart = pattern.index(after: colon)
+        let body = pattern[bodyStart..<pattern.index(before: pattern.endIndex)]
+        return flags.contains("R") && (body == "^" || body == "$")
     }
 
     private func isMultilineBinaryBoundaryPattern(_ pattern: String) -> Bool {

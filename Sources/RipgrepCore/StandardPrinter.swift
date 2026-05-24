@@ -311,6 +311,9 @@ public struct StandardPrinter {
         if options.invertMatch && !forcePositiveSpans {
             return [formatOnlyMatchingInverted(match, showPath: showPath)]
         }
+        if match.spans.isEmpty {
+            return [formatOnlyMatchingEmptySubmatches(match, showPath: showPath, fieldSeparator: separator)]
+        }
 
         let replacementOffsets = replacementStartOffsetsByIndex(for: match)
         return match.spans.enumerated().flatMap { index, span in
@@ -338,6 +341,26 @@ public struct StandardPrinter {
             let text = "\(onlyMatchingText(span, in: match))\(outputTerminator(match.lineTerminator, line: span.text, crlfMatchTerminator: true))"
             return ["\(prefix(path: path, fields: fields, fieldSeparator: separator))\(text)"]
         }
+    }
+
+    private func formatOnlyMatchingEmptySubmatches(
+        _ match: SearchMatch,
+        showPath: Bool,
+        fieldSeparator: String
+    ) -> String {
+        var fields: [OutputField] = []
+        let path = showPath ? renderPath(for: match.fileURL, line: match.lineNumber, column: 1) : nil
+        if options.wantsLineNumber {
+            fields.append(OutputField("\(match.lineNumber)", colorTarget: .line))
+        }
+        if options.column {
+            fields.append(OutputField("1", colorTarget: .column))
+        }
+        if options.byteOffset {
+            fields.append(OutputField("\(match.absoluteOffset)", colorTarget: nil))
+        }
+        let text = "\(renderedText(for: match))\(outputTerminator(match.lineTerminator, line: match.line, crlfMatchTerminator: true))"
+        return "\(prefix(path: path, fields: fields, fieldSeparator: fieldSeparator))\(text)"
     }
 
     private func shouldSuppressMultilineEmptyOnlyMatch(_ span: MatchSpan) -> Bool {

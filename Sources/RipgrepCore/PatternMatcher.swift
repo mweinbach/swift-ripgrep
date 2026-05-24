@@ -316,6 +316,8 @@ public struct PatternMatcher {
         if source == ")(" {
             source = ""
         }
+        let inlineCRLF = inlineCRLFPattern(for: source)
+        source = inlineCRLF.pattern
         let isEmptyPattern = source.isEmpty
         if source.isEmpty {
             source = "(?:)"
@@ -339,6 +341,8 @@ public struct PatternMatcher {
         }
         if options.crlf {
             source = crlfAnchorPattern(for: source)
+        } else if inlineCRLF.enablesGlobalCRLF {
+            source = inlineCRLFAnchorPattern(for: source)
         } else if options.multiline {
             source = multilineLineEndPattern(for: source)
         } else if options.nullData && !options.multiline {
@@ -347,6 +351,189 @@ public struct PatternMatcher {
             source = strictLineEndPattern(for: source)
         }
         return source
+    }
+
+    private static func inlineCRLFPattern(for pattern: String) -> (pattern: String, enablesGlobalCRLF: Bool) {
+        var output = ""
+        var enablesGlobalCRLF = false
+        var escaped = false
+        var inClass = false
+        var index = pattern.startIndex
+
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                output.append("\\")
+                output.append(character)
+                escaped = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "[" {
+                inClass = true
+                output.append(character)
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "]" {
+                inClass = false
+                output.append(character)
+                index = pattern.index(after: index)
+                continue
+            }
+            if !inClass,
+               character == "(",
+               let group = inlineCRLFGroup(in: pattern, openingAt: index) {
+                if group.scoped {
+                    let bodyResult = inlineCRLFPattern(for: group.body)
+                    var body = bodyResult.pattern
+                    if group.crlfEnabled && !group.disablesMultiline {
+                        body = inlineCRLFAnchorPattern(for: body)
+                    }
+                    output += inlineFlagGroup(flags: group.cleanedFlags, body: body)
+                    enablesGlobalCRLF = enablesGlobalCRLF || bodyResult.enablesGlobalCRLF
+                } else {
+                    enablesGlobalCRLF = enablesGlobalCRLF || group.crlfEnabled
+                    output += inlineFlagGroup(flags: group.cleanedFlags)
+                }
+                index = group.end
+                continue
+            }
+            output.append(character)
+            index = pattern.index(after: index)
+        }
+
+        if escaped {
+            output.append("\\")
+        }
+        return (output, enablesGlobalCRLF)
+    }
+
+    private static func inlineCRLFGroup(
+        in pattern: String,
+        openingAt opening: String.Index
+    ) -> (scoped: Bool, crlfEnabled: Bool, disablesMultiline: Bool, cleanedFlags: String, body: String, end: String.Index)? {
+        let question = pattern.index(after: opening)
+        guard question < pattern.endIndex, pattern[question] == "?" else {
+            return nil
+        }
+
+        var cursor = pattern.index(after: question)
+        var flags = ""
+        while cursor < pattern.endIndex {
+            let character = pattern[cursor]
+            if character == ":" || character == ")" {
+                break
+            }
+            guard character == "-" || character.isASCII && character.isLetter else {
+                return nil
+            }
+            flags.append(character)
+            cursor = pattern.index(after: cursor)
+        }
+        guard flags.contains("R"), cursor < pattern.endIndex else {
+            return nil
+        }
+
+        let crlfEnabled = inlineCRLFEnabled(by: flags)
+        let disablesMultiline = inlineFlagsDisableMultiline(flags)
+        let cleanedFlags = inlineFlagsRemovingCRLF(flags)
+        if pattern[cursor] == ")" {
+            return (false, crlfEnabled, disablesMultiline, cleanedFlags, "", pattern.index(after: cursor))
+        }
+        guard pattern[cursor] == ":",
+              let close = closingGroupIndex(in: pattern, openingAt: opening) else {
+            return nil
+        }
+        let bodyStart = pattern.index(after: cursor)
+        let body = String(pattern[bodyStart..<close])
+        return (true, crlfEnabled, disablesMultiline, cleanedFlags, body, pattern.index(after: close))
+    }
+
+    private static func inlineCRLFEnabled(by flags: String) -> Bool {
+        var disabling = false
+        var enabled = false
+        for character in flags {
+            if character == "-" {
+                disabling = true
+            } else if character == "R" {
+                enabled = !disabling
+            }
+        }
+        return enabled
+    }
+
+    private static func inlineFlagsDisableMultiline(_ flags: String) -> Bool {
+        var disabling = false
+        var disabled = false
+        for character in flags {
+            if character == "-" {
+                disabling = true
+            } else if character == "m" {
+                disabled = disabling
+            }
+        }
+        return disabled
+    }
+
+    private static func inlineFlagsRemovingCRLF(_ flags: String) -> String {
+        var cleaned = ""
+        var pendingDash = false
+        for character in flags {
+            if character == "-" {
+                pendingDash = true
+                continue
+            }
+            guard character != "R" else {
+                continue
+            }
+            if pendingDash {
+                cleaned.append("-")
+                pendingDash = false
+            }
+            cleaned.append(character)
+        }
+        return cleaned
+    }
+
+    private static func inlineFlagGroup(flags: String, body: String? = nil) -> String {
+        if let body {
+            return flags.isEmpty ? "(?:\(body))" : "(?\(flags):\(body))"
+        }
+        return flags.isEmpty ? "" : "(?\(flags))"
+    }
+
+    private static func closingGroupIndex(in pattern: String, openingAt opening: String.Index) -> String.Index? {
+        var escaped = false
+        var inClass = false
+        var depth = 0
+        var index = opening
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                escaped = false
+            } else if character == "\\" {
+                escaped = true
+            } else if character == "[" {
+                inClass = true
+            } else if character == "]" {
+                inClass = false
+            } else if !inClass, character == "(" {
+                depth += 1
+            } else if !inClass, character == ")" {
+                depth -= 1
+                if depth == 0 {
+                    return index
+                }
+            }
+            index = pattern.index(after: index)
+        }
+        return nil
     }
 
     private static func byteRegexLiteralPattern(for pattern: String) -> String {
@@ -1378,6 +1565,19 @@ public struct PatternMatcher {
                 return "(?:^|(?<=\\r))"
             case "$":
                 return "(?=\\r|(?<!\\r)$)"
+            default:
+                return String(anchor)
+            }
+        }
+    }
+
+    private static func inlineCRLFAnchorPattern(for pattern: String) -> String {
+        transformAnchors(in: pattern) { anchor in
+            switch anchor {
+            case "^":
+                return "(?:^|(?<=[\\r\\n]))"
+            case "$":
+                return "(?=\\r|\\n|(?<![\\r\\n])\\z)"
             default:
                 return String(anchor)
             }

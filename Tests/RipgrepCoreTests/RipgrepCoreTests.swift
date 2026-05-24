@@ -1525,6 +1525,7 @@ struct RipgrepSearcherTests {
         try root.write("a\r\nb\r\n", to: "plain-crlf.txt")
         try root.write("\n", to: "lf-empty.txt")
         try root.write("first\nlast", to: "lf-no-final-newline.txt")
+        try root.write("foo\r\nbar", to: "crlf-no-final-newline.txt")
 
         #expect(try runAllowingNoMatch(["-n", "foo$", root.path("crlf.txt")]) == [])
         let plainDotOutput = try runExecutableData(["-o", ".", root.path("plain-crlf.txt")]) {}
@@ -1571,6 +1572,30 @@ struct RipgrepSearcherTests {
         #expect(try run(["--crlf", "-n", "^quux", root.path("crlf.txt")]) == [
             "2:bar\rquux",
         ])
+        #expect(try run(["-n", #"(?R:foo$)"#, root.path("crlf.txt")]) == [
+            "1:foo\r",
+        ])
+        #expect(try run(["-n", #"(?R:^quux)"#, root.path("crlf.txt")]) == [
+            "2:bar\rquux",
+        ])
+        #expect(try run(["-n", #"(?R)baz$"#, root.path("crlf.txt")]) == [
+            "3:baz\r",
+        ])
+        #expect(try run(["-U", "-n", #"(?mR:$)"#, root.path("crlf.txt")]) == [
+            "1:foo\r",
+            "2:bar\rquux",
+            "3:baz\r",
+        ])
+        #expect(try run(["--count-matches", #"(?R:$)"#, root.path("crlf.txt")]) == [
+            "6",
+        ])
+        #expect(try run(["-bo", #"(?R:$)"#, root.path("crlf-no-final-newline.txt")]) == [
+            "3:",
+            "4:",
+            "5:bar",
+        ])
+        #expect(try runAllowingNoMatch(["-n", #"(?-R:foo$)"#, root.path("crlf.txt")]) == [])
+        #expect(try runAllowingNoMatch(["-n", #"(?R-m:foo$)"#, root.path("crlf.txt")]) == [])
         #expect(try run(["--crlf", "-x", "foo", root.path("crlf.txt")]) == [
             "foo\r",
         ])
