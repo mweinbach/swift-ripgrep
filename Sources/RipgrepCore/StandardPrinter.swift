@@ -241,7 +241,12 @@ public struct StandardPrinter {
                 : column(in: replacementLine ?? match.line, byteOffset: replacementStartByte)
             let lineNumber = projection?.lineNumber ?? match.lineNumber
             let byteOffset = options.byteOffset
-                ? match.absoluteOffset + (projection?.lineStartByte ?? replacementStartByte)
+                ? vimgrepByteOffset(
+                    match: match,
+                    span: span,
+                    replacementStartByte: replacementStartByte,
+                    projection: projection
+                )
                 : nil
             let fields = vimgrepFields(
                 lineNumber: lineNumber,
@@ -327,6 +332,24 @@ public struct StandardPrinter {
         }
         fields.append(text)
         return fields
+    }
+
+    private func vimgrepByteOffset(
+        match: SearchMatch,
+        span: MatchSpan,
+        replacementStartByte: Int,
+        projection: VimgrepSpanProjection?
+    ) -> Int {
+        if let projection {
+            return match.absoluteOffset + projection.lineStartByte
+        }
+        if options.multiline,
+           options.replacement == nil,
+           span.replacement == nil,
+           options.effectivePatterns.contains(where: containsLineEndAnchor) {
+            return match.absoluteOffset
+        }
+        return match.absoluteOffset + replacementStartByte
     }
 
     private func coloredVimgrepText(

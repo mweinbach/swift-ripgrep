@@ -1670,6 +1670,16 @@ struct RipgrepSearcherTests {
             "\(root.path("multi.txt")):3:1:8:baz",
             "\(root.path("multi.txt")):3:3:8:baz",
         ])
+        #expect(try run(["-U", "--vimgrep", "--byte-offset", "$", root.path("multi.txt")]) == [
+            "\(root.path("multi.txt")):1:4:0:foo",
+            "\(root.path("multi.txt")):2:4:4:bar",
+            "\(root.path("multi.txt")):3:4:8:baz",
+        ])
+        #expect(try run(["-U", "--vimgrep", "--byte-offset", #"foo|$"#, root.path("multi.txt")]) == [
+            "\(root.path("multi.txt")):1:1:0:foo",
+            "\(root.path("multi.txt")):2:4:4:bar",
+            "\(root.path("multi.txt")):3:4:8:baz",
+        ])
         try root.write("pre\naaa\nbbb\nctx\naaa\nbbb\npost\naaa\nbbb\n", to: "multi-context.txt")
         #expect(try run(["-U", "-n", "-m1", "-o", "-A2", #"aaa\nbbb"#, root.path("multi-context.txt")]) == [
             "2:aaa",
