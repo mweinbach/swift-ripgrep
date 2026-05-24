@@ -1100,6 +1100,7 @@ struct RipgrepSearcherTests {
     func searchesMultilineRegexMatches() throws {
         let root = try TemporaryDirectory()
         try root.write("foo\nbar\nbaz\n", to: "multi.txt")
+        try root.write("é\nβ\n", to: "multiline-utf8.txt")
         try root.write("a\nb\nc\na\nb\nc", to: "passthru.txt")
         try root.write("""
         #!/usr/bin/env bash
@@ -1235,6 +1236,27 @@ struct RipgrepSearcherTests {
             "1:foo",
             "2:bar",
         ])
+        let noUnicodeMultilineDotOutput = try runExecutableData([
+            "-U",
+            "--no-unicode",
+            "-o",
+            ".",
+            root.path("multiline-utf8.txt"),
+        ], fixture: {})
+        #expect(noUnicodeMultilineDotOutput == Data([
+            0xC3, 0x0A,
+            0xA9, 0x0A,
+            0xCE, 0x0A,
+            0xB2, 0x0A,
+        ]))
+        let noUnicodeMultilineDotAllOutput = try runExecutableData([
+            "-U",
+            "--no-unicode",
+            "-o",
+            "(?s).",
+            root.path("multiline-utf8.txt"),
+        ], fixture: {})
+        #expect(noUnicodeMultilineDotAllOutput == noUnicodeMultilineDotOutput)
         #expect(try run(["-U", "-r?", "-n", #"\n"#, root.path("multi.txt")]) == [
             "1:foo?bar?baz?",
         ])
