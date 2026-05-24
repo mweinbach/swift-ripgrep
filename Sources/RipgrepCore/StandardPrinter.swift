@@ -1026,7 +1026,7 @@ public struct StandardPrinter {
         for lineNumber in selectedLineNumbers {
             if let previous, lineNumber > previous + 1, !options.passthru {
                 if let contextSeparator = options.contextSeparator {
-                    output.append(contextSeparator)
+                    output.append(contextSeparatorLine(contextSeparator))
                 }
             }
             guard let line = result.lines.first(where: { $0.lineNumber == lineNumber }) else {
@@ -1087,7 +1087,7 @@ public struct StandardPrinter {
         for lineNumber in selectedLineNumbers {
             if let previous, lineNumber > previous + 1, !options.passthru {
                 if let contextSeparator = options.contextSeparator {
-                    output.append(contextSeparator)
+                    output.append(contextSeparatorLine(contextSeparator))
                 }
             }
             guard let line = result.lines.first(where: { $0.lineNumber == lineNumber }) else {
@@ -1133,7 +1133,7 @@ public struct StandardPrinter {
                !output.isEmpty,
                !isBinaryOnlyContextResult(result),
                let contextSeparator = options.contextSeparator {
-                output.append(contextSeparator)
+                output.append(contextSeparatorLine(contextSeparator))
             }
             output.append(contentsOf: lines)
         }
@@ -1187,7 +1187,7 @@ public struct StandardPrinter {
                !output.isEmpty,
                !isBinaryOnlyContextResult(result),
                let contextSeparator = options.contextSeparator {
-                output.append(contextSeparator)
+                output.append(contextSeparatorLine(contextSeparator))
             }
             output.append(contentsOf: lines)
         }
@@ -1580,6 +1580,10 @@ public struct StandardPrinter {
             return "\0"
         }
         return options.crlf ? "\r" : ""
+    }
+
+    private func contextSeparatorLine(_ separator: String) -> String {
+        options.nullData ? "\(separator)\0" : separator
     }
 
     private func pathFieldSeparator() -> String {

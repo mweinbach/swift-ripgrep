@@ -2917,6 +2917,24 @@ struct RipgrepSearcherTests {
             "\(multiRoot.path("b.txt")):needle",
             "\(multiRoot.path("b.txt"))-after",
         ])
+        let nullContextRoot = try TemporaryDirectory()
+        try nullContextRoot.write(Data("needle\0after\0".utf8), to: "a.txt")
+        try nullContextRoot.write(Data("needle\0after\0".utf8), to: "b.txt")
+        let nullDataContextOutput = try runExecutableData([
+            "--sort",
+            "path",
+            "--null-data",
+            "-A1",
+            "needle",
+            nullContextRoot.url.path,
+        ]) {}
+        #expect(nullDataContextOutput == Data((
+            "\(nullContextRoot.path("a.txt")):needle\0" +
+            "\(nullContextRoot.path("a.txt"))-after\0" +
+            "--\0" +
+            "\(nullContextRoot.path("b.txt")):needle\0" +
+            "\(nullContextRoot.path("b.txt"))-after\0"
+        ).utf8))
         #expect(try runAllowingNoMatch(["^", multiRoot.path("empty.txt")]) == [])
         let emptyPassthruJSON = runWithExitCode(
             ["--json", "--passthru", "needle", multiRoot.path("empty.txt")],
