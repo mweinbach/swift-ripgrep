@@ -1445,6 +1445,10 @@ public struct RipgrepSearcher {
             return (filtered, filtered.isEmpty && filtered.count != spans.count)
         }
         if options.effectivePatterns.contains(where: containsLineStartAndEndAnchor) {
+            if options.onlyMatching,
+               options.effectivePatterns.contains(where: containsLineStartEndAlternation) {
+                return (spans, false)
+            }
             if matchingLine == "\n",
                spans.contains(where: { $0.startByte == 0 && $0.endByte == 0 && $0.text.isEmpty }) {
                 return (spans.filter { $0.startByte == 0 && $0.endByte == 0 && $0.text.isEmpty }, false)
@@ -1461,6 +1465,15 @@ public struct RipgrepSearcher {
                 && (!matchingLine.contains("\n") || spans.count > 1))
         }
         return (filtered, filtered.isEmpty && filtered.count != spans.count)
+    }
+
+    private func containsLineStartEndAlternation(_ pattern: String) -> Bool {
+        let alternatives = topLevelAlternatives(in: pattern)
+        guard alternatives.count > 1 else {
+            return false
+        }
+        return alternatives.contains(where: containsLineStartAnchor)
+            && alternatives.contains(where: containsLineEndAnchor)
     }
 
     private func crlfTrimmedSpans(

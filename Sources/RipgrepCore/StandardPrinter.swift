@@ -512,6 +512,9 @@ public struct StandardPrinter {
 
         let replacementOffsets = replacementStartOffsetsByIndex(for: match)
         return match.spans.enumerated().flatMap { index, span in
+            if shouldSuppressNullDataOnlyMatchingSpan(span, in: match) {
+                return [String]()
+            }
             if shouldSuppressMultilineEmptyOnlyMatch(span) {
                 return [String]()
             }
@@ -543,7 +546,21 @@ public struct StandardPrinter {
         }
     }
 
+    private func shouldSuppressNullDataOnlyMatchingSpan(_ span: MatchSpan, in match: SearchMatch) -> Bool {
+        options.nullData
+            && span.text.isEmpty
+            && span.replacement == nil
+            && span.startByte == 0
+            && span.endByte == 0
+            && match.absoluteOffset > 0
+            && options.effectivePatterns.contains(where: containsLineStartAnchor)
+            && options.effectivePatterns.contains(where: containsLineStartEndAlternation)
+    }
+
     private func onlyMatchingOutputText(_ span: MatchSpan, in match: SearchMatch) -> String {
+        if let text = nullDataLineStartOnlyMatchingText(span, in: match) {
+            return text
+        }
         let text = onlyMatchingText(span, in: match)
         if span.replacement != nil,
            !options.nullData,
@@ -551,6 +568,22 @@ public struct StandardPrinter {
             return String(String.UnicodeScalarView(text.unicodeScalars.dropLast()))
         }
         return "\(text)\(outputTerminator(match.lineTerminator, line: span.text, crlfMatchTerminator: true))"
+    }
+
+    private func nullDataLineStartOnlyMatchingText(_ span: MatchSpan, in match: SearchMatch) -> String? {
+        guard options.nullData,
+              span.text.isEmpty,
+              span.replacement == nil,
+              span.startByte == 0,
+              span.endByte == 0,
+              match.absoluteOffset > 0,
+              !match.line.contains("\n"),
+              options.effectivePatterns.contains(where: containsLineStartAnchor),
+              !options.effectivePatterns.contains(where: containsLineEndAnchor) else {
+            return nil
+        }
+        let text = options.trim ? match.line.trimmingASCIIWhitespacePrefix() : match.line
+        return "\(colors.apply(.match, to: text))\(outputTerminator(match.lineTerminator, line: match.line, crlfMatchTerminator: true))"
     }
 
     private func formatOnlyMatchingEmptySubmatches(
@@ -615,12 +648,61 @@ public struct StandardPrinter {
         containsLineStartAnchor(pattern) || containsLineEndAnchor(pattern)
     }
 
+    private func containsLineStartEndAlternation(_ pattern: String) -> Bool {
+        let alternatives = topLevelAlternatives(in: pattern)
+        guard alternatives.count > 1 else {
+            return false
+        }
+        return alternatives.contains(where: containsLineStartAnchor)
+            && alternatives.contains(where: containsLineEndAnchor)
+    }
+
     private func containsLineStartAnchor(_ pattern: String) -> Bool {
         containsAnchor("^", in: pattern)
     }
 
     private func containsLineEndAnchor(_ pattern: String) -> Bool {
         containsAnchor("$", in: pattern)
+    }
+
+    private func topLevelAlternatives(in pattern: String) -> [String] {
+        var alternatives: [String] = []
+        var escaped = false
+        var inClass = false
+        var depth = 0
+        var start = pattern.startIndex
+        var index = pattern.startIndex
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                escaped = false
+                index = pattern.index(after: index)
+                continue
+            }
+            switch character {
+            case "\\":
+                escaped = true
+            case "[":
+                inClass = true
+            case "]":
+                inClass = false
+            case "(" where !inClass:
+                depth += 1
+            case ")" where !inClass:
+                depth = max(0, depth - 1)
+            case "|" where !inClass && depth == 0:
+                alternatives.append(String(pattern[start..<index]))
+                start = pattern.index(after: index)
+            default:
+                break
+            }
+            index = pattern.index(after: index)
+        }
+        guard !alternatives.isEmpty else {
+            return [pattern]
+        }
+        alternatives.append(String(pattern[start..<pattern.endIndex]))
+        return alternatives
     }
 
     private func containsAnchor(_ anchor: Character, in pattern: String) -> Bool {
