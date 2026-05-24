@@ -1498,6 +1498,50 @@ struct RipgrepSearcherTests {
         #expect(jsonLineEndSubmatches?.map { $0["end"] as? Int } == [2, 3, 6])
         #expect(jsonLineEndStats?["matched_lines"] as? Int == 3)
         #expect(jsonLineEndStats?["matches"] as? Int == 3)
+        let jsonMixedLineEndOutput = try run(["-U", "--json", #"foo|$"#, root.path("multi.txt")])
+        let jsonMixedLineEndMessages = try jsonMixedLineEndOutput.map(jsonObject)
+        #expect(jsonMixedLineEndMessages.map { $0["type"] as? String } == ["begin", "match", "end", "summary"])
+        let jsonMixedLineEndMatch = jsonMixedLineEndMessages[1]["data"] as? [String: Any]
+        let jsonMixedLineEndLines = jsonMixedLineEndMatch?["lines"] as? [String: String]
+        let jsonMixedLineEndSubmatches = jsonMixedLineEndMatch?["submatches"] as? [[String: Any]]
+        let jsonMixedLineEndEnd = jsonMixedLineEndMessages[2]["data"] as? [String: Any]
+        let jsonMixedLineEndStats = jsonMixedLineEndEnd?["stats"] as? [String: Any]
+        #expect(jsonMixedLineEndLines?["text"] == "foo\nbar\nbaz\n")
+        #expect(jsonMixedLineEndSubmatches?.compactMap { ($0["match"] as? [String: String])?["text"] } == ["foo", "", ""])
+        #expect(jsonMixedLineEndSubmatches?.map { $0["start"] as? Int } == [0, 7, 11])
+        #expect(jsonMixedLineEndSubmatches?.map { $0["end"] as? Int } == [3, 7, 11])
+        #expect(jsonMixedLineEndStats?["matched_lines"] as? Int == 3)
+        #expect(jsonMixedLineEndStats?["matches"] as? Int == 3)
+
+        let jsonMixedLineEndContextOutput = try run(["-U", "--json", "-C1", #"foo|$"#, root.path("multi.txt")])
+        let jsonMixedLineEndContextMessages = try jsonMixedLineEndContextOutput.map(jsonObject)
+        #expect(jsonMixedLineEndContextMessages.map { $0["type"] as? String } == ["begin", "match", "end", "summary"])
+        let jsonMixedLineEndContextEnd = jsonMixedLineEndContextMessages[2]["data"] as? [String: Any]
+        let jsonMixedLineEndContextStats = jsonMixedLineEndContextEnd?["stats"] as? [String: Any]
+        #expect(jsonMixedLineEndContextStats?["matched_lines"] as? Int == 3)
+        #expect(jsonMixedLineEndContextStats?["matches"] as? Int == 3)
+
+        let jsonMixedLineStartOutput = try run(["-U", "--json", #"foo|^"#, root.path("multi.txt")])
+        let jsonMixedLineStartMessages = try jsonMixedLineStartOutput.map(jsonObject)
+        #expect(jsonMixedLineStartMessages.map { $0["type"] as? String } == ["begin", "match", "end", "summary"])
+        let jsonMixedLineStartMatch = jsonMixedLineStartMessages[1]["data"] as? [String: Any]
+        let jsonMixedLineStartLines = jsonMixedLineStartMatch?["lines"] as? [String: String]
+        let jsonMixedLineStartSubmatches = jsonMixedLineStartMatch?["submatches"] as? [[String: Any]]
+        #expect(jsonMixedLineStartLines?["text"] == "foo\nbar\nbaz\n")
+        #expect(jsonMixedLineStartSubmatches?.compactMap { ($0["match"] as? [String: String])?["text"] } == ["foo", "", ""])
+        #expect(jsonMixedLineStartSubmatches?.map { $0["start"] as? Int } == [0, 4, 8])
+        #expect(jsonMixedLineStartSubmatches?.map { $0["end"] as? Int } == [3, 4, 8])
+        try root.write("foo\r\nbar\r\nfoo bar\r\n", to: "crlf-mixed-line-start.txt")
+        let jsonCRLFMixedLineStartOutput = try run(["-U", "--json", #"foo|^"#, root.path("crlf-mixed-line-start.txt")])
+        let jsonCRLFMixedLineStartMessages = try jsonCRLFMixedLineStartOutput.map(jsonObject)
+        #expect(jsonCRLFMixedLineStartMessages.map { $0["type"] as? String } == ["begin", "match", "end", "summary"])
+        let jsonCRLFMixedLineStartMatch = jsonCRLFMixedLineStartMessages[1]["data"] as? [String: Any]
+        let jsonCRLFMixedLineStartLines = jsonCRLFMixedLineStartMatch?["lines"] as? [String: String]
+        let jsonCRLFMixedLineStartSubmatches = jsonCRLFMixedLineStartMatch?["submatches"] as? [[String: Any]]
+        #expect(jsonCRLFMixedLineStartLines?["text"] == "foo\r\nbar\r\nfoo bar\r\n")
+        #expect(jsonCRLFMixedLineStartSubmatches?.compactMap { ($0["match"] as? [String: String])?["text"] } == ["foo", "", "foo"])
+        #expect(jsonCRLFMixedLineStartSubmatches?.map { $0["start"] as? Int } == [0, 5, 10])
+        #expect(jsonCRLFMixedLineStartSubmatches?.map { $0["end"] as? Int } == [3, 5, 13])
         #expect(try run(["-n", "-U", "-o", #"foo[\s\S]+?bar"#, root.path("multi.txt")]) == [
             "1:foo",
             "2:bar",

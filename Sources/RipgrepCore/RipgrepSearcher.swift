@@ -1398,7 +1398,7 @@ public struct RipgrepSearcher {
         }
         if options.multiline,
            options.maxCount == nil,
-           options.effectivePatterns.allSatisfy(isBareMultilineLineAnchorPattern) {
+           options.effectivePatterns.contains(where: containsLineAnchor) {
             return []
         }
         let matchedLineNumbers = Set(matches.map(\.lineNumber))
@@ -1463,9 +1463,13 @@ public struct RipgrepSearcher {
             } ?? byteCount(splitLine.text, options: options) + byteCount(splitLine.terminator, options: options)
         }
 
-        let spans = adjustedSpans(
-            matcher.spans(in: matchingContents),
-            rawLine: rawContentsForSpanAdjustment,
+        let spans = multilineCRLFLineStartTrimmedSpans(
+            adjustedSpans(
+                matcher.spans(in: matchingContents),
+                rawLine: rawContentsForSpanAdjustment,
+                options: options
+            ),
+            in: matchingContents,
             options: options
         )
         let positiveSpansByLine = multilinePositiveSpansByLine(
@@ -1735,8 +1739,7 @@ public struct RipgrepSearcher {
             && options.multiline
             && options.maxCount == nil
             && !candidates.isEmpty
-            && candidates.allSatisfy { $0.span.text.isEmpty && $0.span.startByte == $0.span.endByte }
-            && options.effectivePatterns.allSatisfy(isBareMultilineLineAnchorPattern)
+            && options.effectivePatterns.contains(where: containsLineAnchor)
     }
 
     private func multilineMatchCount(
@@ -1770,6 +1773,30 @@ public struct RipgrepSearcher {
         let bodyStart = pattern.index(after: colon)
         let body = pattern[bodyStart..<pattern.index(before: pattern.endIndex)]
         return flags.contains("m") && body == "$"
+    }
+
+    private func multilineCRLFLineStartTrimmedSpans(
+        _ spans: [MatchSpan],
+        in contents: String,
+        options: RipgrepOptions
+    ) -> [MatchSpan] {
+        guard options.multiline,
+              options.effectivePatterns.contains(where: containsLineStartAnchor),
+              !options.effectivePatterns.contains(where: containsLineEndAnchor),
+              contents.contains("\r\n") else {
+            return spans
+        }
+        let bytes = Array(contents.utf8)
+        return spans.filter { span in
+            guard span.text.isEmpty,
+                  span.startByte == span.endByte,
+                  span.startByte > 0,
+                  span.startByte < bytes.count else {
+                return true
+            }
+            return !(bytes[span.startByte - 1] == UInt8(ascii: "\r")
+                && bytes[span.startByte] == UInt8(ascii: "\n"))
+        }
     }
 
     private func isBareMultilineLineAnchorPattern(_ pattern: String) -> Bool {
