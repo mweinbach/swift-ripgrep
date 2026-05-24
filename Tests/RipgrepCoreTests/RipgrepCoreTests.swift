@@ -835,6 +835,19 @@ struct RipgrepSearcherTests {
         #expect(try run(["--null-data", "--count-matches", "needle", root.path("nul.txt")]) == [
             "1\0",
         ])
+        try root.write(Data("abc\0needle\nneedle2\0tail\n".utf8), to: "nul-anchors.txt")
+        #expect(try run(["--null-data", "-n", "--column", "--byte-offset", "^needle", root.path("nul-anchors.txt")]) == [
+            "2:8:4:needle\nneedle2\0",
+        ])
+        #expect(try run(["--null-data", "-o", "--column", "needle$", root.path("nul-anchors.txt")]) == [
+            "2:1:needle\0",
+        ])
+        let anchorOutput = try run(["--json", "--null-data", "^needle", root.path("nul-anchors.txt")])
+        let anchorMessages = try anchorOutput.map(jsonObject)
+        let anchorMatch = anchorMessages.first { $0["type"] as? String == "match" }?["data"] as? [String: Any]
+        let anchorSubmatches = anchorMatch?["submatches"] as? [[String: Any]]
+        #expect(anchorSubmatches?.first?["start"] as? Int == 7)
+        #expect(anchorSubmatches?.first?["end"] as? Int == 13)
         try root.write("needle\nunterminated\n", to: "lf.txt")
         #expect(try run(["--null-data", "needle", root.path("lf.txt")]) == [
             "needle\nunterminated\n\0",

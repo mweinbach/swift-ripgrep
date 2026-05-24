@@ -46,7 +46,7 @@ public struct PatternMatcher {
                 let source = Self.regexPattern(for: pattern, options: options)
                 do {
                     var regexOptions: NSRegularExpression.Options = options.effectiveIgnoreCase && !options.noUnicode ? [.caseInsensitive] : []
-                    if options.multiline {
+                    if options.multiline || (options.nullData && !options.crlf) {
                         regexOptions.insert(.anchorsMatchLines)
                     }
                     if options.multiline && options.multilineDotall {
@@ -327,7 +327,9 @@ public struct PatternMatcher {
         }
         if options.crlf {
             source = crlfAnchorPattern(for: source)
-        } else if !options.multiline {
+        } else if options.nullData && !options.multiline {
+            source = nullDataLineEndPattern(for: source)
+        } else if !options.multiline && !options.nullData {
             source = strictLineEndPattern(for: source)
         }
         return source
@@ -1097,6 +1099,12 @@ public struct PatternMatcher {
     private static func strictLineEndPattern(for pattern: String) -> String {
         transformAnchors(in: pattern) { anchor in
             anchor == "$" ? "(?=\\z)" : String(anchor)
+        }
+    }
+
+    private static func nullDataLineEndPattern(for pattern: String) -> String {
+        transformAnchors(in: pattern) { anchor in
+            anchor == "$" ? "(?=\\n|\\z)" : String(anchor)
         }
     }
 

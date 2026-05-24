@@ -836,9 +836,14 @@ public struct RipgrepSearcher {
             let lineByteCount = rawLines?[safe: offset].map {
                 $0.text.unicodeScalars.count + $0.terminator.unicodeScalars.count
             } ?? byteCount(splitLine.text, options: options) + byteCount(splitLine.terminator, options: options)
-            let positiveSpans = adjustedSpans(
-                matcher.positiveSpans(in: line),
-                rawLine: rawLine,
+            let positiveSpans = nullDataLineAnchorSpans(
+                adjustedSpans(
+                    matcher.positiveSpans(in: line),
+                    rawLine: rawLine,
+                    options: options
+                ),
+                line: line,
+                absoluteOffset: absoluteOffset,
                 options: options
             )
             guard matches.count < maxCount else {
@@ -854,9 +859,14 @@ public struct RipgrepSearcher {
                 continue
             }
 
-            let spans = adjustedSpans(
-                matcher.spans(in: line),
-                rawLine: rawLine,
+            let spans = nullDataLineAnchorSpans(
+                adjustedSpans(
+                    matcher.spans(in: line),
+                    rawLine: rawLine,
+                    options: options
+                ),
+                line: line,
+                absoluteOffset: absoluteOffset,
                 options: options
             )
             searchLines.append(SearchLine(
@@ -951,6 +961,51 @@ public struct RipgrepSearcher {
             return bytesSearchedThroughMaxCount
         }
         return line.absoluteOffset + byteCount(line.line, options: options) + byteCount(line.lineTerminator, options: options)
+    }
+
+    private func nullDataLineAnchorSpans(
+        _ spans: [MatchSpan],
+        line: String,
+        absoluteOffset: Int,
+        options: RipgrepOptions
+    ) -> [MatchSpan] {
+        guard options.nullData, !options.multiline else {
+            return spans
+        }
+        var output = spans
+        if absoluteOffset > 3,
+           line.contains("\n"),
+           options.effectivePatterns.contains(where: containsLineStartAnchor) {
+            output = output.filter { $0.startByte != 0 }
+        }
+        return output
+    }
+
+    private func containsLineStartAnchor(_ pattern: String) -> Bool {
+        var escaped = false
+        var inClass = false
+        for character in pattern {
+            if escaped {
+                escaped = false
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                continue
+            }
+            if character == "[" {
+                inClass = true
+                continue
+            }
+            if character == "]" {
+                inClass = false
+                continue
+            }
+            if !inClass && character == "^" {
+                return true
+            }
+        }
+        return false
     }
 
     private func supplementalMatchedLineCount(
