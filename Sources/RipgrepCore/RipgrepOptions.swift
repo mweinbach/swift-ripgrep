@@ -609,6 +609,7 @@ public enum RipgrepArgumentParser {
             case "--no-byte-offset":
                 options.byteOffset = false
             case "--json":
+                options.mode = .search
                 options.json = true
                 options.generateMode = nil
             case "--no-json":

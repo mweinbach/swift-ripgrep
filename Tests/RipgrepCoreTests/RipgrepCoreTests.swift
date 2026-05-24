@@ -3651,6 +3651,10 @@ struct RipgrepSearcherTests {
         let output = try run(["-l", "--json", "needle", root.path("ordering.txt")])
         let messages = try output.map(jsonObject)
         #expect(messages.first?["type"] as? String == "begin")
+        let filesThenJSON = try run(["--files", "--json", "needle", root.path("ordering.txt")])
+        let filesThenJSONMessages = try filesThenJSON.map(jsonObject)
+        #expect(filesThenJSONMessages.first?["type"] as? String == "begin")
+        #expect(try run(["--files", "--json", "--no-json", "needle", root.path("ordering.txt")]) == ["needle"])
         #expect(try run(["--json", "--files", "--no-json", root.url.path]) == [root.path("ordering.txt")])
         #expect(try run(["--json", "-l", "--no-json", "needle", root.path("ordering.txt")]) == [root.path("ordering.txt")])
         #expect(try run(["--color=always", "--json", "--no-json", "needle", root.path("ordering.txt")]) == [
