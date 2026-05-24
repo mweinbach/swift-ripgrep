@@ -391,8 +391,17 @@ public struct FileWalker {
     }
 
     private func ordered(_ haystacks: [Haystack], options: RipgrepOptions) -> [Haystack] {
+        if options.mode == .files,
+           options.sortMode?.reverse == true {
+            return sorted(haystacks, options: options)
+        }
         guard options.sortMode == nil, options.threadCount == nil else {
             return haystacks
+        }
+        if options.mode == .files,
+           haystacks.count > 1,
+           haystacks.allSatisfy(\.isExplicit) {
+            return haystacks.reversed()
         }
         guard haystacks.contains(where: { !$0.isExplicit }) else {
             return haystacks

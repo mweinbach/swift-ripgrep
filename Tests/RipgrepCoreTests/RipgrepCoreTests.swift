@@ -2461,6 +2461,9 @@ struct RipgrepSearcherTests {
         try root.setModificationDate(newer, for: "a.txt")
         try root.setModificationDate(older, for: "b.txt")
 
+        #expect(pathBasenames(try run(["--threads", "1", "needle", root.path("a.txt"), root.path("b.txt")])) == ["a.txt", "b.txt"])
+        #expect(pathBasenames(try run(["--files", root.path("a.txt"), root.path("b.txt")])) == ["b.txt", "a.txt"])
+        #expect(pathBasenames(try run(["--sortr", "path", "--files", root.path("a.txt"), root.path("b.txt")])) == ["b.txt", "a.txt"])
         #expect(pathBasenames(try run(["--sort", "path", "needle", root.url.path])) == ["a.txt", "b.txt"])
         #expect(pathBasenames(try run(["--sortr", "path", "needle", root.url.path])) == ["b.txt", "a.txt"])
         #expect(pathBasenames(try run(["--sort", "modified", "needle", root.url.path])) == ["b.txt", "a.txt"])
