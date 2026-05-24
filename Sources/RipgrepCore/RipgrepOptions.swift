@@ -128,6 +128,7 @@ public struct SortMode: Equatable {
 }
 
 public struct RipgrepOptions: Equatable {
+    public var startupWarnings: [String] = []
     public var mode: SearchMode = .search
     public var generateMode: GenerateMode?
     public var printMode: PrintMode = .matchingLines
@@ -280,12 +281,21 @@ public enum RipgrepArgumentParser {
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> CLIParseResult {
         let finalArguments: [String]
+        let startupWarnings: [String]
         if shouldLoadConfig(for: arguments) {
-            finalArguments = configArguments(environment: environment) + arguments
+            let config = configArguments(environment: environment)
+            finalArguments = config.arguments + arguments
+            startupWarnings = config.warnings
         } else {
             finalArguments = arguments
+            startupWarnings = []
         }
-        return parseFinal(finalArguments)
+        let parsed = parseFinal(finalArguments)
+        if case .run(var options) = parsed {
+            options.startupWarnings.append(contentsOf: startupWarnings)
+            return .run(options)
+        }
+        return parsed
     }
 
     private static func parseFinal(_ arguments: [String]) -> CLIParseResult {
@@ -1558,20 +1568,41 @@ public enum RipgrepArgumentParser {
         }
     }
 
-    private static func configArguments(environment: [String: String]) -> [String] {
+    private static func configArguments(environment: [String: String]) -> (arguments: [String], warnings: [String]) {
         guard let path = environment["RIPGREP_CONFIG_PATH"], !path.isEmpty else {
-            return []
+            return ([], [])
         }
-        guard let contents = try? String(contentsOf: URL(fileURLWithPath: path), encoding: .utf8) else {
-            return []
+        let contents: String
+        do {
+            contents = try String(contentsOf: URL(fileURLWithPath: path), encoding: .utf8)
+        } catch {
+            return ([], [
+                "failed to read the file specified in RIPGREP_CONFIG_PATH: \(path): \(configReadErrorDescription(path: path, error: error))",
+            ])
         }
-        return contents.components(separatedBy: .newlines).compactMap { line in
+        let arguments: [String] = contents.components(separatedBy: .newlines).compactMap { line in
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else {
                 return nil
             }
             return trimmed
         }
+        return (arguments, [])
+    }
+
+    private static func configReadErrorDescription(path: String, error: Error) -> String {
+        if !FileManager.default.fileExists(atPath: path) {
+            return "No such file or directory (os error 2)"
+        }
+        let nsError = error as NSError
+        if nsError.domain == NSPOSIXErrorDomain {
+            return "\(nsError.localizedDescription) (os error \(nsError.code))"
+        }
+        if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError,
+           underlying.domain == NSPOSIXErrorDomain {
+            return "\(underlying.localizedDescription) (os error \(underlying.code))"
+        }
+        return nsError.localizedDescription
     }
 
     private static func parseStrictGlob(_ raw: String) -> String? {

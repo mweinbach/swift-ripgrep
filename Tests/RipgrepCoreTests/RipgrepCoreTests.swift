@@ -1285,6 +1285,33 @@ struct RipgrepSearcherTests {
         #expect(try run(["Needle", root.path("a.txt")], environment: environment) == [
             "\"X Y\"",
         ])
+
+        var output: [String] = []
+        var errors: [String] = []
+        let missingConfig = root.path("missing-ripgreprc")
+        let missingExitCode = RipgrepCLI.run(
+            arguments: ["Needle", root.path("a.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) },
+            environment: ["RIPGREP_CONFIG_PATH": missingConfig]
+        )
+        #expect(missingExitCode == 0)
+        #expect(output == ["Needle"])
+        #expect(errors == [
+            "rg: failed to read the file specified in RIPGREP_CONFIG_PATH: \(missingConfig): No such file or directory (os error 2)",
+        ])
+
+        output = []
+        errors = []
+        let noConfigExitCode = RipgrepCLI.run(
+            arguments: ["--no-config", "Needle", root.path("a.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) },
+            environment: ["RIPGREP_CONFIG_PATH": missingConfig]
+        )
+        #expect(noConfigExitCode == 0)
+        #expect(output == ["Needle"])
+        #expect(errors.isEmpty)
     }
 
     @Test("quiet mode still prints stats")

@@ -51,6 +51,11 @@ public enum RipgrepCLI {
             return 2
         case .run(var options):
             do {
+                if !options.noMessages {
+                    for warning in options.startupWarnings {
+                        stderr("rg: \(warning)")
+                    }
+                }
                 if shouldSearchImplicitStdin(
                     options: options,
                     stdinProvided: stdin != nil,
