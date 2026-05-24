@@ -1105,6 +1105,7 @@ struct RipgrepSearcherTests {
         try root.write(Data([0xFE, 0xFF]) + Data("needle\n".utf16BigEndianBytes), to: "bom16be.txt")
         try root.write(Data("hay\nneedle\n".utf16LittleEndianBytes), to: "utf16le.txt")
         try root.write(Data([0xEF, 0xBB, 0xBF]) + Data("needle\n".utf8), to: "bom8.txt")
+        try root.write(Data([0xFF, 0xFE, 0x00, 0x62, 0x0A]), to: "bom16le-invalid.txt")
         try root.write(Data([
             0x84, 0x59, 0x84, 0x75, 0x84, 0x82, 0x84, 0x7C, 0x84, 0x80, 0x84, 0x7B,
             0x20,
@@ -1119,9 +1120,29 @@ struct RipgrepSearcherTests {
         #expect(try run(["-n", "needle", root.path("bom16le.txt")]) == ["2:needle"])
         #expect(try run(["-n", "-E", "utf-16le", "needle", root.path("bom16le.txt")]) == ["2:needle"])
         #expect(try run(["-n", "-E", "utf-16be", "needle", root.path("bom16be.txt")]) == ["1:needle"])
+        #expect(try run(["-n", "-E", "utf-16le", "needle", root.path("bom16be.txt")]) == ["1:needle"])
+        #expect(try run(["-n", "-E", "utf-16be", "needle", root.path("bom16le.txt")]) == ["2:needle"])
         #expect(try runAllowingNoMatch(["-n", "-E", "none", "needle", root.path("bom16le.txt")]) == [])
         #expect(try run(["-n", "-E", "utf-16le", "needle", root.path("utf16le.txt")]) == ["2:needle"])
         #expect(try run(["-n", "needle", root.path("bom8.txt")]) == ["1:needle"])
+        #expect(try run(["-a", "-n", "needle", root.path("bom16le.txt")]) == ["2:needle"])
+        #expect(try run(["--text", "-n", "needle", root.path("bom16le.txt")]) == ["2:needle"])
+        let bom16JSONOutput = try run(["--json", "needle", root.path("bom16le.txt")])
+        let bom16JSONMessages = try bom16JSONOutput.map(jsonObject)
+        let bom16JSONMatch = bom16JSONMessages.first { $0["type"] as? String == "match" }?["data"] as? [String: Any]
+        let bom16JSONLines = bom16JSONMatch?["lines"] as? [String: String]
+        #expect(bom16JSONLines?["text"] == "needle\n")
+        #expect(try run([".", root.path("bom16le-invalid.txt")]) == ["戀\u{FFFD}"])
+        #expect(try run(["-o", ".", root.path("bom16le-invalid.txt")]) == [
+            "戀",
+            "\u{FFFD}",
+        ])
+        #expect(try run(["-E", "utf-16le", "-o", ".", root.path("bom8.txt")]) == [
+            "敮",
+            "摥",
+            "敬",
+            "\u{FFFD}",
+        ])
         let bomRawOutput = try runExecutableData([
             "-n",
             "-E",

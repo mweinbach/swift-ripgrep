@@ -1839,7 +1839,7 @@ public struct RipgrepSearcher {
     }
 
     private func rawDataForOutput(_ data: Data, options: RipgrepOptions, matcher: PatternMatcher) -> Data? {
-        if options.emitsRawBytes || matcher.usesByteSemantics || (options.json && options.encodingMode == .automatic) {
+        if options.encodingMode == .disabled || matcher.usesByteSemantics {
             return data
         }
         return usesLossyAutomaticUTF8Decode(data, options: options) ? data : nil
@@ -2171,10 +2171,10 @@ public struct RipgrepSearcher {
                 return decodeSlice(data.dropFirst(3), encoding: .utf8)
             }
             if data.starts(with: [0xFF, 0xFE]) {
-                return decodeSlice(data.dropFirst(2), encoding: .utf16LittleEndian)
+                return decodeUTF16(data.dropFirst(2), littleEndian: true)
             }
             if data.starts(with: [0xFE, 0xFF]) {
-                return decodeSlice(data.dropFirst(2), encoding: .utf16BigEndian)
+                return decodeUTF16(data.dropFirst(2), littleEndian: false)
             }
             return decode(data, encoding: .utf8)
         case .disabled:
@@ -2202,16 +2202,50 @@ public struct RipgrepSearcher {
         decode(Data(data), encoding: encoding)
     }
 
+    private func decodeUTF16(_ data: Data.SubSequence, littleEndian: Bool) -> String {
+        let bytes = Array(data)
+        var codeUnits: [UInt16] = []
+        codeUnits.reserveCapacity((bytes.count + 1) / 2)
+        var index = 0
+        while index + 1 < bytes.count {
+            let codeUnit = littleEndian
+                ? UInt16(bytes[index]) | (UInt16(bytes[index + 1]) << 8)
+                : (UInt16(bytes[index]) << 8) | UInt16(bytes[index + 1])
+            codeUnits.append(codeUnit)
+            index += 2
+        }
+        if index < bytes.count {
+            codeUnits.append(0xFFFD)
+        }
+        return String(decoding: codeUnits, as: UTF16.self)
+    }
+
     private func decode(_ data: Data, encoding: String.Encoding) -> String {
         String(data: data, encoding: encoding) ?? String(decoding: data, as: UTF8.self)
     }
 
     private func decodeExplicit(_ data: Data, encoding: String.Encoding) -> String {
-        if encoding == .utf16LittleEndian, data.starts(with: [0xFF, 0xFE]) {
-            return decodeSlice(data.dropFirst(2), encoding: encoding)
+        if data.starts(with: [0xEF, 0xBB, 0xBF]) {
+            let body = data.dropFirst(3)
+            if encoding == .utf16LittleEndian {
+                return decodeUTF16(body, littleEndian: true)
+            }
+            if encoding == .utf16BigEndian {
+                return decodeUTF16(body, littleEndian: false)
+            }
+            return decodeSlice(body, encoding: encoding)
         }
-        if encoding == .utf16BigEndian, data.starts(with: [0xFE, 0xFF]) {
-            return decodeSlice(data.dropFirst(2), encoding: encoding)
+        if data.starts(with: [0xFF, 0xFE]) {
+            return decodeUTF16(data.dropFirst(2), littleEndian: true)
+        }
+        if data.starts(with: [0xFE, 0xFF]) {
+            return decodeUTF16(data.dropFirst(2), littleEndian: false)
+        }
+        if encoding == .utf16LittleEndian {
+            return decodeUTF16(data, littleEndian: true)
+        }
+        if encoding == .utf16BigEndian {
+            return decodeUTF16(data, littleEndian: false)
         }
         return decode(data, encoding: encoding)
     }
