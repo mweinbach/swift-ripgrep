@@ -329,7 +329,10 @@ public struct RipgrepSearcher {
         lineNumberShifts: [Int: Int],
         options: RipgrepOptions
     ) -> [SearchMatch] {
-        matches.flatMap { match -> [SearchMatch] in
+        guard !options.multiline else {
+            return matches
+        }
+        return matches.flatMap { match -> [SearchMatch] in
             let lineNumber = match.lineNumber + (lineNumberShifts[match.lineNumber] ?? 0)
             guard let nulIndex = match.line.firstIndex(of: "\0") else {
                 guard lineNumber != match.lineNumber else {
@@ -407,7 +410,10 @@ public struct RipgrepSearcher {
         lineNumberShifts: [Int: Int],
         options: RipgrepOptions
     ) -> [SearchLine] {
-        lines.flatMap { line -> [SearchLine] in
+        guard !options.multiline else {
+            return lines
+        }
+        return lines.flatMap { line -> [SearchLine] in
             let lineNumber = line.lineNumber + (lineNumberShifts[line.lineNumber] ?? 0)
             guard let nulIndex = line.line.firstIndex(of: "\0") else {
                 guard lineNumber != line.lineNumber else {
@@ -466,7 +472,7 @@ public struct RipgrepSearcher {
     }
 
     private func jsonBinaryLineNumberShifts(for lines: [SearchLine], options: RipgrepOptions) -> [Int: Int] {
-        guard options.json else {
+        guard options.json, !options.multiline else {
             return [:]
         }
         var shifts: [Int: Int] = [:]
@@ -903,6 +909,9 @@ public struct RipgrepSearcher {
     ) -> SearchFileResult {
         let shouldSplitBinaryNUL = splitBinaryNUL && !options.disablesBinaryDetection
         if options.multiline && !options.invertMatch {
+            let shouldSplitMultilineBinaryNUL = shouldSplitBinaryNUL
+                && options.printMode == .countMatches
+                && !options.effectivePatterns.contains(where: containsLineTerminatorOutsideCharacterClass)
             return searchMultilineContents(
                 contents,
                 rawData: rawData,
@@ -910,7 +919,7 @@ public struct RipgrepSearcher {
                 fileURL: fileURL,
                 matcher: matcher,
                 options: options,
-                splitBinaryNUL: shouldSplitBinaryNUL
+                splitBinaryNUL: shouldSplitMultilineBinaryNUL
             )
         }
 
@@ -1330,6 +1339,36 @@ public struct RipgrepSearcher {
 
     private func containsLineTerminatorPattern(_ pattern: String) -> Bool {
         pattern.contains("\n") || pattern.contains(#"\n"#)
+    }
+
+    private func containsLineTerminatorOutsideCharacterClass(_ pattern: String) -> Bool {
+        var escaped = false
+        var inClass = false
+        for character in pattern {
+            if escaped {
+                if !inClass && character == "n" {
+                    return true
+                }
+                escaped = false
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                continue
+            }
+            if character == "[" {
+                inClass = true
+                continue
+            }
+            if character == "]" {
+                inClass = false
+                continue
+            }
+            if !inClass && character == "\n" {
+                return true
+            }
+        }
+        return false
     }
 
     private func containsAnchor(_ anchor: Character, in pattern: String) -> Bool {

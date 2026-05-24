@@ -1463,6 +1463,14 @@ struct RipgrepSearcherTests {
             "1:foo",
             "2:bar",
         ])
+        #expect(try run(["-n", "--column", "-U", #"foo\nbar"#, root.path("multi.txt")]) == [
+            "1:1:foo",
+            "2:1:bar",
+        ])
+        #expect(try run(["--byte-offset", "-U", #"foo\nbar"#, root.path("multi.txt")]) == [
+            "0:foo",
+            "4:bar",
+        ])
         #expect(try run(["-n", "-U", "-F", "foo\nbar", root.path("multi.txt")]) == [
             "1:foo",
             "2:bar",
@@ -4768,6 +4776,7 @@ struct RipgrepSearcherTests {
         #expect(try run(["-U", #"(?s)needle.*tail"#, root.path("bin.dat")]) == [
             #"binary file matches (found "\0" byte around offset 6)"#,
         ])
+        #expect(try runAllowingNoMatch(["-U", #"needle\ntail"#, root.path("bin.dat")]) == [])
         #expect(try run(["-n", "needle", root.path("before-nul.dat")]) == [
             #"binary file matches (found "\0" byte around offset 7)"#,
         ])

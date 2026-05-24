@@ -955,9 +955,26 @@ public struct StandardPrinter {
                 line,
                 fileURL: result.fileURL,
                 showPath: showPath,
-                match: startMatchesByLine[line.lineNumber]
+                match: startMatchesByLine[line.lineNumber] ?? multilineContinuationMatch(for: line, fileURL: result.fileURL)
             )
         }
+    }
+
+    private func multilineContinuationMatch(for line: SearchLine, fileURL: URL) -> SearchMatch? {
+        guard options.multiline else {
+            return nil
+        }
+        return SearchMatch(
+            fileURL: fileURL,
+            lineNumber: line.lineNumber,
+            column: options.column ? 1 : nil,
+            line: line.line,
+            rawLine: line.rawLine,
+            lineTerminator: line.lineTerminator,
+            absoluteOffset: line.absoluteOffset,
+            matchCount: 1,
+            spans: []
+        )
     }
 
     private func multilineMatchedLineNumbers(for result: SearchFileResult) -> Set<Int> {
