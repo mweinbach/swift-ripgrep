@@ -23,7 +23,7 @@ public enum BinaryMode: Equatable {
 public enum EncodingMode: Equatable {
     case automatic
     case disabled
-    case explicit(String.Encoding)
+    case explicit(TextEncoding)
 }
 
 public enum ColorMode: Equatable {
@@ -1324,7 +1324,7 @@ public enum RipgrepArgumentParser {
               --no-line-buffered     Disable forced line buffering
               --block-buffered       Force block buffering
               --no-block-buffered    Disable forced block buffering
-          -E, --encoding ENCODING    Specify text encoding: auto, none, utf-8, utf-16/le/be
+          -E, --encoding ENCODING    Specify text encoding: auto, none, or any WHATWG label
               --no-encoding          Reset to automatic encoding detection
           -e, --regexp PATTERN       Add a pattern to search for
           -f, --file PATTERNFILE     Read patterns from a file
@@ -1802,33 +1802,17 @@ public enum RipgrepArgumentParser {
     }
 
     private static func parseEncoding(_ raw: String) -> EncodingMode? {
-        switch raw.lowercased() {
+        let normalized = raw.trimmingCharacters(
+            in: CharacterSet(charactersIn: "\u{0009}\u{000A}\u{000C}\u{000D}\u{0020}")
+        ).lowercased()
+        switch normalized {
         case "auto":
             return .automatic
         case "none":
             return .disabled
-        case "utf-8", "utf8":
-            return .explicit(.utf8)
-        case "utf-16", "utf16":
-            return .explicit(.utf16)
-        case "utf-16le", "utf16le":
-            return .explicit(.utf16LittleEndian)
-        case "utf-16be", "utf16be":
-            return .explicit(.utf16BigEndian)
-        case "latin1", "latin-1", "iso-8859-1", "iso8859-1":
-            return .explicit(.windowsCP1252)
-        case "shift_jis", "shift-jis", "sjis":
-            return .explicit(Self.stringEncoding(.shiftJIS))
-        case "euc-jp", "eucjp":
-            return .explicit(Self.stringEncoding(.EUC_JP))
         default:
-            return nil
+            return TextEncoding.encoding(forLabel: raw).map(EncodingMode.explicit)
         }
-    }
-
-    private static func stringEncoding(_ encoding: CFStringEncodings) -> String.Encoding {
-        let raw = CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(encoding.rawValue))
-        return String.Encoding(rawValue: raw)
     }
 
     private static func parseEngineMode(_ raw: String) -> EngineMode? {
