@@ -1518,6 +1518,10 @@ struct RipgrepSearcherTests {
             0x63, 0x61, 0x66, 0xE9, 0x0A,
             0x6E, 0x65, 0x65, 0x64, 0x6C, 0x65, 0x20, 0x63, 0x61, 0x66, 0xE9, 0x0A,
         ]), to: "latin1.txt")
+        try root.write(Data([
+            0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x8B, 0x91,
+            0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x99, 0x9F, 0x0A,
+        ]), to: "latin1-c1.txt")
         #expect(try runAllowingNoMatch(["caf.", root.path("latin1.txt")]) == [])
         #expect(try runAllowingNoMatch(["--no-encoding", "caf.", root.path("latin1.txt")]) == [])
         let invalidAutomaticLineOutput = try runExecutableData(["needle", root.path("latin1.txt")], fixture: {})
@@ -1534,6 +1538,27 @@ struct RipgrepSearcherTests {
         #expect(try run(["--encoding", "latin1", "caf.", root.path("latin1.txt")]) == [
             "café",
             "needle café",
+        ])
+        #expect(try run(["--encoding", "latin1", ".", root.path("latin1-c1.txt")]) == [
+            "€\u{81}‚ƒ„…‹‘’“”•–—™Ÿ",
+        ])
+        #expect(try run(["--encoding", "iso-8859-1", "-o", ".", root.path("latin1-c1.txt")]) == [
+            "€",
+            "\u{81}",
+            "‚",
+            "ƒ",
+            "„",
+            "…",
+            "‹",
+            "‘",
+            "’",
+            "“",
+            "”",
+            "•",
+            "–",
+            "—",
+            "™",
+            "Ÿ",
         ])
         let latin1JsonOutput = try run(["--json", "--encoding", "latin1", "caf.", root.path("latin1.txt")])
         let latin1JsonMatches = try latin1JsonOutput.map(jsonObject).compactMap { object -> [String: Any]? in

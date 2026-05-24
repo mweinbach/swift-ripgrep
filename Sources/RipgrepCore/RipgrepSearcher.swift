@@ -3288,7 +3288,74 @@ public struct RipgrepSearcher {
         if encoding == .utf16 {
             return decodeUTF16(data, littleEndian: true)
         }
+        if encoding == .windowsCP1252 {
+            return decodeWindows1252(data)
+        }
         return decode(data, encoding: encoding)
+    }
+
+    private func decodeWindows1252(_ data: Data) -> String {
+        let scalars = data.map { byte -> UnicodeScalar in
+            switch byte {
+            case 0x80:
+                return "\u{20AC}"
+            case 0x82:
+                return "\u{201A}"
+            case 0x83:
+                return "\u{0192}"
+            case 0x84:
+                return "\u{201E}"
+            case 0x85:
+                return "\u{2026}"
+            case 0x86:
+                return "\u{2020}"
+            case 0x87:
+                return "\u{2021}"
+            case 0x88:
+                return "\u{02C6}"
+            case 0x89:
+                return "\u{2030}"
+            case 0x8A:
+                return "\u{0160}"
+            case 0x8B:
+                return "\u{2039}"
+            case 0x8C:
+                return "\u{0152}"
+            case 0x8E:
+                return "\u{017D}"
+            case 0x91:
+                return "\u{2018}"
+            case 0x92:
+                return "\u{2019}"
+            case 0x93:
+                return "\u{201C}"
+            case 0x94:
+                return "\u{201D}"
+            case 0x95:
+                return "\u{2022}"
+            case 0x96:
+                return "\u{2013}"
+            case 0x97:
+                return "\u{2014}"
+            case 0x98:
+                return "\u{02DC}"
+            case 0x99:
+                return "\u{2122}"
+            case 0x9A:
+                return "\u{0161}"
+            case 0x9B:
+                return "\u{203A}"
+            case 0x9C:
+                return "\u{0153}"
+            case 0x9E:
+                return "\u{017E}"
+            case 0x9F:
+                return "\u{0178}"
+            default:
+                return UnicodeScalar(UInt32(byte))!
+            }
+        }
+        return String(String.UnicodeScalarView(scalars))
     }
 
     private func splitLines(
