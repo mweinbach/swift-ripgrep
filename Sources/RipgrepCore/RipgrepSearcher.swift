@@ -1859,6 +1859,7 @@ public struct RipgrepSearcher {
             && options.maxCount == nil
             && !candidates.isEmpty
             && options.effectivePatterns.contains(where: containsLineAnchor)
+            && candidates.contains { $0.span.startByte == $0.span.endByte && $0.span.text.isEmpty }
     }
 
     private func multilineMatchCount(

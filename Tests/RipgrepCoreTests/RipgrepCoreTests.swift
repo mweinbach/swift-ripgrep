@@ -1685,6 +1685,43 @@ struct RipgrepSearcherTests {
         #expect(jsonCRLFMixedLineStartSubmatches?.compactMap { ($0["match"] as? [String: String])?["text"] } == ["foo", "", "foo"])
         #expect(jsonCRLFMixedLineStartSubmatches?.map { $0["start"] as? Int } == [0, 5, 10])
         #expect(jsonCRLFMixedLineStartSubmatches?.map { $0["end"] as? Int } == [3, 5, 13])
+        try root.write("alpha\nfoo\nbar\nbaz\nfoo bar\n", to: "json-anchored-lines.txt")
+        let jsonAnchoredLineStartOutput = try run(["-U", "--json", "^foo", root.path("json-anchored-lines.txt")])
+        let jsonAnchoredLineStartMessages = try jsonAnchoredLineStartOutput.map(jsonObject)
+        let jsonAnchoredLineStartMatches = jsonAnchoredLineStartMessages.compactMap { message -> [String: Any]? in
+            guard message["type"] as? String == "match" else {
+                return nil
+            }
+            return message["data"] as? [String: Any]
+        }
+        #expect(jsonAnchoredLineStartMatches.map { $0["line_number"] as? Int } == [2, 5])
+        #expect(jsonAnchoredLineStartMatches.compactMap { ($0["lines"] as? [String: String])?["text"] } == ["foo\n", "foo bar\n"])
+        #expect(jsonAnchoredLineStartMatches.compactMap { ($0["submatches"] as? [[String: Any]])?.count } == [1, 1])
+
+        let jsonAnchoredLineEndOutput = try run(["-U", "--json", "bar$", root.path("json-anchored-lines.txt")])
+        let jsonAnchoredLineEndMessages = try jsonAnchoredLineEndOutput.map(jsonObject)
+        let jsonAnchoredLineEndMatches = jsonAnchoredLineEndMessages.compactMap { message -> [String: Any]? in
+            guard message["type"] as? String == "match" else {
+                return nil
+            }
+            return message["data"] as? [String: Any]
+        }
+        #expect(jsonAnchoredLineEndMatches.map { $0["line_number"] as? Int } == [3, 5])
+        #expect(jsonAnchoredLineEndMatches.compactMap { ($0["lines"] as? [String: String])?["text"] } == ["bar\n", "foo bar\n"])
+
+        let jsonAnchoredContextOutput = try run(["-U", "--json", "-A1", "^foo", root.path("json-anchored-lines.txt")])
+        let jsonAnchoredContextMessages = try jsonAnchoredContextOutput.map(jsonObject)
+        #expect(jsonAnchoredContextMessages.map { $0["type"] as? String } == [
+            "begin",
+            "match",
+            "context",
+            "match",
+            "end",
+            "summary",
+        ])
+        let jsonAnchoredContextLine = jsonAnchoredContextMessages[2]["data"] as? [String: Any]
+        #expect(jsonAnchoredContextLine?["line_number"] as? Int == 3)
+        #expect((jsonAnchoredContextLine?["lines"] as? [String: String])?["text"] == "bar\n")
         let jsonDotallContextOutput = try run(["-U", "--json", "-C1", #"(?s).+?"#, root.path("multi.txt")])
         let jsonDotallContextMessages = try jsonDotallContextOutput.map(jsonObject)
         #expect(jsonDotallContextMessages.map { $0["type"] as? String } == ["begin", "match", "end", "summary"])
