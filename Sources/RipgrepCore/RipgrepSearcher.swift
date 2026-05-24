@@ -885,6 +885,7 @@ public struct RipgrepSearcher {
                     ),
                     line: line,
                     absoluteOffset: absoluteOffset,
+                    terminator: splitLine.terminator,
                     options: options
                 ),
                 line: matchingRawLine ?? lineForMatching,
@@ -913,6 +914,7 @@ public struct RipgrepSearcher {
                 ),
                 line: line,
                 absoluteOffset: absoluteOffset,
+                terminator: splitLine.terminator,
                 options: options
             )
             let syntheticAdjusted = syntheticBinarySplitSpans(
@@ -1021,16 +1023,26 @@ public struct RipgrepSearcher {
         _ spans: [MatchSpan],
         line: String,
         absoluteOffset: Int,
+        terminator: String,
         options: RipgrepOptions
     ) -> [MatchSpan] {
         guard options.nullData, !options.multiline else {
             return spans
         }
         var output = spans
-        if absoluteOffset > 3,
+        if !terminator.isEmpty,
+           absoluteOffset > 3,
            line.contains("\n"),
            options.effectivePatterns.contains(where: containsLineStartAnchor) {
             output = output.filter { $0.startByte != 0 }
+        }
+        if terminator.isEmpty,
+           line.hasSuffix("\n"),
+           !options.effectivePatterns.contains(where: containsLineStartAndEndAnchor) {
+            let lineEnd = byteCount(line, options: options)
+            output = output.filter {
+                !($0.startByte == lineEnd && $0.endByte == lineEnd && $0.text.isEmpty)
+            }
         }
         return output
     }
@@ -1066,6 +1078,10 @@ public struct RipgrepSearcher {
 
     private func containsLineEndAnchor(_ pattern: String) -> Bool {
         containsAnchor("$", in: pattern)
+    }
+
+    private func containsLineStartAndEndAnchor(_ pattern: String) -> Bool {
+        containsLineStartAnchor(pattern) && containsLineEndAnchor(pattern)
     }
 
     private func containsLineAnchor(_ pattern: String) -> Bool {

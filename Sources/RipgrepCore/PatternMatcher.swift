@@ -511,7 +511,7 @@ public struct PatternMatcher {
         }
         let replacement: String
         if options.nullData {
-            replacement = "[^\\x{0}]"
+            replacement = "[^\\n\\x{0}]"
         } else if options.binaryMode == .asText {
             replacement = "[^\\n]"
         } else {

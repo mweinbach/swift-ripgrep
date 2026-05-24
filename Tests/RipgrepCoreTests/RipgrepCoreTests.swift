@@ -905,6 +905,41 @@ struct RipgrepSearcherTests {
         #expect(try run(["--null-data", #"^$"#, root.path("lf.txt")]) == [
             "needle\nunterminated\n\0",
         ])
+        try root.write(Data([0x61, 0x00, 0x62, 0x0A, 0x00, 0x0A]), to: "nul-empty-anchors.txt")
+        let nullDataDotOutput = try runExecutableData([
+            "--null-data",
+            "-o",
+            ".",
+            root.path("nul-empty-anchors.txt"),
+        ], fixture: {})
+        #expect(nullDataDotOutput == Data([0x61, 0x00, 0x62, 0x00]))
+        let nullDataLineEndOutput = try runExecutableData([
+            "--null-data",
+            "-bo",
+            "$",
+            root.path("nul-empty-anchors.txt"),
+        ], fixture: {})
+        #expect(nullDataLineEndOutput == Data([
+            0x31, 0x3A, 0x00,
+            0x33, 0x3A, 0x00,
+            0x34, 0x3A, 0x00,
+            0x35, 0x3A, 0x00,
+        ]))
+        let nullDataLineStartOutput = try runExecutableData([
+            "--null-data",
+            "-bo",
+            "^",
+            root.path("nul-empty-anchors.txt"),
+        ], fixture: {})
+        #expect(nullDataLineStartOutput == Data([
+            0x30, 0x3A, 0x00,
+            0x32, 0x3A, 0x00,
+            0x34, 0x3A, 0x00,
+            0x35, 0x3A, 0x00,
+        ]))
+        #expect(try run(["--null-data", "--count-matches", "$", root.path("nul-empty-anchors.txt")]) == [
+            "4\0",
+        ])
 
         let output = try run(["--json", "--null-data", "needle", root.path("nul.txt")])
         let messages = try output.map(jsonObject)
