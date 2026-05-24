@@ -1389,6 +1389,7 @@ struct RipgrepSearcherTests {
         try root.write(Data([0xFF, 0xFE]) + Data("hay\nneedle\n".utf16LittleEndianBytes), to: "bom16le.txt")
         try root.write(Data([0xFE, 0xFF]) + Data("needle\n".utf16BigEndianBytes), to: "bom16be.txt")
         try root.write(Data("hay\nneedle\n".utf16LittleEndianBytes), to: "utf16le.txt")
+        try root.write(Data("needle\n".utf16BigEndianBytes), to: "utf16be.txt")
         try root.write(Data([0xEF, 0xBB, 0xBF]) + Data("needle\n".utf8), to: "bom8.txt")
         try root.write(Data([0xFF, 0xFE, 0x00, 0x62, 0x0A]), to: "bom16le-invalid.txt")
         try root.write(Data([
@@ -1404,7 +1405,11 @@ struct RipgrepSearcherTests {
 
         #expect(try run(["-n", "needle", root.path("bom16le.txt")]) == ["2:needle"])
         #expect(try run(["-n", "-E", "utf-16le", "needle", root.path("bom16le.txt")]) == ["2:needle"])
+        #expect(try run(["-n", "-E", "utf-16", "needle", root.path("utf16le.txt")]) == ["2:needle"])
         #expect(try run(["-n", "-E", "utf-16be", "needle", root.path("bom16be.txt")]) == ["1:needle"])
+        #expect(try run(["-n", "-E", "utf-16", "needle", root.path("bom16be.txt")]) == ["1:needle"])
+        #expect(try run(["-n", "-E", "utf-16", "needle", root.path("bom16le.txt")]) == ["2:needle"])
+        #expect(try runAllowingNoMatch(["-n", "-E", "utf-16", "needle", root.path("utf16be.txt")]) == [])
         #expect(try run(["-n", "-E", "utf-16le", "needle", root.path("bom16be.txt")]) == ["1:needle"])
         #expect(try run(["-n", "-E", "utf-16be", "needle", root.path("bom16le.txt")]) == ["2:needle"])
         #expect(try runAllowingNoMatch(["-n", "-E", "none", "needle", root.path("bom16le.txt")]) == [])
