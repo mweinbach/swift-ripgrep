@@ -1945,6 +1945,31 @@ struct RipgrepSearcherTests {
         #expect(try run(["-U", "-n", "-o", #"foo|$"#, root.path("multi.txt")]) == [
             "1:foo",
         ])
+        for arguments in [
+            ["-U", "-o", "-r", "", "^|$", root.path("multi.txt")],
+            ["-U", "-o", "-r", "${missing}", "^|$", root.path("multi.txt")],
+            ["-U", "-o", "-r", "", "^ba", root.path("multi.txt")],
+        ] {
+            var output: [String] = []
+            var errors: [String] = []
+            let exitCode = RipgrepCLI.run(
+                arguments: arguments,
+                stdout: { output.append($0) },
+                stderr: { errors.append($0) }
+            )
+            #expect(exitCode == 0)
+            #expect(output.isEmpty)
+            #expect(errors.isEmpty)
+        }
+        let multilineWordBoundaryEmptyReplacementOutput = try runExecutableData([
+            "-U",
+            "-o",
+            "-r",
+            "${missing}",
+            #"\b"#,
+            root.path("multi.txt"),
+        ], fixture: {})
+        #expect(multilineWordBoundaryEmptyReplacementOutput == Data("\n\n\n\n\n\n".utf8))
         #expect(try runAllowingNoMatch(["-U", #"(?-m)bar$"#, root.path("multi.txt")]) == [])
         #expect(try runAllowingNoMatch(["-U", "-o", #"(?-m)bar$"#, root.path("multi.txt")]) == [])
         #expect(try runAllowingNoMatch(["-U", #"(?-m)bar$"#, root.path("multi-final-newline.txt")]) == [])

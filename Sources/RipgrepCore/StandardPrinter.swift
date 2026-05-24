@@ -680,8 +680,7 @@ public struct StandardPrinter {
 
     private func shouldSuppressMultilineEmptyOnlyMatch(_ span: MatchSpan) -> Bool {
         options.multiline
-            && span.text.isEmpty
-            && span.replacement == nil
+            && ((span.text.isEmpty && span.replacement == nil) || span.replacement == "")
             && !options.fixedStrings
             && !options.effectivePatterns.isEmpty
             && options.effectivePatterns.contains(where: containsLineAnchor)
