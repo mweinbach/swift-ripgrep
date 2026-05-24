@@ -2247,7 +2247,6 @@ public enum RipgrepArgumentParser {
             suggestions.append(contentsOf: knownLongFlags.filter { knownFlag in
                 flag == knownFlag
                     || knownFlag.hasPrefix(flag)
-                    || commonPrefixLength(flag, knownFlag) >= 9
             })
             return suggestions.uniqued()
         }
@@ -2256,11 +2255,12 @@ public enum RipgrepArgumentParser {
                 knownFlag.hasPrefix(flag) || commonPrefixLength(flag, knownFlag) >= 8
             }
         }
-        var suggestions = knownLongFlags.filter { knownFlag in
+        var suggestions = leadingFlagSuggestionExtras[flag] ?? []
+        suggestions.append(contentsOf: knownLongFlags.filter { knownFlag in
             flag == knownFlag
                 || (flag.count >= 7 && knownFlag.hasPrefix(flag))
                 || commonPrefixLength(flag, knownFlag) >= 9
-        }
+        })
         suggestions.append(contentsOf: flagSuggestionExtras[flag] ?? [])
         return suggestions.uniqued()
     }
@@ -2308,6 +2308,7 @@ public enum RipgrepArgumentParser {
         "--glob",
         "--glob-case-insensitive",
         "--heading",
+        "--help",
         "--hidden",
         "--hostname-bin",
         "--hyperlink-format",
@@ -2335,14 +2336,25 @@ public enum RipgrepArgumentParser {
         "--max-depth",
         "--maxdepth",
         "--max-filesize",
+        "--messages",
         "--mmap",
         "--multiline",
         "--multiline-dotall",
+        "--no-auto-hybrid-regex",
+        "--no-binary",
+        "--no-block-buffered",
+        "--no-byte-offset",
+        "--no-column",
         "--no-config",
         "--no-context-separator",
+        "--no-crlf",
         "--no-encoding",
         "--no-fixed-strings",
+        "--no-follow",
+        "--no-filename",
+        "--no-glob-case-insensitive",
         "--no-heading",
+        "--no-hidden",
         "--no-ignore",
         "--no-ignore-dot",
         "--no-ignore-exclude",
@@ -2352,14 +2364,26 @@ public enum RipgrepArgumentParser {
         "--no-ignore-messages",
         "--no-ignore-parent",
         "--no-ignore-vcs",
+        "--no-include-zero",
+        "--no-invert-match",
+        "--no-json",
         "--no-line-number",
+        "--no-line-buffered",
+        "--no-max-columns-preview",
         "--no-messages",
         "--no-mmap",
+        "--no-multiline",
+        "--no-multiline-dotall",
+        "--no-one-file-system",
         "--no-pcre2",
         "--no-pcre2-unicode",
+        "--no-pre",
         "--no-require-git",
+        "--no-search-zip",
         "--no-sort-files",
+        "--no-stats",
         "--no-text",
+        "--no-trim",
         "--no-unicode",
         "--null",
         "--null-data",
@@ -2393,8 +2417,11 @@ public enum RipgrepArgumentParser {
         "--type",
         "--type-add",
         "--type-clear",
+        "--type-not",
         "--type-list",
         "--unrestricted",
+        "--unicode",
+        "--version",
         "--vimgrep",
         "--with-filename",
         "--word-regexp",
@@ -2526,12 +2553,23 @@ public enum RipgrepArgumentParser {
     private static let negativeFlagSuggestionExtras = [
         "--no-color": ["--colors", "--no-column"],
         "--no-count": ["--max-count"],
+        "--no-binar": ["--binary"],
+        "--no-byte-offse": ["--byte-offset"],
+        "--no-colum": ["--column"],
         "--no-files": ["--no-filename", "--sort-files", "--no-sort-files"],
+        "--no-filenam": ["--with-filename"],
+        "--no-follo": ["--follow"],
+        "--no-hidde": ["--hidden"],
         "--no-regexp": ["--line-regexp", "--word-regexp"],
     ]
 
     private static let flagSuggestionExtras = [
         "--max-depthh": ["--maxdepth"],
+    ]
+
+    private static let leadingFlagSuggestionExtras = [
+        "--messag": ["--no-messages"],
+        "--unicod": ["--no-unicode"],
     ]
 }
 

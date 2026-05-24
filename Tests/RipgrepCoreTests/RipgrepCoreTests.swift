@@ -3603,6 +3603,22 @@ struct RipgrepSearcherTests {
                 "rg: unrecognized flag --no-color\n\nsimilar flags that are available: --color, --colors, --no-column"
             ),
             (
+                ["--no-colum"],
+                "rg: unrecognized flag --no-colum\n\nsimilar flags that are available: --column, --no-column"
+            ),
+            (
+                ["--no-filenam"],
+                "rg: unrecognized flag --no-filenam\n\nsimilar flags that are available: --with-filename, --no-filename"
+            ),
+            (
+                ["--unicod"],
+                "rg: unrecognized flag --unicod\n\nsimilar flags that are available: --no-unicode, --unicode"
+            ),
+            (
+                ["--messag"],
+                "rg: unrecognized flag --messag\n\nsimilar flags that are available: --no-messages, --messages"
+            ),
+            (
                 ["--no-max-filesize"],
                 "rg: unrecognized flag --no-max-filesize\n\nsimilar flags that are available: --max-filesize"
             ),
