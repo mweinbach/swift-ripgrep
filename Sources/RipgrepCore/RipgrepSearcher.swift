@@ -1666,15 +1666,12 @@ public struct RipgrepSearcher {
             return spans
         }
         let lineEnd = byteCount(line, options: options)
-        let lineStartOnlySpans = options.effectivePatterns.contains(where: containsLineStartAnchor)
-            && !options.effectivePatterns.contains(where: containsLineEndAnchor)
-            ? spans.filter {
-                !($0.text.isEmpty
-                    && $0.startByte == lineEnd
-                    && $0.endByte == lineEnd)
-            }
-            : spans
-        return lineStartOnlySpans.compactMap { span in
+        let crlfLineEndSpans = spans.filter {
+            !($0.text.isEmpty
+                && $0.startByte == lineEnd
+                && $0.endByte == lineEnd)
+        }
+        return crlfLineEndSpans.compactMap { span in
             guard span.endByte == lineEnd,
                   span.startByte < span.endByte,
                   span.text.hasSuffix("\r") else {

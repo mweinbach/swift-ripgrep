@@ -2643,6 +2643,23 @@ struct RipgrepSearcherTests {
         #expect(try run(["-U", "--crlf", "--count-matches", "^|$", root.path("plain-crlf.txt")]) == [
             "4\r",
         ])
+        let crlfOnlyLineStartEndOutput = try runExecutableData([
+            "--crlf",
+            "-bo",
+            "^|$",
+            root.path("plain-crlf.txt"),
+        ], fixture: {})
+        #expect(crlfOnlyLineStartEndOutput == Data("0:\r\n1:\r\n3:\r\n4:\r\n".utf8))
+        #expect(try run(["--crlf", "--count-matches", "^|$", root.path("plain-crlf.txt")]) == [
+            "4\r",
+        ])
+        let crlfOnlyNotWordBoundaryOutput = try runExecutableData([
+            "--crlf",
+            "-bo",
+            #"\B"#,
+            root.path("crlf-line-regexp.txt"),
+        ], fixture: {})
+        #expect(crlfOnlyNotWordBoundaryOutput == Data("1:\r\n2:\r\n6:\r\n7:\r\n11:\r\n12:\r\n".utf8))
         #expect(try run(["-U", "--crlf", "--count-matches", "$", root.path("crlf-no-final-newline.txt")]) == [
             "1\r",
         ])
