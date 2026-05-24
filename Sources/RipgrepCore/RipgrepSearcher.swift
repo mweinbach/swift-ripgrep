@@ -879,9 +879,13 @@ public struct RipgrepSearcher {
             let positiveSpans = syntheticBinarySplitSpans(
                 syntheticInlineCRLFBoundarySpans(
                     nullDataLineAnchorSpans(
-                        adjustedSpans(
-                            matcher.positiveSpans(in: lineForMatching),
-                            rawLine: rawLineForSpanAdjustment,
+                        crlfTrimmedSpans(
+                            adjustedSpans(
+                                matcher.positiveSpans(in: lineForMatching),
+                                rawLine: rawLineForSpanAdjustment,
+                                options: options
+                            ),
+                            line: line,
                             options: options
                         ),
                         line: line,
@@ -913,9 +917,13 @@ public struct RipgrepSearcher {
 
             let rawSpans = syntheticInlineCRLFBoundarySpans(
                 nullDataLineAnchorSpans(
-                    adjustedSpans(
-                        matcher.spans(in: lineForMatching),
-                        rawLine: rawLineForSpanAdjustment,
+                    crlfTrimmedSpans(
+                        adjustedSpans(
+                            matcher.spans(in: lineForMatching),
+                            rawLine: rawLineForSpanAdjustment,
+                            options: options
+                        ),
+                        line: line,
                         options: options
                     ),
                     line: line,
@@ -1055,6 +1063,39 @@ public struct RipgrepSearcher {
             }
         }
         return output
+    }
+
+    private func crlfTrimmedSpans(
+        _ spans: [MatchSpan],
+        line: String,
+        options: RipgrepOptions
+    ) -> [MatchSpan] {
+        guard options.crlf,
+              !options.multiline,
+              !options.nullData,
+              line.hasSuffix("\r") else {
+            return spans
+        }
+        let lineEnd = byteCount(line, options: options)
+        return spans.compactMap { span in
+            guard span.endByte == lineEnd,
+                  span.startByte < span.endByte,
+                  span.text.hasSuffix("\r") else {
+                return span
+            }
+            let endByte = lineEnd - 1
+            guard endByte > span.startByte else {
+                return nil
+            }
+            return MatchSpan(
+                startColumn: span.startColumn,
+                endColumn: max(span.startColumn, span.endColumn - 1),
+                startByte: span.startByte,
+                endByte: endByte,
+                text: String(span.text.dropLast()),
+                replacement: span.replacement
+            )
+        }
     }
 
     private func syntheticInlineCRLFBoundarySpans(

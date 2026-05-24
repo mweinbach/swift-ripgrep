@@ -1728,6 +1728,23 @@ struct RipgrepSearcherTests {
         #expect(try run(["--crlf", "-o", "quux$", root.path("crlf.txt")]) == [
             "quux\r",
         ])
+        try root.write("a\r\nb\r\nab\r\nba\r\n", to: "crlf-classes.txt")
+        #expect(try run(["--crlf", "--count-matches", "[^a]+", root.path("crlf-classes.txt")]) == [
+            "3\r",
+        ])
+        #expect(try run(["--crlf", "-bo", "[^a]+", root.path("crlf-classes.txt")]) == [
+            "3:b\r",
+            "7:b\r",
+            "10:b\r",
+        ])
+        #expect(try run(["--crlf", "-o", "[^a]+", root.path("crlf-classes.txt")]) == [
+            "b\r",
+            "b\r",
+            "b\r",
+        ])
+        #expect(try run(["--crlf", "--count-matches", "[^b]+", root.path("crlf-classes.txt")]) == [
+            "3\r",
+        ])
         try root.write("foo\r\nbar\r\n\r\n", to: "crlf-empty.txt")
         let onlyMatchingEndAnchors = try runExecutableData(["--crlf", "-o", "$", root.path("crlf-empty.txt")]) {}
         #expect(onlyMatchingEndAnchors == Data([13, 10, 13, 10, 13, 10]))
