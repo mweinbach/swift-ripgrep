@@ -1370,6 +1370,12 @@ public struct RipgrepSearcher {
         guard options.nullData, !options.multiline, !spans.isEmpty else {
             return (spans, false)
         }
+        if !terminator.isEmpty,
+           options.effectivePatterns.allSatisfy(isPlainDisabledMultilineLineEndAnchorPattern) {
+            let recordEnd = byteCount(matchingLine, options: options)
+            let filtered = spans.filter { $0.endByte < recordEnd }
+            return (filtered, false)
+        }
         if terminator.isEmpty,
            lastScalar(in: matchingLine, equals: "\n"),
            !options.effectivePatterns.contains(where: containsLineStartAndEndAnchor) {
@@ -1565,6 +1571,110 @@ public struct RipgrepSearcher {
         containsAnchor("^", in: pattern) || containsAnchor("$", in: pattern)
     }
 
+    private func containsDisabledMultilineLineEndAnchor(_ pattern: String) -> Bool {
+        containsDisabledMultilineLineEndAnchor(in: pattern, multilineEnabled: true)
+    }
+
+    private func isPlainDisabledMultilineLineEndAnchorPattern(_ pattern: String) -> Bool {
+        containsDisabledMultilineLineEndAnchor(pattern) && !containsTopLevelAlternation(pattern)
+    }
+
+    private func containsDisabledMultilineLineEndAnchor(in pattern: String, multilineEnabled: Bool) -> Bool {
+        var escaped = false
+        var inClass = false
+        var currentMultilineEnabled = multilineEnabled
+        var index = pattern.startIndex
+
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                escaped = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "[" {
+                inClass = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "]" {
+                inClass = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if !inClass,
+               character == "(",
+               let flags = inlineMultilineFlags(in: pattern, openingAt: index) {
+                if flags.scoped, let close = flags.close {
+                    let scopedMultilineEnabled = flags.multilineEnabled ?? currentMultilineEnabled
+                    if containsDisabledMultilineLineEndAnchor(
+                        in: String(pattern[flags.bodyStart..<close]),
+                        multilineEnabled: scopedMultilineEnabled
+                    ) {
+                        return true
+                    }
+                    index = flags.end
+                    continue
+                }
+                if let flagMultilineEnabled = flags.multilineEnabled {
+                    currentMultilineEnabled = flagMultilineEnabled
+                }
+                index = flags.end
+                continue
+            }
+            if !inClass, character == "$", !currentMultilineEnabled {
+                return true
+            }
+            index = pattern.index(after: index)
+        }
+        return false
+    }
+
+    private func containsTopLevelAlternation(_ pattern: String) -> Bool {
+        var escaped = false
+        var inClass = false
+        var depth = 0
+
+        for character in pattern {
+            if escaped {
+                escaped = false
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                continue
+            }
+            if character == "[" {
+                inClass = true
+                continue
+            }
+            if character == "]" {
+                inClass = false
+                continue
+            }
+            if inClass {
+                continue
+            }
+            if character == "(" {
+                depth += 1
+                continue
+            }
+            if character == ")" {
+                depth = max(0, depth - 1)
+                continue
+            }
+            if character == "|", depth == 0 {
+                return true
+            }
+        }
+        return false
+    }
+
     private func isBareInlineCRLFLineAnchorPattern(_ pattern: String) -> Bool {
         if pattern.hasPrefix("(?"),
            let close = pattern.firstIndex(of: ")") {
@@ -1646,6 +1756,95 @@ public struct RipgrepSearcher {
             }
         }
         return false
+    }
+
+    private func inlineMultilineFlags(
+        in pattern: String,
+        openingAt opening: String.Index
+    ) -> (scoped: Bool, multilineEnabled: Bool?, bodyStart: String.Index, close: String.Index?, end: String.Index)? {
+        let question = pattern.index(after: opening)
+        guard question < pattern.endIndex, pattern[question] == "?" else {
+            return nil
+        }
+
+        var cursor = pattern.index(after: question)
+        var disabling = false
+        var multilineEnabled: Bool?
+        while cursor < pattern.endIndex {
+            let character = pattern[cursor]
+            if character == ":" {
+                guard let close = closingGroupIndex(in: pattern, openingAt: opening) else {
+                    return nil
+                }
+                return (
+                    scoped: true,
+                    multilineEnabled: multilineEnabled,
+                    bodyStart: pattern.index(after: cursor),
+                    close: close,
+                    end: pattern.index(after: close)
+                )
+            }
+            if character == ")" {
+                return (
+                    scoped: false,
+                    multilineEnabled: multilineEnabled,
+                    bodyStart: cursor,
+                    close: nil,
+                    end: pattern.index(after: cursor)
+                )
+            }
+            guard character == "-" || character.isASCII && character.isLetter else {
+                return nil
+            }
+            if character == "-" {
+                disabling = true
+            } else if character == "m" {
+                multilineEnabled = !disabling
+            }
+            cursor = pattern.index(after: cursor)
+        }
+        return nil
+    }
+
+    private func closingGroupIndex(in pattern: String, openingAt opening: String.Index) -> String.Index? {
+        var escaped = false
+        var inClass = false
+        var depth = 0
+        var index = opening
+
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                escaped = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "[" {
+                inClass = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "]" {
+                inClass = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if !inClass, character == "(" {
+                depth += 1
+            } else if !inClass, character == ")" {
+                depth -= 1
+                if depth == 0 {
+                    return index
+                }
+            }
+            index = pattern.index(after: index)
+        }
+        return nil
     }
 
     private func unwrappedSingleGroupPattern(_ pattern: String) -> String? {

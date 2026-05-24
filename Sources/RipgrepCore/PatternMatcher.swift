@@ -2348,12 +2348,12 @@ public struct PatternMatcher {
     }
 
     private static func nullDataAnchorPattern(for pattern: String) -> String {
-        transformAnchors(in: pattern) { anchor in
+        transformMultilineAnchors(in: pattern) { anchor, multilineEnabled in
             switch anchor {
             case "^":
                 return "(?:^|(?<=\\n))"
             case "$":
-                return "(?=\\n|\\z)"
+                return multilineEnabled ? "(?=\\n|\\z)" : "(?=\\z)"
             default:
                 return String(anchor)
             }

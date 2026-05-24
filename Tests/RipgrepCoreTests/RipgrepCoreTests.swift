@@ -1096,6 +1096,11 @@ struct RipgrepSearcherTests {
         #expect(try run(["--null-data", "-o", "--column", "needle$", root.path("nul-anchors.txt")]) == [
             "2:1:needle\0",
         ])
+        try root.write(Data("foo\0bar\0foo bar\0end\0".utf8), to: "nul-inline-m.txt")
+        try root.write(Data("foo\0bar".utf8), to: "nul-inline-m-no-final.txt")
+        #expect(try runAllowingNoMatch(["--null-data", #"(?-m)bar$"#, root.path("nul-inline-m.txt")]) == [])
+        #expect(try run(["--null-data", #"(?-m)^bar"#, root.path("nul-inline-m.txt")]) == ["bar\0"])
+        #expect(try run(["--null-data", #"(?-m)bar$"#, root.path("nul-inline-m-no-final.txt")]) == ["bar\0"])
         let anchorOutput = try run(["--json", "--null-data", "^needle", root.path("nul-anchors.txt")])
         let anchorMessages = try anchorOutput.map(jsonObject)
         let anchorMatch = anchorMessages.first { $0["type"] as? String == "match" }?["data"] as? [String: Any]
