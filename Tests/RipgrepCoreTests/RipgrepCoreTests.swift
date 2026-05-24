@@ -1542,6 +1542,13 @@ struct RipgrepSearcherTests {
         #expect(jsonCRLFMixedLineStartSubmatches?.compactMap { ($0["match"] as? [String: String])?["text"] } == ["foo", "", "foo"])
         #expect(jsonCRLFMixedLineStartSubmatches?.map { $0["start"] as? Int } == [0, 5, 10])
         #expect(jsonCRLFMixedLineStartSubmatches?.map { $0["end"] as? Int } == [3, 5, 13])
+        let jsonDotallContextOutput = try run(["-U", "--json", "-C1", #"(?s).+?"#, root.path("multi.txt")])
+        let jsonDotallContextMessages = try jsonDotallContextOutput.map(jsonObject)
+        #expect(jsonDotallContextMessages.map { $0["type"] as? String } == ["begin", "match", "end", "summary"])
+        let jsonDotallContextEnd = jsonDotallContextMessages[2]["data"] as? [String: Any]
+        let jsonDotallContextStats = jsonDotallContextEnd?["stats"] as? [String: Any]
+        #expect(jsonDotallContextStats?["matched_lines"] as? Int == 3)
+        #expect(jsonDotallContextStats?["matches"] as? Int == 12)
         #expect(try run(["-n", "-U", "-o", #"foo[\s\S]+?bar"#, root.path("multi.txt")]) == [
             "1:foo",
             "2:bar",

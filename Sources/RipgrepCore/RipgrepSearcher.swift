@@ -1401,13 +1401,32 @@ public struct RipgrepSearcher {
            options.effectivePatterns.contains(where: containsLineAnchor) {
             return []
         }
-        let matchedLineNumbers = Set(matches.map(\.lineNumber))
+        if options.multiline,
+           matches.count == 1,
+           let match = matches.first,
+           match.absoluteOffset == 0,
+           let matchEnd = match.spans.map(\.endByte).max(),
+           matchEnd >= byteCount(match.lineWithTerminator, options: options) {
+            return []
+        }
+        let matchedLineNumbers = Set(matches.flatMap { multilineMatchedLineNumbers(for: $0, options: options) })
         let selected = selectedContextLineNumbers(lineCount: lines.count, matches: matches, options: options)
         return lines.filter {
             selected.contains($0.lineNumber)
                 && !matchedLineNumbers.contains($0.lineNumber)
                 && !$0.positiveSpans.isEmpty
         }
+    }
+
+    private func multilineMatchedLineNumbers(for match: SearchMatch, options: RipgrepOptions) -> [Int] {
+        guard options.multiline else {
+            return [match.lineNumber]
+        }
+        let separator: Character = options.nullData ? "\0" : "\n"
+        let text = match.lineWithTerminator
+        let separatorCount = text.filter { $0 == separator }.count
+        let lineCount = separatorCount + (text.last == separator ? 0 : 1)
+        return Array(match.lineNumber..<(match.lineNumber + max(1, lineCount)))
     }
 
     private func selectedContextLineNumbers(
