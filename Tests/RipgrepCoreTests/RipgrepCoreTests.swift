@@ -3514,6 +3514,32 @@ struct RipgrepSearcherTests {
         let endData = endMessage?["data"] as? [String: Any]
         let stats = endData?["stats"] as? [String: Any]
         #expect(stats?["bytes_searched"] as? Int == "needle in gzip\n".utf8.count)
+        let compressedBinary = Data("prefix match\n".utf8) + Data("needle utf16\n".utf16LittleEndianBytes)
+        try root.writeGzip(compressedBinary, to: "binary.txt.gz")
+        #expect(try run(["--search-zip", ".", root.path("binary.txt.gz")]) == [
+            #"binary file matches (found "\0" byte around offset 14)"#,
+        ])
+        #expect(try run(["--search-zip", "--count", ".", root.path("binary.txt.gz")]) == [
+            "13",
+        ])
+        #expect(try run(["--search-zip", "--count-matches", ".", root.path("binary.txt.gz")]) == [
+            "24",
+        ])
+        try root.writeGzip(compressedBinary, to: "binary-dir/binary.txt.gz")
+        #expect(try runAllowingNoMatch(["--search-zip", "--count", ".", root.path("binary-dir")]) == [])
+        let compressedBinaryJSONOutput = try run([
+            "--json",
+            "--search-zip",
+            ".",
+            root.path("binary.txt.gz"),
+        ])
+        let compressedBinaryJSONMessages = try compressedBinaryJSONOutput.map(jsonObject)
+        let compressedBinaryJSONMatches = compressedBinaryJSONMessages.filter { $0["type"] as? String == "match" }
+        let compressedBinaryJSONEnd = compressedBinaryJSONMessages.first { $0["type"] as? String == "end" }?["data"] as? [String: Any]
+        let compressedBinaryJSONStats = compressedBinaryJSONEnd?["stats"] as? [String: Any]
+        #expect(compressedBinaryJSONMatches.count == 13)
+        #expect(compressedBinaryJSONStats?["matched_lines"] as? Int == 13)
+        #expect(compressedBinaryJSONStats?["matches"] as? Int == 24)
 
         try root.write("not gzip\nneedle\n", to: "bad.gz")
         var output: [String] = []
@@ -6855,6 +6881,10 @@ private final class TemporaryDirectory {
     }
 
     func writeGzip(_ contents: String, to relativePath: String) throws {
+        try writeGzip(Data(contents.utf8), to: relativePath)
+    }
+
+    func writeGzip(_ contents: Data, to relativePath: String) throws {
         let fileURL = url.appendingPathComponent(relativePath, isDirectory: false)
         try FileManager.default.createDirectory(
             at: fileURL.deletingLastPathComponent(),
@@ -6870,7 +6900,7 @@ private final class TemporaryDirectory {
         process.standardOutput = output
 
         try process.run()
-        try input.fileHandleForWriting.write(contentsOf: Data(contents.utf8))
+        try input.fileHandleForWriting.write(contentsOf: contents)
         try input.fileHandleForWriting.close()
         let data = output.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()

@@ -296,7 +296,8 @@ public struct RipgrepSearcher {
                 fileURL,
                 command: decompressionCommand,
                 matcher: matcher,
-                options: options
+                options: options,
+                isExplicit: haystack.isExplicit
             )
         }
 
@@ -1113,7 +1114,8 @@ public struct RipgrepSearcher {
         _ fileURL: URL,
         command: DecompressionCommand,
         matcher: PatternMatcher,
-        options: RipgrepOptions
+        options: RipgrepOptions,
+        isExplicit: Bool
     ) -> FileSearchOutcome {
         do {
             let displayPath = OutputPathFormatter(options: options).displayPath(for: fileURL)
@@ -1129,14 +1131,21 @@ public struct RipgrepSearcher {
                 rawDataForMatching: rawDataForMatching(data, options: options, matcher: matcher),
                 fileURL: fileURL,
                 matcher: matcher,
-                options: options
+                options: options,
+                splitBinaryNUL: true
             )
-            return FileSearchOutcome(result: SearchFileResult(
+            let searchedResult = SearchFileResult(
                 fileURL: result.fileURL,
                 matches: result.matches,
                 lines: result.lines,
                 bytesSearched: data.count,
                 searched: result.searched
+            )
+            return FileSearchOutcome(result: binaryAdjustedDecompressedResult(
+                searchedResult,
+                data: data,
+                options: options,
+                isExplicit: isExplicit
             ))
         } catch {
             let displayPath = OutputPathFormatter(options: options).displayPath(for: fileURL)
@@ -1145,6 +1154,67 @@ public struct RipgrepSearcher {
                 message: "\(displayPath): \(error)"
             )
         }
+    }
+
+    private func binaryAdjustedDecompressedResult(
+        _ result: SearchFileResult,
+        data: Data,
+        options: RipgrepOptions,
+        isExplicit: Bool
+    ) -> SearchFileResult {
+        guard !options.disablesBinaryDetection,
+              shouldCheckBinary(data, options: options),
+              let binaryByteOffset = data.firstIndex(of: 0) else {
+            return result
+        }
+        let binaryDetectedBeforeSearch = binaryByteOffset < Self.binaryDetectionBufferSize
+        let visibleMatches = binaryDetectedBeforeSearch && !isExplicit
+            ? []
+            : binaryVisibleMatches(result.matches, binaryByteOffset: binaryByteOffset, options: options)
+        let emittedMatches = shouldEmitSuppressedBinaryMatches(options, isExplicit: isExplicit)
+            ? result.matches
+            : visibleMatches
+        let lineNumberShifts = jsonBinaryLineNumberShifts(for: result.lines, options: options)
+        let displayMatches = options.json
+            ? jsonBinaryDisplayMatches(emittedMatches, lineNumberShifts: lineNumberShifts, options: options)
+            : emittedMatches
+        let hasBinaryMatch = hasBinaryMatchResult(
+            result: result,
+            visibleMatches: visibleMatches,
+            binaryByteOffset: binaryByteOffset,
+            options: options
+        )
+        let displayLines = options.json
+            ? jsonBinaryDisplayLines(result.lines, lineNumberShifts: lineNumberShifts, options: options)
+            : hasBinaryMatch ? result.lines : []
+        if options.binaryMode == .automatic && !isExplicit && binaryDetectedBeforeSearch {
+            return SearchFileResult(
+                fileURL: result.fileURL,
+                matches: [],
+                binaryByteOffset: binaryByteOffset,
+                stoppedBinaryAfterMatch: true,
+                searched: true
+            )
+        }
+        if options.binaryMode == .automatic && !isExplicit && visibleMatches.isEmpty {
+            return SearchFileResult(fileURL: result.fileURL, matches: [], searched: false)
+        }
+        return SearchFileResult(
+            fileURL: result.fileURL,
+            matches: displayMatches,
+            lines: displayLines,
+            binaryByteOffset: binaryByteOffset,
+            hasBinaryMatch: hasBinaryMatch,
+            bytesSearched: suppressedBinaryBytesSearched(
+                dataCount: data.count,
+                binaryByteOffset: binaryByteOffset,
+                searchedMatches: result.matches,
+                visibleMatches: visibleMatches,
+                options: options
+            ),
+            supplementalMatchedLines: result.supplementalMatchedLines,
+            supplementalMatches: result.supplementalMatches
+        )
     }
 
     private func runStreamingCommand(
