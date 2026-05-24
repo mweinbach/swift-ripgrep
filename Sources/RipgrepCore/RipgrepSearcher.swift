@@ -239,7 +239,7 @@ public struct RipgrepSearcher {
         }
 
         let binaryByteOffset = shouldCheckBinary(data, options: options) ? data.firstIndex(of: 0) : nil
-        if let binaryByteOffset, options.binaryMode != .asText {
+        if let binaryByteOffset, !options.disablesBinaryDetection {
             let contents = decode(data, options: options)
             let result = searchContents(
                 contents,
@@ -505,7 +505,7 @@ public struct RipgrepSearcher {
             matcher: matcher,
             options: options
         )
-        guard options.binaryMode != .asText,
+        guard !options.disablesBinaryDetection,
               shouldCheckBinary(data, options: options),
               let binaryByteOffset = data.firstIndex(of: 0) else {
             return result
@@ -706,7 +706,7 @@ public struct RipgrepSearcher {
         options: RipgrepOptions,
         isExplicit: Bool
     ) -> SearchFileResult {
-        guard options.binaryMode != .asText,
+        guard !options.disablesBinaryDetection,
               shouldCheckBinary(data, options: options),
               let binaryByteOffset = data.firstIndex(of: 0) else {
             return result
@@ -901,7 +901,7 @@ public struct RipgrepSearcher {
         options: RipgrepOptions,
         splitBinaryNUL: Bool = false
     ) -> SearchFileResult {
-        let shouldSplitBinaryNUL = splitBinaryNUL && options.binaryMode != .asText && !options.nullData
+        let shouldSplitBinaryNUL = splitBinaryNUL && !options.disablesBinaryDetection
         if options.multiline && !options.invertMatch {
             return searchMultilineContents(
                 contents,

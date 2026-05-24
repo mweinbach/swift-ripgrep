@@ -992,6 +992,26 @@ struct RipgrepSearcherTests {
         #expect(try run(["--null-data", "--count-matches", "needle", root.path("nul.txt")]) == [
             "1\0",
         ])
+        var nullTerminatorOutput: [String] = []
+        var nullTerminatorErrors: [String] = []
+        let nullTerminatorExitCode = RipgrepCLI.run(
+            arguments: ["--null-data", #"\x00"#, root.path("nul.txt")],
+            stdout: { nullTerminatorOutput.append($0) },
+            stderr: { nullTerminatorErrors.append($0) }
+        )
+        #expect(nullTerminatorExitCode == 2)
+        #expect(nullTerminatorOutput.isEmpty)
+        #expect(nullTerminatorErrors == ["""
+        rg: the literal "\\0" is not allowed in a regex
+
+        Consider enabling multiline mode with the --multiline flag (or -U for short).
+        When multiline mode is enabled, new line characters can be matched.
+        """])
+        #expect(try run(["--null-data", #"[^\x00]"#, root.path("nul.txt")]) == [
+            "alpha\0",
+            "needle\0",
+            "omega\0",
+        ])
         try root.write(Data("abc\0needle\nneedle2\0tail\n".utf8), to: "nul-anchors.txt")
         #expect(try run(["--null-data", "-n", "--column", "--byte-offset", "^needle", root.path("nul-anchors.txt")]) == [
             "2:8:4:needle\nneedle2\0",
@@ -2100,6 +2120,28 @@ struct RipgrepSearcherTests {
         #expect(try runAllowingNoMatch(["--crlf", "--null-data", "-n", "foo$", root.path("crlf.txt")]) == [])
         #expect(try run(["--null-data", "--crlf", "-n", "foo$", root.path("crlf.txt")]) == [
             "1:foo\r",
+        ])
+        try root.write(Data("pre\0needle\n".utf8), to: "crlf-binary.dat")
+        try root.write("alpha\nneedle one\nneedle two\ntail\n", to: "crlf-text.txt")
+        #expect(try run(["--sort=path", "--null-data", "--crlf", "needle", root.url.path]) == [
+            "\(root.path("crlf-text.txt")):needle one",
+            "\(root.path("crlf-text.txt")):needle two",
+        ])
+        let crlfThenNullData = try runExecutableData([
+            "--sort=path",
+            "--crlf",
+            "--null-data",
+            "needle",
+            root.url.path,
+        ]) {}
+        #expect(crlfThenNullData == Data((
+            "\(root.path("crlf-binary.dat")):needle\n\0" +
+            "\(root.path("crlf-text.txt")):alpha\nneedle one\nneedle two\ntail\n\0"
+        ).utf8))
+        #expect(try run(["--sort=path", "--binary", "--null-data", "--crlf", "needle", root.url.path]) == [
+            #"\#(root.path("crlf-binary.dat")): binary file matches (found "\0" byte around offset 3)"#,
+            "\(root.path("crlf-text.txt")):needle one",
+            "\(root.path("crlf-text.txt")):needle two",
         ])
         #expect(try run(["x?", "--crlf", "--color=always", root.path("lf-empty.txt")]) == [
             "\r",

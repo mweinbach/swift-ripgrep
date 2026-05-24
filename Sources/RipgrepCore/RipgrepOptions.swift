@@ -241,7 +241,11 @@ public struct RipgrepOptions: Equatable {
     }
 
     public var emitsRawBytes: Bool {
-        encodingMode == .disabled || (binaryMode == .asText && encodingMode == .automatic)
+        encodingMode == .disabled || ((binaryMode == .asText || nullData) && encodingMode == .automatic)
+    }
+
+    public var disablesBinaryDetection: Bool {
+        binaryMode == .asText || nullData
     }
 
     public mutating func appendPatternFileContents(_ contents: String) {
@@ -1027,7 +1031,6 @@ public enum RipgrepArgumentParser {
             case "--null-data":
                 options.nullData = true
                 options.crlf = false
-                options.binaryMode = .asText
             case "-u", "--unrestricted":
                 applyUnrestricted(to: &options)
             case "-uu":

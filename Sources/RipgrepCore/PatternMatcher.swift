@@ -19,7 +19,7 @@ public struct PatternMatcher {
                 if !options.multiline,
                    !(options.nullData && !options.crlf),
                    pattern.contains("\n") {
-                    throw RipgrepError.message(Self.lineTerminatorPatternError)
+                    throw RipgrepError.message(Self.lineTerminatorPatternError(terminator: "\\n"))
                 }
                 let literal = options.effectiveIgnoreCase ? Self.foldedCase(pattern, options: options) : pattern
                 return [.literal(usesByteSemantics ? Self.bytePattern(literal) : literal)]
@@ -27,7 +27,7 @@ public struct PatternMatcher {
                 if options.engineMode == .pcre2 {
                     throw RipgrepError.message("PCRE2 is not available in this build of ripgrep")
                 }
-                if options.binaryMode != .asText, Self.canMatchNUL(pattern) {
+                if !options.disablesBinaryDetection, Self.canMatchNUL(pattern) {
                     throw RipgrepError.message("""
                     pattern contains "\\0" but it is impossible to match
 
@@ -35,10 +35,13 @@ public struct PatternMatcher {
                     binary detection is enabled and matching a NUL byte is impossible.
                     """)
                 }
+                if options.nullData && !options.multiline && Self.canMatchLineTerminator(pattern, terminator: "\0") {
+                    throw RipgrepError.message(Self.lineTerminatorPatternError(terminator: "\\0"))
+                }
                 if !options.multiline,
                    !(options.nullData && !options.crlf),
-                   Self.canMatchLineTerminator(pattern) {
-                    throw RipgrepError.message(Self.lineTerminatorPatternError)
+                   Self.canMatchLineTerminator(pattern, terminator: "\n") {
+                    throw RipgrepError.message(Self.lineTerminatorPatternError(terminator: "\\n"))
                 }
                 if options.engineMode == .default, let unsupported = Self.defaultEngineUnsupportedFeature(in: pattern) {
                     throw RipgrepError.message(Self.defaultRegexParseError(pattern: pattern, feature: unsupported))
@@ -73,12 +76,14 @@ public struct PatternMatcher {
         }
     }
 
-    private static let lineTerminatorPatternError = """
-    the literal "\\n" is not allowed in a regex
+    private static func lineTerminatorPatternError(terminator: String) -> String {
+        """
+        the literal "\(terminator)" is not allowed in a regex
 
-    Consider enabling multiline mode with the --multiline flag (or -U for short).
-    When multiline mode is enabled, new line characters can be matched.
-    """
+        Consider enabling multiline mode with the --multiline flag (or -U for short).
+        When multiline mode is enabled, new line characters can be matched.
+        """
+    }
 
     private static func canMatchNUL(_ pattern: String) -> Bool {
         if pattern.contains("\0") {
@@ -117,7 +122,8 @@ public struct PatternMatcher {
         return false
     }
 
-    private static func canMatchLineTerminator(_ pattern: String) -> Bool {
+    private static func canMatchLineTerminator(_ pattern: String, terminator: Character) -> Bool {
+        let terminatorValue: UInt32 = terminator == "\0" ? 0x00 : 0x0A
         var escaped = false
         var inClass = false
         var classNegated = false
@@ -131,18 +137,20 @@ public struct PatternMatcher {
             if escaped {
                 let escapeEnd = escapeStart.flatMap { regexEscapeEnd(in: pattern, backslashAt: $0) }
                 let matchesLineTerminator: Bool
-                if character == "n" {
+                if terminator == "\n", character == "n" {
+                    matchesLineTerminator = true
+                } else if terminator == "\0", character == "0" {
                     matchesLineTerminator = true
                 } else if character == "x" {
                     let next = pattern.index(after: index)
                     let remainder = pattern[next...].lowercased()
-                    matchesLineTerminator = remainder.hasPrefix("0a")
-                        || bracedHexEscapeValue(in: remainder) == 0x0A
+                    matchesLineTerminator = remainder.hasPrefix(String(format: "%02x", terminatorValue))
+                        || bracedHexEscapeValue(in: remainder) == terminatorValue
                 } else if character == "u" {
                     let next = pattern.index(after: index)
                     let remainder = pattern[next...].lowercased()
-                    matchesLineTerminator = remainder.hasPrefix("000a")
-                        || bracedHexEscapeValue(in: remainder) == 0x0A
+                    matchesLineTerminator = remainder.hasPrefix(String(format: "%04x", terminatorValue))
+                        || bracedHexEscapeValue(in: remainder) == terminatorValue
                 } else {
                     matchesLineTerminator = false
                 }
@@ -161,7 +169,7 @@ public struct PatternMatcher {
                 index = escapeEnd ?? pattern.index(after: index)
                 continue
             }
-            if character == "\n" && !inClass {
+            if character == terminator && !inClass {
                 return true
             }
             if character == "\\" {
@@ -188,7 +196,7 @@ public struct PatternMatcher {
                     continue
                 }
                 classContentStarted = true
-                if character == "\n" {
+                if character == terminator {
                     classHasLineTerminator = true
                 } else {
                     classHasOther = true
@@ -898,7 +906,7 @@ public struct PatternMatcher {
         let replacement: String
         if options.nullData {
             replacement = "[^\\n\\x{0}]"
-        } else if options.binaryMode == .asText {
+        } else if options.disablesBinaryDetection {
             replacement = "[^\\n]"
         } else {
             replacement = "[^\\n\\x{0}]"
