@@ -779,6 +779,13 @@ struct RipgrepSearcherTests {
             "1:4:0:xx needle yy",
             "2:1:13:needle",
         ])
+        try root.write("Needle\nneedle\nfoo needle foo\n", to: "invert-offsets.txt")
+        #expect(try run(["--column", "-v", "needle", root.path("invert-offsets.txt")]) == [
+            "1:Needle",
+        ])
+        #expect(try run(["--column", "--byte-offset", "-v", "needle", root.path("invert-offsets.txt")]) == [
+            "1:0:Needle",
+        ])
         #expect(try run(["-n", "--byte-offset", "-A1", "needle", root.path("offsets.txt")]) == [
             "1:0:xx needle yy",
             "2:13:needle",
