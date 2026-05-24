@@ -421,7 +421,7 @@ public struct PatternMatcher {
 
         return candidates.filter { candidate in
             (!options.wordRegexp || isWordBounded(candidate.range, in: line))
-                && (!options.lineRegexp || (candidate.range.lowerBound == lineStartIndex(in: line) && candidate.range.upperBound == lineEndIndex(in: line)))
+                && (!options.lineRegexp || isLineRegexpBounded(candidate.range, in: line))
                 && !shouldDropTrailingMultilineEmptySpan(candidate.range, in: line)
         }
     }
@@ -2862,6 +2862,28 @@ public struct PatternMatcher {
             return line.endIndex
         }
         return line.index(before: line.endIndex)
+    }
+
+    private func isLineRegexpBounded(_ range: Range<String.Index>, in line: String) -> Bool {
+        guard options.multiline else {
+            return range.lowerBound == lineStartIndex(in: line) && range.upperBound == lineEndIndex(in: line)
+        }
+        let startsLine = range.lowerBound == line.startIndex
+            || line[line.index(before: range.lowerBound)] == "\n"
+        let endsLine: Bool
+        if range.upperBound == line.endIndex {
+            endsLine = true
+        } else if line[range.upperBound] == "\n" {
+            endsLine = true
+        } else if options.crlf,
+                  line[range.upperBound] == "\r",
+                  line.index(after: range.upperBound) < line.endIndex,
+                  line[line.index(after: range.upperBound)] == "\n" {
+            endsLine = true
+        } else {
+            endsLine = false
+        }
+        return startsLine && endsLine
     }
 
     private func indexRange(for span: MatchSpan, in line: String) -> Range<String.Index>? {

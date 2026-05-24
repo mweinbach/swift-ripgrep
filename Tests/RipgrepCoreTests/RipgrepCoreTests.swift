@@ -1743,6 +1743,15 @@ struct RipgrepSearcherTests {
             "1:foo",
             "2:bar",
         ])
+        #expect(try run(["-U", "-x", "bar", root.path("multi.txt")]) == [
+            "bar",
+        ])
+        #expect(try run(["-U", "-x", #"\bbar\b"#, root.path("multi.txt")]) == [
+            "bar",
+        ])
+        #expect(try run(["-U", "--count", "-x", #"\bbar\b"#, root.path("multi.txt")]) == [
+            "1",
+        ])
         #expect(try run(["-U", "-o", #"foo\nbar"#, root.path("multi.txt")]) == [
             "foo",
             "bar",
@@ -3769,6 +3778,13 @@ struct RipgrepSearcherTests {
         #expect(try run(["--vimgrep", "-N", "--no-column", "--column", "Sherlock", root.path("vimgrep.txt")]) == [
             "\(root.path("vimgrep.txt")):8:Watson Sherlock",
             "\(root.path("vimgrep.txt")):1:Sherlock Holmes",
+        ])
+        let vimgrepInvertRoot = try TemporaryDirectory()
+        try vimgrepInvertRoot.write("before\nneedle\nafter\n", to: "vimgrep-invert.txt")
+        #expect(try run(["--vimgrep", "--passthru", "-v", "NEEDLE", vimgrepInvertRoot.path("vimgrep-invert.txt")]) == [
+            "\(vimgrepInvertRoot.path("vimgrep-invert.txt")):1:before",
+            "\(vimgrepInvertRoot.path("vimgrep-invert.txt")):2:needle",
+            "\(vimgrepInvertRoot.path("vimgrep-invert.txt")):3:after",
         ])
         try root.write("κόσμε target\n", to: "vimgrep-unicode-replace-column.txt")
         #expect(try run([

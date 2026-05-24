@@ -327,6 +327,19 @@ public struct StandardPrinter {
         return "\(path)\(matchPathFieldSeparator())\(fields.joined(separator: options.fieldMatchSeparator))\(terminator)"
     }
 
+    private func formatVimgrepInverted(_ match: SearchMatch, showPath: Bool) -> String {
+        var fields: [OutputField] = []
+        if !options.noLineNumber {
+            fields.append(OutputField("\(match.lineNumber)", colorTarget: .line))
+        }
+        if options.byteOffset {
+            fields.append(OutputField("\(match.absoluteOffset)", colorTarget: nil))
+        }
+        let path = showPath ? renderPath(for: match.fileURL, line: match.lineNumber) : nil
+        let text = displayLine(for: match)
+        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(renderedLine(text))\(outputTerminator(match.lineTerminator, line: text))"
+    }
+
     private struct VimgrepSpanProjection {
         let lineNumber: Int
         let column: Int
@@ -1132,7 +1145,9 @@ public struct StandardPrinter {
             guard let line = result.lines.first(where: { $0.lineNumber == lineNumber }) else {
                 continue
             }
-            if let matches = matchesByLine[lineNumber] {
+            if options.invertMatch, let matches = matchesByLine[lineNumber] {
+                output.append(contentsOf: matches.map { formatVimgrepInverted($0, showPath: showPath) })
+            } else if let matches = matchesByLine[lineNumber] {
                 output.append(contentsOf: matches.flatMap { formatVimgrep($0, showPath: showPath) })
             } else if continuationLineNumbers.contains(lineNumber) {
                 previous = lineNumber
