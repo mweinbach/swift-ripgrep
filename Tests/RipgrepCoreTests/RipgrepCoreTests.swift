@@ -1412,6 +1412,26 @@ struct RipgrepSearcherTests {
         #expect(try run(["-n", "needle", root.path("bom8.txt")]) == ["1:needle"])
         #expect(try run(["-a", "-n", "needle", root.path("bom16le.txt")]) == ["2:needle"])
         #expect(try run(["--text", "-n", "needle", root.path("bom16le.txt")]) == ["2:needle"])
+        try root.write(Data("needle utf16\n".utf16LittleEndianBytes), to: "utf16le-raw.txt")
+        let rawUTF16Stats = try run([
+            "-a",
+            "--stats",
+            #"\x00"#,
+            root.path("utf16le-raw.txt"),
+        ])
+        #expect(rawUTF16Stats.contains("13 matches"))
+        #expect(rawUTF16Stats.contains("2 matched lines"))
+        let rawUTF16JSONOutput = try run([
+            "--json",
+            "-a",
+            #"\x00"#,
+            root.path("utf16le-raw.txt"),
+        ])
+        let rawUTF16JSONMessages = try rawUTF16JSONOutput.map(jsonObject)
+        let rawUTF16JSONEnd = rawUTF16JSONMessages.first { $0["type"] as? String == "end" }?["data"] as? [String: Any]
+        let rawUTF16JSONStats = rawUTF16JSONEnd?["stats"] as? [String: Any]
+        #expect(rawUTF16JSONStats?["matched_lines"] as? Int == 2)
+        #expect(rawUTF16JSONStats?["matches"] as? Int == 13)
         let bom16JSONOutput = try run(["--json", "needle", root.path("bom16le.txt")])
         let bom16JSONMessages = try bom16JSONOutput.map(jsonObject)
         let bom16JSONMatch = bom16JSONMessages.first { $0["type"] as? String == "match" }?["data"] as? [String: Any]

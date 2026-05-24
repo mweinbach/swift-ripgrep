@@ -204,8 +204,7 @@ enum MatchedLineCounter {
         if options.multiline {
             return multilineCount(match, options: options)
         }
-        let terminator: Character = match.lineWithTerminator.contains("\0") ? "\0" : "\n"
-        return max(1, match.lineWithTerminator.filter { $0 == terminator }.count)
+        return max(1, match.lineWithTerminator.filter { $0 == "\n" }.count)
     }
 
     private static func multilineCount(_ match: SearchMatch, options: RipgrepOptions) -> Int {
