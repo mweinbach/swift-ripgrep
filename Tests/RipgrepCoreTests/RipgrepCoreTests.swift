@@ -875,6 +875,13 @@ struct RipgrepSearcherTests {
         #expect(try run(["-o", "--byte-offset", "--column", "abc", root.path("unicode-offsets.txt")]) == [
             "1:3:2:abc",
         ])
+        try root.write("solo", to: "unterminated.txt")
+        #expect(try run(["--column", "-n", "-o", "$", root.path("unterminated.txt")]) == [
+            "1:solo",
+        ])
+        #expect(try run(["--column", "-n", "-o", #"\z"#, root.path("unterminated.txt")]) == [
+            "1:solo",
+        ])
         try root.write("á\na_1\n--\n", to: "unicode-empty-offsets.txt")
         #expect(try run(["--count-matches", "x?", root.path("unicode-empty-offsets.txt")]) == [
             "10",

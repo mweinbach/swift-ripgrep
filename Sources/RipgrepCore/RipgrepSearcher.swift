@@ -961,7 +961,7 @@ public struct RipgrepSearcher {
             matches.append(SearchMatch(
                 fileURL: fileURL,
                 lineNumber: lineNumber,
-                column: options.column && !options.invertMatch ? spans[0].startColumn : nil,
+                column: options.column && !options.invertMatch ? spans.first?.startColumn : nil,
                 line: line,
                 rawLine: rawLine,
                 lineTerminator: splitLine.terminator,

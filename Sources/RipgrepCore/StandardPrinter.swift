@@ -349,12 +349,12 @@ public struct StandardPrinter {
         fieldSeparator: String
     ) -> String {
         var fields: [OutputField] = []
-        let path = showPath ? renderPath(for: match.fileURL, line: match.lineNumber, column: 1) : nil
+        let path = showPath ? renderPath(for: match.fileURL, line: match.lineNumber, column: match.column) : nil
         if options.wantsLineNumber {
             fields.append(OutputField("\(match.lineNumber)", colorTarget: .line))
         }
-        if options.column {
-            fields.append(OutputField("1", colorTarget: .column))
+        if options.column, let column = match.column {
+            fields.append(OutputField("\(column)", colorTarget: .column))
         }
         if options.byteOffset {
             fields.append(OutputField("\(match.absoluteOffset)", colorTarget: nil))
