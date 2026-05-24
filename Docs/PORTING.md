@@ -157,7 +157,7 @@ Owner: pair-agent-B. Touches: new
 Owner: pair-agent-C. Touches: `Tests/RipgrepCoreTests/*` only — do not modify
 files under `Sources/`.
 
-- [ ] Split `Tests/RipgrepCoreTests/RipgrepCoreTests.swift` (≈7,110 lines)
+- [x] Split `Tests/RipgrepCoreTests/RipgrepCoreTests.swift` (≈7,110 lines)
       into per-area files that mirror the Rust integration test layout under
       `~/Projects/swift-harness/ripgrep/tests/`: `BinaryTests.swift`,
       `FeatureTests.swift`, `JSONTests.swift`, `MiscTests.swift`,
@@ -165,13 +165,13 @@ files under `Sources/`.
       into a new `RipgrepTestSupport.swift` (or similar). Every existing test
       method must land in exactly one new file with the same name and
       behaviour; do not silently drop tests.
-- [ ] Add a `ParityHarnessTests.swift` (gated behind an env var such as
+- [x] Add a `ParityHarnessTests.swift` (gated behind an env var such as
       `SWIFT_RIPGREP_PARITY=1`) that, when enabled, runs both
       `.build/debug/ripgrep` and the installed `rg` over a small fixture set
       (a tiny `Tests/Fixtures/parity/` tree with text, binary, gitignored,
       multiline and encoding samples) and diffs stdout/stderr/exit. When the
       env var is unset the test should skip cleanly so CI stays green.
-- [ ] Run `swift test` after the split to confirm the suite still passes,
+- [x] Run `swift test` after the split to confirm the suite still passes,
       and `SWIFT_RIPGREP_PARITY=1 swift test --filter ParityHarnessTests`
       locally to sanity-check the harness against installed `rg`.
 
