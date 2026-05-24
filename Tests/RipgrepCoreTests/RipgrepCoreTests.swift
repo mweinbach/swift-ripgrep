@@ -5860,6 +5860,10 @@ struct RipgrepSearcherTests {
                 "rg: unrecognized flag --no-max-filesize\n\nsimilar flags that are available: --max-filesize"
             ),
             (
+                ["--no-max-columns"],
+                "rg: unrecognized flag --no-max-columns\n\nsimilar flags that are available: --no-column, --max-columns, --max-columns-preview, --no-max-columns-preview"
+            ),
+            (
                 ["--no-maxdepth"],
                 "rg: unrecognized flag --no-maxdepth\n\nsimilar flags that are available: --maxdepth"
             ),

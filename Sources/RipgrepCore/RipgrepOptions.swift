@@ -2319,6 +2319,9 @@ public enum RipgrepArgumentParser {
             return prefixMatches.filter { $0.count == shortest }
         }
         if flag.hasPrefix("--no-") {
+            if let suggestions = exactNegativeFlagSuggestionExtras[flag] {
+                return suggestions
+            }
             var suggestions: [String] = []
             let positiveFlag = "--" + flag.dropFirst("--no-".count)
             if knownLongFlags.contains(positiveFlag) {
@@ -2642,6 +2645,10 @@ public enum RipgrepArgumentParser {
         "--no-follo": ["--follow"],
         "--no-hidde": ["--hidden"],
         "--no-regexp": ["--line-regexp", "--word-regexp"],
+    ]
+
+    private static let exactNegativeFlagSuggestionExtras = [
+        "--no-max-columns": ["--no-column", "--max-columns", "--max-columns-preview", "--no-max-columns-preview"],
     ]
 
     private static let flagSuggestionExtras = [
