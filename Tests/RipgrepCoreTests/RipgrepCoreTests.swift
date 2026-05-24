@@ -789,6 +789,12 @@ struct RipgrepSearcherTests {
             "3-15-ctx",
             "4:19:needle",
         ])
+        #expect(try run(["-m1", "-A2", "--count", "needle", root.path("max-context-offsets.txt")]) == [
+            "2",
+        ])
+        #expect(try run(["-m1", "-A2", "--count-matches", "needle", root.path("max-context-offsets.txt")]) == [
+            "2",
+        ])
 
         try root.write("éabc\n", to: "unicode-offsets.txt")
         #expect(try run(["-o", "--column", "abc", root.path("unicode-offsets.txt")]) == [

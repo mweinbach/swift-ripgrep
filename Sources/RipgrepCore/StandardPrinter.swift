@@ -77,13 +77,15 @@ public struct StandardPrinter {
         case .count:
             return countResults(for: results).map { result in
                 let count = options.onlyMatching
-                    ? result.matches.reduce(0) { $0 + $1.matchCount }
-                    : result.matches.isEmpty && result.hasBinaryMatch ? 1 : result.matches.count
+                    ? result.matches.reduce(0) { $0 + $1.matchCount } + result.supplementalMatches
+                    : result.matches.isEmpty && result.hasBinaryMatch ? 1 : result.matches.count + result.supplementalMatchedLines
                 return countLine(count, fileURL: result.fileURL, showPath: showPath(for: results))
             }
         case .countMatches:
             return countResults(for: results).map { result in
-                let count = result.matches.isEmpty && result.hasBinaryMatch ? 1 : result.matches.reduce(0) { $0 + $1.matchCount }
+                let count = result.matches.isEmpty && result.hasBinaryMatch
+                    ? 1
+                    : result.matches.reduce(0) { $0 + $1.matchCount } + result.supplementalMatches
                 return countLine(count, fileURL: result.fileURL, showPath: showPath(for: results))
             }
         case .filesWithMatches:
