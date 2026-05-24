@@ -1586,9 +1586,18 @@ public struct RipgrepSearcher {
             return (filtered, filtered.isEmpty && filtered.count != spans.count)
         }
         if options.effectivePatterns.contains(where: containsLineStartAndEndAnchor) {
-            if options.onlyMatching,
-               options.effectivePatterns.contains(where: containsLineStartEndAlternation) {
-                return (spans, false)
+            if options.effectivePatterns.contains(where: containsLineStartEndAlternation),
+               options.onlyMatching || options.printMode == .countMatches || options.json {
+                return (
+                    nullDataLineStartEndAlternationSpans(
+                        spans,
+                        matchingLine: matchingLine,
+                        absoluteOffset: absoluteOffset,
+                        terminator: terminator,
+                        options: options
+                    ),
+                    false
+                )
             }
             if matchingLine == "\n",
                spans.contains(where: { $0.startByte == 0 && $0.endByte == 0 && $0.text.isEmpty }) {
@@ -1606,6 +1615,34 @@ public struct RipgrepSearcher {
                 && (!matchingLine.contains("\n") || spans.count > 1))
         }
         return (filtered, filtered.isEmpty && filtered.count != spans.count)
+    }
+
+    private func nullDataLineStartEndAlternationSpans(
+        _ spans: [MatchSpan],
+        matchingLine: String,
+        absoluteOffset: Int,
+        terminator: String,
+        options: RipgrepOptions
+    ) -> [MatchSpan] {
+        let recordEnd = byteCount(matchingLine, options: options)
+        return spans.filter { span in
+            guard span.text.isEmpty,
+                  span.startByte == span.endByte else {
+                return true
+            }
+            if absoluteOffset > 0,
+               !terminator.isEmpty,
+               matchingLine.contains("\n"),
+               span.startByte == 0 {
+                return false
+            }
+            if terminator.isEmpty,
+               lastScalar(in: matchingLine, equals: "\n"),
+               span.startByte >= recordEnd {
+                return false
+            }
+            return true
+        }
     }
 
     private func containsLineStartEndAlternation(_ pattern: String) -> Bool {

@@ -607,6 +607,7 @@ public struct StandardPrinter {
             && span.startByte == 0
             && span.endByte == 0
             && match.absoluteOffset > 0
+            && !match.lineTerminator.isEmpty
             && options.effectivePatterns.contains(where: containsLineStartAnchor)
             && options.effectivePatterns.contains(where: containsLineStartEndAlternation)
     }

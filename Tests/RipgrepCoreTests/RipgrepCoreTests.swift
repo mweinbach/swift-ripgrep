@@ -1279,6 +1279,9 @@ struct RipgrepSearcherTests {
             root.path("nul-record-anchors.txt"),
         ], fixture: {})
         #expect(nullDataOnlyLineStartEndOutput == Data([0x00, 0x00, 0x00, 0x00]))
+        #expect(try run(["--null-data", "--count-matches", "^|$", root.path("nul-record-anchors.txt")]) == [
+            "6\0",
+        ])
         try root.write(Data("foo\0bar\nzzz\0foo\n".utf8), to: "nul-record-starts.txt")
         let nullDataOnlyRecordStartOutput = try runExecutableData([
             "--null-data",
@@ -1291,6 +1294,22 @@ struct RipgrepSearcherTests {
         #expect(try run(["--null-data", "--count-matches", "^", root.path("nul-record-starts.txt")]) == [
             "3\0",
         ])
+        #expect(try run(["--null-data", "--count-matches", "^|$", root.path("nul-record-starts.txt")]) == [
+            "7\0",
+        ])
+        let nullDataRecordStartEndJSONOutput = try run([
+            "--json",
+            "--null-data",
+            "^|$",
+            root.path("nul-record-starts.txt"),
+        ])
+        let nullDataRecordStartEndMessages = try nullDataRecordStartEndJSONOutput.map(jsonObject)
+        let nullDataRecordStartEndMatches = nullDataRecordStartEndMessages.compactMap { object -> [String: Any]? in
+            guard object["type"] as? String == "match" else { return nil }
+            return object["data"] as? [String: Any]
+        }
+        let nullDataRecordStartEndSubmatches = nullDataRecordStartEndMatches.compactMap { $0["submatches"] as? [[String: Any]] }
+        #expect(nullDataRecordStartEndSubmatches.map(\.count) == [2, 3, 2])
         let nullDataRecordStartJSONOutput = try run([
             "--json",
             "--null-data",
