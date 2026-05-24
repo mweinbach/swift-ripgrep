@@ -316,11 +316,26 @@ struct RipgrepSearcherTests {
 
         #expect(try run(["-o", #"\w+"#, root.path("classes.txt")]) == ["café", "π", "_"])
         #expect(try run(["--no-unicode", "-o", #"\w+"#, root.path("classes.txt")]) == ["caf", "_"])
+        #expect(try run(["-o", #"(?-u)\w+"#, root.path("classes.txt")]) == ["caf", "_"])
         #expect(try run(["-w", "x", root.path("words.txt")]) == ["x"])
         #expect(try run(["-won", "x", root.path("words.txt")]) == ["3:x"])
         #expect(try run(["-won", "", root.path("empty-word.txt")]) == ["1:", "2:", "2:", "2:"])
         let noUnicodeWordOutput = try runExecutableData(["--no-unicode", "-w", "x", root.path("words.txt")], fixture: {})
         #expect(noUnicodeWordOutput == Data("éx\nxé\nx\n".utf8))
+        #expect(try run(["--no-unicode", "-bo", #"\b"#, root.path("words.txt")]) == [
+            "2:",
+            "3:",
+            "4:",
+            "5:",
+            "8:",
+            "9:",
+        ])
+        #expect(try run(["--no-unicode", "-bo", #"\B"#, root.path("words.txt")]) == [
+            "0:",
+            "1:",
+            "6:",
+            "7:",
+        ])
         #expect(try run(["-F", "-i", "σ", root.path("casefold.txt")]) == ["Σ", "σ"])
         let noUnicodeFixedOutput = try runExecutableData([
             "--no-unicode",

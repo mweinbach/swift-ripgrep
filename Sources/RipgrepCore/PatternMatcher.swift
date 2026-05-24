@@ -305,6 +305,7 @@ public struct PatternMatcher {
     }
 
     private static func regexPattern(for pattern: String, options: RipgrepOptions) -> String {
+        let hasInlineNoUnicode = hasInlineNoUnicodeOption(pattern)
         var source = foundationNamedCapturePattern(for: pattern)
         source = foundationAnyClassPattern(for: source)
         source = scalarDotAllWildcardPattern(for: source, options: options)
@@ -319,13 +320,13 @@ public struct PatternMatcher {
         if source.isEmpty {
             source = "(?:)"
         }
-        if options.noUnicode {
+        if options.noUnicode || hasInlineNoUnicode {
             source = asciiRegexPattern(for: source)
         }
-        if options.noUnicode && options.effectiveIgnoreCase {
+        if (options.noUnicode || hasInlineNoUnicode) && options.effectiveIgnoreCase {
             source = asciiCaseInsensitivePattern(for: source)
         }
-        if options.noUnicode || hasInlineNoUnicodeOption(pattern) {
+        if options.noUnicode || hasInlineNoUnicode {
             source = byteRegexLiteralPattern(for: source)
         }
         if options.wordRegexp && !isEmptyPattern {
@@ -1040,6 +1041,10 @@ public struct PatternMatcher {
                     output += inClass ? " \\t\\r\\n\\f" : "[ \\t\\r\\n\\f]"
                 case "S":
                     output += inClass ? "\\S" : "[^ \\t\\r\\n\\f]"
+                case "b":
+                    output += inClass ? "\\b" : asciiWordBoundaryPattern
+                case "B":
+                    output += inClass ? "\\B" : asciiNotWordBoundaryPattern
                 default:
                     output.append("\\")
                     output.append(character)
@@ -1063,6 +1068,12 @@ public struct PatternMatcher {
         }
         return output
     }
+
+    private static let asciiWordBoundaryPattern =
+        "(?:(?<![0-9A-Za-z_])(?=[0-9A-Za-z_])|(?<=[0-9A-Za-z_])(?![0-9A-Za-z_]))"
+
+    private static let asciiNotWordBoundaryPattern =
+        "(?:(?<=[0-9A-Za-z_])(?=[0-9A-Za-z_])|(?<![0-9A-Za-z_])(?![0-9A-Za-z_]))"
 
     private static func asciiPOSIXClasses(for pattern: String) -> String {
         var output = ""
