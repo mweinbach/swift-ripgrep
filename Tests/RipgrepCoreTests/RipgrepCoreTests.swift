@@ -1093,6 +1093,68 @@ struct RipgrepSearcherTests {
             "4\0",
         ])
 
+        try root.write(Data("needle\0tail\0needle tail\0".utf8), to: "nul-record-start.txt")
+        let nullDataRecordStartColumnOutput = try runExecutableData([
+            "--null-data",
+            "--column",
+            "^needle",
+            root.path("nul-record-start.txt"),
+        ], fixture: {})
+        #expect(nullDataRecordStartColumnOutput == Data("1:1:needle\03:needle tail\0".utf8))
+        let nullDataRecordStartOnlyOutput = try runExecutableData([
+            "--null-data",
+            "-o",
+            "^needle",
+            root.path("nul-record-start.txt"),
+        ], fixture: {})
+        #expect(nullDataRecordStartOnlyOutput == Data("needle\0needle tail\0".utf8))
+        let nullDataRecordStartJSONOutput = try run([
+            "--json",
+            "--null-data",
+            "^needle",
+            root.path("nul-record-start.txt"),
+        ])
+        let nullDataRecordStartMessages = try nullDataRecordStartJSONOutput.map(jsonObject)
+        let nullDataRecordStartMatches = nullDataRecordStartMessages.compactMap { object -> [String: Any]? in
+            guard object["type"] as? String == "match" else { return nil }
+            return object["data"] as? [String: Any]
+        }
+        let nullDataRecordStartSubmatches = nullDataRecordStartMatches.compactMap { $0["submatches"] as? [[String: Any]] }
+        #expect(nullDataRecordStartSubmatches.map(\.count) == [1, 0])
+
+        try root.write(Data("needle\r\ntail needle\r\nlast\r\n".utf8), to: "null-data-crlf-record.txt")
+        let nullDataEmptyLineColumnOutput = try runExecutableData([
+            "--null-data",
+            "--column",
+            "^$",
+            root.path("null-data-crlf-record.txt"),
+        ], fixture: {})
+        #expect(nullDataEmptyLineColumnOutput == Data("1:needle\r\ntail needle\r\nlast\r\n\0".utf8))
+        let nullDataEmptyLineOnlyOutput = try runExecutableData([
+            "--null-data",
+            "-o",
+            "^$",
+            root.path("null-data-crlf-record.txt"),
+        ], fixture: {})
+        #expect(nullDataEmptyLineOnlyOutput == Data("needle\r\ntail needle\r\nlast\r\n\0".utf8))
+        #expect(try run(["--null-data", "--count-matches", "^$", root.path("null-data-crlf-record.txt")]) == [
+            "1\0",
+        ])
+        #expect(try run(["--null-data", "--count-matches", "$", root.path("null-data-crlf-record.txt")]) == [
+            "3\0",
+        ])
+        try root.write(Data("a\0needle\nb\0\n".utf8), to: "null-data-empty-record-line.txt")
+        let nullDataEmptyOnlyOutput = try runExecutableData([
+            "--null-data",
+            "-o",
+            "^$",
+            root.path("null-data-empty-record-line.txt"),
+        ], fixture: {})
+        #expect(nullDataEmptyOnlyOutput == Data([0x00]))
+        #expect(try run(["--null-data", "--count-matches", "^$", root.path("null-data-empty-record-line.txt")]) == [
+            "1\0",
+        ])
+
         let output = try run(["--json", "--null-data", "needle", root.path("nul.txt")])
         let messages = try output.map(jsonObject)
         let match = messages.first { $0["type"] as? String == "match" }?["data"] as? [String: Any]

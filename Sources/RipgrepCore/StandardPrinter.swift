@@ -134,12 +134,18 @@ public struct StandardPrinter {
         if hasAnyAbsoluteStartAnchorPattern {
             return result.matches.count + result.supplementalMatches
         }
+        if options.nullData && options.effectivePatterns.contains(where: containsLineAnchor) {
+            return result.matches.reduce(0) { $0 + max(1, $1.matchCount) } + result.supplementalMatches
+        }
         return result.matches.reduce(0) { $0 + $1.matchCount } + result.supplementalMatches
     }
 
     private func countMatchesCount(for result: SearchFileResult) -> Int {
         if hasAnyAbsoluteStartAnchorPattern {
             return result.matches.count + result.supplementalMatches
+        }
+        if options.nullData && options.effectivePatterns.contains(where: containsLineAnchor) {
+            return result.matches.reduce(0) { $0 + max(1, $1.matchCount) } + result.supplementalMatches
         }
         return result.matches.reduce(0) { $0 + $1.matchCount } + result.supplementalMatches
     }

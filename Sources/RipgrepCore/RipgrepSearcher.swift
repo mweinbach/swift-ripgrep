@@ -1009,19 +1009,13 @@ public struct RipgrepSearcher {
             } ?? byteCount(splitLine.text, options: options) + byteCount(splitLine.terminator, options: options)
             let positiveSpans = syntheticBinarySplitSpans(
                 syntheticInlineCRLFBoundarySpans(
-                    nullDataLineAnchorSpans(
-                        crlfTrimmedSpans(
-                            adjustedSpans(
-                                matcher.positiveSpans(in: lineForMatching),
-                                rawLine: rawLineForSpanAdjustment,
-                                options: options
-                            ),
-                            line: line,
+                    crlfTrimmedSpans(
+                        adjustedSpans(
+                            matcher.positiveSpans(in: lineForMatching),
+                            rawLine: rawLineForSpanAdjustment,
                             options: options
                         ),
                         line: line,
-                        absoluteOffset: absoluteOffset,
-                        terminator: splitLine.terminator,
                         options: options
                     ),
                     line: line,
@@ -1047,27 +1041,28 @@ public struct RipgrepSearcher {
             }
 
             let rawSpans = syntheticInlineCRLFBoundarySpans(
-                nullDataLineAnchorSpans(
-                    crlfTrimmedSpans(
-                        adjustedSpans(
-                            matcher.spans(in: lineForMatching),
-                            rawLine: rawLineForSpanAdjustment,
-                            options: options
-                        ),
-                        line: line,
+                crlfTrimmedSpans(
+                    adjustedSpans(
+                        matcher.spans(in: lineForMatching),
+                        rawLine: rawLineForSpanAdjustment,
                         options: options
                     ),
                     line: line,
-                    absoluteOffset: absoluteOffset,
-                    terminator: splitLine.terminator,
                     options: options
                 ),
                 line: line,
                 terminator: splitLine.terminator,
                 options: options
             )
-            let syntheticAdjusted = syntheticBinarySplitSpans(
+            let nullDataRecordAdjusted = nullDataRecordAnchorSpans(
                 rawSpans,
+                matchingLine: matchingRawLine ?? lineForMatching,
+                absoluteOffset: absoluteOffset,
+                terminator: splitLine.terminator,
+                options: options
+            )
+            let syntheticAdjusted = syntheticBinarySplitSpans(
+                nullDataRecordAdjusted.spans,
                 line: matchingRawLine ?? lineForMatching,
                 terminator: splitLine.terminator,
                 splitBinaryNUL: shouldSplitBinaryNUL,
@@ -1092,7 +1087,9 @@ public struct RipgrepSearcher {
                 absoluteOffset: absoluteOffset,
                 positiveSpans: positiveSpans
             ))
-            let preserveMatchedLine = syntheticAdjusted.preserveMatchedLine || absoluteStartAdjusted.preserveMatchedLine
+            let preserveMatchedLine = nullDataRecordAdjusted.preserveMatchedLine
+                || syntheticAdjusted.preserveMatchedLine
+                || absoluteStartAdjusted.preserveMatchedLine
             let positiveMatched = options.invertMatch && options.stopOnNonmatch
                 ? !positiveSpans.isEmpty
                 : (!spans.isEmpty || preserveMatchedLine)
@@ -1179,32 +1176,44 @@ public struct RipgrepSearcher {
         return line.absoluteOffset + byteCount(line.line, options: options) + byteCount(line.lineTerminator, options: options)
     }
 
-    private func nullDataLineAnchorSpans(
+    private func nullDataRecordAnchorSpans(
         _ spans: [MatchSpan],
-        line: String,
+        matchingLine: String,
         absoluteOffset: Int,
         terminator: String,
         options: RipgrepOptions
-    ) -> [MatchSpan] {
-        guard options.nullData, !options.multiline else {
-            return spans
-        }
-        var output = spans
-        if !terminator.isEmpty,
-           absoluteOffset > 3,
-           line.contains("\n"),
-           options.effectivePatterns.contains(where: containsLineStartAnchor) {
-            output = output.filter { $0.startByte != 0 }
+    ) -> (spans: [MatchSpan], preserveMatchedLine: Bool) {
+        guard options.nullData, !options.multiline, !spans.isEmpty else {
+            return (spans, false)
         }
         if terminator.isEmpty,
-           line.hasSuffix("\n"),
+           lastScalar(in: matchingLine, equals: "\n"),
            !options.effectivePatterns.contains(where: containsLineStartAndEndAnchor) {
-            let lineEnd = byteCount(line, options: options)
-            output = output.filter {
-                !($0.startByte == lineEnd && $0.endByte == lineEnd && $0.text.isEmpty)
+            let trailingRecordEnd = byteCount(matchingLine, options: options)
+            let filtered = spans.filter {
+                !($0.text.isEmpty
+                    && $0.startByte == $0.endByte
+                    && $0.startByte >= trailingRecordEnd)
             }
+            return (filtered, filtered.isEmpty && filtered.count != spans.count)
         }
-        return output
+        if options.effectivePatterns.contains(where: containsLineStartAndEndAnchor) {
+            if matchingLine == "\n",
+               spans.contains(where: { $0.startByte == 0 && $0.endByte == 0 && $0.text.isEmpty }) {
+                return (spans.filter { $0.startByte == 0 && $0.endByte == 0 && $0.text.isEmpty }, false)
+            }
+            return ([], true)
+        }
+        guard absoluteOffset > 0,
+              options.effectivePatterns.contains(where: containsLineStartAnchor) else {
+            return (spans, false)
+        }
+        let filtered = spans.filter {
+            !($0.startByte == 0
+                && $0.endByte > 0
+                && (!matchingLine.contains("\n") || spans.count > 1))
+        }
+        return (filtered, filtered.isEmpty && filtered.count != spans.count)
     }
 
     private func crlfTrimmedSpans(
