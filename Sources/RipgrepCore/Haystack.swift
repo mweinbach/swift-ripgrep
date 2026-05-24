@@ -848,11 +848,12 @@ public struct FileWalker {
         let parsed = parseIgnorePatterns(contents, fileURL: fileURL)
         let scope = pathPrefix.map { (stripBasePath: String?.none, pathPrefix: $0) }
             ?? ignoreScope(for: scopeDirectory ?? fileURL.deletingLastPathComponent(), rootBase: rootBase)
+        let matchSlashPatternsAnywhere = slashPatternsMatchAnywhere ?? false
         let patterns = ignoreExplicitRootMatch
             ? patternsIgnoringExplicitRootMatch(
                 parsed.patterns,
                 scope: scope,
-                slashPatternsMatchAnywhere: slashPatternsMatchAnywhere,
+                slashPatternsMatchAnywhere: matchSlashPatternsAnywhere,
                 caseInsensitive: caseInsensitive
             )
             : parsed.patterns
@@ -861,7 +862,7 @@ public struct FileWalker {
             caseInsensitive: caseInsensitive,
             stripBasePath: scope.stripBasePath,
             pathPrefix: scope.pathPrefix,
-            slashPatternsMatchAnywhere: slashPatternsMatchAnywhere
+            slashPatternsMatchAnywhere: matchSlashPatternsAnywhere
         ), messages: parsed.messages)
     }
 

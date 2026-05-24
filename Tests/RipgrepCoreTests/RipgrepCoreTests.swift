@@ -4208,6 +4208,23 @@ struct RipgrepSearcherTests {
         try anchored.write("needle\n", to: "src/llvm/foo")
         #expect(try run(["needle", anchored.url.path]) == [anchored.path("src/llvm/foo") + ":needle"])
         #expect(try run(["needle", anchored.path("src")]) == [anchored.path("src/llvm/foo") + ":needle"])
+
+        let slashScoped = try TemporaryDirectory()
+        try slashScoped.createDirectory(".git")
+        try slashScoped.createDirectory("vendor")
+        try slashScoped.createDirectory("src/vendor")
+        try slashScoped.write("vendor/**\n", to: ".ignore")
+        try slashScoped.write("needle\n", to: "vendor/skip.rs")
+        try slashScoped.write("needle\n", to: "src/vendor/keep.rs")
+        try slashScoped.write("needle\n", to: "src/main.rs")
+        #expect(try run(["--sort", "path", "needle", slashScoped.url.path]) == [
+            slashScoped.path("src/main.rs") + ":needle",
+            slashScoped.path("src/vendor/keep.rs") + ":needle",
+        ])
+        #expect(try run(["--sort", "path", "--files", slashScoped.url.path]) == [
+            slashScoped.path("src/main.rs"),
+            slashScoped.path("src/vendor/keep.rs"),
+        ])
     }
 
     @Test("honors git info exclude and its toggle")
