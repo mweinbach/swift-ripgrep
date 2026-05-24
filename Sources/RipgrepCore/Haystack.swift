@@ -155,8 +155,7 @@ public struct FileWalker {
     }
 
     private func missingRootMessage(_ displayPath: String, options: RipgrepOptions, hasExistingRoot: Bool) -> String {
-        let filesModeUsesIOMessage = options.mode == .files && !(options.quiet && hasExistingRoot)
-        guard filesModeUsesIOMessage || options.sortMode != nil || !hasExistingRoot else {
+        guard options.sortMode != nil || !hasExistingRoot else {
             return "\(displayPath): No such file or directory (os error 2)"
         }
         return "\(displayPath): IO error for operation on \(displayPath): No such file or directory (os error 2)"
@@ -648,7 +647,7 @@ public struct FileWalker {
             return
         }
         let pathPrefix = cwdRelativePathPrefix(for: rootBase)
-        for ignoreFile in options.ignoreFiles {
+        for (offset, ignoreFile) in options.ignoreFiles.enumerated() {
             appendLoadedMatcher(
                 from: ignoreFile,
                 to: &ignoreStack,
@@ -657,6 +656,7 @@ public struct FileWalker {
                 pathPrefix: pathPrefix,
                 slashPatternsMatchAnywhere: false,
                 reportLoadErrors: true,
+                displayPath: offset < options.ignoreFileDisplayPaths.count ? options.ignoreFileDisplayPaths[offset] : nil,
                 caseInsensitive: false,
                 options: options
             )
@@ -754,6 +754,7 @@ public struct FileWalker {
         pathPrefix: String? = nil,
         slashPatternsMatchAnywhere: Bool? = nil,
         reportLoadErrors: Bool = false,
+        displayPath: String? = nil,
         caseInsensitive: Bool? = nil,
         ignoreExplicitRootMatch: Bool = false,
         options: RipgrepOptions
@@ -765,6 +766,7 @@ public struct FileWalker {
             pathPrefix: pathPrefix,
             slashPatternsMatchAnywhere: slashPatternsMatchAnywhere,
             reportLoadErrors: reportLoadErrors,
+            displayPath: displayPath,
             caseInsensitive: caseInsensitive ?? options.ignoreFileCaseInsensitive,
             ignoreExplicitRootMatch: ignoreExplicitRootMatch
         )
@@ -781,6 +783,7 @@ public struct FileWalker {
         pathPrefix: String? = nil,
         slashPatternsMatchAnywhere: Bool? = nil,
         reportLoadErrors: Bool = false,
+        displayPath: String? = nil,
         caseInsensitive: Bool = false,
         ignoreExplicitRootMatch: Bool = false
     ) -> LoadedIgnoreMatcher {
@@ -788,7 +791,7 @@ public struct FileWalker {
         do {
             contents = try String(contentsOf: fileURL, encoding: .utf8)
         } catch {
-            let messages = reportLoadErrors ? [ignoreFileLoadMessage(for: fileURL)] : []
+            let messages = reportLoadErrors ? [ignoreFileLoadMessage(for: fileURL, displayPath: displayPath)] : []
             return LoadedIgnoreMatcher(matcher: GlobMatcher(patterns: []), messages: messages)
         }
         let parsed = parseIgnorePatterns(contents, fileURL: fileURL)
@@ -832,15 +835,16 @@ public struct FileWalker {
         }
     }
 
-    private func ignoreFileLoadMessage(for fileURL: URL) -> String {
+    private func ignoreFileLoadMessage(for fileURL: URL, displayPath: String?) -> String {
+        let renderedPath = displayPath ?? fileURL.path
         var isDirectory: ObjCBool = false
         if fileManager.fileExists(atPath: fileURL.path, isDirectory: &isDirectory), isDirectory.boolValue {
-            return "\(fileURL.path): line 1: Is a directory (os error 21)"
+            return "\(renderedPath): line 1: Is a directory (os error 21)"
         }
         if !fileManager.fileExists(atPath: fileURL.path) {
-            return "\(fileURL.path): No such file or directory (os error 2)"
+            return "\(renderedPath): No such file or directory (os error 2)"
         }
-        return "\(fileURL.path): error reading ignore file"
+        return "\(renderedPath): error reading ignore file"
     }
 
     private func ignoreScope(for ignoreDirectory: URL, rootBase: URL?) -> (stripBasePath: String?, pathPrefix: String) {

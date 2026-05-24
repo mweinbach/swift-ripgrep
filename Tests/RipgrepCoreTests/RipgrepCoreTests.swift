@@ -2500,7 +2500,18 @@ struct RipgrepSearcherTests {
         )
         #expect(exitCode == 2)
         #expect(output.map { URL(fileURLWithPath: $0).lastPathComponent } == ["visible.txt"])
-        #expect(errors == ["rg: missing: IO error for operation on missing: No such file or directory (os error 2)"])
+        #expect(errors == ["rg: missing: No such file or directory (os error 2)"])
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--json", "--files", "missing", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.map { URL(fileURLWithPath: $0).lastPathComponent } == ["visible.txt"])
+        #expect(errors == ["rg: missing: No such file or directory (os error 2)"])
 
         output = []
         errors = []
@@ -3086,6 +3097,15 @@ struct RipgrepSearcherTests {
         #expect(exitCode == 2)
         #expect(errors == ["rg: error parsing flag --max-filesize: invalid size: size too big in '34359738368G'"])
 
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--max-filesize=999999999999999999999999999999999G", "needle", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(errors == ["rg: error parsing flag --max-filesize: invalid size: invalid integer found in size '999999999999999999999999999999999G': number too large to fit in target type"])
+
         #expect(Set(pathBasenames(try run([
             "--no-ignore",
             "-g",
@@ -3220,6 +3240,17 @@ struct RipgrepSearcherTests {
         #expect(exitCode == 0)
         #expect(output == ["needle"])
         #expect(errors == ["rg: \(root.path("missing-ignore")): No such file or directory (os error 2)"])
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--ignore-file", "missing-ignore", "needle", root.path("keep.swift")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(output == ["needle"])
+        #expect(errors == ["rg: missing-ignore: No such file or directory (os error 2)"])
 
         let globstarRoot = try TemporaryDirectory()
         try globstarRoot.createDirectory(".git")
@@ -3745,7 +3776,7 @@ struct RipgrepSearcherTests {
 
         #expect(exitCode == 2)
         #expect(output == [root.path("ok.txt")])
-        #expect(errors == ["rg: \(missingPath): IO error for operation on \(missingPath): No such file or directory (os error 2)"])
+        #expect(errors == ["rg: \(missingPath): No such file or directory (os error 2)"])
 
         output = []
         errors = []

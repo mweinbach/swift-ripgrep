@@ -194,6 +194,7 @@ public struct RipgrepOptions: Equatable {
     public var globCaseInsensitive = false
     public var ignoreFileCaseInsensitive = false
     public var ignoreFiles: [URL] = []
+    public var ignoreFileDisplayPaths: [String] = []
     public var globPatterns: [String] = []
     public var caseInsensitiveGlobPatterns: [String] = []
     public var preprocessor: String?
@@ -877,9 +878,12 @@ public enum RipgrepArgumentParser {
                     return .error(missingValue(flag: "--ignore-file"))
                 }
                 options.ignoreFiles.append(URL(fileURLWithPath: arguments[index]))
+                options.ignoreFileDisplayPaths.append(arguments[index])
                 index += 1
             case let value where value.hasPrefix("--ignore-file="):
-                options.ignoreFiles.append(URL(fileURLWithPath: String(value.dropFirst("--ignore-file=".count))))
+                let raw = String(value.dropFirst("--ignore-file=".count))
+                options.ignoreFiles.append(URL(fileURLWithPath: raw))
+                options.ignoreFileDisplayPaths.append(raw)
             case "--pre":
                 guard index < arguments.count else {
                     return .error(missingValue(flag: "--pre"))
@@ -2152,8 +2156,11 @@ public enum RipgrepArgumentParser {
             multiplier = 1
             digits = Substring(raw)
         }
-        guard let value = UInt64(digits) else {
+        guard !digits.isEmpty, digits.allSatisfy(\.isNumber) else {
             return formatMessage
+        }
+        guard let value = UInt64(digits) else {
+            return "invalid integer found in size '\(raw)': number too large to fit in target type"
         }
         return value.multipliedReportingOverflow(by: multiplier).overflow
             ? "size too big in '\(raw)'"
