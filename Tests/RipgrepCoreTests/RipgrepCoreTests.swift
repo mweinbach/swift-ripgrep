@@ -1559,6 +1559,7 @@ struct RipgrepSearcherTests {
     func searchesMultilineRegexMatches() throws {
         let root = try TemporaryDirectory()
         try root.write("foo\nbar\nbaz\n", to: "multi.txt")
+        try root.write("foo\nbar\n", to: "multi-final-newline.txt")
         try root.write("é\nβ\n", to: "multiline-utf8.txt")
         try root.write("a\nb\nc\na\nb\nc", to: "passthru.txt")
         try root.write("""
@@ -1747,6 +1748,7 @@ struct RipgrepSearcherTests {
         ])
         #expect(try runAllowingNoMatch(["-U", #"(?-m)bar$"#, root.path("multi.txt")]) == [])
         #expect(try runAllowingNoMatch(["-U", "-o", #"(?-m)bar$"#, root.path("multi.txt")]) == [])
+        #expect(try runAllowingNoMatch(["-U", #"(?-m)bar$"#, root.path("multi-final-newline.txt")]) == [])
         var vimgrepLineStartOutput: [String] = []
         var vimgrepLineStartErrors: [String] = []
         let vimgrepLineStartExitCode = RipgrepCLI.run(
@@ -2225,6 +2227,8 @@ struct RipgrepSearcherTests {
             "a\r",
             "b\r",
         ])
+        #expect(try runAllowingNoMatch(["-U", "--crlf", #"(?-m)b$"#, root.path("plain-crlf.txt")]) == [])
+        #expect(try runAllowingNoMatch(["-U", "--crlf", #"(?-m)^b"#, root.path("plain-crlf.txt")]) == [])
         #expect(try run(["-U", "--count-matches", "$", root.path("plain-crlf.txt")]) == [
             "2",
         ])

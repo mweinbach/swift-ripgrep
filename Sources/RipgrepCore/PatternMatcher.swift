@@ -2301,7 +2301,10 @@ public struct PatternMatcher {
     }
 
     private static func multilineCRLFAnchorPattern(for pattern: String) -> String {
-        transformAnchors(in: pattern) { anchor in
+        transformMultilineAnchors(in: pattern) { anchor, multilineEnabled in
+            if !multilineEnabled {
+                return anchor == "$" ? "(?=\\z)" : String(anchor)
+            }
             switch anchor {
             case "^":
                 return "(?:^|(?<=\\n))"
@@ -2314,7 +2317,10 @@ public struct PatternMatcher {
     }
 
     private static func inlineCRLFAnchorPattern(for pattern: String) -> String {
-        transformAnchors(in: pattern) { anchor in
+        transformMultilineAnchors(in: pattern) { anchor, multilineEnabled in
+            if !multilineEnabled {
+                return anchor == "$" ? "(?=\\z)" : String(anchor)
+            }
             switch anchor {
             case "^":
                 return "(?:^|(?<=[\\r\\n]))"
@@ -2334,7 +2340,10 @@ public struct PatternMatcher {
 
     private static func multilineLineEndPattern(for pattern: String) -> String {
         transformMultilineAnchors(in: pattern) { anchor, multilineEnabled in
-            anchor == "$" && multilineEnabled ? "(?=\\n|(?<!\\n)\\z)" : String(anchor)
+            if anchor == "$" {
+                return multilineEnabled ? "(?=\\n|(?<!\\n)\\z)" : "(?=\\z)"
+            }
+            return String(anchor)
         }
     }
 
