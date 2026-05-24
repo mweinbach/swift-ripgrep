@@ -242,7 +242,8 @@ public struct StandardPrinter {
             let terminator = outputTerminator(
                 match.lineTerminator,
                 line: options.onlyMatching ? span.text : (replacementLine ?? match.line),
-                crlfMatchTerminator: options.onlyMatching
+                crlfMatchTerminator: options.onlyMatching,
+                forceCRLF: isColumnLimitedVimgrepLine(match: match, replacementLine: replacementLine)
             )
             guard showPath else {
                 return "\(fields.joined(separator: options.fieldMatchSeparator))\(terminator)"
@@ -769,7 +770,7 @@ public struct StandardPrinter {
         }
 
         let text = displayLine(for: line)
-        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldContextSeparator))\(renderedLine(text, omittedKind: .context))\(outputTerminator(line.lineTerminator, line: text))"
+        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldContextSeparator))\(renderedLine(text, omittedKind: .context))\(outputTerminator(line.lineTerminator, line: text, forceCRLF: isColumnLimitedLine(text)))"
     }
 
     private func positiveMatch(for line: SearchLine, fileURL: URL) -> SearchMatch? {
@@ -800,7 +801,7 @@ public struct StandardPrinter {
         }
 
         let text = displayLine(for: line)
-        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldContextSeparator))\(renderedLine(text, omittedKind: .context))\(outputTerminator(line.lineTerminator, line: text))"
+        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldContextSeparator))\(renderedLine(text, omittedKind: .context))\(outputTerminator(line.lineTerminator, line: text, forceCRLF: isColumnLimitedLine(text)))"
     }
 
     private func formatMatchedLine(_ line: SearchLine, fileURL: URL, showPath: Bool, match: SearchMatch?) -> String {
@@ -817,24 +818,24 @@ public struct StandardPrinter {
         }
 
         let text = displayLine(for: line)
-        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(renderedLine(text))\(outputTerminator(line.lineTerminator, line: text))"
+        return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(renderedLine(text))\(outputTerminator(line.lineTerminator, line: text, forceCRLF: isColumnLimitedLine(text)))"
     }
 
     private func renderedLine(for match: SearchMatch) -> String {
         guard options.replacement != nil, !match.spans.isEmpty else {
             let line = displayLine(for: match)
             if let rendered = limitedMatchedLine(line, match: match) {
-                return "\(rendered)\(outputTerminator(match.lineTerminator, line: line))"
+                return "\(rendered)\(outputTerminator(match.lineTerminator, line: line, forceCRLF: true))"
             }
             if let rendered = limitedColumnMatchedLine(line, match: match) {
-                return "\(rendered)\(outputTerminator(match.lineTerminator, line: line))"
+                return "\(rendered)\(outputTerminator(match.lineTerminator, line: line, forceCRLF: true))"
             }
-            return "\(renderedLine(line, spans: match.rawLine == nil ? match.spans : []))\(outputTerminator(match.lineTerminator, line: line))"
+            return "\(renderedLine(line, spans: match.rawLine == nil ? match.spans : []))\(outputTerminator(match.lineTerminator, line: line, forceCRLF: isColumnLimitedLine(line)))"
         }
         let originalLine = match.line
         let line = renderedText(for: match)
         if let rendered = limitedReplacementLine(line, originalLine: originalLine, match: match) {
-            return "\(rendered)\(outputTerminator(match.lineTerminator, line: match.line))"
+            return "\(rendered)\(outputTerminator(match.lineTerminator, line: match.line, forceCRLF: true))"
         }
         return "\(renderedLine(line))\(outputTerminator(match.lineTerminator, line: line))"
     }
@@ -957,16 +958,39 @@ public struct StandardPrinter {
         return colors.colorMatches(in: trimmed, spans: trimmedSpans)
     }
 
-    private func outputTerminator(_ terminator: String, line: String? = nil, crlfMatchTerminator: Bool = false) -> String {
+    private func outputTerminator(
+        _ terminator: String,
+        line: String? = nil,
+        crlfMatchTerminator: Bool = false,
+        forceCRLF: Bool = false
+    ) -> String {
         if options.nullData {
             return "\0"
         }
         if options.crlf,
-           (terminator.isEmpty || colors.isEnabled || crlfMatchTerminator),
+           (forceCRLF || terminator.isEmpty || colors.isEnabled || crlfMatchTerminator),
            line?.hasSuffix("\r") != true {
             return "\r"
         }
         return ""
+    }
+
+    private func isColumnLimitedVimgrepLine(match: SearchMatch, replacementLine: String?) -> Bool {
+        if let replacementLine {
+            return isColumnLimitedLine(replacementLine, originalLine: match.line)
+        }
+        return isColumnLimitedLine(options.nullData ? match.line : firstRenderedLine(match.line))
+    }
+
+    private func isColumnLimitedLine(_ line: String, originalLine: String? = nil) -> Bool {
+        guard let maxColumns = options.maxColumns else {
+            return false
+        }
+        if let originalLine, originalLine.utf8.count >= maxColumns {
+            return true
+        }
+        let rendered = options.trim ? line.trimmingASCIIWhitespacePrefix() : line
+        return rendered.utf8.count >= maxColumns
     }
 
     private func pathTerminator() -> String {

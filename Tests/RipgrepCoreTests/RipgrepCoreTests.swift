@@ -711,6 +711,27 @@ struct RipgrepSearcherTests {
             "short needle [... omitted end of long line]",
             "verylong nee [... omitted end of long line]",
         ])
+        let crlfOmitted = try runExecutableData([
+            "--crlf",
+            "--max-columns",
+            "12",
+            "needle",
+            root.path("columns.txt"),
+        ]) {}
+        #expect(crlfOmitted == Data(
+            "[Omitted long matching line]\r\n[Omitted long matching line]\r\n".utf8
+        ))
+        let crlfPreview = try runExecutableData([
+            "--crlf",
+            "--max-columns",
+            "12",
+            "--max-columns-preview",
+            "needle",
+            root.path("columns.txt"),
+        ]) {}
+        #expect(crlfPreview == Data(
+            "short needle [... omitted end of long line]\r\nverylong nee [... omitted end of long line]\r\n".utf8
+        ))
         #expect(try run(["-M0", "needle", root.path("columns.txt")]) == [
             "short needle",
             "verylong needle tail",
@@ -819,6 +840,15 @@ struct RipgrepSearcherTests {
             "needle",
             "[Omitted long context line]",
         ])
+        let crlfContextOmitted = try runExecutableData([
+            "--crlf",
+            "-M",
+            "20",
+            "-A1",
+            "needle",
+            root.path("context-columns.txt"),
+        ]) {}
+        #expect(crlfContextOmitted == Data("needle\n[Omitted long context line]\r\n".utf8))
     }
 
     @Test("prints byte offsets for lines and only matches")
