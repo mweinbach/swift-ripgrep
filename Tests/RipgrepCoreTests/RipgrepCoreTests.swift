@@ -3650,6 +3650,12 @@ struct RipgrepSearcherTests {
             (["--max-columns", "nope", "needle"], "rg: error parsing flag --max-columns: value is not a valid number: invalid digit found in string"),
             (["-M", "nope", "needle"], "rg: error parsing flag -M: value is not a valid number: invalid digit found in string"),
             (["--path-separator"], "rg: missing value for flag --path-separator: missing argument for option '--path-separator'"),
+            (["--no-json=true", "needle"], "rg: invalid CLI arguments: unexpected argument for option '--no-json': \"true\""),
+            (["--count=1", "needle"], "rg: invalid CLI arguments: unexpected argument for option '--count': \"1\""),
+            (["--help=foo"], "rg: invalid CLI arguments: unexpected argument for option '--help': \"foo\""),
+            (["--no-context-separator=", "needle"], "rg: invalid CLI arguments: unexpected argument for option '--no-context-separator': \"\""),
+            (["--no-byte-offset=x", "needle"], "rg: invalid CLI arguments: unexpected argument for option '--no-byte-offset': \"x\""),
+            (["--no-filename=x", "needle"], "rg: invalid CLI arguments: unexpected argument for option '--no-filename': \"x\""),
             (["--hyperlink-format", "{bogus}", "needle"], "rg: error parsing flag --hyperlink-format: invalid hyperlink format: invalid hyperlink format variable: 'bogus', choose from: path, line, column, host, wslprefix"),
         ] {
             var output: [String] = []

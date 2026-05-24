@@ -1222,6 +1222,9 @@ public enum RipgrepArgumentParser {
                 options.useStdin = true
                 positionals.append(argument)
             default:
+                if let unexpectedArgumentError = unexpectedArgumentForNoValueFlag(argument) {
+                    return .error(unexpectedArgumentError)
+                }
                 if argument.hasPrefix("-") {
                     return .error(unrecognizedFlag(argument))
                 }
@@ -2189,6 +2192,26 @@ public enum RipgrepArgumentParser {
         return "unrecognized flag \(flag)\n\nsimilar flags that are available: \(suggestions.joined(separator: ", "))"
     }
 
+    private static func unexpectedArgumentForNoValueFlag(_ argument: String) -> String? {
+        guard argument.hasPrefix("--"),
+              let equals = argument.firstIndex(of: "=") else {
+            return nil
+        }
+        let flag = String(argument[..<equals])
+        guard noValueLongFlags.contains(flag) else {
+            return nil
+        }
+        let valueStart = argument.index(after: equals)
+        let value = String(argument[valueStart...])
+        return "invalid CLI arguments: unexpected argument for option '\(flag)': \"\(escapedArgumentValue(value))\""
+    }
+
+    private static func escapedArgumentValue(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+    }
+
     private static func flagSuggestions(for flag: String) -> [String] {
         guard flag.hasPrefix("--") else {
             return []
@@ -2290,6 +2313,7 @@ public enum RipgrepArgumentParser {
         "--ignore-parent",
         "--ignore-vcs",
         "--include-zero",
+        "--invert-match",
         "--json",
         "--line-buffered",
         "--line-number",
@@ -2360,6 +2384,121 @@ public enum RipgrepArgumentParser {
         "--type-clear",
         "--type-list",
         "--unrestricted",
+        "--vimgrep",
+        "--with-filename",
+        "--word-regexp",
+    ]
+
+    private static let noValueLongFlags: Set<String> = [
+        "--auto-hybrid-regex",
+        "--binary",
+        "--block-buffered",
+        "--byte-offset",
+        "--case-sensitive",
+        "--column",
+        "--count",
+        "--count-matches",
+        "--crlf",
+        "--debug",
+        "--files",
+        "--files-with-matches",
+        "--files-without-match",
+        "--fixed-strings",
+        "--follow",
+        "--glob-case-insensitive",
+        "--heading",
+        "--help",
+        "--hidden",
+        "--ignore",
+        "--ignore-case",
+        "--ignore-dot",
+        "--ignore-exclude",
+        "--ignore-file-case-insensitive",
+        "--ignore-files",
+        "--ignore-global",
+        "--ignore-messages",
+        "--ignore-parent",
+        "--ignore-vcs",
+        "--include-zero",
+        "--invert-match",
+        "--json",
+        "--line-buffered",
+        "--line-number",
+        "--line-regexp",
+        "--max-columns-preview",
+        "--messages",
+        "--mmap",
+        "--multiline",
+        "--multiline-dotall",
+        "--no-auto-hybrid-regex",
+        "--no-binary",
+        "--no-block-buffered",
+        "--no-byte-offset",
+        "--no-column",
+        "--no-config",
+        "--no-context-separator",
+        "--no-crlf",
+        "--no-encoding",
+        "--no-fixed-strings",
+        "--no-follow",
+        "--no-filename",
+        "--no-glob-case-insensitive",
+        "--no-heading",
+        "--no-hidden",
+        "--no-ignore",
+        "--no-ignore-dot",
+        "--no-ignore-exclude",
+        "--no-ignore-file-case-insensitive",
+        "--no-ignore-files",
+        "--no-ignore-global",
+        "--no-ignore-messages",
+        "--no-ignore-parent",
+        "--no-ignore-vcs",
+        "--no-include-zero",
+        "--no-invert-match",
+        "--no-json",
+        "--no-line-buffered",
+        "--no-line-number",
+        "--no-max-columns-preview",
+        "--no-messages",
+        "--no-mmap",
+        "--no-multiline",
+        "--no-multiline-dotall",
+        "--no-one-file-system",
+        "--no-pcre2",
+        "--no-pcre2-unicode",
+        "--no-pre",
+        "--no-require-git",
+        "--no-search-zip",
+        "--no-sort-files",
+        "--no-stats",
+        "--no-text",
+        "--no-trim",
+        "--no-unicode",
+        "--null",
+        "--null-data",
+        "--one-file-system",
+        "--only-matching",
+        "--passthrough",
+        "--passthru",
+        "--pcre2",
+        "--pcre2-unicode",
+        "--pcre2-version",
+        "--pretty",
+        "--quiet",
+        "--require-git",
+        "--search-zip",
+        "--smart-case",
+        "--sort-files",
+        "--stats",
+        "--stop-on-nonmatch",
+        "--text",
+        "--trace",
+        "--trim",
+        "--type-list",
+        "--unrestricted",
+        "--unicode",
+        "--version",
         "--vimgrep",
         "--with-filename",
         "--word-regexp",
