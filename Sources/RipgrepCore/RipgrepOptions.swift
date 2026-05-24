@@ -255,7 +255,7 @@ public struct RipgrepOptions: Equatable {
             return []
         }
         var patterns = contents.components(separatedBy: "\n")
-        if contents.hasSuffix("\n") {
+        if contents.utf8.last == UInt8(ascii: "\n") {
             patterns.removeLast()
         }
         return patterns.map {
@@ -1426,6 +1426,11 @@ public enum RipgrepArgumentParser {
     }
 
     private static func readPatterns(from path: String) -> PatternFileResult {
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory),
+           isDirectory.boolValue {
+            return .error("\(path):Is a directory (os error 21)")
+        }
         do {
             let handle = try FileHandle(forReadingFrom: URL(fileURLWithPath: path))
             defer { try? handle.close() }

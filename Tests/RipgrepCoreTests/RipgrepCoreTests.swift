@@ -329,11 +329,13 @@ struct RipgrepSearcherTests {
         let root = try TemporaryDirectory()
         try root.write("alpha\nbeta\ngamma\n", to: "words.txt")
         try root.write("alpha\ngamma\n", to: "patterns")
+        try root.write("alpha\r\ngamma\r\n", to: "crlf-patterns")
         try root.write("", to: "zero-patterns")
         try root.write("\n", to: "empty-pattern")
 
         #expect(try run(["-e", "alpha", "-e", "gamma", root.path("words.txt")]) == ["alpha", "gamma"])
         #expect(try run(["-f", root.path("patterns"), root.path("words.txt")]) == ["alpha", "gamma"])
+        #expect(try run(["-f", root.path("crlf-patterns"), root.path("words.txt")]) == ["alpha", "gamma"])
         #expect(try run(["-f\(root.path("patterns"))", root.path("words.txt")]) == ["alpha", "gamma"])
         #expect(try run(["-vf", root.path("patterns"), root.path("words.txt")]) == ["beta"])
         #expect(try runAllowingNoMatch(["-f", root.path("zero-patterns"), root.path("words.txt")]) == [])
@@ -373,6 +375,17 @@ struct RipgrepSearcherTests {
         #expect(missingExitCode == 2)
         #expect(output.isEmpty)
         #expect(errors == ["rg: missing: No such file or directory (os error 2)"])
+
+        output = []
+        errors = []
+        let directoryExitCode = RipgrepCLI.run(
+            arguments: ["-f", root.url.path, root.path("words.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(directoryExitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["rg: \(root.url.path):Is a directory (os error 21)"])
     }
 
     @Test("formats line numbers columns counts and filename modes")
