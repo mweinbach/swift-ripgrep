@@ -91,6 +91,7 @@ public struct GlobMatcher: Equatable {
 
     private let rules: [Rule]
     private let requirePositiveMatch: Bool
+    private let hasBasenameOnlyRules: Bool
     private let slashPatternsMatchAnywhere: Bool
     private let stripBasePath: String?
     private let pathPrefix: String
@@ -150,6 +151,7 @@ public struct GlobMatcher: Equatable {
 
         self.rules = rules
         self.requirePositiveMatch = overrideSemantics && rules.contains { $0.decision == .include }
+        self.hasBasenameOnlyRules = rules.contains(where: \.basenameOnly)
         self.overrideSemantics = overrideSemantics
         self.slashPatternsMatchAnywhere = slashPatternsMatchAnywhere ?? !overrideSemantics
         self.stripBasePath = stripBasePath?.isEmpty == true ? nil : stripBasePath
@@ -178,7 +180,11 @@ public struct GlobMatcher: Equatable {
         guard let scopedPath = scopedPath(for: relativePath) else {
             return nil
         }
+        #if canImport(Darwin)
+        let pathBasename = hasBasenameOnlyRules ? basename(scopedPath) : nil
+        #else
         let pathBasename = basename(scopedPath)
+        #endif
         var matchedDecision: Decision?
         for rule in rules where matches(rule, relativePath: scopedPath, basename: pathBasename, isDirectory: isDirectory) {
             matchedDecision = rule.decision
@@ -190,7 +196,11 @@ public struct GlobMatcher: Equatable {
         guard let scopedPath = scopedPath(for: relativePath) else {
             return nil
         }
+        #if canImport(Darwin)
+        let pathBasename = hasBasenameOnlyRules ? basename(scopedPath) : nil
+        #else
         let pathBasename = basename(scopedPath)
+        #endif
         var matchedRule: Rule?
         for rule in rules where matches(rule, relativePath: scopedPath, basename: pathBasename, isDirectory: isDirectory) {
             matchedRule = rule
