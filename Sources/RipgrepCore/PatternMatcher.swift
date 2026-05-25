@@ -368,6 +368,14 @@ public struct PatternMatcher {
         return byteRequiredLiteralPrefilterCache
     }
 
+    func fixedPositiveLookbehindFastPath() -> (prefix: [UInt8], literal: [UInt8])? {
+        guard patterns.count == 1,
+              case .pcre2(let regex) = patterns[0] else {
+            return nil
+        }
+        return regex.fixedPositiveLookbehindFastPath
+    }
+
     private static func makeByteLiteralFastPath(
         patterns: [CompiledPattern],
         options: RipgrepOptions,
@@ -740,6 +748,11 @@ public struct PatternMatcher {
         options: RipgrepOptions,
         usesByteSemantics: Bool
     ) -> String? {
+        if options.engineMode != .default,
+           let literal = PCRE2CompiledPattern.fixedPositiveLookbehindLiteral(pattern) {
+            let folded = options.effectiveIgnoreCase ? foldedCase(literal, options: options) : literal
+            return usesByteSemantics ? bytePattern(folded) : folded
+        }
         guard !pattern.isEmpty,
               topLevelAlternatives(in: pattern).count == 1,
               !pattern.contains("("),

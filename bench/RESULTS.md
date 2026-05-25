@@ -23,6 +23,12 @@ benchmarks below use `/tmp/swift-rg-bench/subtitles/en.small.txt` (193 MiB).
 | byte alternation, 5 literals | `'A\|B\|C\|D\|E'` | 128.2 ms | 97.6 ms | **0.76x** |
 | required-literal regex with lines | `-n '\w+\s+Holmes\s+\w+'` | 33.7 ms | 32.3 ms | **0.96x** |
 
+A 3-run PCRE compatibility check for `-P -o '(?<=Sherlock )Holmes'` on the
+same 193 MiB file produced byte-identical output to Rust and measured Swift at
+141.4 ms versus Rust PCRE2 at 214.9 ms (**0.66x**). The same query took about
+25.3 s through the Foundation-regex path before the in-tree fixed-lookbehind
+specialization.
+
 The recursive Linux-kernel traversal/search path now matches or beats Rust in
 this environment for the default literal search. A fresh confirmation run used
 2 warm-ups and 7 timed iterations for the default Swift worker count and Rust
@@ -74,6 +80,10 @@ The key improvements since the 2026-05-24 baseline are:
   output no longer materializes a second full path-string array;
 - byte-literal fast-path detection is cached per worker matcher, and the
   streaming fallback probe reuses walker metadata instead of restatting files;
+- PCRE2 is no longer linked, and the common fixed positive-lookbehind literal
+  shape now uses an in-tree Swift parser plus Darwin byte scanning for
+  `-P -o`, preserving Rust output while avoiding Foundation regex work on the
+  hot path;
 - Darwin default recursive search remains capped at four workers because this
   checkout benchmarked faster than the ripgrep-style 12-worker cap on the
   Linux tree, while `--threads N` still lets callers override it.

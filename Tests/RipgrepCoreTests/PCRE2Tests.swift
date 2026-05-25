@@ -13,6 +13,24 @@ struct PCRE2Tests {
         #expect(output == ["b"])
     }
 
+    @Test func pcre2FixedLookbehindLiteralOnlyMatchesAfterPrefix() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("Sherlock Holmes\nMycroft Holmes\nSherlock Holmes\n", to: "pcre.txt")
+
+        let output = try run(["-P", "-o", "(?<=Sherlock )Holmes", temp.path("pcre.txt")])
+
+        #expect(output == ["Holmes", "Holmes"])
+    }
+
+    @Test func pcre2FixedLookbehindExecutableFastPathOnlyMatchingOutput() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("Mycroft Holmes\nSherlock Holmes and Sherlock Holmes\n", to: "pcre.txt")
+
+        let output = try runExecutableData(["-P", "-o", "(?<=Sherlock )Holmes", temp.path("pcre.txt")]) {}
+
+        #expect(output == Data("Holmes\nHolmes\n".utf8))
+    }
+
     @Test func pcre2BackreferenceOnlyMatching() throws {
         let temp = try TemporaryDirectory()
         try temp.write("abba\nabca\n", to: "pcre.txt")
