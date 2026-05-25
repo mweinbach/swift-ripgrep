@@ -1,4 +1,9 @@
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 public struct GlobMatcher: Equatable {
     public enum Decision: Equatable {
@@ -362,7 +367,7 @@ public struct GlobMatcher: Equatable {
         case .suffix(let suffix):
             return value.hasSuffix(suffix)
         case .contains(let needle):
-            return value.contains(needle)
+            return containsFast(needle, in: value)
         case .simpleGlob(let glob):
             return matchesSimpleGlob(glob, value)
         }
@@ -394,12 +399,55 @@ public struct GlobMatcher: Equatable {
     }
 
     private func hasPathComponentSuffix(_ suffix: String, in value: String) -> Bool {
-        guard value.hasSuffix(suffix),
-              let suffixStart = value.index(value.endIndex, offsetBy: -suffix.count, limitedBy: value.startIndex),
-              suffixStart > value.startIndex else {
-            return false
+        withUTF8Buffer(value) { valueBytes in
+            withUTF8Buffer(suffix) { suffixBytes in
+                guard !suffixBytes.isEmpty,
+                      suffixBytes.count < valueBytes.count,
+                      let valueBase = valueBytes.baseAddress,
+                      let suffixBase = suffixBytes.baseAddress else {
+                    return false
+                }
+                let offset = valueBytes.count - suffixBytes.count
+                guard valueBytes[offset - 1] == UInt8(ascii: "/") else {
+                    return false
+                }
+                return memcmp(valueBase.advanced(by: offset), suffixBase, suffixBytes.count) == 0
+            }
         }
-        return value[value.index(before: suffixStart)] == "/"
+    }
+
+    private func containsFast(_ needle: String, in value: String) -> Bool {
+        withUTF8Buffer(needle) { needleBytes in
+            guard needleBytes.allSatisfy({ $0 < 0x80 }) else {
+                return value.contains(needle)
+            }
+            guard !needleBytes.isEmpty else {
+                return true
+            }
+            return withUTF8Buffer(value) { valueBytes in
+                guard needleBytes.count <= valueBytes.count,
+                      let valueBase = valueBytes.baseAddress,
+                      let needleBase = needleBytes.baseAddress else {
+                    return false
+                }
+                let first = needleBytes[0]
+                let lastStart = valueBytes.count - needleBytes.count
+                var offset = 0
+                while offset <= lastStart {
+                    if valueBytes[offset] == first,
+                       memcmp(valueBase.advanced(by: offset), needleBase, needleBytes.count) == 0 {
+                        return true
+                    }
+                    offset += 1
+                }
+                return false
+            }
+        }
+    }
+
+    private func withUTF8Buffer<T>(_ value: String, _ body: (UnsafeBufferPointer<UInt8>) -> T) -> T {
+        var value = value
+        return value.withUTF8(body)
     }
 
     private static func compileFastMatcher(
