@@ -500,6 +500,97 @@ public struct RipgrepSearcher: @unchecked Sendable {
             var lineNumber = 1
             var lineCountOffset = 0
 
+            if options.quiet {
+                if literals.count == 1,
+                   let literal = literals.first {
+                    var searchOffset = 0
+                    var foldedLiteral: [UInt8] = []
+                    var caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
+                    if fastPath.caseInsensitiveASCII {
+                        foldedLiteral = literal.map(asciiLowercase)
+                        if literal.count > 1 {
+                            for index in 0..<(foldedLiteral.count - 1) {
+                                caseInsensitiveShifts[Int(foldedLiteral[index])] = literal.count - 1 - index
+                            }
+                        }
+                    }
+                    while searchOffset < data.count {
+                        let foundPointer: UnsafePointer<UInt8>?
+                        if fastPath.caseInsensitiveASCII {
+                            foundPointer = foldedLiteral.withUnsafeBufferPointer { foldedNeedle in
+                                caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
+                                    rg_memcasemem_ascii_prepared(
+                                        baseAddress.advanced(by: searchOffset),
+                                        data.count - searchOffset,
+                                        foldedNeedle.baseAddress,
+                                        foldedNeedle.count,
+                                        shifts.baseAddress
+                                    )
+                                }
+                            }
+                        } else {
+                            foundPointer = literal.withUnsafeBufferPointer { needle in
+                                rg_memmem_simple(
+                                    baseAddress.advanced(by: searchOffset),
+                                    data.count - searchOffset,
+                                    needle.baseAddress,
+                                    needle.count
+                                )
+                            }
+                        }
+                        guard let rawFoundPointer = foundPointer else {
+                            return
+                        }
+                        let matchStart = baseAddress.distance(to: rawFoundPointer)
+                        if fastPath.wordASCII {
+                            var lineStart = matchStart
+                            while lineStart > 0, baseAddress[lineStart - 1] != UInt8(ascii: "\n") {
+                                lineStart -= 1
+                            }
+                            let remaining = data.count - matchStart
+                            let newlinePointer = memchr(rawFoundPointer, Int32(UInt8(ascii: "\n")), remaining)
+                            let lineEnd = newlinePointer.map {
+                                baseAddress.distance(to: $0.assumingMemoryBound(to: UInt8.self))
+                            } ?? data.count
+                            switch asciiWordBoundaryState(
+                                bytes: byteBuffer,
+                                lineStart: lineStart,
+                                lineEnd: lineEnd,
+                                matchStart: matchStart,
+                                matchEnd: matchStart + literal.count
+                            ) {
+                            case .bounded:
+                                matchedLineCount = 1
+                                bytesSearched = matchStart + literal.count
+                                return
+                            case .notBounded:
+                                searchOffset = max(matchStart + 1, searchOffset + 1)
+                                continue
+                            case .needsDecodedFallback:
+                                needsDecodedFallback = true
+                                return
+                            }
+                        }
+                        matchedLineCount = 1
+                        bytesSearched = matchStart + literal.count
+                        return
+                    }
+                    return
+                }
+
+                if let byteSet = singleByteLiteralSet(literals) {
+                    var table = [UInt8](repeating: 0, count: 256)
+                    byteSet.withUnsafeBufferPointer { needles in
+                        rg_byte_set_init(&table, needles.baseAddress, needles.count)
+                    }
+                    if let foundPointer = rg_memchr_any_table(baseAddress, data.count, table) {
+                        matchedLineCount = 1
+                        bytesSearched = baseAddress.distance(to: foundPointer) + 1
+                    }
+                }
+                return
+            }
+
             func advanceLineNumber(to targetOffset: Int) {
                 guard wantsLineNumber, lineCountOffset < targetOffset else {
                     return
@@ -785,7 +876,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
               options.replacement == nil,
               !options.json,
               !options.stats,
-              !options.quiet,
               options.maxColumns == nil,
               !options.maxColumnsPreview,
               options.sortMode == nil,

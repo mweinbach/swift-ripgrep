@@ -89,6 +89,28 @@ struct MiscTests {
         }
         #expect(lineNumberResults?.summary.matchedLines == 2)
         #expect(lineNumberOutput == Data("2:bravo\n4:delta\n".utf8))
+
+        var quietOptions = options
+        quietOptions.quiet = true
+        var quietOutput = Data()
+        let quietResults = try RipgrepSearcher().writeDarwinSimpleByteLiteralLines(options: quietOptions) { buffer in
+            let bytes = buffer.bindMemory(to: UInt8.self)
+            guard let baseAddress = bytes.baseAddress else {
+                return
+            }
+            quietOutput.append(baseAddress, count: bytes.count)
+        }
+        #expect(quietResults?.summary.filesWithMatches == 1)
+        #expect(quietResults?.summary.matchedLines == 1)
+        #expect(quietOutput.isEmpty)
+
+        var quietNoMatchOptions = quietOptions
+        quietNoMatchOptions.pattern = "missing"
+        let quietNoMatchResults = try RipgrepSearcher().writeDarwinSimpleByteLiteralLines(options: quietNoMatchOptions) { _ in
+            Issue.record("quiet no-match search should not write output")
+        }
+        #expect(quietNoMatchResults?.summary.filesWithMatches == 0)
+        #expect(quietNoMatchResults?.summary.matchedLines == 0)
         #endif
     }
 
