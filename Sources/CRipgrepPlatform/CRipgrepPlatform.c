@@ -22,6 +22,59 @@ static inline int rg_ascii_is_alpha(uint8_t byte) {
     return (byte >= 'A' && byte <= 'Z') || (byte >= 'a' && byte <= 'z');
 }
 
+#if defined(__APPLE__) && defined(__aarch64__)
+static const uint8_t *rg_memmem_neon_candidates(
+    const uint8_t *haystack,
+    size_t haystack_len,
+    const uint8_t *needle,
+    size_t needle_len
+) {
+    const uint8_t first = needle[0];
+    const uint8_t tail = needle[needle_len - 1];
+    const uint8x16_t first_vector = vdupq_n_u8(first);
+    const uint8x16_t tail_vector = vdupq_n_u8(tail);
+    uint8_t matching_lanes[16];
+
+    size_t cursor = 0;
+    const size_t vector_limit = haystack_len >= needle_len + 15
+        ? haystack_len - needle_len - 15 + 1
+        : 0;
+    while (cursor < vector_limit) {
+        const uint8x16_t candidate_lanes = vandq_u8(
+            vceqq_u8(vld1q_u8(haystack + cursor), first_vector),
+            vceqq_u8(vld1q_u8(haystack + cursor + needle_len - 1), tail_vector)
+        );
+
+        if (vmaxvq_u8(candidate_lanes) != 0) {
+            vst1q_u8(matching_lanes, candidate_lanes);
+            for (int lane = 0; lane < 16; ++lane) {
+                if (matching_lanes[lane] == 0) {
+                    continue;
+                }
+                const uint8_t *candidate = haystack + cursor + (size_t)lane;
+                if (needle_len <= 2 || memcmp(candidate + 1, needle + 1, needle_len - 2) == 0) {
+                    return candidate;
+                }
+            }
+        }
+
+        cursor += 16;
+    }
+
+    const size_t max_start = haystack_len - needle_len + 1;
+    while (cursor < max_start) {
+        if (haystack[cursor] == first
+            && haystack[cursor + needle_len - 1] == tail
+            && (needle_len <= 2 || memcmp(haystack + cursor + 1, needle + 1, needle_len - 2) == 0)) {
+            return haystack + cursor;
+        }
+        cursor++;
+    }
+
+    return NULL;
+}
+#endif
+
 const uint8_t *rg_memmem_simple(
     const uint8_t *haystack,
     size_t haystack_len,
@@ -37,6 +90,9 @@ const uint8_t *rg_memmem_simple(
     if (needle_len == 1) {
         return memchr(haystack, needle[0], haystack_len);
     }
+#if defined(__APPLE__) && defined(__aarch64__)
+    return rg_memmem_neon_candidates(haystack, haystack_len, needle, needle_len);
+#endif
 
     const uint8_t first = needle[0];
     const uint8_t *cursor = haystack;
