@@ -402,7 +402,18 @@ public struct GlobMatcher: Equatable {
     }
 
     private func matchesSimpleGlob(_ glob: SimpleGlob, _ value: String) -> Bool {
+        if let matched = value.utf8.withContiguousStorageIfAvailable({ bytes in
+            matchesSimpleGlob(glob, bytes: bytes)
+        }) {
+            return matched
+        }
         let bytes = Array(value.utf8)
+        return bytes.withUnsafeBufferPointer { bytes in
+            matchesSimpleGlob(glob, bytes: bytes)
+        }
+    }
+
+    private func matchesSimpleGlob(_ glob: SimpleGlob, bytes: UnsafeBufferPointer<UInt8>) -> Bool {
         let tokens = glob.tokens
         var tokenIndex = 0
         var byteIndex = 0
