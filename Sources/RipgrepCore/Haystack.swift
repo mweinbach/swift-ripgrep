@@ -668,36 +668,40 @@ public struct FileWalker {
                    isDirectory: isDirectory,
                    ignoreStack: directoryIgnoreStack
                ) {
-                debugHiddenMatch(
-                    displayPath: debugDisplayPath(
-                        path: logicalDirectoryPath,
-                        childName: child.name,
-                        relativePath: childRelativePath,
-                        rootDisplayPath: rootDebugDisplayPath,
-                        rootArgumentIsAbsolute: rootArgumentIsAbsolute
-                    ),
-                    options: options,
-                    diagnostics: &diagnostics
-                )
+                if options.loggingMode != nil {
+                    debugHiddenMatch(
+                        displayPath: debugDisplayPath(
+                            path: logicalDirectoryPath,
+                            childName: child.name,
+                            relativePath: childRelativePath,
+                            rootDisplayPath: rootDebugDisplayPath,
+                            rootArgumentIsAbsolute: rootArgumentIsAbsolute
+                        ),
+                        options: options,
+                        diagnostics: &diagnostics
+                    )
+                }
                 continue
             }
             if !directoryIgnoreStack.allows(relativePath: childRelativePath, basename: child.name, isDirectory: isDirectory) {
-                let childPath = logicalDirectoryPathPrefix + child.name
-                debugIgnoreMatch(
-                    path: childPath,
-                    displayPath: debugDisplayPath(
-                        path: logicalDirectoryPath,
-                        childName: child.name,
+                if options.loggingMode != nil {
+                    let childPath = logicalDirectoryPathPrefix + child.name
+                    debugIgnoreMatch(
+                        path: childPath,
+                        displayPath: debugDisplayPath(
+                            path: logicalDirectoryPath,
+                            childName: child.name,
+                            relativePath: childRelativePath,
+                            rootDisplayPath: rootDebugDisplayPath,
+                            rootArgumentIsAbsolute: rootArgumentIsAbsolute
+                        ),
                         relativePath: childRelativePath,
-                        rootDisplayPath: rootDebugDisplayPath,
-                        rootArgumentIsAbsolute: rootArgumentIsAbsolute
-                    ),
-                    relativePath: childRelativePath,
-                    isDirectory: isDirectory,
-                    ignoreStack: directoryIgnoreStack,
-                    options: options,
-                    diagnostics: &diagnostics
-                )
+                        isDirectory: isDirectory,
+                        ignoreStack: directoryIgnoreStack,
+                        options: options,
+                        diagnostics: &diagnostics
+                    )
+                }
                 filtered = true
                 continue
             }
@@ -1529,33 +1533,37 @@ public struct FileWalker {
                    isDirectory: isDirectory,
                    ignoreStack: ignoreStack
                ) {
-                debugHiddenMatch(
-                    displayPath: debugDisplayPath(
-                        for: url,
-                        relativePath: relativePath,
-                        rootDisplayPath: rootDebugDisplayPath,
-                        rootArgumentIsAbsolute: rootArgumentIsAbsolute
-                    ),
-                    options: options,
-                    diagnostics: &diagnostics
-                )
+                if options.loggingMode != nil {
+                    debugHiddenMatch(
+                        displayPath: debugDisplayPath(
+                            for: url,
+                            relativePath: relativePath,
+                            rootDisplayPath: rootDebugDisplayPath,
+                            rootArgumentIsAbsolute: rootArgumentIsAbsolute
+                        ),
+                        options: options,
+                        diagnostics: &diagnostics
+                    )
+                }
                 return
             }
             if !isIncludedByOverride && !ignoreStack.allows(relativePath: relativePath, basename: fileName, isDirectory: isDirectory) {
-                debugIgnoreMatch(
-                    path: url.path,
-                    displayPath: debugDisplayPath(
-                        for: url,
+                if options.loggingMode != nil {
+                    debugIgnoreMatch(
+                        path: url.path,
+                        displayPath: debugDisplayPath(
+                            for: url,
+                            relativePath: relativePath,
+                            rootDisplayPath: rootDebugDisplayPath,
+                            rootArgumentIsAbsolute: rootArgumentIsAbsolute
+                        ),
                         relativePath: relativePath,
-                        rootDisplayPath: rootDebugDisplayPath,
-                        rootArgumentIsAbsolute: rootArgumentIsAbsolute
-                    ),
-                    relativePath: relativePath,
-                    isDirectory: isDirectory,
-                    ignoreStack: ignoreStack,
-                    options: options,
-                    diagnostics: &diagnostics
-                )
+                        isDirectory: isDirectory,
+                        ignoreStack: ignoreStack,
+                        options: options,
+                        diagnostics: &diagnostics
+                    )
+                }
                 filtered = true
                 return
             }

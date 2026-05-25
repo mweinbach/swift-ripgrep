@@ -3491,6 +3491,39 @@ struct FeatureTests {
             classReinclude.path("TODO"),
             classReinclude.path("fake_sigreturn_bad_magic.c"),
         ])
+
+        let indexedRules = try TemporaryDirectory()
+        try indexedRules.createDirectory(".git")
+        try indexedRules.createDirectory("cache-build")
+        try indexedRules.createDirectory("generated/a")
+        try indexedRules.createDirectory("generated/c")
+        try indexedRules.write(
+            """
+            *.tmp
+            *.bin
+            *.log
+            *.o
+            *.d
+            cache*/
+            build
+            dist
+            node_modules
+            !keep.bin
+            !generated/[ab]/keep.log
+            """,
+            to: ".gitignore"
+        )
+        try indexedRules.write("needle\n", to: "cache-build/skip.txt")
+        try indexedRules.write("needle\n", to: "drop.bin")
+        try indexedRules.write("needle\n", to: "generated/a/keep.log")
+        try indexedRules.write("needle\n", to: "generated/c/skip.log")
+        try indexedRules.write("needle\n", to: "keep.bin")
+        try indexedRules.write("needle\n", to: "main.swift")
+        #expect(try run(["--sort", "path", "--files", indexedRules.url.path]) == [
+            indexedRules.path("generated/a/keep.log"),
+            indexedRules.path("keep.bin"),
+            indexedRules.path("main.swift"),
+        ])
     }
 
     @Test("honors git info exclude and its toggle")

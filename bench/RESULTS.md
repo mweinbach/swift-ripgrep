@@ -244,6 +244,15 @@ The key improvements since the 2026-05-24 baseline are:
   preflight. A same-machine 30-run A/B against checkpoint `4f40289` measured
   default Swift release `--files` at 323.9 ms versus 327.2 ms and
   `--quiet --files` at 49.5 ms versus 53.9 ms on `/tmp/swift-rg-bench/linux`.
+- Darwin ignore matching now builds an in-process index for larger exact and
+  simple basename/path rules, while complex rules still run through the
+  last-match-wins reverse scan and can override indexed candidates. Normal
+  traversal also avoids constructing hidden/ignore debug display paths unless
+  debug or trace logging is enabled. A same-machine 15-run A/B against
+  checkpoint `f443789` measured default Swift release `--files` at 299.8 ms
+  versus 331.6 ms, and `--quiet --files` at 55.6 ms versus 66.4 ms on
+  `/tmp/swift-rg-bench/linux`, with byte-identical sorted file-list output
+  against Rust.
 - Quiet no-ignore file listing now has a narrower existence-only Darwin walker.
   The same Linux tree measured `--no-ignore --hidden --quiet --files` at
   31.0 ms for Swift versus 5.3 ms for Rust, down from the prior 53.4 ms Swift
@@ -286,6 +295,16 @@ benchmarks:
   measured Swift release `--files` at 338.5 ms versus the preceding 323.0 ms
   smoke on `/tmp/swift-rg-bench/linux`, with Rust at 159.8 ms and the existing
   Swift no-ignore direct writer at 167.8 ms.
+- Replacing the Swift no-ignore byte walker with a whole-output C walker
+  preserved byte-identical sorted output but was slower on the Linux tree. A
+  2026-05-25 10-run check measured Swift release `--no-ignore --files` at
+  177.8 ms and `--no-ignore --hidden --files` at 184.1 ms, versus the current
+  Swift byte walker's ledgered 167.2 ms / 162.2 ms.
+- Combining `dirent` name byte copying and ASCII/hidden flag detection into a
+  manual Swift loop also regressed the no-ignore walker. A 2026-05-25 10-run
+  check measured `--no-ignore --files` at 184.6 ms and
+  `--no-ignore --hidden --files` at 181.2 ms, so the existing
+  `Array(buffer)` plus `allSatisfy` path remains faster.
 
 ## Historical baseline — 2026-05-24
 

@@ -32,6 +32,37 @@ public struct GlobMatcher: Equatable {
         let tokens: [Token]
     }
 
+    #if canImport(Darwin)
+    private struct IndexedRule: Equatable {
+        let ruleIndex: Int
+        let decision: Decision
+        let directoryOnly: Bool
+    }
+
+    private struct IndexedTextRule: Equatable {
+        let rule: IndexedRule
+        let text: String
+    }
+
+    private struct IndexedPrefixSuffixRule: Equatable {
+        let rule: IndexedRule
+        let prefix: String
+        let suffix: String
+    }
+
+    private struct FastRuleIndex: Equatable {
+        let indexedRuleCount: Int
+        let exactPathRules: [String: [IndexedRule]]
+        let exactBasenameRules: [String: [IndexedRule]]
+        let suffixBasenameRulesByLastByte: [UInt8: [IndexedTextRule]]
+        let prefixBasenameRulesByFirstByte: [UInt8: [IndexedTextRule]]
+        let prefixSuffixBasenameRulesByFirstByte: [UInt8: [IndexedPrefixSuffixRule]]
+        let containsBasenameRules: [IndexedTextRule]
+        let anyBasenameRules: [IndexedRule]
+        let unindexedRuleIndicesDescending: [Int]
+    }
+    #endif
+
     public struct Rule: Equatable {
         let originalPattern: String
         let pattern: String
@@ -112,6 +143,9 @@ public struct GlobMatcher: Equatable {
     private let stripBasePath: String?
     private let pathPrefix: String
     private let overrideSemantics: Bool
+    #if canImport(Darwin)
+    private let fastRuleIndex: FastRuleIndex?
+    #endif
 
     public init(
         patterns: [String],
@@ -172,6 +206,17 @@ public struct GlobMatcher: Equatable {
         self.slashPatternsMatchAnywhere = slashPatternsMatchAnywhere ?? !overrideSemantics
         self.stripBasePath = stripBasePath?.isEmpty == true ? nil : stripBasePath
         self.pathPrefix = pathPrefix
+        #if canImport(Darwin)
+        if rules.count >= 8 {
+            let fastRuleIndex = Self.makeFastRuleIndex(for: rules)
+            self.fastRuleIndex = fastRuleIndex.indexedRuleCount >= 8
+                && fastRuleIndex.indexedRuleCount >= fastRuleIndex.unindexedRuleIndicesDescending.count
+                ? fastRuleIndex
+                : nil
+        } else {
+            self.fastRuleIndex = nil
+        }
+        #endif
     }
 
     public var isEmpty: Bool {
@@ -202,9 +247,21 @@ public struct GlobMatcher: Equatable {
         }
         #if canImport(Darwin)
         let pathBasename = hasBasenameOnlyRules ? (pathBasename ?? basename(scopedPath)) : nil
+        if let fastRuleIndex {
+            return fastDecision(
+                relativePath: scopedPath,
+                basename: pathBasename,
+                isDirectory: isDirectory,
+                fastRuleIndex: fastRuleIndex
+            )
+        }
         #else
         let pathBasename = pathBasename ?? basename(scopedPath)
         #endif
+        return reverseDecision(relativePath: scopedPath, basename: pathBasename, isDirectory: isDirectory)
+    }
+
+    private func reverseDecision(relativePath: String, basename pathBasename: String?, isDirectory: Bool) -> Decision? {
         var matchedDecision: Decision?
         rules.withUnsafeBufferPointer { buffer in
             guard let baseAddress = buffer.baseAddress else {
@@ -214,7 +271,7 @@ public struct GlobMatcher: Equatable {
             while offset > 0 {
                 offset -= 1
                 let rule = baseAddress.advanced(by: offset)
-                if matches(rule, relativePath: scopedPath, basename: pathBasename, isDirectory: isDirectory) {
+                if matches(rule, relativePath: relativePath, basename: pathBasename, isDirectory: isDirectory) {
                     matchedDecision = rule.pointee.decision
                     return
                 }
@@ -222,6 +279,233 @@ public struct GlobMatcher: Equatable {
         }
         return matchedDecision
     }
+
+    #if canImport(Darwin)
+    private static func makeFastRuleIndex(for rules: [Rule]) -> FastRuleIndex {
+        var exactPathRules: [String: [IndexedRule]] = [:]
+        var exactBasenameRules: [String: [IndexedRule]] = [:]
+        var suffixBasenameRulesByLastByte: [UInt8: [IndexedTextRule]] = [:]
+        var prefixBasenameRulesByFirstByte: [UInt8: [IndexedTextRule]] = [:]
+        var prefixSuffixBasenameRulesByFirstByte: [UInt8: [IndexedPrefixSuffixRule]] = [:]
+        var containsBasenameRules: [IndexedTextRule] = []
+        var anyBasenameRules: [IndexedRule] = []
+        var unindexedRuleIndices: [Int] = []
+        var indexedRuleCount = 0
+
+        for (ruleIndex, rule) in rules.enumerated() {
+            let indexedRule = IndexedRule(
+                ruleIndex: ruleIndex,
+                decision: rule.decision,
+                directoryOnly: rule.directoryOnly
+            )
+            guard let fastMatcher = rule.fastMatcher else {
+                unindexedRuleIndices.append(ruleIndex)
+                continue
+            }
+            if rule.anchored {
+                if case .exact = fastMatcher {
+                    exactPathRules[rule.pattern, default: []].append(indexedRule)
+                    indexedRuleCount += 1
+                } else {
+                    unindexedRuleIndices.append(ruleIndex)
+                }
+                continue
+            }
+            guard rule.basenameOnly else {
+                unindexedRuleIndices.append(ruleIndex)
+                continue
+            }
+
+            switch fastMatcher {
+            case .any:
+                anyBasenameRules.append(indexedRule)
+                indexedRuleCount += 1
+            case .exact(let expected):
+                exactBasenameRules[expected, default: []].append(indexedRule)
+                indexedRuleCount += 1
+            case .suffix(let suffix):
+                guard let lastByte = suffix.utf8.last else {
+                    anyBasenameRules.append(indexedRule)
+                    indexedRuleCount += 1
+                    continue
+                }
+                suffixBasenameRulesByLastByte[lastByte, default: []].append(IndexedTextRule(
+                    rule: indexedRule,
+                    text: suffix
+                ))
+                indexedRuleCount += 1
+            case .prefix(let prefix):
+                guard let firstByte = prefix.utf8.first else {
+                    anyBasenameRules.append(indexedRule)
+                    indexedRuleCount += 1
+                    continue
+                }
+                prefixBasenameRulesByFirstByte[firstByte, default: []].append(IndexedTextRule(
+                    rule: indexedRule,
+                    text: prefix
+                ))
+                indexedRuleCount += 1
+            case .prefixSuffix(let prefix, let suffix):
+                guard let firstByte = prefix.utf8.first else {
+                    unindexedRuleIndices.append(ruleIndex)
+                    continue
+                }
+                prefixSuffixBasenameRulesByFirstByte[firstByte, default: []].append(IndexedPrefixSuffixRule(
+                    rule: indexedRule,
+                    prefix: prefix,
+                    suffix: suffix
+                ))
+                indexedRuleCount += 1
+            case .contains(let needle):
+                containsBasenameRules.append(IndexedTextRule(rule: indexedRule, text: needle))
+                indexedRuleCount += 1
+            case .simpleGlob:
+                unindexedRuleIndices.append(ruleIndex)
+            }
+        }
+
+        return FastRuleIndex(
+            indexedRuleCount: indexedRuleCount,
+            exactPathRules: exactPathRules,
+            exactBasenameRules: exactBasenameRules,
+            suffixBasenameRulesByLastByte: suffixBasenameRulesByLastByte,
+            prefixBasenameRulesByFirstByte: prefixBasenameRulesByFirstByte,
+            prefixSuffixBasenameRulesByFirstByte: prefixSuffixBasenameRulesByFirstByte,
+            containsBasenameRules: containsBasenameRules,
+            anyBasenameRules: anyBasenameRules,
+            unindexedRuleIndicesDescending: Array(unindexedRuleIndices.reversed())
+        )
+    }
+
+    private func fastDecision(
+        relativePath: String,
+        basename pathBasename: String?,
+        isDirectory: Bool,
+        fastRuleIndex: FastRuleIndex
+    ) -> Decision? {
+        var bestRuleIndex = -1
+        var bestDecision: Decision?
+        considerIndexedRules(
+            fastRuleIndex.exactPathRules[relativePath],
+            isDirectory: isDirectory,
+            bestRuleIndex: &bestRuleIndex,
+            bestDecision: &bestDecision
+        )
+
+        if let pathBasename {
+            considerIndexedRules(
+                fastRuleIndex.exactBasenameRules[pathBasename],
+                isDirectory: isDirectory,
+                bestRuleIndex: &bestRuleIndex,
+                bestDecision: &bestDecision
+            )
+
+            if let lastByte = pathBasename.utf8.last,
+               let suffixRules = fastRuleIndex.suffixBasenameRulesByLastByte[lastByte] {
+                for candidate in suffixRules where pathBasename.hasSuffix(candidate.text) {
+                    considerIndexedRule(
+                        candidate.rule,
+                        isDirectory: isDirectory,
+                        bestRuleIndex: &bestRuleIndex,
+                        bestDecision: &bestDecision
+                    )
+                }
+            }
+
+            if let firstByte = pathBasename.utf8.first {
+                if let prefixRules = fastRuleIndex.prefixBasenameRulesByFirstByte[firstByte] {
+                    for candidate in prefixRules where pathBasename.hasPrefix(candidate.text) {
+                        considerIndexedRule(
+                            candidate.rule,
+                            isDirectory: isDirectory,
+                            bestRuleIndex: &bestRuleIndex,
+                            bestDecision: &bestDecision
+                        )
+                    }
+                }
+                if let prefixSuffixRules = fastRuleIndex.prefixSuffixBasenameRulesByFirstByte[firstByte] {
+                    for candidate in prefixSuffixRules
+                    where pathBasename.hasPrefix(candidate.prefix) && pathBasename.hasSuffix(candidate.suffix) {
+                        considerIndexedRule(
+                            candidate.rule,
+                            isDirectory: isDirectory,
+                            bestRuleIndex: &bestRuleIndex,
+                            bestDecision: &bestDecision
+                        )
+                    }
+                }
+            }
+
+            for candidate in fastRuleIndex.containsBasenameRules where containsFast(candidate.text, in: pathBasename) {
+                considerIndexedRule(
+                    candidate.rule,
+                    isDirectory: isDirectory,
+                    bestRuleIndex: &bestRuleIndex,
+                    bestDecision: &bestDecision
+                )
+            }
+            considerIndexedRules(
+                fastRuleIndex.anyBasenameRules,
+                isDirectory: isDirectory,
+                bestRuleIndex: &bestRuleIndex,
+                bestDecision: &bestDecision
+            )
+        }
+
+        var resolvedDecision = bestDecision
+        rules.withUnsafeBufferPointer { buffer in
+            guard let baseAddress = buffer.baseAddress else {
+                return
+            }
+            for ruleIndex in fastRuleIndex.unindexedRuleIndicesDescending {
+                if ruleIndex <= bestRuleIndex {
+                    break
+                }
+                let rule = baseAddress.advanced(by: ruleIndex)
+                if matches(rule, relativePath: relativePath, basename: pathBasename, isDirectory: isDirectory) {
+                    resolvedDecision = rule.pointee.decision
+                    return
+                }
+            }
+        }
+        return resolvedDecision
+    }
+
+    private func considerIndexedRules(
+        _ candidates: [IndexedRule]?,
+        isDirectory: Bool,
+        bestRuleIndex: inout Int,
+        bestDecision: inout Decision?
+    ) {
+        guard let candidates else {
+            return
+        }
+        for candidate in candidates {
+            considerIndexedRule(
+                candidate,
+                isDirectory: isDirectory,
+                bestRuleIndex: &bestRuleIndex,
+                bestDecision: &bestDecision
+            )
+        }
+    }
+
+    private func considerIndexedRule(
+        _ candidate: IndexedRule,
+        isDirectory: Bool,
+        bestRuleIndex: inout Int,
+        bestDecision: inout Decision?
+    ) {
+        guard candidate.ruleIndex > bestRuleIndex else {
+            return
+        }
+        guard isDirectory || !candidate.directoryOnly else {
+            return
+        }
+        bestRuleIndex = candidate.ruleIndex
+        bestDecision = candidate.decision
+    }
+    #endif
 
     public func matchingRule(relativePath: String, isDirectory: Bool) -> Rule? {
         matchingRule(relativePath: relativePath, basename: nil, isDirectory: isDirectory)
