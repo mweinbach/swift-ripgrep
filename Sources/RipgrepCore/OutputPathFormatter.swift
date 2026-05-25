@@ -1,17 +1,41 @@
 import Foundation
 
 struct OutputPathFormatter {
+    private struct RootMapping {
+        let argument: String
+        let path: String
+        let prefix: String
+    }
+
     private let options: RipgrepOptions
     private let currentDirectory: String
+    private let currentDirectoryPrefix: String
+    private let rootMappings: [RootMapping]
+    private let currentDirectoryPreservingRoots: [RootMapping]
 
     init(
         options: RipgrepOptions,
         currentDirectory: String = FileManager.default.currentDirectoryPath
     ) {
         self.options = options
-        self.currentDirectory = URL(fileURLWithPath: currentDirectory)
+        let standardizedCurrentDirectory = URL(fileURLWithPath: currentDirectory)
             .standardizedFileURL
             .path
+        self.currentDirectory = standardizedCurrentDirectory
+        self.currentDirectoryPrefix = standardizedCurrentDirectory.hasSuffix("/")
+            ? standardizedCurrentDirectory
+            : "\(standardizedCurrentDirectory)/"
+        self.rootMappings = zip(options.rootPathArguments, options.roots).compactMap { rootArgument, root in
+            guard !rootArgument.isEmpty else {
+                return nil
+            }
+            let rootPath = root.standardizedFileURL.path
+            let rootPrefix = rootPath.hasSuffix("/") ? rootPath : "\(rootPath)/"
+            return RootMapping(argument: rootArgument, path: rootPath, prefix: rootPrefix)
+        }
+        self.currentDirectoryPreservingRoots = rootMappings.filter { mapping in
+            mapping.argument == "." || mapping.argument == "./" || mapping.argument.hasPrefix("./")
+        }
     }
 
     func displayPath(for url: URL, applyingPathSeparator: Bool = true) -> String {
@@ -24,10 +48,9 @@ struct OutputPathFormatter {
             return normalizedPath(rootedPath, applyingPathSeparator: applyingPathSeparator)
         }
 
-        let prefix = currentDirectory.hasSuffix("/") ? currentDirectory : "\(currentDirectory)/"
-        if path.hasPrefix(prefix) {
-            var relativePath = String(path.dropFirst(prefix.count))
-            if shouldPreserveCurrentDirectoryPrefix(for: url),
+        if path.hasPrefix(currentDirectoryPrefix) {
+            var relativePath = String(path.dropFirst(currentDirectoryPrefix.count))
+            if shouldPreserveCurrentDirectoryPrefix(for: path),
                !relativePath.hasPrefix("./") {
                 relativePath = "./\(relativePath)"
             }
@@ -45,28 +68,23 @@ struct OutputPathFormatter {
     }
 
     private func displayPathFromRootArgument(for path: String) -> String? {
-        for (rootArgument, root) in zip(options.rootPathArguments, options.roots) {
-            guard !rootArgument.isEmpty else {
+        for mapping in rootMappings {
+            guard let suffix = suffix(of: path, under: mapping) else {
                 continue
             }
-            let rootPath = root.standardizedFileURL.path
-            guard let suffix = suffix(of: path, under: rootPath) else {
-                continue
-            }
-            return append(suffix: suffix, toRootArgument: rootArgument)
+            return append(suffix: suffix, toRootArgument: mapping.argument)
         }
         return nil
     }
 
-    private func suffix(of path: String, under rootPath: String) -> String? {
-        if path == rootPath {
+    private func suffix(of path: String, under mapping: RootMapping) -> String? {
+        if path == mapping.path {
             return ""
         }
-        let rootPrefix = rootPath.hasSuffix("/") ? rootPath : "\(rootPath)/"
-        guard path.hasPrefix(rootPrefix) else {
+        guard path.hasPrefix(mapping.prefix) else {
             return nil
         }
-        return String(path.dropFirst(rootPrefix.count))
+        return String(path.dropFirst(mapping.prefix.count))
     }
 
     private func append(suffix: String, toRootArgument rootArgument: String) -> String {
@@ -77,15 +95,9 @@ struct OutputPathFormatter {
         return "\(root)/\(suffix)"
     }
 
-    private func shouldPreserveCurrentDirectoryPrefix(for url: URL) -> Bool {
-        let path = url.standardizedFileURL.path
-        for (rootArgument, root) in zip(options.rootPathArguments, options.roots) {
-            guard rootArgument == "." || rootArgument == "./" || rootArgument.hasPrefix("./") else {
-                continue
-            }
-            let rootPath = root.standardizedFileURL.path
-            let rootPrefix = rootPath.hasSuffix("/") ? rootPath : "\(rootPath)/"
-            if path == rootPath || path.hasPrefix(rootPrefix) {
+    private func shouldPreserveCurrentDirectoryPrefix(for path: String) -> Bool {
+        for root in currentDirectoryPreservingRoots {
+            if path == root.path || path.hasPrefix(root.prefix) {
                 return true
             }
         }
