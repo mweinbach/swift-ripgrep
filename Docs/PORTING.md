@@ -10,7 +10,7 @@ in-tree Swift compatibility engine; it does not link libpcre2.
 **Functional 1:1 with Rust ripgrep 15.1.0, including the streaming I/O
 architecture.** Verified via:
 
-- **115 Swift Testing cases** across 12 suites covering search, output formats,
+- **117 Swift Testing cases** across 12 suites covering search, output formats,
   ignore rules, file types, stdin, encodings, binary handling, parser
   diagnostics, mmap/worker pool, PCRE2, streaming haystack reads, and
   generated-asset drift.
@@ -29,6 +29,11 @@ architecture.** Verified via:
 - **Asset drift suite:** stored help/man/completion files are pinned to the
   current binary's `--generate`/`--help` output via 7 dedicated tests.
   `scripts/refresh-generated-assets.sh` regenerates them when needed.
+- **Dependency guard:** `scripts/check-no-external-deps.sh` builds the release
+  binary and verifies the manifest, package graph, source hooks, vendored
+  binary libraries, Darwin arm64 architecture, dynamic libraries and binary
+  symbols so the normal build stays free of external PCRE2/package-manager
+  dependencies.
 
 Every public CLI flag accepted by Rust ripgrep is parsed; every flag that
 controls runtime behaviour is wired to the corresponding subsystem.
@@ -278,7 +283,8 @@ Owner: pair-agent-A. Touches: `Package.swift`,
 
 - [x] Remove the libpcre2 dependency from the normal build. The current macOS
       arm64 package links no `CPCRE2` system module, vendored archive,
-      Homebrew install, `pkg-config` output or `pcre2-config` output.
+      Homebrew install, `pkg-config` output or `pcre2-config` output. Keep this
+      true with `scripts/check-no-external-deps.sh`.
 - [x] Replace the "PCRE2 is not available" error path in
       `PatternMatcher` with a Swift/Foundation-backed compatibility pattern.
       Implement `--engine=pcre2`, `-P`, `--engine=auto` (auto must try the

@@ -17,4 +17,5 @@ swift run ripgrep needle Sources Tests
 
 ```sh
 swift test
+./scripts/check-no-external-deps.sh
 ```

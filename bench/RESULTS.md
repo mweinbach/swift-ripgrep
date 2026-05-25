@@ -312,6 +312,11 @@ benchmarks:
   check measured `--no-ignore --files` at 184.6 ms and
   `--no-ignore --hidden --files` at 181.2 ms, so the existing
   `Array(buffer)` plus `allSatisfy` path remains faster.
+- Adding a first-byte prefilter before the small multi-literal line-output
+  scanner preserved byte-identical output but regressed the 1.5 GiB subtitles
+  `Sherlock|Watson` benchmark. A 2026-05-25 check measured Swift release at
+  426.8 ms versus 315.6 ms for the current first+tail window scanner, with
+  Rust at 300.5 ms.
 
 ## Historical baseline — 2026-05-24
 
