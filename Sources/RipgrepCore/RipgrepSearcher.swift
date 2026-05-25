@@ -836,7 +836,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
             return nil
         }
 
-        let bytes = [UInt8](data)
         var matches: [SearchMatch] = []
         var supplementalMatchedLines = 0
         var supplementalMatches = 0
@@ -845,113 +844,129 @@ public struct RipgrepSearcher: @unchecked Sendable {
         var bytesSearchedThroughMaxCount: Int?
         var failedDecode = false
         let maxCount = options.maxCount ?? Int.max
-
-        func scanLine(end lineEnd: Int, terminator: String) -> Bool {
-            let spans = byteLiteralSpans(
-                literals: literals,
-                bytes: bytes,
-                lineStart: lineStart,
-                lineEnd: lineEnd
-            )
-            guard !spans.isEmpty else {
-                return false
+        let dataCount = data.count
+        let result = data.withUnsafeBytes { rawBytes -> SearchFileResult? in
+            let bytes = rawBytes.bindMemory(to: UInt8.self)
+            guard let baseAddress = bytes.baseAddress else {
+                return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: data.count)
             }
 
-            switch options.printMode {
-            case .count:
-                supplementalMatchedLines += 1
-                return false
-            case .countMatches:
-                supplementalMatches += spans.count
-                return false
-            case .filesWithMatches:
-                matches.append(SearchMatch(
-                    fileURL: fileURL,
-                    lineNumber: lineNumber,
-                    column: nil,
-                    line: "",
-                    lineTerminator: "",
-                    absoluteOffset: lineStart,
-                    matchCount: spans.count,
-                    spans: []
-                ))
-                return true
-            case .filesWithoutMatch:
-                matches.append(SearchMatch(
-                    fileURL: fileURL,
-                    lineNumber: lineNumber,
-                    column: nil,
-                    line: "",
-                    lineTerminator: "",
-                    absoluteOffset: lineStart,
-                    matchCount: spans.count,
-                    spans: []
-                ))
-                return true
-            case .matchingLines:
-                guard matches.count < maxCount else {
-                    return true
+            func scanLine(end lineEnd: Int, terminator: String) -> Bool {
+                let spans = byteLiteralSpans(
+                    literals: literals,
+                    bytes: bytes,
+                    lineStart: lineStart,
+                    lineEnd: lineEnd
+                )
+                guard !spans.isEmpty else {
+                    return false
                 }
-                let lineBytes = bytes[lineStart..<lineEnd]
-                guard let line = String(data: Data(lineBytes), encoding: .utf8) else {
-                    failedDecode = true
+
+                switch options.printMode {
+                case .count:
+                    supplementalMatchedLines += 1
+                    return false
+                case .countMatches:
+                    supplementalMatches += spans.count
+                    return false
+                case .filesWithMatches:
+                    matches.append(SearchMatch(
+                        fileURL: fileURL,
+                        lineNumber: lineNumber,
+                        column: nil,
+                        line: "",
+                        lineTerminator: "",
+                        absoluteOffset: lineStart,
+                        matchCount: spans.count,
+                        spans: []
+                    ))
                     return true
-                }
-                matches.append(SearchMatch(
-                    fileURL: fileURL,
-                    lineNumber: lineNumber,
-                    column: nil,
-                    line: line,
-                    lineTerminator: terminator,
-                    absoluteOffset: lineStart,
-                    matchCount: spans.count,
-                    spans: spans.map { span in
-                        let textBytes = bytes[(lineStart + span.startByte)..<(lineStart + span.endByte)]
-                        return MatchSpan(
-                            startColumn: span.startByte + 1,
-                            endColumn: span.endByte + 1,
-                            startByte: span.startByte,
-                            endByte: span.endByte,
-                            text: String(decoding: textBytes, as: UTF8.self)
-                        )
+                case .filesWithoutMatch:
+                    matches.append(SearchMatch(
+                        fileURL: fileURL,
+                        lineNumber: lineNumber,
+                        column: nil,
+                        line: "",
+                        lineTerminator: "",
+                        absoluteOffset: lineStart,
+                        matchCount: spans.count,
+                        spans: []
+                    ))
+                    return true
+                case .matchingLines:
+                    guard matches.count < maxCount else {
+                        return true
                     }
-                ))
-                if matches.count == maxCount {
-                    bytesSearchedThroughMaxCount = lineEnd + terminator.utf8.count
-                    return true
+                    let lineData = Data(
+                        bytes: baseAddress.advanced(by: lineStart),
+                        count: lineEnd - lineStart
+                    )
+                    guard let line = String(data: lineData, encoding: .utf8) else {
+                        failedDecode = true
+                        return true
+                    }
+                    matches.append(SearchMatch(
+                        fileURL: fileURL,
+                        lineNumber: lineNumber,
+                        column: nil,
+                        line: line,
+                        lineTerminator: terminator,
+                        absoluteOffset: lineStart,
+                        matchCount: spans.count,
+                        spans: spans.map { span in
+                            let start = lineStart + span.startByte
+                            let count = span.endByte - span.startByte
+                            let textBytes = UnsafeBufferPointer(
+                                start: baseAddress.advanced(by: start),
+                                count: count
+                            )
+                            return MatchSpan(
+                                startColumn: span.startByte + 1,
+                                endColumn: span.endByte + 1,
+                                startByte: span.startByte,
+                                endByte: span.endByte,
+                                text: String(decoding: textBytes, as: UTF8.self)
+                            )
+                        }
+                    ))
+                    if matches.count == maxCount {
+                        bytesSearchedThroughMaxCount = lineEnd + terminator.utf8.count
+                        return true
+                    }
+                    return false
                 }
-                return false
             }
-        }
 
-        var index = 0
-        while index < bytes.count {
-            if bytes[index] == UInt8(ascii: "\n") {
-                if scanLine(end: index, terminator: "\n") {
-                    break
+            var index = 0
+            while index < dataCount {
+                if bytes[index] == UInt8(ascii: "\n") {
+                    if scanLine(end: index, terminator: "\n") {
+                        break
+                    }
+                    index += 1
+                    lineStart = index
+                    lineNumber += 1
+                    continue
                 }
                 index += 1
-                lineStart = index
-                lineNumber += 1
-                continue
             }
-            index += 1
-        }
-        if lineStart < bytes.count || bytes.last != UInt8(ascii: "\n") {
-            _ = scanLine(end: bytes.count, terminator: "")
-        }
-        if failedDecode {
-            return nil
-        }
+            if lineStart < dataCount || data.last != UInt8(ascii: "\n") {
+                _ = scanLine(end: dataCount, terminator: "")
+            }
+            if failedDecode {
+                return nil
+            }
 
-        return SearchFileResult(
-            fileURL: fileURL,
-            matches: matches,
-            bytesSearched: bytesSearchedThroughMaxCount ?? data.count,
-            searched: true,
-            supplementalMatchedLines: supplementalMatchedLines,
-            supplementalMatches: supplementalMatches
-        )
+            return SearchFileResult(
+                fileURL: fileURL,
+                matches: matches,
+                bytesSearched: bytesSearchedThroughMaxCount ?? data.count,
+                searched: true,
+                supplementalMatchedLines: supplementalMatchedLines,
+                supplementalMatches: supplementalMatches
+            )
+        }
+        return result
         #endif
     }
 
@@ -987,6 +1002,17 @@ public struct RipgrepSearcher: @unchecked Sendable {
     private func byteLiteralSpans(
         literals: [[UInt8]],
         bytes: [UInt8],
+        lineStart: Int,
+        lineEnd: Int
+    ) -> [MatchSpan] {
+        bytes.withUnsafeBufferPointer { buffer in
+            byteLiteralSpans(literals: literals, bytes: buffer, lineStart: lineStart, lineEnd: lineEnd)
+        }
+    }
+
+    private func byteLiteralSpans(
+        literals: [[UInt8]],
+        bytes: UnsafeBufferPointer<UInt8>,
         lineStart: Int,
         lineEnd: Int
     ) -> [MatchSpan] {
