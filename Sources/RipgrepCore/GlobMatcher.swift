@@ -10,6 +10,7 @@ public struct GlobMatcher: Equatable {
         case any
         case exact(String)
         case prefix(String)
+        case prefixSuffix(prefix: String, suffix: String)
         case suffix(String)
         case contains(String)
     }
@@ -169,8 +170,9 @@ public struct GlobMatcher: Equatable {
         guard let scopedPath = scopedPath(for: relativePath) else {
             return nil
         }
+        let pathBasename = basename(scopedPath)
         var matchedRule: Rule?
-        for rule in rules where matches(rule, relativePath: scopedPath, isDirectory: isDirectory) {
+        for rule in rules where matches(rule, relativePath: scopedPath, basename: pathBasename, isDirectory: isDirectory) {
             matchedRule = rule
         }
         return matchedRule
@@ -195,7 +197,7 @@ public struct GlobMatcher: Equatable {
         return path
     }
 
-    private func matches(_ rule: Rule, relativePath: String, isDirectory: Bool) -> Bool {
+    private func matches(_ rule: Rule, relativePath: String, basename pathBasename: String?, isDirectory: Bool) -> Bool {
         if rule.directoryOnly && !isDirectory {
             return false
         }
@@ -206,10 +208,10 @@ public struct GlobMatcher: Equatable {
             return matchesGlob(rule, relativePath)
         }
         if rule.basenameOnly {
-            guard let basename = basename(relativePath) else {
+            guard let pathBasename else {
                 return false
             }
-            return matchesGlob(rule, basename)
+            return matchesGlob(rule, pathBasename)
         }
         if slashPatternsMatchAnywhere && !rule.anchored {
             return matchesGlobAnywhere(rule, relativePath) || matchesGlob(rule, relativePath)
@@ -261,6 +263,8 @@ public struct GlobMatcher: Equatable {
             return value == expected
         case .prefix(let prefix):
             return value.hasPrefix(prefix)
+        case .prefixSuffix(let prefix, let suffix):
+            return value.hasPrefix(prefix) && value.hasSuffix(suffix)
         case .suffix(let suffix):
             return value.hasSuffix(suffix)
         case .contains(let needle):
@@ -299,6 +303,13 @@ public struct GlobMatcher: Equatable {
         if starCount == 1, pattern.hasSuffix("*") {
             let prefix = String(pattern.dropLast())
             return prefix.isEmpty ? .any : .prefix(prefix)
+        }
+        if starCount == 1, let star = pattern.firstIndex(of: "*") {
+            let prefix = String(pattern[..<star])
+            let suffix = String(pattern[pattern.index(after: star)...])
+            if !prefix.isEmpty, !suffix.isEmpty {
+                return .prefixSuffix(prefix: prefix, suffix: suffix)
+            }
         }
         if starCount == 2, pattern.hasPrefix("*"), pattern.hasSuffix("*") {
             let needle = pattern.dropFirst().dropLast()
