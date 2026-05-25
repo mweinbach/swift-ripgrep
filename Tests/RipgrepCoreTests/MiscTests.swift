@@ -62,6 +62,19 @@ struct MiscTests {
         #expect(ignoreCaseResults?.summary.matchedLines == 1)
         #expect(ignoreCaseOutput == Data("delta\n".utf8))
 
+        var mmapOptions = options
+        mmapOptions.mmapMode = .always
+        var mmapOutput = Data()
+        let mmapResults = try RipgrepSearcher().writeDarwinSimpleByteLiteralLines(options: mmapOptions) { buffer in
+            let bytes = buffer.bindMemory(to: UInt8.self)
+            guard let baseAddress = bytes.baseAddress else {
+                return
+            }
+            mmapOutput.append(baseAddress, count: bytes.count)
+        }
+        #expect(mmapResults?.summary.matchedLines == 1)
+        #expect(mmapOutput == Data("delta\n".utf8))
+
         var wordOptions = options
         wordOptions.pattern = "ha"
         wordOptions.wordRegexp = true

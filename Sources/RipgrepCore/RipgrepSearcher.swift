@@ -861,7 +861,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !options.patternFileStdin,
               options.encodingMode == .automatic,
               options.binaryMode == .automatic,
-              options.mmapMode != .always,
               !options.fixedStrings,
               options.engineMode == .default,
               options.dfaSizeLimit == nil,
