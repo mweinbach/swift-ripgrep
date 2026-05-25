@@ -23,6 +23,15 @@ benchmarks below use `/tmp/swift-rg-bench/subtitles/en.small.txt` (193 MiB).
 | byte alternation, 5 literals | `'A\|B\|C\|D\|E'` | 128.2 ms | 97.6 ms | **0.76x** |
 | required-literal regex with lines | `-n '\w+\s+Holmes\s+\w+'` | 33.7 ms | 32.3 ms | **0.96x** |
 
+Plain single-literal only-match field output now stays on the Darwin byte
+writer. On the 193 MiB subtitles corpus, `-b -o 'Sherlock Holmes'` produced
+byte-identical output to the sibling Rust oracle and measured Swift release at
+86.0 ms versus 1.089 s for Rust in 5-run checks. `--column -o 'Sherlock
+Holmes'` measured Swift at 64.6 ms versus 1.423 s for Rust, and
+`-n -b --column -o 'Sherlock Holmes'` measured Swift at 73.2 ms versus
+1.428 s for Rust. These literal field cases previously fell through the
+formatted Swift path at about 10.8 s on the same corpus.
+
 A 3-run PCRE compatibility check for `-P -o '(?<=Sherlock )Holmes'` on the
 same 193 MiB file produced byte-identical output to Rust and measured Swift at
 141.4 ms versus Rust PCRE2 at 214.9 ms (**0.66x**). The same query took about
@@ -100,6 +109,10 @@ The key improvements since the 2026-05-24 baseline are:
 - executable-level Darwin fast paths for plain literals, no-mmap literals,
   ASCII ignore-case literals, word literals, surrounding-word regexes, and
   byte alternations;
+- plain single-literal only-match byte-offset and byte-column formatting now
+  writes line/column/offset prefixes directly on the Darwin byte path, cutting
+  representative field output from about 10.8 s to 64.6-86.0 ms while
+  preserving Rust field ordering and byte-identical output;
 - NEON-backed literal, byte-counting, and byte-set scanning in
   `CRipgrepPlatform`;
 - suppressed optional ignore-file loads now check existence before attempting

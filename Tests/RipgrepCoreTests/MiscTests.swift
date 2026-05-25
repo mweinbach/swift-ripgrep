@@ -161,6 +161,22 @@ struct MiscTests {
         #expect(onlyMatchingLineNumberResults?.summary.totalMatches == 1)
         #expect(onlyMatchingLineNumberOutput == Data("4:delta\n".utf8))
 
+        var onlyMatchingFieldOptions = onlyMatchingOptions
+        onlyMatchingFieldOptions.byteOffset = true
+        onlyMatchingFieldOptions.column = true
+        var onlyMatchingFieldOutput = Data()
+        let onlyMatchingFieldResults = try RipgrepSearcher()
+            .writeDarwinSimpleByteLiteralLines(options: onlyMatchingFieldOptions) { buffer in
+                let bytes = buffer.bindMemory(to: UInt8.self)
+                guard let baseAddress = bytes.baseAddress else {
+                    return
+                }
+                onlyMatchingFieldOutput.append(baseAddress, count: bytes.count)
+            }
+        #expect(onlyMatchingFieldResults?.summary.matchedLines == 1)
+        #expect(onlyMatchingFieldResults?.summary.totalMatches == 1)
+        #expect(onlyMatchingFieldOutput == Data("4:1:20:delta\n".utf8))
+
         var quietCountOutput = Data()
         var quietCountOptions = countOptions
         quietCountOptions.quiet = true
