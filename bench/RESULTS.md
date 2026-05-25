@@ -40,7 +40,7 @@ this environment for the default literal search. A fresh confirmation run used
 
 | Bench | Flags | rg | swift-rg | swift / rg |
 |---|---|---:|---:|---:|
-| Linux tree files | `--files` | 83.0 ms | 321.4 ms | **3.87x** |
+| Linux tree files | `--files` | 83.0 ms | 306.0 ms | **3.69x** |
 | Linux tree files, no ignore | `--no-ignore --files` | 73.3 ms | 167.4 ms | **2.28x** |
 | Linux tree files, no ignore/hidden | `--no-ignore --hidden --files` | 71.6 ms | 168.4 ms | **2.35x** |
 | Linux tree files, quiet | `--quiet --files` | 6.5 ms | 44.3 ms | **6.82x** |
@@ -101,13 +101,14 @@ The key improvements since the 2026-05-24 baseline are:
   summaries/source paths unless debug logging needs them and scans ignore rules
   through a borrowed buffer while preserving last-match-wins semantics. The fast
   `--files` stdout path also appends string UTF-8 bytes directly into its block
-  buffer. A 2026-05-25 7-run recheck measured Swift release `--files` at
-  321.4 ms versus Rust release at 83.0 ms on `/tmp/swift-rg-bench/linux`, down
+  buffer. A 2026-05-25 recheck measured Swift release `--files` at
+  306.0 ms versus Rust release at 83.0 ms on `/tmp/swift-rg-bench/linux`, down
   from the prior 462.0 ms Swift smoke with byte-identical sorted output. The
   same recheck includes direct UTF-8 matching for the remaining exact
   path-component and ASCII contains ignore-glob fast paths, reuses directory
-  path prefixes in the Darwin walker, and avoids ignore-marker checks in the
-  no-ignore/hidden file-list branch.
+  path prefixes in the Darwin walker, decodes Darwin `dirent` names from their
+  known `d_namlen` byte spans instead of scanning for a nul terminator, and
+  avoids ignore-marker checks in the no-ignore/hidden file-list branch.
 - executable no-ignore file listing now has a direct Darwin byte-output walker
   for both visible-only and hidden-inclusive modes. It copies `dirent` names as
   UTF-8 bytes, filters hidden names byte-wise when needed, writes ASCII paths

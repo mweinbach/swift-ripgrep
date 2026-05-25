@@ -1085,15 +1085,12 @@ public struct FileWalker {
 
     private func fastDirectoryEntryNameAndASCII(_ entry: dirent) -> (name: String, isASCII: Bool) {
         return withUnsafePointer(to: entry.d_name) { pointer in
-            pointer.withMemoryRebound(to: CChar.self, capacity: Int(entry.d_namlen) + 1) { bytes in
-                let name = fastDirectoryEntryName(bytes)
-                return (name, name.utf8.allSatisfy { $0 < 0x80 })
+            let nameLength = Int(entry.d_namlen)
+            return pointer.withMemoryRebound(to: UInt8.self, capacity: nameLength + 1) { bytes in
+                let buffer = UnsafeBufferPointer(start: bytes, count: nameLength)
+                return (String(decoding: buffer, as: UTF8.self), buffer.allSatisfy { $0 < 0x80 })
             }
         }
-    }
-
-    private func fastDirectoryEntryName(_ bytes: UnsafePointer<CChar>) -> String {
-        String(cString: bytes)
     }
 
     private func fastDirectoryEntryKind(_ type: UInt8, path: String, name: String) throws -> FastDirectoryEntryKind {
