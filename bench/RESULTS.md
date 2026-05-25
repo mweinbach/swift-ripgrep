@@ -8,6 +8,46 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Status — 2026-05-25 fast-path checkpoint
+
+After the Darwin C fast-path work, the hot single-file ASCII cases are now
+near Rust ripgrep, and several are faster in this environment. Single-file
+benchmarks below use `/tmp/swift-rg-bench/subtitles/en.small.txt` (193 MiB).
+
+| Bench | Flags | rg | swift-rg | swift / rg |
+|---|---|---:|---:|---:|
+| literal | `'Sherlock Holmes'` | 25.8 ms | 26.4 ms | **1.03x** |
+| literal, no-mmap | `--no-mmap 'Sherlock Holmes'` | 26.2 ms | 24.8 ms | **0.95x** |
+| literal, case-insensitive | `-i 'Sherlock Holmes'` | 41.5 ms | 35.3 ms | **0.85x** |
+| word boundary | `-nw 'Sherlock Holmes'` | 31.2 ms | 32.0 ms | **1.03x** |
+| byte alternation, 5 literals | `'A\|B\|C\|D\|E'` | 128.2 ms | 97.6 ms | **0.76x** |
+| required-literal regex with lines | `-n '\w+\s+Holmes\s+\w+'` | 33.7 ms | 32.3 ms | **0.96x** |
+
+The recursive Linux-kernel literal search is also much closer:
+
+| Bench | Flags | rg | swift-rg | swift / rg |
+|---|---|---:|---:|---:|
+| Linux tree literal | `PM_RESUME` | 3.65 s | 5.03 s | **1.38x** |
+
+The Linux-tree comparison above has byte-identical sorted output. Natural
+output order still differs from Rust for this corpus because the Swift walker
+preserves its own deterministic traversal order under parallel search.
+
+The key improvements since the 2026-05-24 baseline are:
+
+- executable-level Darwin fast paths for plain literals, no-mmap literals,
+  ASCII ignore-case literals, word literals, surrounding-word regexes, and
+  byte alternations;
+- NEON-backed literal, byte-counting, and byte-set scanning in
+  `CRipgrepPlatform`;
+- suppressed optional ignore-file loads now check existence before attempting
+  UTF-8 reads, avoiding exception-heavy traversal misses;
+- Darwin default recursive search remains capped at four workers because this
+  checkout benchmarked faster than the ripgrep-style 12-worker cap on the
+  Linux tree, while `--threads N` still lets callers override it.
+
+## Historical baseline — 2026-05-24
+
 ## Single-file haystack (subtitles, 200 MiB ASCII text)
 
 Slice of OpenSubtitles English (`en.sample.txt`, first 7 M lines ≈ 200 MiB).
