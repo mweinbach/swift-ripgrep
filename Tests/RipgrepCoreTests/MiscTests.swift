@@ -48,6 +48,20 @@ struct MiscTests {
         #expect(results?.summary.matchedLines == 1)
         #expect(output == Data("delta\n".utf8))
 
+        var lineFieldOptions = options
+        lineFieldOptions.byteOffset = true
+        lineFieldOptions.column = true
+        var lineFieldOutput = Data()
+        let lineFieldResults = try RipgrepSearcher().writeDarwinSimpleByteLiteralLines(options: lineFieldOptions) { buffer in
+            let bytes = buffer.bindMemory(to: UInt8.self)
+            guard let baseAddress = bytes.baseAddress else {
+                return
+            }
+            lineFieldOutput.append(baseAddress, count: bytes.count)
+        }
+        #expect(lineFieldResults?.summary.matchedLines == 1)
+        #expect(lineFieldOutput == Data("4:1:20:delta\n".utf8))
+
         var ignoreCaseOptions = options
         ignoreCaseOptions.pattern = "DELTA"
         ignoreCaseOptions.ignoreCase = true
