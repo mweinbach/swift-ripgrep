@@ -96,7 +96,11 @@ public struct FileWalker {
             patternEntries: overrideEntries,
             overrideSemantics: true,
         )
+        #if canImport(Darwin)
+        var typeRegistry = FileTypeRegistry(loadDefaults: !options.typeChanges.isEmpty)
+        #else
         var typeRegistry = FileTypeRegistry()
+        #endif
         let typeErrors = typeRegistry.apply(options.typeChanges)
         if let error = typeErrors.first {
             throw RipgrepError.message(error)
@@ -252,7 +256,14 @@ public struct FileWalker {
         let values = try metadataURL.resourceValues(forKeys: metadataKeys)
         let isDirectory = values.isDirectory == true
         let relativePath = relativePath(for: url, rootBase: rootBase, rootBasePrefix: rootBasePrefix)
+        #if canImport(Darwin)
+        let needsOverridePath = !overrides.isEmpty || (options.preprocessor != nil && !options.preGlobPatterns.isEmpty)
+        let overridePath = needsOverridePath
+            ? overridePath(for: url, rootArgumentIsAbsolute: rootArgumentIsAbsolute, cwdPrefix: cwdPrefix)
+            : relativePath
+        #else
         let overridePath = overridePath(for: url, rootArgumentIsAbsolute: rootArgumentIsAbsolute, cwdPrefix: cwdPrefix)
+        #endif
 
         if !isExplicit {
             #if canImport(Darwin)
