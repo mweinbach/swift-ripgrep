@@ -77,6 +77,11 @@ public struct PatternMatcher {
                 if let parseError = Self.defaultRegexParseErrorIfRecognized(pattern) {
                     throw RipgrepError.message(parseError)
                 }
+                if let literals = Self.defaultLiteralPatterns(for: pattern, options: options) {
+                    return literals.map { literal in
+                        .literal(usesByteSemantics ? Self.bytePattern(literal) : literal)
+                    }
+                }
                 do {
                     return try Self.defaultCompiledPatterns(for: pattern, options: options)
                 } catch let error as RipgrepError {
@@ -316,6 +321,19 @@ public struct PatternMatcher {
 
     public func hasPositiveMatch(in line: String) -> Bool {
         !filteredCandidates(in: line).isEmpty
+    }
+
+    public func canFastReject(_ line: String) -> Bool {
+        let literals = patterns.compactMap { pattern -> String? in
+            guard case .literal(let literal) = pattern, !literal.isEmpty else {
+                return nil
+            }
+            return literal
+        }
+        guard literals.count == patterns.count else {
+            return false
+        }
+        return !literals.contains { literalContains($0, in: line) }
     }
 
     public func positiveSpans(in line: String) -> [MatchSpan] {
@@ -590,6 +608,33 @@ public struct PatternMatcher {
                 pattern: source,
                 options: regexOptions
             ))
+        }
+    }
+
+    private static func defaultLiteralPatterns(for pattern: String, options: RipgrepOptions) -> [String]? {
+        guard !pattern.isEmpty,
+              !options.multiline,
+              !options.nullData,
+              !options.crlf,
+              options.regexSizeLimit == nil,
+              options.dfaSizeLimit == nil else {
+            return nil
+        }
+        let alternatives = topLevelAlternatives(in: pattern)
+        guard alternatives.allSatisfy(isPlainRegexLiteral) else {
+            return nil
+        }
+        return alternatives.map {
+            options.effectiveIgnoreCase ? foldedCase($0, options: options) : $0
+        }
+    }
+
+    private static func isPlainRegexLiteral(_ pattern: String) -> Bool {
+        guard !pattern.isEmpty else {
+            return false
+        }
+        return !pattern.contains { character in
+            "\\.[]{}()+*?^$|".contains(character)
         }
     }
 
@@ -2824,6 +2869,16 @@ public struct PatternMatcher {
         }
 
         return ranges
+    }
+
+    private func literalContains(_ literal: String, in line: String) -> Bool {
+        guard !literal.isEmpty else {
+            return true
+        }
+        if options.effectiveIgnoreCase {
+            return line.range(of: literal, options: [.caseInsensitive]) != nil
+        }
+        return line.range(of: literal) != nil
     }
 
     private func caseInsensitiveLiteralRanges(_ literal: String, in line: String) -> [Range<String.Index>] {

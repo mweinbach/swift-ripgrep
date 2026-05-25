@@ -480,6 +480,14 @@ public struct RipgrepSearcher: @unchecked Sendable {
             var supplementalMatches = 0
             var fellBackToBufferedSearch = false
             let maxCount = options.maxCount ?? Int.max
+            let countOnly = options.printMode == .count
+                && !options.stats
+                && options.maxCount == nil
+                && !options.onlyMatching
+                && !options.wordRegexp
+                && !options.lineRegexp
+                && !options.column
+                && !options.byteOffset
 
             try HaystackReader.streamLines(haystack, options: options) { streamedLine, terminate in
                 lineNumber += 1
@@ -505,6 +513,14 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 guard let lineText = String(data: lineData, encoding: .utf8) else {
                     fellBackToBufferedSearch = true
                     terminate = true
+                    return
+                }
+
+                if countOnly {
+                    if !matcher.canFastReject(lineText),
+                       matcher.hasPositiveMatch(in: lineText) {
+                        supplementalMatchedLines += 1
+                    }
                     return
                 }
 
@@ -1764,6 +1780,21 @@ public struct RipgrepSearcher: @unchecked Sendable {
             let lineByteCount = matchingRawLines?[safe: offset].map {
                 $0.text.unicodeScalars.count + $0.terminator.unicodeScalars.count
             } ?? byteCount(splitLine.text, options: options) + byteCount(splitLine.terminator, options: options)
+            if !options.invertMatch, matcher.canFastReject(lineForMatching) {
+                searchLines.append(SearchLine(
+                    lineNumber: lineNumber,
+                    line: line,
+                    rawLine: rawLine,
+                    lineTerminator: splitLine.terminator,
+                    absoluteOffset: absoluteOffset,
+                    positiveSpans: []
+                ))
+                absoluteOffset += lineByteCount
+                if options.stopOnNonmatch && !options.invertMatch && hasMatched {
+                    break
+                }
+                continue
+            }
             let positiveSpans = syntheticBinarySplitSpans(
                 syntheticInlineCRLFBoundarySpans(
                     crlfTrimmedSpans(

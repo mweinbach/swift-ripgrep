@@ -132,7 +132,7 @@ public struct SearchFileResult: Equatable, Sendable {
     }
 
     public var hasMatch: Bool {
-        hasBinaryMatch || !matches.isEmpty
+        hasBinaryMatch || !matches.isEmpty || supplementalMatchedLines > 0 || supplementalMatches > 0
     }
 }
 
