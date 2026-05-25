@@ -363,6 +363,11 @@ public struct GlobMatcher: Equatable {
         if starCount == 0 {
             return .exact(pattern)
         }
+        #if canImport(Darwin)
+        if !basenameOnly, let simpleGlob = compileSimpleGlob(pattern, basenameOnly: basenameOnly) {
+            return .simpleGlob(simpleGlob)
+        }
+        #endif
         guard basenameOnly else {
             return nil
         }
