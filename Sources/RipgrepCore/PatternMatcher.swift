@@ -322,6 +322,10 @@ public struct PatternMatcher {
         matchSpans(from: filteredCandidates(in: line), in: line)
     }
 
+    public func syntheticEmptyReplacement(atEndOf line: String) -> String? {
+        replacement(for: line.endIndex..<line.endIndex, in: line)
+    }
+
     public func spans(in line: String) -> [MatchSpan] {
         let filtered = filteredCandidates(in: line)
 

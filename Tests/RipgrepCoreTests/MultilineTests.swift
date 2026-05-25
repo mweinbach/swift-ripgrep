@@ -846,6 +846,7 @@ struct MultilineTests {
         try root.write("foo\r\nbar\r\nbaz\r\n", to: "crlf-line-regexp.txt")
         try root.write("foo\nbar\nbaz\n", to: "lf-line-regexp.txt")
         try root.write("\n", to: "lf-empty.txt")
+        try root.write("emoji end\r\n\n", to: "inline-crlf-boundary.txt")
         try root.write("first\nlast", to: "lf-no-final-newline.txt")
         try root.write("foo\r\nbar", to: "crlf-no-final-newline.txt")
 
@@ -966,6 +967,33 @@ struct MultilineTests {
             "4:",
             "5:bar",
         ])
+        let inlineCRLFWordBoundaryOutput = try runExecutableData([
+            "-w",
+            #"(?R:$)"#,
+            root.path("inline-crlf-boundary.txt"),
+        ], fixture: {})
+        #expect(inlineCRLFWordBoundaryOutput == Data("\n".utf8))
+        let inlineCRLFLineRegexpOutput = try runExecutableData([
+            "-x",
+            #"(?R:$)"#,
+            root.path("inline-crlf-boundary.txt"),
+        ], fixture: {})
+        #expect(inlineCRLFLineRegexpOutput == Data("\n".utf8))
+        let inlineCRLFReplacementOutput = try runExecutableData([
+            "--replace",
+            "X",
+            #"(?R:$)"#,
+            root.path("inline-crlf-boundary.txt"),
+        ], fixture: {})
+        #expect(inlineCRLFReplacementOutput == Data("emoji endX\rX\nX\n".utf8))
+        let inlineCRLFOnlyMatchingReplacementOutput = try runExecutableData([
+            "-o",
+            "--replace",
+            "X",
+            #"(?R:$)"#,
+            root.path("inline-crlf-boundary.txt"),
+        ], fixture: {})
+        #expect(inlineCRLFOnlyMatchingReplacementOutput == Data("X\nX\nX\n".utf8))
         #expect(try runAllowingNoMatch(["-n", #"(?-R:foo$)"#, root.path("crlf.txt")]) == [])
         #expect(try runAllowingNoMatch(["-n", #"(?R-m:foo$)"#, root.path("crlf.txt")]) == [])
         #expect(try run(["--crlf", "-x", "foo", root.path("crlf.txt")]) == [

@@ -1783,6 +1783,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     ),
                     line: line,
                     terminator: splitLine.terminator,
+                    matcher: matcher,
                     options: options
                 ),
                 line: matchingRawLine ?? lineForMatching,
@@ -1821,6 +1822,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 ),
                 line: line,
                 terminator: splitLine.terminator,
+                matcher: matcher,
                 options: options
             )
             let nullDataRecordAdjusted = nullDataRecordAnchorSpans(
@@ -2179,9 +2181,12 @@ public struct RipgrepSearcher: @unchecked Sendable {
         _ spans: [MatchSpan],
         line: String,
         terminator: String,
+        matcher: PatternMatcher,
         options: RipgrepOptions
     ) -> [MatchSpan] {
         guard !options.multiline,
+              !options.wordRegexp,
+              !options.lineRegexp,
               line.hasSuffix("\r"),
               terminator == "\n",
               options.effectivePatterns.contains(where: isBareInlineCRLFLineAnchorPattern) else {
@@ -2197,7 +2202,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 endColumn: lineEnd + 1,
                 startByte: lineEnd,
                 endByte: lineEnd,
-                text: ""
+                text: "",
+                replacement: matcher.syntheticEmptyReplacement(atEndOf: line)
             ),
         ]
     }
