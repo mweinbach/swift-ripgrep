@@ -1958,7 +1958,8 @@ public struct FileWalker {
             reportLoadErrors: reportLoadErrors,
             displayPath: displayPath,
             caseInsensitive: caseInsensitive ?? options.ignoreFileCaseInsensitive,
-            ignoreExplicitRootMatch: ignoreExplicitRootMatch
+            ignoreExplicitRootMatch: ignoreExplicitRootMatch,
+            collectDiagnostics: emitDiagnostics && options.loggingMode != .none
         )
         ignoreStack.append(loaded.matcher)
         if emitDiagnostics, options.loggingMode != .none {
@@ -1978,7 +1979,8 @@ public struct FileWalker {
         reportLoadErrors: Bool = false,
         displayPath: String? = nil,
         caseInsensitive: Bool = false,
-        ignoreExplicitRootMatch: Bool = false
+        ignoreExplicitRootMatch: Bool = false,
+        collectDiagnostics: Bool = false
     ) -> LoadedIgnoreMatcher {
         if !reportLoadErrors {
             var isDirectory: ObjCBool = false
@@ -2007,18 +2009,20 @@ public struct FileWalker {
                 caseInsensitive: caseInsensitive
             )
             : parsed.patterns
-        let diagnostics = ignoreLoadDiagnostics(
-            fileURL: fileURL,
-            displayPath: displayPath,
-            patterns: patterns
-        )
+        let diagnostics = collectDiagnostics
+            ? ignoreLoadDiagnostics(
+                fileURL: fileURL,
+                displayPath: displayPath,
+                patterns: patterns
+            )
+            : []
         return LoadedIgnoreMatcher(matcher: GlobMatcher(
             patterns: patterns,
             caseInsensitive: caseInsensitive,
             stripBasePath: scope.stripBasePath,
             pathPrefix: scope.pathPrefix,
             slashPatternsMatchAnywhere: matchSlashPatternsAnywhere,
-            sourcePath: ignoreDiagnosticPath(fileURL, displayPath: displayPath)
+            sourcePath: collectDiagnostics ? ignoreDiagnosticPath(fileURL, displayPath: displayPath) : nil
         ), messages: parsed.messages, diagnostics: diagnostics)
     }
 

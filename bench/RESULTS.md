@@ -25,24 +25,25 @@ benchmarks below use `/tmp/swift-rg-bench/subtitles/en.small.txt` (193 MiB).
 
 The recursive Linux-kernel traversal/search path now matches or beats Rust in
 this environment for the default literal search. A fresh confirmation run used
-2 warm-ups and 6 timed iterations for the default Swift worker count and Rust
+2 warm-ups and 5 timed iterations for the default Swift worker count and Rust
 `rg`:
 
 | Bench | Flags | rg | swift-rg | swift / rg |
 |---|---|---:|---:|---:|
-| Linux tree files | `--files` | 88.9 ms | 472.0 ms | **5.31x** |
-| Linux tree files, no ignore/hidden | `--no-ignore --hidden --files` | 83.5 ms | 205.2 ms | **2.46x** |
-| Linux tree files, quiet | `--quiet --files` | 6.23 ms | 55.9 ms | **8.97x** |
+| Linux tree files | `--files` | 83.7 ms | 344.9 ms | **4.12x** |
+| Linux tree files, no ignore/hidden | `--no-ignore --hidden --files` | 70.3 ms | 178.0 ms | **2.53x** |
+| Linux tree files, quiet | `--quiet --files` | 6.5 ms | 44.7 ms | **6.88x** |
 | Linux tree literal | `PM_RESUME` | 3.92 s | 2.37 s | **0.61x** |
 
 The Linux-tree comparisons above have byte-identical sorted output, including
 the 79,353-path `--files` set, and the Swift `--files` natural output remains
 byte-identical to the previous Swift checkpoint. Natural output order still
 differs from Rust for this corpus because the Swift walker preserves its own
-deterministic traversal order under parallel search. The latest traversal slice
-reduced the Swift `--files` median from 1.43 s to 472.0 ms, the `--no-ignore
---hidden --files` median to 205.2 ms, and the Swift `PM_RESUME` median from
-2.53 s to 2.37 s versus the previous 0ae4c30 checkpoint on the same corpus.
+deterministic traversal order under parallel search. The latest traversal
+slices reduced the Swift `--files` mean from 1.43 s to 344.9 ms, the
+`--no-ignore --hidden --files` mean to 178.0 ms, and the Swift `PM_RESUME`
+median from 2.53 s to 2.37 s versus the previous 0ae4c30 checkpoint on the
+same corpus.
 
 The key improvements since the 2026-05-24 baseline are:
 
@@ -81,13 +82,19 @@ The key improvements since the 2026-05-24 baseline are:
   the four-worker default remains the faster Darwin choice. Keeping that cap
   measured Swift `PM_RESUME` at 2.596 s versus 3.972 s for Rust in a 3-run
   smoke check.
+- default ignore-aware `--files` now avoids constructing ignore debug
+  summaries/source paths unless debug logging needs them and scans ignore rules
+  through a borrowed buffer while preserving last-match-wins semantics. The fast
+  `--files` stdout path also appends string UTF-8 bytes directly into its block
+  buffer. A 2026-05-25 5-run recheck measured Swift release `--files` at
+  344.9 ms versus Rust release at 83.7 ms on `/tmp/swift-rg-bench/linux`, down
+  from the prior 462.0 ms Swift smoke with byte-identical sorted output.
 - `--quiet --files` has an early-exit walker for the plain single-root Darwin
   path that checks files before descending once ignore files for the current
-  directory are loaded. A 2026-05-25 5-run smoke check measured Swift release at
-  46.5 ms versus Rust release at 5.5 ms on `/tmp/swift-rg-bench/linux`, down
-  from the 66.6 ms Swift no-PCRE2 checkpoint. Default `--files` in the same
-  smoke was 462.0 ms for Swift versus 88.2 ms for Rust, so ignore setup and
-  matching are still the largest traversal hotspot.
+  directory are loaded. A 2026-05-25 5-run recheck measured Swift release at
+  44.7 ms versus Rust release at 6.5 ms on `/tmp/swift-rg-bench/linux`, down
+  from the 66.6 ms Swift no-PCRE2 checkpoint. Ignore setup and matching remain
+  the largest traversal hotspot.
 - Quiet no-ignore file listing now has a narrower existence-only Darwin walker.
   The same Linux tree measured `--no-ignore --hidden --quiet --files` at
   31.0 ms for Swift versus 5.3 ms for Rust, down from the prior 53.4 ms Swift

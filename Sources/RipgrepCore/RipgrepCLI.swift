@@ -94,7 +94,7 @@ public enum RipgrepCLI {
                                 return
                             }
                             if stdout == nil {
-                                filePathOutputBuffer.append(contentsOf: line.utf8)
+                                appendUTF8(line, to: &filePathOutputBuffer)
                                 filePathOutputBuffer.append(UInt8(ascii: "\n"))
                                 if filePathOutputBuffer.count >= 64 * 1024 {
                                     writeStdout(filePathOutputBuffer)
@@ -229,6 +229,16 @@ public enum RipgrepCLI {
                 stderr("rg: \(error)")
                 return 2
             }
+        }
+    }
+
+    private static func appendUTF8(_ string: String, to data: inout Data) {
+        var string = string
+        string.withUTF8 { bytes in
+            guard let baseAddress = bytes.baseAddress, !bytes.isEmpty else {
+                return
+            }
+            data.append(baseAddress, count: bytes.count)
         }
     }
 

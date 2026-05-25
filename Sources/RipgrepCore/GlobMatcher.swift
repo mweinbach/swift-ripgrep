@@ -201,8 +201,19 @@ public struct GlobMatcher: Equatable {
         let pathBasename = pathBasename ?? basename(scopedPath)
         #endif
         var matchedDecision: Decision?
-        for rule in rules where matches(rule, relativePath: scopedPath, basename: pathBasename, isDirectory: isDirectory) {
-            matchedDecision = rule.decision
+        rules.withUnsafeBufferPointer { buffer in
+            guard let baseAddress = buffer.baseAddress else {
+                return
+            }
+            var offset = buffer.count
+            while offset > 0 {
+                offset -= 1
+                let rule = baseAddress.advanced(by: offset)
+                if matches(rule, relativePath: scopedPath, basename: pathBasename, isDirectory: isDirectory) {
+                    matchedDecision = rule.pointee.decision
+                    return
+                }
+            }
         }
         return matchedDecision
     }
@@ -221,8 +232,19 @@ public struct GlobMatcher: Equatable {
         let pathBasename = pathBasename ?? basename(scopedPath)
         #endif
         var matchedRule: Rule?
-        for rule in rules where matches(rule, relativePath: scopedPath, basename: pathBasename, isDirectory: isDirectory) {
-            matchedRule = rule
+        rules.withUnsafeBufferPointer { buffer in
+            guard let baseAddress = buffer.baseAddress else {
+                return
+            }
+            var offset = buffer.count
+            while offset > 0 {
+                offset -= 1
+                let rule = baseAddress.advanced(by: offset)
+                if matches(rule, relativePath: scopedPath, basename: pathBasename, isDirectory: isDirectory) {
+                    matchedRule = rule.pointee
+                    return
+                }
+            }
         }
         return matchedRule
     }
@@ -246,23 +268,23 @@ public struct GlobMatcher: Equatable {
         return path
     }
 
-    private func matches(_ rule: Rule, relativePath: String, basename pathBasename: String?, isDirectory: Bool) -> Bool {
-        if rule.directoryOnly && !isDirectory {
+    private func matches(_ rule: UnsafePointer<Rule>, relativePath: String, basename pathBasename: String?, isDirectory: Bool) -> Bool {
+        if rule.pointee.directoryOnly && !isDirectory {
             return false
         }
-        if rule.pattern.isEmpty {
+        if rule.pointee.pattern.isEmpty {
             return false
         }
-        if rule.anchored {
+        if rule.pointee.anchored {
             return matchesGlob(rule, relativePath)
         }
-        if rule.basenameOnly {
+        if rule.pointee.basenameOnly {
             guard let pathBasename else {
                 return false
             }
             return matchesGlob(rule, pathBasename)
         }
-        if slashPatternsMatchAnywhere && !rule.anchored {
+        if slashPatternsMatchAnywhere && !rule.pointee.anchored {
             return matchesGlobAnywhere(rule, relativePath) || matchesGlob(rule, relativePath)
         }
         return matchesGlob(rule, relativePath)
@@ -282,31 +304,31 @@ public struct GlobMatcher: Equatable {
         return String(path[next...])
     }
 
-    private func matchesGlob(_ rule: Rule, _ value: String) -> Bool {
-        if let fastMatcher = rule.fastMatcher {
+    private func matchesGlob(_ rule: UnsafePointer<Rule>, _ value: String) -> Bool {
+        if let fastMatcher = rule.pointee.fastMatcher {
             if case .simpleGlob = fastMatcher,
                !value.utf8.allSatisfy({ $0 < 0x80 }) {
-                guard let regex = rule.regex else {
+                guard let regex = rule.pointee.regex else {
                     return false
                 }
                 return matches(regex, value)
             }
             return matchesFast(fastMatcher, value)
         }
-        guard let regex = rule.regex else {
+        guard let regex = rule.pointee.regex else {
             return false
         }
         return matches(regex, value)
     }
 
-    private func matchesGlobAnywhere(_ rule: Rule, _ value: String) -> Bool {
-        if let fastMatcher = rule.fastMatcher {
+    private func matchesGlobAnywhere(_ rule: UnsafePointer<Rule>, _ value: String) -> Bool {
+        if let fastMatcher = rule.pointee.fastMatcher {
             if matchesFastAnywhere(fastMatcher, value) {
                 return true
             }
             if case .simpleGlob = fastMatcher {
                 if !value.utf8.allSatisfy({ $0 < 0x80 }) {
-                    guard let regex = rule.anywhereRegex else {
+                    guard let regex = rule.pointee.anywhereRegex else {
                         return false
                     }
                     return matches(regex, value)
@@ -316,7 +338,7 @@ public struct GlobMatcher: Equatable {
                 return false
             }
         }
-        guard let regex = rule.anywhereRegex else {
+        guard let regex = rule.pointee.anywhereRegex else {
             return false
         }
         return matches(regex, value)
@@ -655,7 +677,7 @@ public struct IgnoreStack {
     public init() {}
 
     public var isEmpty: Bool {
-        matchers.allSatisfy(\.isEmpty)
+        matchers.isEmpty
     }
 
     public mutating func append(_ matcher: GlobMatcher) {
@@ -669,16 +691,7 @@ public struct IgnoreStack {
     }
 
     public func allows(relativePath: String, basename: String?, isDirectory: Bool) -> Bool {
-        guard !matchers.isEmpty else {
-            return true
-        }
-        var allowed = true
-        for matcher in matchers {
-            if let decision = matcher.decision(relativePath: relativePath, basename: basename, isDirectory: isDirectory) {
-                allowed = decision == .include
-            }
-        }
-        return allowed
+        decision(relativePath: relativePath, basename: basename, isDirectory: isDirectory) != .exclude
     }
 
     public func decision(relativePath: String, isDirectory: Bool) -> GlobMatcher.Decision? {
@@ -686,7 +699,15 @@ public struct IgnoreStack {
     }
 
     public func decision(relativePath: String, basename: String?, isDirectory: Bool) -> GlobMatcher.Decision? {
-        matchingRule(relativePath: relativePath, basename: basename, isDirectory: isDirectory)?.decision
+        guard !matchers.isEmpty else {
+            return nil
+        }
+        for matcher in matchers.reversed() {
+            if let decision = matcher.decision(relativePath: relativePath, basename: basename, isDirectory: isDirectory) {
+                return decision
+            }
+        }
+        return nil
     }
 
     public func matchingRule(relativePath: String, isDirectory: Bool) -> GlobMatcher.Rule? {
@@ -697,12 +718,11 @@ public struct IgnoreStack {
         guard !matchers.isEmpty else {
             return nil
         }
-        var matchedRule: GlobMatcher.Rule?
-        for matcher in matchers {
+        for matcher in matchers.reversed() {
             if let rule = matcher.matchingRule(relativePath: relativePath, basename: basename, isDirectory: isDirectory) {
-                matchedRule = rule
+                return rule
             }
         }
-        return matchedRule
+        return nil
     }
 }
