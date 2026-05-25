@@ -31,7 +31,7 @@ struct MiscTests {
         try root.write("alpha\nbravo\ncharlie\ndelta", to: "letters.txt")
 
         var options = RipgrepOptions()
-        options.pattern = "v|d"
+        options.pattern = "delta"
         options.roots = [file]
         options.rootPathArguments = [file.path]
 
@@ -45,8 +45,8 @@ struct MiscTests {
         }
 
         #expect(results?.summary.filesWithMatches == 1)
-        #expect(results?.summary.matchedLines == 2)
-        #expect(output == Data("bravo\ndelta\n".utf8))
+        #expect(results?.summary.matchedLines == 1)
+        #expect(output == Data("delta\n".utf8))
         #endif
     }
 

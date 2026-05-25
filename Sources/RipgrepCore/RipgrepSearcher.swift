@@ -456,7 +456,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !fastPath.caseInsensitiveASCII,
               !fastPath.wordASCII,
               !fastPath.literals.isEmpty,
-              fastPath.literals.allSatisfy({ $0.count == 1 }),
+              fastPath.literals.allSatisfy({ !$0.isEmpty }),
+              (fastPath.literals.allSatisfy({ $0.count == 1 }) || fastPath.literals.count == 1),
               let fileURL = options.roots.first?.standardizedFileURL else {
             return nil
         }
@@ -480,7 +481,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             return nil
         }
 
-        let literalBytes = fastPath.literals.map { $0[0] }
+        let literals = fastPath.literals
         let maxCount = options.maxCount ?? Int.max
         var matchedLineCount = 0
         var bytesSearched = data.count
@@ -490,6 +491,59 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 return
             }
             let baseAddress = rawBaseAddress.assumingMemoryBound(to: UInt8.self)
+            if literals.count == 1,
+               let literal = literals.first,
+               literal.count > 1 {
+                var searchOffset = 0
+                var lastEmittedLineStart: Int?
+                while searchOffset < data.count, matchedLineCount < maxCount {
+                    let foundPointer = literal.withUnsafeBufferPointer { needle in
+                        rg_memmem_simple(
+                            baseAddress.advanced(by: searchOffset),
+                            data.count - searchOffset,
+                            needle.baseAddress,
+                            needle.count
+                        )
+                    }
+                    guard let rawFoundPointer = foundPointer else {
+                        break
+                    }
+                    let matchStart = baseAddress.distance(to: rawFoundPointer)
+                    var lineStart = matchStart
+                    while lineStart > 0, baseAddress[lineStart - 1] != UInt8(ascii: "\n") {
+                        lineStart -= 1
+                    }
+                    if lastEmittedLineStart != lineStart {
+                        let remaining = data.count - matchStart
+                        let newlinePointer = memchr(rawFoundPointer, Int32(UInt8(ascii: "\n")), remaining)
+                        let outputEnd: Int
+                        if let newlinePointer {
+                            outputEnd = baseAddress.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self)) + 1
+                        } else {
+                            outputEnd = data.count
+                        }
+                        matchedLineCount += 1
+                        lastEmittedLineStart = lineStart
+                        writeBytes(UnsafeRawBufferPointer(
+                            start: rawBaseAddress.advanced(by: lineStart),
+                            count: outputEnd - lineStart
+                        ))
+                        if newlinePointer == nil {
+                            var newline = UInt8(ascii: "\n")
+                            withUnsafeBytes(of: &newline) { buffer in
+                                writeBytes(buffer)
+                            }
+                        }
+                        if matchedLineCount == maxCount {
+                            bytesSearched = outputEnd
+                            break
+                        }
+                    }
+                    searchOffset = max(matchStart + 1, searchOffset + 1)
+                }
+                return
+            }
+
             var lineStart = 0
             while lineStart < data.count, matchedLineCount < maxCount {
                 let remaining = data.count - lineStart
@@ -504,10 +558,10 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     outputEnd = data.count
                 }
 
-                if lineContainsAnyByte(
+                if lineContainsAnyLiteral(
                     baseAddress.advanced(by: lineStart),
                     count: lineEnd - lineStart,
-                    bytes: literalBytes
+                    literals: literals
                 ) {
                     matchedLineCount += 1
                     writeBytes(UnsafeRawBufferPointer(
@@ -609,13 +663,22 @@ public struct RipgrepSearcher: @unchecked Sendable {
         return options.effectivePatterns.allSatisfy { !$0.isEmpty }
     }
 
-    private func lineContainsAnyByte(_ line: UnsafePointer<UInt8>, count: Int, bytes: [UInt8]) -> Bool {
+    private func lineContainsAnyLiteral(_ line: UnsafePointer<UInt8>, count: Int, literals: [[UInt8]]) -> Bool {
         guard count > 0 else {
             return false
         }
-        for byte in bytes {
-            if memchr(line, Int32(byte), count) != nil {
-                return true
+        for literal in literals where literal.count <= count {
+            if literal.count == 1 {
+                if memchr(line, Int32(literal[0]), count) != nil {
+                    return true
+                }
+            } else {
+                let found = literal.withUnsafeBufferPointer { needle in
+                    rg_memmem_simple(line, count, needle.baseAddress, needle.count)
+                }
+                if found != nil {
+                    return true
+                }
             }
         }
         return false
