@@ -489,6 +489,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         var matchedLineCount = 0
         var bytesSearched = data.count
         var needsDecodedFallback = false
+        let wantsLineNumber = options.wantsLineNumber
 
         data.withUnsafeBytes { rawBytes in
             guard let rawBaseAddress = rawBytes.baseAddress else {
@@ -496,6 +497,42 @@ public struct RipgrepSearcher: @unchecked Sendable {
             }
             let baseAddress = rawBaseAddress.assumingMemoryBound(to: UInt8.self)
             let byteBuffer = UnsafeBufferPointer(start: baseAddress, count: data.count)
+            var lineNumber = 1
+            var lineCountOffset = 0
+
+            func advanceLineNumber(to targetOffset: Int) {
+                guard wantsLineNumber, lineCountOffset < targetOffset else {
+                    return
+                }
+                lineNumber += Int(rg_memcount_byte(
+                    baseAddress.advanced(by: lineCountOffset),
+                    targetOffset - lineCountOffset,
+                    UInt8(ascii: "\n")
+                ))
+                lineCountOffset = targetOffset
+            }
+
+            func writeLineNumberPrefix(for lineStart: Int) {
+                guard wantsLineNumber else {
+                    return
+                }
+                advanceLineNumber(to: lineStart)
+                withUnsafeTemporaryAllocation(of: UInt8.self, capacity: 32) { buffer in
+                    var cursor = buffer.count - 1
+                    buffer[cursor] = UInt8(ascii: ":")
+                    var number = lineNumber
+                    repeat {
+                        cursor -= 1
+                        buffer[cursor] = UInt8(number % 10) + UInt8(ascii: "0")
+                        number /= 10
+                    } while number > 0
+                    writeBytes(UnsafeRawBufferPointer(
+                        start: buffer.baseAddress?.advanced(by: cursor),
+                        count: buffer.count - cursor
+                    ))
+                }
+            }
+
             if literals.count == 1,
                let literal = literals.first {
                 var searchOffset = 0
@@ -558,6 +595,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         }
                         matchedLineCount += 1
                         lastEmittedLineStart = lineStart
+                        writeLineNumberPrefix(for: lineStart)
                         writeBytes(UnsafeRawBufferPointer(
                             start: rawBaseAddress.advanced(by: lineStart),
                             count: outputEnd - lineStart
@@ -610,6 +648,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         outputEnd = data.count
                     }
                     matchedLineCount += 1
+                    writeLineNumberPrefix(for: lineStart)
                     writeBytes(UnsafeRawBufferPointer(
                         start: rawBaseAddress.advanced(by: lineStart),
                         count: outputEnd - lineStart
@@ -649,6 +688,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     literals: literals
                 ) {
                     matchedLineCount += 1
+                    writeLineNumberPrefix(for: lineStart)
                     writeBytes(UnsafeRawBufferPointer(
                         start: rawBaseAddress.advanced(by: lineStart),
                         count: outputEnd - lineStart
@@ -733,7 +773,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
               options.maxColumns == nil,
               !options.maxColumnsPreview,
               options.sortMode == nil,
-              !options.wantsLineNumber,
               !options.byteOffset,
               !options.column,
               options.heading != true,

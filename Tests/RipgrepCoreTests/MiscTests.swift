@@ -75,6 +75,20 @@ struct MiscTests {
         }
         #expect(wordResults?.summary.matchedLines == 0)
         #expect(wordOutput.isEmpty)
+
+        var lineNumberOptions = options
+        lineNumberOptions.pattern = "b|d"
+        lineNumberOptions.lineNumber = true
+        var lineNumberOutput = Data()
+        let lineNumberResults = try RipgrepSearcher().writeDarwinSimpleByteLiteralLines(options: lineNumberOptions) { buffer in
+            let bytes = buffer.bindMemory(to: UInt8.self)
+            guard let baseAddress = bytes.baseAddress else {
+                return
+            }
+            lineNumberOutput.append(baseAddress, count: bytes.count)
+        }
+        #expect(lineNumberResults?.summary.matchedLines == 2)
+        #expect(lineNumberOutput == Data("2:bravo\n4:delta\n".utf8))
         #endif
     }
 
