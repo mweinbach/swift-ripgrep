@@ -368,7 +368,7 @@ public struct PatternMatcher {
         return byteRequiredLiteralPrefilterCache
     }
 
-    func fixedPositiveLookbehindFastPath() -> (prefix: [UInt8], literal: [UInt8])? {
+    func fixedPositiveLookbehindFastPath() -> (prefix: [UInt8], literal: [UInt8], caseInsensitiveASCII: Bool)? {
         guard patterns.count == 1,
               case .pcre2(let regex) = patterns[0] else {
             return nil
@@ -376,7 +376,7 @@ public struct PatternMatcher {
         return regex.fixedPositiveLookbehindFastPath
     }
 
-    func fixedPositiveLookaheadFastPath() -> (literal: [UInt8], suffix: [UInt8])? {
+    func fixedPositiveLookaheadFastPath() -> (literal: [UInt8], suffix: [UInt8], caseInsensitiveASCII: Bool)? {
         guard patterns.count == 1,
               case .pcre2(let regex) = patterns[0] else {
             return nil
@@ -384,7 +384,7 @@ public struct PatternMatcher {
         return regex.fixedPositiveLookaheadFastPath
     }
 
-    func fixedNegativeLookbehindFastPath() -> (prefix: [UInt8], literal: [UInt8])? {
+    func fixedNegativeLookbehindFastPath() -> (prefix: [UInt8], literal: [UInt8], caseInsensitiveASCII: Bool)? {
         guard patterns.count == 1,
               case .pcre2(let regex) = patterns[0] else {
             return nil
@@ -392,7 +392,7 @@ public struct PatternMatcher {
         return regex.fixedNegativeLookbehindFastPath
     }
 
-    func fixedNegativeLookaheadFastPath() -> (literal: [UInt8], suffix: [UInt8])? {
+    func fixedNegativeLookaheadFastPath() -> (literal: [UInt8], suffix: [UInt8], caseInsensitiveASCII: Bool)? {
         guard patterns.count == 1,
               case .pcre2(let regex) = patterns[0] else {
             return nil
@@ -400,7 +400,7 @@ public struct PatternMatcher {
         return regex.fixedNegativeLookaheadFastPath
     }
 
-    func fixedLiteralBackreferenceFastPath() -> [UInt8]? {
+    func fixedLiteralBackreferenceFastPath() -> (literal: [UInt8], caseInsensitiveASCII: Bool)? {
         guard patterns.count == 1,
               case .pcre2(let regex) = patterns[0] else {
             return nil

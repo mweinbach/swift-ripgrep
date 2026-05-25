@@ -119,7 +119,9 @@ into a much smaller implementation:
    Fixed positive/negative lookaround literals and simple literal-group
    backreferences now avoid the Foundation regex path for single-file `-P -o`
    output, line-numbered/byte-offset/byte-column only-match output and
-   count/path/quiet modes, and remain byte-identical to Rust `rg`.
+   count/path/quiet modes, including ASCII ignore-case forms when
+   `--no-pcre2-unicode` selects byte semantics. They remain byte-identical to
+   Rust `rg`.
 
 2. **(Done 2026-05-24)** Enforced regex resource limits — see the size-budget
    guard in `Sources/RipgrepCore/PatternMatcher.swift`.

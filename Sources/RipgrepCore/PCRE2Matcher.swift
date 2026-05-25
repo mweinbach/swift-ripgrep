@@ -15,91 +15,98 @@ struct PCRE2Backend {
 final class PCRE2CompiledPattern {
     private enum Matcher {
         case regex(NSRegularExpression)
-        case fixedPositiveLookbehind(prefix: [UInt8], literal: [UInt8])
-        case fixedNegativeLookbehind(prefix: [UInt8], literal: [UInt8])
-        case fixedPositiveLookahead(literal: [UInt8], suffix: [UInt8])
-        case fixedNegativeLookahead(literal: [UInt8], suffix: [UInt8])
-        case fixedLiteralBackreference(literal: [UInt8], captureRanges: [Range<Int>])
+        case fixedPositiveLookbehind(prefix: [UInt8], literal: [UInt8], caseInsensitiveASCII: Bool)
+        case fixedNegativeLookbehind(prefix: [UInt8], literal: [UInt8], caseInsensitiveASCII: Bool)
+        case fixedPositiveLookahead(literal: [UInt8], suffix: [UInt8], caseInsensitiveASCII: Bool)
+        case fixedNegativeLookahead(literal: [UInt8], suffix: [UInt8], caseInsensitiveASCII: Bool)
+        case fixedLiteralBackreference(literal: [UInt8], captureRanges: [Range<Int>], caseInsensitiveASCII: Bool)
     }
 
     let source: String
     private let matcher: Matcher
 
-    var fixedPositiveLookbehindFastPath: (prefix: [UInt8], literal: [UInt8])? {
-        guard case .fixedPositiveLookbehind(let prefix, let literal) = matcher else {
+    var fixedPositiveLookbehindFastPath: (prefix: [UInt8], literal: [UInt8], caseInsensitiveASCII: Bool)? {
+        guard case .fixedPositiveLookbehind(let prefix, let literal, let caseInsensitiveASCII) = matcher else {
             return nil
         }
-        return (prefix, literal)
+        return (prefix, literal, caseInsensitiveASCII)
     }
 
-    var fixedPositiveLookaheadFastPath: (literal: [UInt8], suffix: [UInt8])? {
-        guard case .fixedPositiveLookahead(let literal, let suffix) = matcher else {
+    var fixedPositiveLookaheadFastPath: (literal: [UInt8], suffix: [UInt8], caseInsensitiveASCII: Bool)? {
+        guard case .fixedPositiveLookahead(let literal, let suffix, let caseInsensitiveASCII) = matcher else {
             return nil
         }
-        return (literal, suffix)
+        return (literal, suffix, caseInsensitiveASCII)
     }
 
-    var fixedNegativeLookbehindFastPath: (prefix: [UInt8], literal: [UInt8])? {
-        guard case .fixedNegativeLookbehind(let prefix, let literal) = matcher else {
+    var fixedNegativeLookbehindFastPath: (prefix: [UInt8], literal: [UInt8], caseInsensitiveASCII: Bool)? {
+        guard case .fixedNegativeLookbehind(let prefix, let literal, let caseInsensitiveASCII) = matcher else {
             return nil
         }
-        return (prefix, literal)
+        return (prefix, literal, caseInsensitiveASCII)
     }
 
-    var fixedNegativeLookaheadFastPath: (literal: [UInt8], suffix: [UInt8])? {
-        guard case .fixedNegativeLookahead(let literal, let suffix) = matcher else {
+    var fixedNegativeLookaheadFastPath: (literal: [UInt8], suffix: [UInt8], caseInsensitiveASCII: Bool)? {
+        guard case .fixedNegativeLookahead(let literal, let suffix, let caseInsensitiveASCII) = matcher else {
             return nil
         }
-        return (literal, suffix)
+        return (literal, suffix, caseInsensitiveASCII)
     }
 
-    var fixedLiteralBackreferenceFastPath: [UInt8]? {
-        guard case .fixedLiteralBackreference(let literal, _) = matcher else {
+    var fixedLiteralBackreferenceFastPath: (literal: [UInt8], caseInsensitiveASCII: Bool)? {
+        guard case .fixedLiteralBackreference(let literal, _, let caseInsensitiveASCII) = matcher else {
             return nil
         }
-        return literal
+        return (literal, caseInsensitiveASCII)
     }
 
     init(pattern: String, options: RipgrepOptions) throws {
         self.source = pattern
         #if canImport(CRipgrepPlatform)
-        if !options.effectiveIgnoreCase,
+        let canUseFixedByteMatcher = !options.effectiveIgnoreCase || options.noUnicode
+        let caseInsensitiveASCII = options.effectiveIgnoreCase && options.noUnicode
+        if canUseFixedByteMatcher,
            let lookbehind = Self.fixedPositiveLookbehind(pattern) {
             self.matcher = .fixedPositiveLookbehind(
                 prefix: Array(lookbehind.prefix.utf8),
-                literal: Array(lookbehind.literal.utf8)
+                literal: Array(lookbehind.literal.utf8),
+                caseInsensitiveASCII: caseInsensitiveASCII
             )
             return
         }
-        if !options.effectiveIgnoreCase,
+        if canUseFixedByteMatcher,
            let lookahead = Self.fixedPositiveLookahead(pattern) {
             self.matcher = .fixedPositiveLookahead(
                 literal: Array(lookahead.literal.utf8),
-                suffix: Array(lookahead.suffix.utf8)
+                suffix: Array(lookahead.suffix.utf8),
+                caseInsensitiveASCII: caseInsensitiveASCII
             )
             return
         }
-        if !options.effectiveIgnoreCase,
+        if canUseFixedByteMatcher,
            let lookbehind = Self.fixedNegativeLookbehind(pattern) {
             self.matcher = .fixedNegativeLookbehind(
                 prefix: Array(lookbehind.prefix.utf8),
-                literal: Array(lookbehind.literal.utf8)
+                literal: Array(lookbehind.literal.utf8),
+                caseInsensitiveASCII: caseInsensitiveASCII
             )
             return
         }
-        if !options.effectiveIgnoreCase,
+        if canUseFixedByteMatcher,
            let lookahead = Self.fixedNegativeLookahead(pattern) {
             self.matcher = .fixedNegativeLookahead(
                 literal: Array(lookahead.literal.utf8),
-                suffix: Array(lookahead.suffix.utf8)
+                suffix: Array(lookahead.suffix.utf8),
+                caseInsensitiveASCII: caseInsensitiveASCII
             )
             return
         }
-        if !options.effectiveIgnoreCase,
+        if canUseFixedByteMatcher,
            let backreference = Self.fixedLiteralBackreference(pattern) {
             self.matcher = .fixedLiteralBackreference(
                 literal: Array(backreference.literal.utf8),
-                captureRanges: backreference.captureRanges
+                captureRanges: backreference.captureRanges,
+                caseInsensitiveASCII: caseInsensitiveASCII
             )
             return
         }
@@ -129,16 +136,41 @@ final class PCRE2CompiledPattern {
             return regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { match in
                 Self.match(from: match, in: text)
             }
-        case .fixedPositiveLookbehind(let prefix, let literal):
-            return Self.fixedPositiveLookbehindMatches(prefix: prefix, literal: literal, in: text)
-        case .fixedPositiveLookahead(let literal, let suffix):
-            return Self.fixedPositiveLookaheadMatches(literal: literal, suffix: suffix, in: text)
-        case .fixedNegativeLookbehind(let prefix, let literal):
-            return Self.fixedNegativeLookbehindMatches(prefix: prefix, literal: literal, in: text)
-        case .fixedNegativeLookahead(let literal, let suffix):
-            return Self.fixedNegativeLookaheadMatches(literal: literal, suffix: suffix, in: text)
-        case .fixedLiteralBackreference(let literal, let captureRanges):
-            return Self.fixedLiteralBackreferenceMatches(literal: literal, captureRanges: captureRanges, in: text)
+        case .fixedPositiveLookbehind(let prefix, let literal, let caseInsensitiveASCII):
+            return Self.fixedPositiveLookbehindMatches(
+                prefix: prefix,
+                literal: literal,
+                caseInsensitiveASCII: caseInsensitiveASCII,
+                in: text
+            )
+        case .fixedPositiveLookahead(let literal, let suffix, let caseInsensitiveASCII):
+            return Self.fixedPositiveLookaheadMatches(
+                literal: literal,
+                suffix: suffix,
+                caseInsensitiveASCII: caseInsensitiveASCII,
+                in: text
+            )
+        case .fixedNegativeLookbehind(let prefix, let literal, let caseInsensitiveASCII):
+            return Self.fixedNegativeLookbehindMatches(
+                prefix: prefix,
+                literal: literal,
+                caseInsensitiveASCII: caseInsensitiveASCII,
+                in: text
+            )
+        case .fixedNegativeLookahead(let literal, let suffix, let caseInsensitiveASCII):
+            return Self.fixedNegativeLookaheadMatches(
+                literal: literal,
+                suffix: suffix,
+                caseInsensitiveASCII: caseInsensitiveASCII,
+                in: text
+            )
+        case .fixedLiteralBackreference(let literal, let captureRanges, let caseInsensitiveASCII):
+            return Self.fixedLiteralBackreferenceMatches(
+                literal: literal,
+                captureRanges: captureRanges,
+                caseInsensitiveASCII: caseInsensitiveASCII,
+                in: text
+            )
         }
     }
 
@@ -310,6 +342,7 @@ final class PCRE2CompiledPattern {
     private static func fixedPositiveLookbehindMatches(
         prefix: [UInt8],
         literal: [UInt8],
+        caseInsensitiveASCII: Bool,
         in text: String
     ) -> [PCRE2Match] {
         #if canImport(CRipgrepPlatform)
@@ -328,19 +361,21 @@ final class PCRE2CompiledPattern {
                     }
                     var searchOffset = 0
                     while searchOffset <= bytes.count - literalBytes.count,
-                          let found = rg_memmem_simple(
+                          let found = findLiteral(
                             baseAddress.advanced(by: searchOffset),
                             bytes.count - searchOffset,
                             literalBase,
-                            literalBytes.count
+                            literalBytes.count,
+                            caseInsensitiveASCII: caseInsensitiveASCII
                           ) {
                         let matchOffset = baseAddress.distance(to: found)
                         if matchOffset >= prefixBytes.count,
-                           memcmp(
+                           bytesEqual(
                             baseAddress.advanced(by: matchOffset - prefixBytes.count),
                             prefixBase,
-                            prefixBytes.count
-                           ) == 0,
+                            prefixBytes.count,
+                            caseInsensitiveASCII: caseInsensitiveASCII
+                           ),
                            let range = stringRange(
                             startByte: matchOffset,
                             endByte: matchOffset + literalBytes.count,
@@ -366,6 +401,7 @@ final class PCRE2CompiledPattern {
     private static func fixedNegativeLookbehindMatches(
         prefix: [UInt8],
         literal: [UInt8],
+        caseInsensitiveASCII: Bool,
         in text: String
     ) -> [PCRE2Match] {
         #if canImport(CRipgrepPlatform)
@@ -384,19 +420,21 @@ final class PCRE2CompiledPattern {
                     }
                     var searchOffset = 0
                     while searchOffset <= bytes.count - literalBytes.count,
-                          let found = rg_memmem_simple(
+                          let found = findLiteral(
                             baseAddress.advanced(by: searchOffset),
                             bytes.count - searchOffset,
                             literalBase,
-                            literalBytes.count
+                            literalBytes.count,
+                            caseInsensitiveASCII: caseInsensitiveASCII
                           ) {
                         let matchOffset = baseAddress.distance(to: found)
                         let hasPrefix = matchOffset >= prefixBytes.count
-                            && memcmp(
+                            && bytesEqual(
                                 baseAddress.advanced(by: matchOffset - prefixBytes.count),
                                 prefixBase,
-                                prefixBytes.count
-                            ) == 0
+                                prefixBytes.count,
+                                caseInsensitiveASCII: caseInsensitiveASCII
+                            )
                         if !hasPrefix,
                            let range = stringRange(
                             startByte: matchOffset,
@@ -423,6 +461,7 @@ final class PCRE2CompiledPattern {
     private static func fixedPositiveLookaheadMatches(
         literal: [UInt8],
         suffix: [UInt8],
+        caseInsensitiveASCII: Bool,
         in text: String
     ) -> [PCRE2Match] {
         #if canImport(CRipgrepPlatform)
@@ -441,20 +480,22 @@ final class PCRE2CompiledPattern {
                     }
                     var searchOffset = 0
                     while searchOffset <= bytes.count - literalBytes.count,
-                          let found = rg_memmem_simple(
+                          let found = findLiteral(
                             baseAddress.advanced(by: searchOffset),
                             bytes.count - searchOffset,
                             literalBase,
-                            literalBytes.count
+                            literalBytes.count,
+                            caseInsensitiveASCII: caseInsensitiveASCII
                           ) {
                         let matchOffset = baseAddress.distance(to: found)
                         let suffixOffset = matchOffset + literalBytes.count
                         if suffixOffset + suffixBytes.count <= bytes.count,
-                           memcmp(
+                           bytesEqual(
                             baseAddress.advanced(by: suffixOffset),
                             suffixBase,
-                            suffixBytes.count
-                           ) == 0,
+                            suffixBytes.count,
+                            caseInsensitiveASCII: caseInsensitiveASCII
+                           ),
                            let range = stringRange(
                             startByte: matchOffset,
                             endByte: suffixOffset,
@@ -480,6 +521,7 @@ final class PCRE2CompiledPattern {
     private static func fixedNegativeLookaheadMatches(
         literal: [UInt8],
         suffix: [UInt8],
+        caseInsensitiveASCII: Bool,
         in text: String
     ) -> [PCRE2Match] {
         #if canImport(CRipgrepPlatform)
@@ -498,20 +540,22 @@ final class PCRE2CompiledPattern {
                     }
                     var searchOffset = 0
                     while searchOffset <= bytes.count - literalBytes.count,
-                          let found = rg_memmem_simple(
+                          let found = findLiteral(
                             baseAddress.advanced(by: searchOffset),
                             bytes.count - searchOffset,
                             literalBase,
-                            literalBytes.count
+                            literalBytes.count,
+                            caseInsensitiveASCII: caseInsensitiveASCII
                           ) {
                         let matchOffset = baseAddress.distance(to: found)
                         let suffixOffset = matchOffset + literalBytes.count
                         let hasSuffix = suffixOffset + suffixBytes.count <= bytes.count
-                            && memcmp(
+                            && bytesEqual(
                                 baseAddress.advanced(by: suffixOffset),
                                 suffixBase,
-                                suffixBytes.count
-                            ) == 0
+                                suffixBytes.count,
+                                caseInsensitiveASCII: caseInsensitiveASCII
+                            )
                         if !hasSuffix,
                            let range = stringRange(
                             startByte: matchOffset,
@@ -538,6 +582,7 @@ final class PCRE2CompiledPattern {
     private static func fixedLiteralBackreferenceMatches(
         literal: [UInt8],
         captureRanges: [Range<Int>],
+        caseInsensitiveASCII: Bool,
         in text: String
     ) -> [PCRE2Match] {
         #if canImport(CRipgrepPlatform)
@@ -554,11 +599,12 @@ final class PCRE2CompiledPattern {
                 }
                 var searchOffset = 0
                 while searchOffset <= bytes.count - literalBytes.count,
-                      let found = rg_memmem_simple(
+                      let found = findLiteral(
                         baseAddress.advanced(by: searchOffset),
                         bytes.count - searchOffset,
                         literalBase,
-                        literalBytes.count
+                        literalBytes.count,
+                        caseInsensitiveASCII: caseInsensitiveASCII
                       ) {
                     let matchOffset = baseAddress.distance(to: found)
                     let matchEnd = matchOffset + literalBytes.count
@@ -587,6 +633,42 @@ final class PCRE2CompiledPattern {
         return []
         #endif
     }
+
+    #if canImport(CRipgrepPlatform)
+    private static func findLiteral(
+        _ haystack: UnsafePointer<UInt8>,
+        _ haystackLength: Int,
+        _ literal: UnsafePointer<UInt8>,
+        _ literalLength: Int,
+        caseInsensitiveASCII: Bool
+    ) -> UnsafePointer<UInt8>? {
+        if caseInsensitiveASCII {
+            return rg_memcasemem_ascii(haystack, haystackLength, literal, literalLength)
+        }
+        return rg_memmem_simple(haystack, haystackLength, literal, literalLength)
+    }
+
+    private static func bytesEqual(
+        _ lhs: UnsafePointer<UInt8>,
+        _ rhs: UnsafePointer<UInt8>,
+        _ count: Int,
+        caseInsensitiveASCII: Bool
+    ) -> Bool {
+        guard caseInsensitiveASCII else {
+            return memcmp(lhs, rhs, count) == 0
+        }
+        for offset in 0..<count {
+            guard asciiLowercase(lhs[offset]) == asciiLowercase(rhs[offset]) else {
+                return false
+            }
+        }
+        return true
+    }
+
+    private static func asciiLowercase(_ byte: UInt8) -> UInt8 {
+        (UInt8(ascii: "A")...UInt8(ascii: "Z")).contains(byte) ? byte + 32 : byte
+    }
+    #endif
 
     private static func stringRange(startByte: Int, endByte: Int, in text: String) -> Range<String.Index>? {
         let lowerUTF8 = text.utf8.index(text.utf8.startIndex, offsetBy: startByte)

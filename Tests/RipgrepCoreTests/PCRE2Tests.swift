@@ -31,6 +31,23 @@ struct PCRE2Tests {
         #expect(output == Data("Holmes\nHolmes\n".utf8))
     }
 
+    @Test func pcre2NoUnicodeIgnoreCaseFixedLookbehindExecutableFastPathOnlyMatchingOutput() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("sherlock holmes\nSHERLOCK HOLMES\nSherlock Holmes\nMycroft Holmes\n", to: "pcre.txt")
+
+        let output = try runExecutableData([
+            "-P",
+            "--no-pcre2-unicode",
+            "-i",
+            "-n",
+            "-o",
+            "(?<=sherlock )holmes",
+            temp.path("pcre.txt"),
+        ]) {}
+
+        #expect(output == Data("1:holmes\n2:HOLMES\n3:Holmes\n".utf8))
+    }
+
     @Test func pcre2FixedLookbehindExecutableFastPathLineNumberOnlyMatchingOutput() throws {
         let temp = try TemporaryDirectory()
         try temp.write("Mycroft Holmes\nSherlock Holmes and Sherlock Holmes\n", to: "pcre.txt")
@@ -198,6 +215,22 @@ struct PCRE2Tests {
         let output = try runExecutableData(["-P", "-o", #"(a)(b)\2"#, temp.path("pcre.txt")]) {}
 
         #expect(output == Data("abb\nabb\n".utf8))
+    }
+
+    @Test func pcre2NoUnicodeIgnoreCaseLiteralBackreferenceExecutableFastPathOnlyMatchingOutput() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("abba\naBBa\nabca\n", to: "pcre.txt")
+
+        let output = try runExecutableData([
+            "-P",
+            "--no-pcre2-unicode",
+            "-i",
+            "-o",
+            #"(a)(b)\2"#,
+            temp.path("pcre.txt"),
+        ]) {}
+
+        #expect(output == Data("abb\naBB\n".utf8))
     }
 
     @Test func pcre2LiteralBackreferenceExecutableFastPathLineNumberOnlyMatchingOutput() throws {

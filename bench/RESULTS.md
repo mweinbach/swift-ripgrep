@@ -61,6 +61,13 @@ same 193 MiB file produced byte-identical output to Rust and measured Swift at
 25.3 s through the Foundation-regex path before the in-tree fixed-lookbehind
 specialization.
 
+The same fixed PCRE byte path now covers explicit ASCII case-folding under
+`--no-pcre2-unicode`. On the current 1.5 GiB / 55 M-line subtitles corpus,
+`-P --no-pcre2-unicode -i -o '(?<=sherlock )holmes'` produced byte-identical
+output to Rust and measured Swift release at 1.099 s versus Rust PCRE2 at
+1.841 s in 10-run checks. The case-sensitive control on the same larger file,
+`-P -o '(?<=Sherlock )Holmes'`, measured Swift release at 1.014 s.
+
 The matching fixed-lookahead shape is on the same byte path:
 `-P -o 'Sherlock(?= Holmes)'` produced byte-identical output and measured
 Swift at 145.5 ms versus Rust PCRE2 at 216.0 ms (**0.67x**) in a 3-run check.

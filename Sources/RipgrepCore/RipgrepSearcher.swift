@@ -538,6 +538,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 literal: fixedLookbehindFastPath.literal,
                 prefix: fixedLookbehindFastPath.prefix,
                 suffix: nil,
+                caseInsensitiveASCII: fixedLookbehindFastPath.caseInsensitiveASCII,
                 options: options,
                 writeBytes: writeBytes
             )
@@ -549,6 +550,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 literal: fixedLookaheadFastPath.literal,
                 prefix: nil,
                 suffix: fixedLookaheadFastPath.suffix,
+                caseInsensitiveASCII: fixedLookaheadFastPath.caseInsensitiveASCII,
                 options: options,
                 writeBytes: writeBytes
             )
@@ -561,6 +563,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 prefix: fixedNegativeLookbehindFastPath.prefix,
                 prefixShouldMatch: false,
                 suffix: nil,
+                caseInsensitiveASCII: fixedNegativeLookbehindFastPath.caseInsensitiveASCII,
                 options: options,
                 writeBytes: writeBytes
             )
@@ -573,6 +576,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 prefix: nil,
                 suffix: fixedNegativeLookaheadFastPath.suffix,
                 suffixShouldMatch: false,
+                caseInsensitiveASCII: fixedNegativeLookaheadFastPath.caseInsensitiveASCII,
                 options: options,
                 writeBytes: writeBytes
             )
@@ -581,9 +585,10 @@ public struct RipgrepSearcher: @unchecked Sendable {
             return writeDarwinFixedPCREFastPath(
                 data,
                 fileURL: fileURL,
-                literal: fixedBackreferenceFastPath,
+                literal: fixedBackreferenceFastPath.literal,
                 prefix: nil,
                 suffix: nil,
+                caseInsensitiveASCII: fixedBackreferenceFastPath.caseInsensitiveASCII,
                 options: options,
                 writeBytes: writeBytes
             )
@@ -1180,6 +1185,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         prefixShouldMatch: Bool = true,
         suffix: [UInt8]?,
         suffixShouldMatch: Bool = true,
+        caseInsensitiveASCII: Bool = false,
         options: RipgrepOptions,
         writeBytes: (UnsafeRawBufferPointer) -> Void
     ) -> SearchResults? {
@@ -1193,6 +1199,18 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let filesWithoutMatch = options.printMode == .filesWithoutMatch
         let stopAfterFirstMatch = options.quiet || filesWithMatches || filesWithoutMatch
         let maxCount = options.maxCount ?? Int.max
+        let literalBytesStorage: [UInt8]
+        var caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
+        if caseInsensitiveASCII {
+            literalBytesStorage = literal.map(asciiLowercase)
+            if literal.count > 1 {
+                for index in 0..<(literalBytesStorage.count - 1) {
+                    caseInsensitiveShifts[Int(literalBytesStorage[index])] = literal.count - 1 - index
+                }
+            }
+        } else {
+            literalBytesStorage = literal
+        }
 
         data.withUnsafeBytes { rawBytes in
             guard let rawBaseAddress = rawBytes.baseAddress else {
@@ -1211,7 +1229,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             let suffixBytesStorage = suffix ?? []
 
             prefixBytesStorage.withUnsafeBufferPointer { prefixBytes in
-                literal.withUnsafeBufferPointer { literalBytes in
+                literalBytesStorage.withUnsafeBufferPointer { literalBytes in
                     suffixBytesStorage.withUnsafeBufferPointer { suffixBytes in
                         guard let literalBaseAddress = literalBytes.baseAddress else {
                             return
@@ -1222,12 +1240,22 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         var searchOffset = 0
                         var shouldStop = false
                         while searchOffset <= data.count - literalBytes.count, !shouldStop {
-                            let foundPointer = rg_memmem_simple(
-                                baseAddress.advanced(by: searchOffset),
-                                data.count - searchOffset,
-                                literalBaseAddress,
-                                literalBytes.count
-                            )
+                            let foundPointer = caseInsensitiveASCII
+                                ? caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
+                                    rg_memcasemem_ascii_prepared(
+                                        baseAddress.advanced(by: searchOffset),
+                                        data.count - searchOffset,
+                                        literalBaseAddress,
+                                        literalBytes.count,
+                                        shifts.baseAddress
+                                    )
+                                }
+                                : rg_memmem_simple(
+                                    baseAddress.advanced(by: searchOffset),
+                                    data.count - searchOffset,
+                                    literalBaseAddress,
+                                    literalBytes.count
+                                )
                             guard let foundPointer else {
                                 break
                             }
@@ -1244,7 +1272,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
                                 prefixShouldMatch: prefixShouldMatch,
                                 suffixBytes: suffixBytes,
                                 suffixBaseAddress: suffixBaseAddress,
-                                suffixShouldMatch: suffixShouldMatch
+                                suffixShouldMatch: suffixShouldMatch,
+                                caseInsensitiveASCII: caseInsensitiveASCII
                             ) {
                                 while matchStart > currentLineEnd {
                                     currentLineStart = min(currentLineEnd + 1, data.count)
@@ -1329,27 +1358,47 @@ public struct RipgrepSearcher: @unchecked Sendable {
         prefixShouldMatch: Bool,
         suffixBytes: UnsafeBufferPointer<UInt8>,
         suffixBaseAddress: UnsafePointer<UInt8>?,
-        suffixShouldMatch: Bool
+        suffixShouldMatch: Bool,
+        caseInsensitiveASCII: Bool
     ) -> Bool {
         if let prefixBaseAddress {
             let hasPrefix = matchStart >= prefixBytes.count
-                && memcmp(
+                && bytesEqual(
                     baseAddress.advanced(by: matchStart - prefixBytes.count),
                     prefixBaseAddress,
-                    prefixBytes.count
-                ) == 0
+                    count: prefixBytes.count,
+                    caseInsensitiveASCII: caseInsensitiveASCII
+                )
             guard hasPrefix == prefixShouldMatch else {
                 return false
             }
         }
         if let suffixBaseAddress {
             let hasSuffix = matchEnd + suffixBytes.count <= dataCount
-                && memcmp(
+                && bytesEqual(
                     baseAddress.advanced(by: matchEnd),
                     suffixBaseAddress,
-                    suffixBytes.count
-                ) == 0
+                    count: suffixBytes.count,
+                    caseInsensitiveASCII: caseInsensitiveASCII
+                )
             guard hasSuffix == suffixShouldMatch else {
+                return false
+            }
+        }
+        return true
+    }
+
+    private func bytesEqual(
+        _ lhs: UnsafePointer<UInt8>,
+        _ rhs: UnsafePointer<UInt8>,
+        count: Int,
+        caseInsensitiveASCII: Bool
+    ) -> Bool {
+        guard caseInsensitiveASCII else {
+            return memcmp(lhs, rhs, count) == 0
+        }
+        for offset in 0..<count {
+            guard asciiLowercase(lhs[offset]) == asciiLowercase(rhs[offset]) else {
                 return false
             }
         }
@@ -1465,7 +1514,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
               options.dfaSizeLimit == nil,
               options.regexSizeLimit == nil,
               !options.lineRegexp,
-              !options.noUnicode,
+              (!options.noUnicode || options.engineMode != .default),
               !options.multiline,
               !options.crlf,
               !options.invertMatch,
