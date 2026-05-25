@@ -22,7 +22,7 @@ struct HaystackReader {
         options: RipgrepOptions,
         maxBufferBytes: Int = defaultMaxBufferBytes
     ) throws -> Data {
-        let readPath = try selectedPath(forFileAt: haystack.url, options: options)
+        let readPath = try selectedPath(for: haystack, options: options)
         switch readPath {
         case .buffered:
             return try readBuffered(fileURL: haystack.url, maxBufferBytes: maxBufferBytes)
@@ -48,7 +48,7 @@ struct HaystackReader {
         maxCarryBytes: Int = defaultMaxBufferBytes,
         body: (StreamedLine, inout Bool) throws -> Void
     ) throws {
-        let readPath = try selectedPath(forFileAt: haystack.url, options: options)
+        let readPath = try selectedPath(for: haystack, options: options)
         guard readPath == .buffered else {
             throw ReaderError.notBuffered(path: haystack.url.path)
         }
@@ -69,6 +69,20 @@ struct HaystackReader {
             isRegularFile: isRegular(fileStat.st_mode),
             options: options
         )
+    }
+
+    static func selectedPath(for haystack: Haystack, options: RipgrepOptions) throws -> ReadPath {
+        #if canImport(Darwin)
+        if let fileSize = haystack.fileSize,
+           let isRegularFile = haystack.isRegularFile {
+            return selectedPath(
+                fileSize: fileSize,
+                isRegularFile: isRegularFile,
+                options: options
+            )
+        }
+        #endif
+        return try selectedPath(forFileAt: haystack.url, options: options)
     }
 
     static func selectedPath(fileSize: UInt64, isRegularFile: Bool, options: RipgrepOptions) -> ReadPath {

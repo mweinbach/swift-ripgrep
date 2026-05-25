@@ -4,11 +4,21 @@ public struct Haystack: Equatable, Sendable {
     public let url: URL
     public let isExplicit: Bool
     public let overridePath: String
+    public let fileSize: UInt64?
+    public let isRegularFile: Bool?
 
-    public init(url: URL, isExplicit: Bool, overridePath: String? = nil) {
+    public init(
+        url: URL,
+        isExplicit: Bool,
+        overridePath: String? = nil,
+        fileSize: UInt64? = nil,
+        isRegularFile: Bool? = nil
+    ) {
         self.url = url
         self.isExplicit = isExplicit
         self.overridePath = overridePath ?? url.path
+        self.fileSize = fileSize
+        self.isRegularFile = isRegularFile
     }
 }
 
@@ -316,7 +326,13 @@ public struct FileWalker {
                 debug("ignoring \(url.path): \(fileSize) bytes exceeds max filesize \(maxFileSize)", options: options, diagnostics: &diagnostics)
                 return []
             }
-            return [Haystack(url: url, isExplicit: isExplicit, overridePath: overridePath)]
+            return [Haystack(
+                url: url,
+                isExplicit: isExplicit,
+                overridePath: overridePath,
+                fileSize: resolvedValues.fileSize.map { UInt64(max(0, $0)) },
+                isRegularFile: true
+            )]
         }
 
         guard resolvedValues.isDirectory == true else {
