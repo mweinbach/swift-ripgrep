@@ -405,6 +405,38 @@ static int rg_write_decimal_colon(size_t value) {
     return rg_write_all_stdout(buffer + cursor, sizeof(buffer) - cursor);
 }
 
+typedef struct {
+    uint8_t *bytes;
+    size_t length;
+    size_t capacity;
+} rg_output_buffer;
+
+static int rg_output_buffer_flush(rg_output_buffer *buffer) {
+    if (buffer->length == 0) {
+        return 0;
+    }
+    if (rg_write_all_stdout(buffer->bytes, buffer->length) != 0) {
+        return -1;
+    }
+    buffer->length = 0;
+    return 0;
+}
+
+static int rg_output_buffer_write(rg_output_buffer *buffer, const uint8_t *bytes, size_t length) {
+    if (length > buffer->capacity) {
+        if (rg_output_buffer_flush(buffer) != 0) {
+            return -1;
+        }
+        return rg_write_all_stdout(bytes, length);
+    }
+    if (buffer->length + length > buffer->capacity && rg_output_buffer_flush(buffer) != 0) {
+        return -1;
+    }
+    memcpy(buffer->bytes + buffer->length, bytes, length);
+    buffer->length += length;
+    return 0;
+}
+
 static int rg_has_surrounding_ascii_words(
     const uint8_t *base,
     size_t line_start,
@@ -604,6 +636,81 @@ static rg_darwin_literal_file_result rg_darwin_write_word_literal_bytes(
         search_offset = match_end;
     }
 
+    result.status = result.matched_line_count > 0 ? 1 : 0;
+    result.bytes_searched = haystack_len;
+    return result;
+}
+
+static rg_darwin_literal_file_result rg_darwin_write_byte_set_bytes(
+    const uint8_t *base,
+    size_t haystack_len,
+    const uint8_t *needles,
+    size_t needle_count
+) {
+    rg_darwin_literal_file_result result = { .status = -2, .matched_line_count = 0, .total_match_count = 0, .bytes_searched = 0 };
+
+    if (haystack_len >= 3 && base[0] == 0xEF && base[1] == 0xBB && base[2] == 0xBF) {
+        return result;
+    }
+    if (haystack_len >= 2
+        && ((base[0] == 0xFF && base[1] == 0xFE) || (base[0] == 0xFE && base[1] == 0xFF))) {
+        return result;
+    }
+    const size_t binary_check_len = haystack_len < (64 * 1024) ? haystack_len : (64 * 1024);
+    if (memchr(base, 0, binary_check_len) != NULL) {
+        return result;
+    }
+
+    uint8_t table[256];
+    rg_byte_set_init(table, needles, needle_count);
+
+    rg_output_buffer output = { .bytes = malloc(1024 * 1024), .length = 0, .capacity = 1024 * 1024 };
+    if (output.bytes == NULL) {
+        result.status = -1;
+        return result;
+    }
+
+    size_t search_offset = 0;
+    while (search_offset < haystack_len) {
+        const uint8_t *found = rg_memchr_any_table(base + search_offset, haystack_len - search_offset, table);
+        if (found == NULL) {
+            break;
+        }
+
+        const size_t match_start = (size_t)(found - base);
+        size_t line_start = match_start;
+        while (line_start > 0 && base[line_start - 1] != '\n') {
+            line_start--;
+        }
+
+        const void *newline = memchr(found, '\n', haystack_len - match_start);
+        const size_t output_end = newline == NULL
+            ? haystack_len
+            : (size_t)(((const uint8_t *)newline - base) + 1);
+        if (rg_output_buffer_write(&output, base + line_start, output_end - line_start) != 0) {
+            free(output.bytes);
+            result.status = -1;
+            return result;
+        }
+        if (newline == NULL) {
+            uint8_t terminator = '\n';
+            if (rg_output_buffer_write(&output, &terminator, 1) != 0) {
+                free(output.bytes);
+                result.status = -1;
+                return result;
+            }
+        }
+        result.matched_line_count++;
+        result.total_match_count++;
+        search_offset = output_end;
+    }
+
+    if (rg_output_buffer_flush(&output) != 0) {
+        free(output.bytes);
+        result.status = -1;
+        return result;
+    }
+    free(output.bytes);
     result.status = result.matched_line_count > 0 ? 1 : 0;
     result.bytes_searched = haystack_len;
     return result;
@@ -888,6 +995,58 @@ rg_darwin_literal_file_result rg_darwin_write_word_literal_file_lines(
     }
 
     result = rg_darwin_write_word_literal_bytes(base, haystack_len, literal, literal_len);
+    munmap(base, haystack_len);
+    return result;
+#endif
+}
+
+rg_darwin_literal_file_result rg_darwin_write_byte_set_file_lines(
+    const char *path,
+    const uint8_t *needles,
+    size_t needle_count
+) {
+    rg_darwin_literal_file_result result = { .status = -2, .matched_line_count = 0, .total_match_count = 0, .bytes_searched = 0 };
+#ifndef __APPLE__
+    (void)path;
+    (void)needles;
+    (void)needle_count;
+    return result;
+#else
+    if (path == NULL || needles == NULL || needle_count == 0) {
+        return result;
+    }
+
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        result.status = -1;
+        return result;
+    }
+
+    struct stat file_stat;
+    if (fstat(fd, &file_stat) != 0) {
+        close(fd);
+        result.status = -1;
+        return result;
+    }
+    if ((file_stat.st_mode & S_IFMT) != S_IFREG) {
+        close(fd);
+        return result;
+    }
+    if (file_stat.st_size <= 0) {
+        close(fd);
+        result.status = 0;
+        return result;
+    }
+
+    const size_t haystack_len = (size_t)file_stat.st_size;
+    uint8_t *base = mmap(NULL, haystack_len, PROT_READ, MAP_PRIVATE, fd, 0);
+    close(fd);
+    if (base == MAP_FAILED) {
+        result.status = -1;
+        return result;
+    }
+
+    result = rg_darwin_write_byte_set_bytes(base, haystack_len, needles, needle_count);
     munmap(base, haystack_len);
     return result;
 #endif

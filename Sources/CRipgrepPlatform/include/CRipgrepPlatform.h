@@ -81,4 +81,10 @@ rg_darwin_literal_file_result rg_darwin_write_word_literal_file_lines(
     size_t literal_len
 );
 
+rg_darwin_literal_file_result rg_darwin_write_byte_set_file_lines(
+    const char *path,
+    const uint8_t *needles,
+    size_t needle_count
+);
+
 #endif

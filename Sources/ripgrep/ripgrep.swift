@@ -112,6 +112,24 @@ struct RipgrepCommand {
             return result.status > 0 ? 0 : 1
         }
 
+        if mode == .mmap,
+           let byteSet = singleByteAlternation(pattern),
+           path != "-" {
+            let result = path.withCString { pathPointer in
+                byteSet.withUnsafeBufferPointer { needles in
+                    rg_darwin_write_byte_set_file_lines(
+                        pathPointer,
+                        needles.baseAddress,
+                        needles.count
+                    )
+                }
+            }
+            guard result.status >= 0 else {
+                return nil
+            }
+            return result.status > 0 ? 0 : 1
+        }
+
         guard !pattern.hasPrefix("-"),
               path != "-",
               isPlainDarwinLiteral(pattern) else {
@@ -187,6 +205,48 @@ struct RipgrepCommand {
             return nil
         }
         return literal
+    }
+
+    private static func singleByteAlternation(_ pattern: String) -> [UInt8]? {
+        let parts = pattern.split(separator: "|", omittingEmptySubsequences: false)
+        guard parts.count > 1 else {
+            return nil
+        }
+
+        var bytes: [UInt8] = []
+        bytes.reserveCapacity(parts.count)
+        for part in parts {
+            guard part.utf8.count == 1,
+                  let byte = part.utf8.first,
+                  byte < 0x80,
+                  !isRegexSyntaxByte(byte) else {
+                return nil
+            }
+            bytes.append(byte)
+        }
+        return bytes
+    }
+
+    private static func isRegexSyntaxByte(_ byte: UInt8) -> Bool {
+        switch byte {
+        case UInt8(ascii: "\\"),
+             UInt8(ascii: "."),
+             UInt8(ascii: "^"),
+             UInt8(ascii: "$"),
+             UInt8(ascii: "*"),
+             UInt8(ascii: "+"),
+             UInt8(ascii: "?"),
+             UInt8(ascii: "("),
+             UInt8(ascii: ")"),
+             UInt8(ascii: "["),
+             UInt8(ascii: "]"),
+             UInt8(ascii: "{"),
+             UInt8(ascii: "}"),
+             UInt8(ascii: "|"):
+            return true
+        default:
+            return false
+        }
     }
     #endif
 }
