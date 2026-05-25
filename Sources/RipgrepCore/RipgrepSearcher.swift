@@ -149,7 +149,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
 
         let matcher = try PatternMatcher(options: options)
-        guard !matcher.usesByteSemantics else {
+        guard !matcher.usesByteSemantics,
+              matcher.byteLiteralFastPath() != nil else {
             return nil
         }
         let walkResults = try FileWalker(fileManager: fileManager)

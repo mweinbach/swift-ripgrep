@@ -48,6 +48,23 @@ struct StreamingHaystackTests {
         #expect(results == nil)
     }
 
+    @Test("plain direct output declines regex prefilter searches")
+    func plainDirectOutputDeclinesRegexPrefilterSearches() throws {
+        let root = try TemporaryDirectory()
+        try root.write("Mr Holmes returns\n", to: "regex.txt")
+        let fileURL = URL(fileURLWithPath: root.path("regex.txt"))
+
+        var options = RipgrepOptions()
+        options.pattern = #"\w+\s+Holmes\s+\w+"#
+        options.roots = [fileURL]
+        options.rootPathArguments = [fileURL.path]
+
+        let results = try RipgrepSearcher().streamPlainMatchingLines(options: options) { _ in
+            Issue.record("regex prefilter searches should use the raw regex prefilter path")
+        }
+        #expect(results == nil)
+    }
+
     @Test("large --no-mmap search streams within the perf smoke budget")
     func largeNoMmapSearchStreamsWithinPerfSmokeBudget() throws {
         let root = try TemporaryDirectory()
