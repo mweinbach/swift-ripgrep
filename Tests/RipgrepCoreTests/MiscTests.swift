@@ -116,6 +116,33 @@ struct MiscTests {
         #expect(countNoMatchResults?.summary.matchedLines == 0)
         #expect(countNoMatchOutput.isEmpty)
 
+        var filesWithOptions = options
+        filesWithOptions.printMode = .filesWithMatches
+        var filesWithOutput = Data()
+        let filesWithResults = try RipgrepSearcher().writeDarwinSimpleByteLiteralLines(options: filesWithOptions) { buffer in
+            let bytes = buffer.bindMemory(to: UInt8.self)
+            guard let baseAddress = bytes.baseAddress else {
+                return
+            }
+            filesWithOutput.append(baseAddress, count: bytes.count)
+        }
+        #expect(filesWithResults?.summary.filesWithMatches == 1)
+        #expect(filesWithOutput == Data("\(file.path)\n".utf8))
+
+        var filesWithoutOptions = options
+        filesWithoutOptions.pattern = "missing"
+        filesWithoutOptions.printMode = .filesWithoutMatch
+        var filesWithoutOutput = Data()
+        let filesWithoutResults = try RipgrepSearcher().writeDarwinSimpleByteLiteralLines(options: filesWithoutOptions) { buffer in
+            let bytes = buffer.bindMemory(to: UInt8.self)
+            guard let baseAddress = bytes.baseAddress else {
+                return
+            }
+            filesWithoutOutput.append(baseAddress, count: bytes.count)
+        }
+        #expect(filesWithoutResults?.summary.filesWithMatches == 0)
+        #expect(filesWithoutOutput == Data("\(file.path)\n".utf8))
+
         var wordOptions = options
         wordOptions.pattern = "ha"
         wordOptions.wordRegexp = true

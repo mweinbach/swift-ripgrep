@@ -491,6 +491,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
         var needsDecodedFallback = false
         let wantsLineNumber = options.wantsLineNumber
         let countOnly = options.printMode == .count
+        let filesWithMatches = options.printMode == .filesWithMatches
+        let filesWithoutMatch = options.printMode == .filesWithoutMatch
+        let pathOnly = filesWithMatches || filesWithoutMatch
 
         data.withUnsafeBytes { rawBytes in
             guard let rawBaseAddress = rawBytes.baseAddress else {
@@ -501,7 +504,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             var lineNumber = 1
             var lineCountOffset = 0
 
-            if options.quiet {
+            if options.quiet || pathOnly {
                 if literals.count == 1,
                    let literal = literals.first {
                     var searchOffset = 0
@@ -827,6 +830,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
         if countOnly && matchedLineCount > 0 {
             writeDarwinDecimalLine(matchedLineCount, writeBytes: writeBytes)
+        } else if (filesWithMatches && matchedLineCount > 0) || (filesWithoutMatch && matchedLineCount == 0) {
+            writeDarwinPathLine(fileURL.path, writeBytes: writeBytes)
         }
 
         let fileResult = SearchFileResult(
@@ -880,8 +885,18 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
     }
 
+    private func writeDarwinPathLine(_ path: String, writeBytes: (UnsafeRawBufferPointer) -> Void) {
+        let bytes = Array(path.utf8) + [UInt8(ascii: "\n")]
+        bytes.withUnsafeBytes { buffer in
+            writeBytes(buffer)
+        }
+    }
+
     private func canWriteDarwinSimpleByteLiteralLines(options: RipgrepOptions) -> Bool {
-        guard (options.printMode == .matchingLines || options.printMode == .count),
+        guard (options.printMode == .matchingLines
+            || options.printMode == .count
+            || options.printMode == .filesWithMatches
+            || options.printMode == .filesWithoutMatch),
               options.rootPathArguments.count == 1,
               options.roots.count == 1,
               !options.useStdin,
