@@ -142,6 +142,11 @@ The key improvements since the 2026-05-24 baseline are:
   31.0 ms for Swift versus 5.3 ms for Rust, down from the prior 53.4 ms Swift
   smoke. Default quiet listing remains around 52 ms because it still needs the
   ignore stack.
+- Ignore-aware `--quiet --files` now has a marker-first Darwin existence
+  walker that loads local ignore files before scanning entries, avoids
+  materializing per-directory child arrays, and exits as soon as an allowed
+  file is found. A 30-run A/B against checkpoint `a386edc` measured Swift
+  release at 37.0 ms versus 48.6 ms on `/tmp/swift-rg-bench/linux`.
 
 ### Rejected A/B checks — 2026-05-25
 

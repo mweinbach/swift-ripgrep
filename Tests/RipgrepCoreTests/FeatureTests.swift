@@ -3022,6 +3022,36 @@ struct FeatureTests {
         #expect(output.isEmpty)
         #expect(errors.isEmpty)
 
+        let quietIgnored = try TemporaryDirectory()
+        try quietIgnored.write("ignored\n", to: "ignored.txt")
+        try quietIgnored.write("ignored.txt\n", to: ".ignore")
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--quiet", "--files", quietIgnored.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 1)
+        #expect(output.isEmpty)
+        #expect(errors.isEmpty)
+
+        let quietReincludedHidden = try TemporaryDirectory()
+        try quietReincludedHidden.write("secret\n", to: ".allowed.txt")
+        try quietReincludedHidden.write("!.allowed.txt\n", to: ".ignore")
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--quiet", "--files", quietReincludedHidden.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(output.isEmpty)
+        #expect(errors.isEmpty)
+
         let hiddenOnly = try TemporaryDirectory()
         try hiddenOnly.write("secret\n", to: ".only-hidden.txt")
 

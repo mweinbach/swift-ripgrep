@@ -110,6 +110,13 @@ private struct FastDirectoryContents {
     let hasRgignore: Bool
 }
 
+private struct FastDirectoryMarkers {
+    let hasGitMarker: Bool
+    let hasGitignore: Bool
+    let hasIgnore: Bool
+    let hasRgignore: Bool
+}
+
 private enum FastDirectoryEntryKind: Equatable {
     case directory
     case file
@@ -214,6 +221,29 @@ public struct FileWalker {
         appendGlobalIgnoreFile(to: &rootIgnoreStack, rootBase: rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
         appendParentIgnoreFiles(to: &rootIgnoreStack, rootBase: rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
         let rootVCSContext = options.noRequireGit || isInGitRepository(rootBase)
+        if stopAfterFirst, options.quiet, options.loggingMode == nil {
+            let hasFile = try fastDirectoryTreeContainsAllowedFile(
+                directoryPath: rootURL.path,
+                logicalDirectoryPath: rootURL.path,
+                relativePath: "",
+                rootBase: rootBase,
+                rootDebugDisplayPath: rootDisplayPath(at: 0, root: root, options: options),
+                rootArgumentIsAbsolute: true,
+                vcsContext: rootVCSContext,
+                warnings: &warnings,
+                diagnostics: &diagnostics,
+                filtered: &filtered,
+                ignoreStack: rootIgnoreStack,
+                options: options
+            )
+            return FilePathStreamResults(
+                count: hasFile ? 1 : 0,
+                messages: messages,
+                warnings: warnings,
+                diagnostics: diagnostics,
+                filtered: filtered
+            )
+        }
         var didStop = false
         try walkFilePathsInOutputOrder(
             directoryPath: rootURL.path,
@@ -1108,6 +1138,196 @@ public struct FileWalker {
             }
         }
         return false
+    }
+
+    private func fastDirectoryTreeContainsAllowedFile(
+        directoryPath: String,
+        logicalDirectoryPath: String,
+        relativePath: String,
+        rootBase: URL,
+        rootDebugDisplayPath: String,
+        rootArgumentIsAbsolute: Bool,
+        vcsContext: Bool,
+        warnings: inout [String],
+        diagnostics: inout [String],
+        filtered: inout Bool,
+        ignoreStack: IgnoreStack,
+        options: RipgrepOptions
+    ) throws -> Bool {
+        let markers = try fastDirectoryMarkers(atPath: directoryPath)
+        let directoryVCSContext = vcsContext || (!options.noIgnoreVCS && markers.hasGitMarker)
+        var directoryIgnoreStack = ignoreStack
+        if !options.noIgnore && hasLoadableIgnoreFiles(
+            hasGitMarker: markers.hasGitMarker,
+            hasGitignore: markers.hasGitignore,
+            hasIgnore: markers.hasIgnore,
+            hasRgignore: markers.hasRgignore,
+            vcsContext: directoryVCSContext,
+            options: options
+        ) {
+            let directoryURL = URL(fileURLWithPath: directoryPath, isDirectory: true)
+            let logicalDirectoryURL = URL(fileURLWithPath: logicalDirectoryPath, isDirectory: true)
+            appendIgnoreFiles(
+                in: directoryURL,
+                logicalDirectory: logicalDirectoryURL,
+                to: &directoryIgnoreStack,
+                warnings: &warnings,
+                diagnostics: &diagnostics,
+                rootBase: rootBase,
+                rootDebugDisplayPath: rootDebugDisplayPath,
+                rootArgumentIsAbsolute: rootArgumentIsAbsolute,
+                vcsContext: directoryVCSContext,
+                directoryContents: DirectoryContents(
+                    children: [],
+                    hasGitMarker: markers.hasGitMarker,
+                    hasGitignore: markers.hasGitignore,
+                    hasIgnore: markers.hasIgnore,
+                    hasRgignore: markers.hasRgignore
+                ),
+                options: options
+            )
+        }
+
+        guard let directory = opendir(directoryPath) else {
+            throw NSError(
+                domain: NSPOSIXErrorDomain,
+                code: Int(errno),
+                userInfo: [NSFilePathErrorKey: directoryPath]
+            )
+        }
+        defer {
+            closedir(directory)
+        }
+
+        let directoryPathPrefix = directoryPath + "/"
+        let logicalDirectoryPathPrefix = logicalDirectoryPath + "/"
+        let relativePathPrefix = relativePath.isEmpty ? "" : relativePath + "/"
+        while let entryPointer = readdir(directory) {
+            let entry = entryPointer.pointee
+            let nameLength = Int(entry.d_namlen)
+            let nameBytes = withUnsafePointer(to: entry.d_name) { pointer in
+                pointer.withMemoryRebound(to: UInt8.self, capacity: nameLength + 1) { bytes in
+                    Array(UnsafeBufferPointer(start: bytes, count: nameLength))
+                }
+            }
+            if isCurrentOrParentDirectoryName(nameBytes) {
+                continue
+            }
+            let name = String(decoding: nameBytes, as: UTF8.self)
+            let kind = try fastDirectoryEntryKind(entry.d_type, path: directoryPath, name: name)
+            if kind == .symbolicLink {
+                continue
+            }
+
+            let childRelativePath = relativePathPrefix + name
+            let isDirectory = kind.isDirectory
+            if !options.hidden,
+               nameBytes.first == UInt8(ascii: "."),
+               !isIncludedByIgnore(
+                   relativePath: childRelativePath,
+                   basename: name,
+                   isDirectory: isDirectory,
+                   ignoreStack: directoryIgnoreStack
+               ) {
+                continue
+            }
+            if !directoryIgnoreStack.allows(relativePath: childRelativePath, basename: name, isDirectory: isDirectory) {
+                filtered = true
+                continue
+            }
+            if kind.isFile {
+                return true
+            }
+            if kind.isDirectory,
+               try fastDirectoryTreeContainsAllowedFile(
+                directoryPath: directoryPathPrefix + name,
+                logicalDirectoryPath: logicalDirectoryPathPrefix + name,
+                relativePath: childRelativePath,
+                rootBase: rootBase,
+                rootDebugDisplayPath: rootDebugDisplayPath,
+                rootArgumentIsAbsolute: rootArgumentIsAbsolute,
+                vcsContext: directoryVCSContext,
+                warnings: &warnings,
+                diagnostics: &diagnostics,
+                filtered: &filtered,
+                ignoreStack: directoryIgnoreStack,
+                options: options
+               ) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private func fastDirectoryMarkers(atPath path: String) throws -> FastDirectoryMarkers {
+        guard let directory = opendir(path) else {
+            throw NSError(
+                domain: NSPOSIXErrorDomain,
+                code: Int(errno),
+                userInfo: [NSFilePathErrorKey: path]
+            )
+        }
+        defer {
+            closedir(directory)
+        }
+
+        var hasGitMarker = false
+        var hasGitignore = false
+        var hasIgnore = false
+        var hasRgignore = false
+        while let entryPointer = readdir(directory) {
+            let entry = entryPointer.pointee
+            let nameLength = Int(entry.d_namlen)
+            withUnsafePointer(to: entry.d_name) { pointer in
+                pointer.withMemoryRebound(to: UInt8.self, capacity: nameLength + 1) { bytes in
+                    if nameLength == 4,
+                       bytes[0] == UInt8(ascii: "."),
+                       bytes[1] == UInt8(ascii: "g"),
+                       bytes[2] == UInt8(ascii: "i"),
+                       bytes[3] == UInt8(ascii: "t") {
+                        hasGitMarker = true
+                    } else if nameLength == 7,
+                              bytes[0] == UInt8(ascii: "."),
+                              bytes[1] == UInt8(ascii: "i"),
+                              bytes[2] == UInt8(ascii: "g"),
+                              bytes[3] == UInt8(ascii: "n"),
+                              bytes[4] == UInt8(ascii: "o"),
+                              bytes[5] == UInt8(ascii: "r"),
+                              bytes[6] == UInt8(ascii: "e") {
+                        hasIgnore = true
+                    } else if nameLength == 9,
+                              bytes[0] == UInt8(ascii: "."),
+                              bytes[1] == UInt8(ascii: "r"),
+                              bytes[2] == UInt8(ascii: "g"),
+                              bytes[3] == UInt8(ascii: "i"),
+                              bytes[4] == UInt8(ascii: "g"),
+                              bytes[5] == UInt8(ascii: "n"),
+                              bytes[6] == UInt8(ascii: "o"),
+                              bytes[7] == UInt8(ascii: "r"),
+                              bytes[8] == UInt8(ascii: "e") {
+                        hasRgignore = true
+                    } else if nameLength == 10,
+                              bytes[0] == UInt8(ascii: "."),
+                              bytes[1] == UInt8(ascii: "g"),
+                              bytes[2] == UInt8(ascii: "i"),
+                              bytes[3] == UInt8(ascii: "t"),
+                              bytes[4] == UInt8(ascii: "i"),
+                              bytes[5] == UInt8(ascii: "g"),
+                              bytes[6] == UInt8(ascii: "n"),
+                              bytes[7] == UInt8(ascii: "o"),
+                              bytes[8] == UInt8(ascii: "r"),
+                              bytes[9] == UInt8(ascii: "e") {
+                        hasGitignore = true
+                    }
+                }
+            }
+        }
+        return FastDirectoryMarkers(
+            hasGitMarker: hasGitMarker,
+            hasGitignore: hasGitignore,
+            hasIgnore: hasIgnore,
+            hasRgignore: hasRgignore
+        )
     }
 
     private func outputPath(
