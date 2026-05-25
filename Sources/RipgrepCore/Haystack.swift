@@ -154,6 +154,7 @@ public struct FileWalker {
             let rootVolume = options.oneFileSystem ? volumeIdentifier(for: root.standardizedFileURL) : nil
             let rootBasePath = rootBase.standardizedFileURL.path
             let rootBasePrefix = rootBasePath.hasSuffix("/") ? rootBasePath : "\(rootBasePath)/"
+            let rootVCSContext = options.noRequireGit || isInGitRepository(rootBase)
             let cwdPath = URL(fileURLWithPath: fileManager.currentDirectoryPath, isDirectory: true)
                 .standardizedFileURL
                 .path
@@ -170,6 +171,7 @@ public struct FileWalker {
                 rootArgumentIsAbsolute: rootArgumentIsAbsolute,
                 cwdPrefix: cwdPrefix,
                 rootVolume: rootVolume,
+                vcsContext: rootVCSContext,
                 messages: &messages,
                 warnings: &warnings,
                 diagnostics: &diagnostics,
@@ -218,6 +220,7 @@ public struct FileWalker {
         rootArgumentIsAbsolute: Bool,
         cwdPrefix: String,
         rootVolume: String?,
+        vcsContext: Bool,
         messages: inout [String],
         warnings: inout [String],
         diagnostics: inout [String],
@@ -370,6 +373,7 @@ public struct FileWalker {
             return []
         }
 
+        let directoryVCSContext = vcsContext || (!options.noIgnoreVCS && hasGitMarker(in: resolvedURL))
         var directoryIgnoreStack = ignoreStack
         if !options.noIgnore {
             appendIgnoreFiles(
@@ -381,6 +385,7 @@ public struct FileWalker {
                 rootBase: rootBase,
                 rootDebugDisplayPath: rootDebugDisplayPath,
                 rootArgumentIsAbsolute: rootArgumentIsAbsolute,
+                vcsContext: directoryVCSContext,
                 options: options
             )
         }
@@ -415,6 +420,7 @@ public struct FileWalker {
                 rootArgumentIsAbsolute: rootArgumentIsAbsolute,
                 cwdPrefix: cwdPrefix,
                 rootVolume: rootVolume,
+                vcsContext: directoryVCSContext,
                 messages: &messages,
                 warnings: &warnings,
                 diagnostics: &diagnostics,
@@ -627,6 +633,7 @@ public struct FileWalker {
             rootBase: rootBase,
             rootDebugDisplayPath: rootDebugDisplayPath,
             rootArgumentIsAbsolute: rootArgumentIsAbsolute,
+            vcsContext: options.noRequireGit || isInGitRepository(rootBase),
             options: options
         )
     }
@@ -1294,6 +1301,7 @@ public struct FileWalker {
         rootBase: URL,
         rootDebugDisplayPath: String,
         rootArgumentIsAbsolute: Bool,
+        vcsContext: Bool,
         options: RipgrepOptions
     ) {
         let scopeDirectory = logicalDirectory ?? directoryURL
@@ -1331,7 +1339,8 @@ public struct FileWalker {
                 options: options
             )
         }
-        if !options.noIgnoreVCS && (options.noRequireGit || isInGitRepository(directoryURL)) {
+        let shouldLoadVCSIgnore = !options.noIgnoreVCS && (options.noRequireGit || vcsContext)
+        if shouldLoadVCSIgnore {
             let gitignoreURL = directoryURL.appendingPathComponent(".gitignore")
             appendLoadedMatcher(
                 from: gitignoreURL,
@@ -1350,8 +1359,7 @@ public struct FileWalker {
             )
         }
         if !options.noIgnoreExclude,
-           !options.noIgnoreVCS,
-           (options.noRequireGit || isInGitRepository(directoryURL)),
+           shouldLoadVCSIgnore,
            let excludeURL = gitInfoExcludeURL(for: directoryURL) {
             appendLoadedMatcher(
                 from: excludeURL,
