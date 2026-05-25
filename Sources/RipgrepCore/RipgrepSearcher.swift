@@ -812,6 +812,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
         matcher: PatternMatcher,
         options: RipgrepOptions
     ) -> SearchFileResult? {
+        #if !canImport(Darwin)
+        return nil
+        #else
         guard case .automatic = options.encodingMode,
               !data.starts(with: [0xEF, 0xBB, 0xBF]),
               !data.starts(with: [0xFF, 0xFE]),
@@ -949,12 +952,16 @@ public struct RipgrepSearcher: @unchecked Sendable {
             supplementalMatchedLines: supplementalMatchedLines,
             supplementalMatches: supplementalMatches
         )
+        #endif
     }
 
     private func streamingByteLiteralFastPath(
         matcher: PatternMatcher,
         options: RipgrepOptions
     ) -> [[UInt8]]? {
+        #if !canImport(Darwin)
+        return nil
+        #else
         guard case .automatic = options.encodingMode,
               !options.json,
               !options.stats,
@@ -974,6 +981,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             return nil
         }
         return matcher.byteLiteralFastPath()
+        #endif
     }
 
     private func byteLiteralSpans(
