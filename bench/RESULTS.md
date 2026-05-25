@@ -33,6 +33,15 @@ The matching fixed-lookahead shape is on the same byte path:
 `-P -o 'Sherlock(?= Holmes)'` produced byte-identical output and measured
 Swift at 145.5 ms versus Rust PCRE2 at 216.0 ms (**0.67x**) in a 3-run check.
 
+Fixed negative lookaround literals also avoid the Foundation regex path for
+single-file `-P -o`. On a 54 MiB repeated
+`Sherlock Holmes` / `Mycroft Holmes` / `Sherlock Watson` corpus,
+`-P -o '(?<!Sherlock )Holmes'` produced byte-identical output to Rust and
+measured Swift release at 167.2 ms versus 15.520 s for the previous Swift path
+and 1.661 s for the sibling Rust PCRE2 oracle in 10-run checks. The matching
+negative-lookahead shape, `-P -o 'Sherlock(?! Holmes)'`, measured 145.8 ms
+versus 15.441 s for the previous Swift path on the same corpus.
+
 Simple literal-group backreferences now take the same in-tree byte-output path
 for single-file `-P -o`. On a 74 MiB repeated `abba abca Sherlock Holmes`
 corpus, `-P -o '(a)(b)\2'` produced byte-identical output to Rust and measured
@@ -95,6 +104,10 @@ The key improvements since the 2026-05-24 baseline are:
   shapes now use an in-tree Swift parser plus Darwin byte scanning for
   `-P -o`, preserving Rust output while avoiding Foundation regex work on the
   hot path;
+- PCRE2 fixed negative-lookaround literal shapes now use the same in-tree
+  parser and Darwin byte scanner for `-P -o`, preserving Rust output while
+  reducing representative negative lookbehind/lookahead cases by about two
+  orders of magnitude versus the previous Swift path;
 - PCRE2 literal-group backreferences such as `(a)(b)\2` now use the same
   in-tree parser and Darwin byte-output path for single-file `-P -o`, while
   still preserving capture replacement semantics through the non-executable

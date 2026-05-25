@@ -384,6 +384,22 @@ public struct PatternMatcher {
         return regex.fixedPositiveLookaheadFastPath
     }
 
+    func fixedNegativeLookbehindFastPath() -> (prefix: [UInt8], literal: [UInt8])? {
+        guard patterns.count == 1,
+              case .pcre2(let regex) = patterns[0] else {
+            return nil
+        }
+        return regex.fixedNegativeLookbehindFastPath
+    }
+
+    func fixedNegativeLookaheadFastPath() -> (literal: [UInt8], suffix: [UInt8])? {
+        guard patterns.count == 1,
+              case .pcre2(let regex) = patterns[0] else {
+            return nil
+        }
+        return regex.fixedNegativeLookaheadFastPath
+    }
+
     func fixedLiteralBackreferenceFastPath() -> [UInt8]? {
         guard patterns.count == 1,
               case .pcre2(let regex) = patterns[0] else {

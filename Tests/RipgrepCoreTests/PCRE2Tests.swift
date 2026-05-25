@@ -31,6 +31,24 @@ struct PCRE2Tests {
         #expect(output == Data("Holmes\nHolmes\n".utf8))
     }
 
+    @Test func pcre2FixedNegativeLookbehindLiteralOnlyMatchesWithoutPrefix() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("Sherlock Holmes\nMycroft Holmes\nHolmes\n", to: "pcre.txt")
+
+        let output = try run(["-P", "-o", "(?<!Sherlock )Holmes", temp.path("pcre.txt")])
+
+        #expect(output == ["Holmes", "Holmes"])
+    }
+
+    @Test func pcre2FixedNegativeLookbehindExecutableFastPathOnlyMatchingOutput() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("Sherlock Holmes\nMycroft Holmes\nHolmes\n", to: "pcre.txt")
+
+        let output = try runExecutableData(["-P", "-o", "(?<!Sherlock )Holmes", temp.path("pcre.txt")]) {}
+
+        #expect(output == Data("Holmes\nHolmes\n".utf8))
+    }
+
     @Test func pcre2FixedLookaheadLiteralOnlyMatchesBeforeSuffix() throws {
         let temp = try TemporaryDirectory()
         try temp.write("Sherlock Holmes\nSherlock Watson\nSherlock Holmes\n", to: "pcre.txt")
@@ -45,6 +63,24 @@ struct PCRE2Tests {
         try temp.write("Sherlock Watson\nSherlock Holmes and Sherlock Holmes\n", to: "pcre.txt")
 
         let output = try runExecutableData(["-P", "-o", "Sherlock(?= Holmes)", temp.path("pcre.txt")]) {}
+
+        #expect(output == Data("Sherlock\nSherlock\n".utf8))
+    }
+
+    @Test func pcre2FixedNegativeLookaheadLiteralOnlyMatchesWithoutSuffix() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("Sherlock Holmes\nSherlock Watson\nSherlock\n", to: "pcre.txt")
+
+        let output = try run(["-P", "-o", "Sherlock(?! Holmes)", temp.path("pcre.txt")])
+
+        #expect(output == ["Sherlock", "Sherlock"])
+    }
+
+    @Test func pcre2FixedNegativeLookaheadExecutableFastPathOnlyMatchingOutput() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("Sherlock Holmes\nSherlock Watson\nSherlock\n", to: "pcre.txt")
+
+        let output = try runExecutableData(["-P", "-o", "Sherlock(?! Holmes)", temp.path("pcre.txt")]) {}
 
         #expect(output == Data("Sherlock\nSherlock\n".utf8))
     }

@@ -16,7 +16,9 @@ final class PCRE2CompiledPattern {
     private enum Matcher {
         case regex(NSRegularExpression)
         case fixedPositiveLookbehind(prefix: [UInt8], literal: [UInt8])
+        case fixedNegativeLookbehind(prefix: [UInt8], literal: [UInt8])
         case fixedPositiveLookahead(literal: [UInt8], suffix: [UInt8])
+        case fixedNegativeLookahead(literal: [UInt8], suffix: [UInt8])
         case fixedLiteralBackreference(literal: [UInt8], captureRanges: [Range<Int>])
     }
 
@@ -32,6 +34,20 @@ final class PCRE2CompiledPattern {
 
     var fixedPositiveLookaheadFastPath: (literal: [UInt8], suffix: [UInt8])? {
         guard case .fixedPositiveLookahead(let literal, let suffix) = matcher else {
+            return nil
+        }
+        return (literal, suffix)
+    }
+
+    var fixedNegativeLookbehindFastPath: (prefix: [UInt8], literal: [UInt8])? {
+        guard case .fixedNegativeLookbehind(let prefix, let literal) = matcher else {
+            return nil
+        }
+        return (prefix, literal)
+    }
+
+    var fixedNegativeLookaheadFastPath: (literal: [UInt8], suffix: [UInt8])? {
+        guard case .fixedNegativeLookahead(let literal, let suffix) = matcher else {
             return nil
         }
         return (literal, suffix)
@@ -58,6 +74,22 @@ final class PCRE2CompiledPattern {
         if !options.effectiveIgnoreCase,
            let lookahead = Self.fixedPositiveLookahead(pattern) {
             self.matcher = .fixedPositiveLookahead(
+                literal: Array(lookahead.literal.utf8),
+                suffix: Array(lookahead.suffix.utf8)
+            )
+            return
+        }
+        if !options.effectiveIgnoreCase,
+           let lookbehind = Self.fixedNegativeLookbehind(pattern) {
+            self.matcher = .fixedNegativeLookbehind(
+                prefix: Array(lookbehind.prefix.utf8),
+                literal: Array(lookbehind.literal.utf8)
+            )
+            return
+        }
+        if !options.effectiveIgnoreCase,
+           let lookahead = Self.fixedNegativeLookahead(pattern) {
+            self.matcher = .fixedNegativeLookahead(
                 literal: Array(lookahead.literal.utf8),
                 suffix: Array(lookahead.suffix.utf8)
             )
@@ -101,6 +133,10 @@ final class PCRE2CompiledPattern {
             return Self.fixedPositiveLookbehindMatches(prefix: prefix, literal: literal, in: text)
         case .fixedPositiveLookahead(let literal, let suffix):
             return Self.fixedPositiveLookaheadMatches(literal: literal, suffix: suffix, in: text)
+        case .fixedNegativeLookbehind(let prefix, let literal):
+            return Self.fixedNegativeLookbehindMatches(prefix: prefix, literal: literal, in: text)
+        case .fixedNegativeLookahead(let literal, let suffix):
+            return Self.fixedNegativeLookaheadMatches(literal: literal, suffix: suffix, in: text)
         case .fixedLiteralBackreference(let literal, let captureRanges):
             return Self.fixedLiteralBackreferenceMatches(literal: literal, captureRanges: captureRanges, in: text)
         }
@@ -111,6 +147,12 @@ final class PCRE2CompiledPattern {
             return lookbehind.literal
         }
         if let lookahead = fixedPositiveLookahead(pattern) {
+            return lookahead.literal
+        }
+        if let lookbehind = fixedNegativeLookbehind(pattern) {
+            return lookbehind.literal
+        }
+        if let lookahead = fixedNegativeLookahead(pattern) {
             return lookahead.literal
         }
         return nil
@@ -143,6 +185,55 @@ final class PCRE2CompiledPattern {
 
     private static func fixedPositiveLookahead(_ pattern: String) -> (literal: String, suffix: String)? {
         let marker = "(?="
+        guard pattern.hasSuffix(")"),
+              let markerRange = pattern.range(of: marker) else {
+            return nil
+        }
+        let literal = String(pattern[..<markerRange.lowerBound])
+        let suffixEnd = pattern.index(before: pattern.endIndex)
+        let suffix = String(pattern[markerRange.upperBound..<suffixEnd])
+        guard !literal.isEmpty,
+              !suffix.isEmpty,
+              !literal.contains("\n"),
+              !literal.contains("\r"),
+              !suffix.contains("\n"),
+              !suffix.contains("\r"),
+              literal.utf8.allSatisfy({ $0 < 0x80 }),
+              suffix.utf8.allSatisfy({ $0 < 0x80 }),
+              isPlainPCRELiteral(literal),
+              isPlainPCRELiteral(suffix) else {
+            return nil
+        }
+        return (literal, suffix)
+    }
+
+    private static func fixedNegativeLookbehind(_ pattern: String) -> (prefix: String, literal: String)? {
+        let marker = "(?<!"
+        guard pattern.hasPrefix(marker),
+              let close = pattern.dropFirst(marker.count).firstIndex(of: ")") else {
+            return nil
+        }
+        let prefixStart = pattern.index(pattern.startIndex, offsetBy: marker.count)
+        let prefix = String(pattern[prefixStart..<close])
+        let literalStart = pattern.index(after: close)
+        let literal = String(pattern[literalStart...])
+        guard !prefix.isEmpty,
+              !literal.isEmpty,
+              !prefix.contains("\n"),
+              !prefix.contains("\r"),
+              !literal.contains("\n"),
+              !literal.contains("\r"),
+              prefix.utf8.allSatisfy({ $0 < 0x80 }),
+              literal.utf8.allSatisfy({ $0 < 0x80 }),
+              isPlainPCRELiteral(prefix),
+              isPlainPCRELiteral(literal) else {
+            return nil
+        }
+        return (prefix, literal)
+    }
+
+    private static func fixedNegativeLookahead(_ pattern: String) -> (literal: String, suffix: String)? {
+        let marker = "(?!"
         guard pattern.hasSuffix(")"),
               let markerRange = pattern.range(of: marker) else {
             return nil
@@ -272,6 +363,63 @@ final class PCRE2CompiledPattern {
         #endif
     }
 
+    private static func fixedNegativeLookbehindMatches(
+        prefix: [UInt8],
+        literal: [UInt8],
+        in text: String
+    ) -> [PCRE2Match] {
+        #if canImport(CRipgrepPlatform)
+        var matches: [PCRE2Match] = []
+        let originalText = text
+        var utf8Text = text
+        utf8Text.withUTF8 { bytes in
+            guard let baseAddress = bytes.baseAddress else {
+                return
+            }
+            prefix.withUnsafeBufferPointer { prefixBytes in
+                literal.withUnsafeBufferPointer { literalBytes in
+                    guard let prefixBase = prefixBytes.baseAddress,
+                          let literalBase = literalBytes.baseAddress else {
+                        return
+                    }
+                    var searchOffset = 0
+                    while searchOffset <= bytes.count - literalBytes.count,
+                          let found = rg_memmem_simple(
+                            baseAddress.advanced(by: searchOffset),
+                            bytes.count - searchOffset,
+                            literalBase,
+                            literalBytes.count
+                          ) {
+                        let matchOffset = baseAddress.distance(to: found)
+                        let hasPrefix = matchOffset >= prefixBytes.count
+                            && memcmp(
+                                baseAddress.advanced(by: matchOffset - prefixBytes.count),
+                                prefixBase,
+                                prefixBytes.count
+                            ) == 0
+                        if !hasPrefix,
+                           let range = stringRange(
+                            startByte: matchOffset,
+                            endByte: matchOffset + literalBytes.count,
+                            in: originalText
+                           ) {
+                            matches.append(PCRE2Match(
+                                range: range,
+                                byteRange: matchOffset..<matchOffset + literalBytes.count,
+                                captures: [range]
+                            ))
+                        }
+                        searchOffset = matchOffset + max(literalBytes.count, 1)
+                    }
+                }
+            }
+        }
+        return matches
+        #else
+        return []
+        #endif
+    }
+
     private static func fixedPositiveLookaheadMatches(
         literal: [UInt8],
         suffix: [UInt8],
@@ -307,6 +455,64 @@ final class PCRE2CompiledPattern {
                             suffixBase,
                             suffixBytes.count
                            ) == 0,
+                           let range = stringRange(
+                            startByte: matchOffset,
+                            endByte: suffixOffset,
+                            in: originalText
+                           ) {
+                            matches.append(PCRE2Match(
+                                range: range,
+                                byteRange: matchOffset..<suffixOffset,
+                                captures: [range]
+                            ))
+                        }
+                        searchOffset = matchOffset + max(literalBytes.count, 1)
+                    }
+                }
+            }
+        }
+        return matches
+        #else
+        return []
+        #endif
+    }
+
+    private static func fixedNegativeLookaheadMatches(
+        literal: [UInt8],
+        suffix: [UInt8],
+        in text: String
+    ) -> [PCRE2Match] {
+        #if canImport(CRipgrepPlatform)
+        var matches: [PCRE2Match] = []
+        let originalText = text
+        var utf8Text = text
+        utf8Text.withUTF8 { bytes in
+            guard let baseAddress = bytes.baseAddress else {
+                return
+            }
+            literal.withUnsafeBufferPointer { literalBytes in
+                suffix.withUnsafeBufferPointer { suffixBytes in
+                    guard let literalBase = literalBytes.baseAddress,
+                          let suffixBase = suffixBytes.baseAddress else {
+                        return
+                    }
+                    var searchOffset = 0
+                    while searchOffset <= bytes.count - literalBytes.count,
+                          let found = rg_memmem_simple(
+                            baseAddress.advanced(by: searchOffset),
+                            bytes.count - searchOffset,
+                            literalBase,
+                            literalBytes.count
+                          ) {
+                        let matchOffset = baseAddress.distance(to: found)
+                        let suffixOffset = matchOffset + literalBytes.count
+                        let hasSuffix = suffixOffset + suffixBytes.count <= bytes.count
+                            && memcmp(
+                                baseAddress.advanced(by: suffixOffset),
+                                suffixBase,
+                                suffixBytes.count
+                            ) == 0
+                        if !hasSuffix,
                            let range = stringRange(
                             startByte: matchOffset,
                             endByte: suffixOffset,

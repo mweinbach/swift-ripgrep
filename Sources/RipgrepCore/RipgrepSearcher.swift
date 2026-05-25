@@ -480,16 +480,24 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let matcher = try PatternMatcher(options: options)
         let fixedLookbehindFastPath = matcher.fixedPositiveLookbehindFastPath()
         let fixedLookaheadFastPath = matcher.fixedPositiveLookaheadFastPath()
+        let fixedNegativeLookbehindFastPath = matcher.fixedNegativeLookbehindFastPath()
+        let fixedNegativeLookaheadFastPath = matcher.fixedNegativeLookaheadFastPath()
         let fixedBackreferenceFastPath = matcher.fixedLiteralBackreferenceFastPath()
         let byteLiteralFastPath = matcher.byteLiteralFastPath()
         guard let fileURL = options.roots.first?.standardizedFileURL,
               fixedLookbehindFastPath != nil
                 || fixedLookaheadFastPath != nil
+                || fixedNegativeLookbehindFastPath != nil
+                || fixedNegativeLookaheadFastPath != nil
                 || fixedBackreferenceFastPath != nil
                 || byteLiteralFastPath != nil else {
             return nil
         }
-        if (fixedLookbehindFastPath != nil || fixedLookaheadFastPath != nil || fixedBackreferenceFastPath != nil),
+        if (fixedLookbehindFastPath != nil
+            || fixedLookaheadFastPath != nil
+            || fixedNegativeLookbehindFastPath != nil
+            || fixedNegativeLookaheadFastPath != nil
+            || fixedBackreferenceFastPath != nil),
            !(options.onlyMatching && options.printMode == .matchingLines && !options.wantsLineNumber && options.maxCount == nil) {
             return nil
         }
@@ -529,6 +537,28 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 literal: fixedLookaheadFastPath.literal,
                 prefix: nil,
                 suffix: fixedLookaheadFastPath.suffix,
+                writeBytes: writeBytes
+            )
+        }
+        if let fixedNegativeLookbehindFastPath {
+            return writeDarwinFixedLookaroundOnlyMatches(
+                data,
+                fileURL: fileURL,
+                literal: fixedNegativeLookbehindFastPath.literal,
+                prefix: fixedNegativeLookbehindFastPath.prefix,
+                prefixShouldMatch: false,
+                suffix: nil,
+                writeBytes: writeBytes
+            )
+        }
+        if let fixedNegativeLookaheadFastPath {
+            return writeDarwinFixedLookaroundOnlyMatches(
+                data,
+                fileURL: fileURL,
+                literal: fixedNegativeLookaheadFastPath.literal,
+                prefix: nil,
+                suffix: fixedNegativeLookaheadFastPath.suffix,
+                suffixShouldMatch: false,
                 writeBytes: writeBytes
             )
         }
@@ -953,7 +983,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
         fileURL: URL,
         literal: [UInt8],
         prefix: [UInt8]?,
+        prefixShouldMatch: Bool = true,
         suffix: [UInt8]?,
+        suffixShouldMatch: Bool = true,
         writeBytes: (UnsafeRawBufferPointer) -> Void
     ) -> SearchResults {
         var matchedLineCount = 0
@@ -1004,8 +1036,10 @@ public struct RipgrepSearcher: @unchecked Sendable {
                                 matchEnd: matchEnd,
                                 prefixBytes: prefixBytes,
                                 prefixBaseAddress: prefixBaseAddress,
+                                prefixShouldMatch: prefixShouldMatch,
                                 suffixBytes: suffixBytes,
-                                suffixBaseAddress: suffixBaseAddress
+                                suffixBaseAddress: suffixBaseAddress,
+                                suffixShouldMatch: suffixShouldMatch
                             ) {
                                 while matchStart > currentLineEnd {
                                     currentLineStart = min(currentLineEnd + 1, data.count)
@@ -1063,26 +1097,30 @@ public struct RipgrepSearcher: @unchecked Sendable {
         matchEnd: Int,
         prefixBytes: UnsafeBufferPointer<UInt8>,
         prefixBaseAddress: UnsafePointer<UInt8>?,
+        prefixShouldMatch: Bool,
         suffixBytes: UnsafeBufferPointer<UInt8>,
-        suffixBaseAddress: UnsafePointer<UInt8>?
+        suffixBaseAddress: UnsafePointer<UInt8>?,
+        suffixShouldMatch: Bool
     ) -> Bool {
         if let prefixBaseAddress {
-            guard matchStart >= prefixBytes.count,
-                  memcmp(
+            let hasPrefix = matchStart >= prefixBytes.count
+                && memcmp(
                     baseAddress.advanced(by: matchStart - prefixBytes.count),
                     prefixBaseAddress,
                     prefixBytes.count
-                  ) == 0 else {
+                ) == 0
+            guard hasPrefix == prefixShouldMatch else {
                 return false
             }
         }
         if let suffixBaseAddress {
-            guard matchEnd + suffixBytes.count <= dataCount,
-                  memcmp(
+            let hasSuffix = matchEnd + suffixBytes.count <= dataCount
+                && memcmp(
                     baseAddress.advanced(by: matchEnd),
                     suffixBaseAddress,
                     suffixBytes.count
-                  ) == 0 else {
+                ) == 0
+            guard hasSuffix == suffixShouldMatch else {
                 return false
             }
         }
