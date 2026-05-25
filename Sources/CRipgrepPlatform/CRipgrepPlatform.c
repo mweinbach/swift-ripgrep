@@ -344,14 +344,21 @@ size_t rg_memcount_byte(
 ) {
 #if defined(__APPLE__) && defined(__aarch64__)
     size_t index = 0;
-    uint64x2_t vector_count = vdupq_n_u64(0);
+    size_t count = 0;
     const uint8x16_t target = vdupq_n_u8(byte);
+    const uint8x16_t one = vdupq_n_u8(1);
+    for (; index + 64 <= haystack_len; index += 64) {
+        const uint8x16_t matches0 = vandq_u8(vceqq_u8(vld1q_u8(haystack + index), target), one);
+        const uint8x16_t matches1 = vandq_u8(vceqq_u8(vld1q_u8(haystack + index + 16), target), one);
+        const uint8x16_t matches2 = vandq_u8(vceqq_u8(vld1q_u8(haystack + index + 32), target), one);
+        const uint8x16_t matches3 = vandq_u8(vceqq_u8(vld1q_u8(haystack + index + 48), target), one);
+        count += vaddvq_u8(matches0) + vaddvq_u8(matches1) + vaddvq_u8(matches2) + vaddvq_u8(matches3);
+    }
     for (; index + 16 <= haystack_len; index += 16) {
-        const uint8x16_t matches = vceqq_u8(vld1q_u8(haystack + index), target);
-        vector_count = vaddq_u64(vector_count, vpaddlq_u32(vpaddlq_u16(vpaddlq_u8(matches))));
+        const uint8x16_t matches = vandq_u8(vceqq_u8(vld1q_u8(haystack + index), target), one);
+        count += vaddvq_u8(matches);
     }
 
-    size_t count = (size_t)(vgetq_lane_u64(vector_count, 0) + vgetq_lane_u64(vector_count, 1)) / 255;
     for (; index < haystack_len; index++) {
         count += haystack[index] == byte;
     }
