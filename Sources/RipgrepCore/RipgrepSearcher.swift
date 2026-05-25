@@ -581,6 +581,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
         guard let fastPath = byteLiteralFastPath,
               !fastPath.literals.isEmpty,
               fastPath.literals.allSatisfy({ !$0.isEmpty }),
+              !options.byteOffset,
+              !options.column,
               canWriteDarwinSimpleByteLiteralFastPath(fastPath) else {
             return nil
         }
@@ -1006,7 +1008,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         suffixShouldMatch: Bool = true,
         options: RipgrepOptions,
         writeBytes: (UnsafeRawBufferPointer) -> Void
-    ) -> SearchResults {
+    ) -> SearchResults? {
         var matchedLineCount = 0
         var totalMatchCount = 0
         var bytesSearched = data.count
@@ -1088,9 +1090,13 @@ public struct RipgrepSearcher: @unchecked Sendable {
                                     bytesSearched = matchEnd
                                     shouldStop = true
                                 } else if onlyMatching {
-                                    if options.wantsLineNumber {
-                                        writeDarwinLineNumberPrefix(currentLineNumber, writeBytes: writeBytes)
-                                    }
+                                    writeDarwinOnlyMatchingPrefixes(
+                                        lineNumber: currentLineNumber,
+                                        column: matchStart - currentLineStart + 1,
+                                        byteOffset: matchStart,
+                                        options: options,
+                                        writeBytes: writeBytes
+                                    )
                                     writeBytes(UnsafeRawBufferPointer(
                                         start: rawBaseAddress.advanced(by: matchStart),
                                         count: literalBytes.count
@@ -1174,6 +1180,24 @@ public struct RipgrepSearcher: @unchecked Sendable {
             }
         }
         return true
+    }
+
+    private func writeDarwinOnlyMatchingPrefixes(
+        lineNumber: Int,
+        column: Int,
+        byteOffset: Int,
+        options: RipgrepOptions,
+        writeBytes: (UnsafeRawBufferPointer) -> Void
+    ) {
+        if options.wantsLineNumber {
+            writeDarwinLineNumberPrefix(lineNumber, writeBytes: writeBytes)
+        }
+        if options.column {
+            writeDarwinLineNumberPrefix(column, writeBytes: writeBytes)
+        }
+        if options.byteOffset {
+            writeDarwinLineNumberPrefix(byteOffset, writeBytes: writeBytes)
+        }
     }
 
     private func writeDarwinLineNumberPrefix(_ value: Int, writeBytes: (UnsafeRawBufferPointer) -> Void) {
@@ -1280,8 +1304,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
               options.maxColumns == nil,
               !options.maxColumnsPreview,
               options.sortMode == nil,
-              !options.byteOffset,
-              !options.column,
+              options.fieldMatchSeparator == ":",
               options.heading != true,
               !options.trim,
               !options.vimgrep,

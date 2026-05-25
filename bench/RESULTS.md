@@ -62,6 +62,16 @@ Swift release at 146.8 ms versus 302.9 ms before this slice and 2.378 s for
 Rust PCRE2. This slice also fixed quiet count output so `-q -c` remains silent
 like Rust while preserving the match exit status.
 
+Byte-offset and byte-column only-match output for fixed PCRE2 shapes now stays
+on the same direct Darwin writer. On the 193 MiB subtitles corpus,
+`-P -b -o '(?<=Sherlock )Holmes'` produced byte-identical output to the sibling
+Rust PCRE2 oracle and measured Swift release at 139.6 ms versus 2.385 s for
+Rust in 5-run checks. `-P --column -o '(?<=Sherlock )Holmes'` measured Swift
+at 144.3 ms versus 2.712 s for Rust, and
+`-P -n -b --column -o '(?<=Sherlock )Holmes'` measured Swift at 145.1 ms
+versus 2.699 s for Rust. These cases previously fell through the formatted
+Swift path at about 10.6 s on the same corpus.
+
 The recursive Linux-kernel traversal/search path now matches or beats Rust in
 this environment for the default literal search. A fresh confirmation run used
 2 warm-ups and 7 timed iterations for the default Swift worker count and Rust
@@ -133,6 +143,11 @@ The key improvements since the 2026-05-24 baseline are:
 - fixed PCRE2 count/count-matches/path/quiet modes now use the same direct
   byte scanner, cutting representative fixed-lookbehind count output from
   299.4 ms to 144.5 ms and restoring Rust-compatible silent `-q -c` output;
+- fixed PCRE2 byte-offset and byte-column only-match formatting now writes the
+  line/column/offset fields directly on the Darwin byte path, cutting
+  representative fixed-lookbehind offset/column output from about 10.6 s to
+  roughly 0.14 s while preserving Rust field ordering and byte-identical
+  output;
 - Darwin default recursive search remains capped at four workers because this
   checkout benchmarked faster than the ripgrep-style 12-worker cap on the
   Linux tree, while `--threads N` still lets callers override it.

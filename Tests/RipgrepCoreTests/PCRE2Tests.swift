@@ -40,6 +40,48 @@ struct PCRE2Tests {
         #expect(output == Data("2:Holmes\n2:Holmes\n".utf8))
     }
 
+    @Test func pcre2FixedLookbehindExecutableFastPathOnlyMatchingFields() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("abc Sherlock Holmes xyz\n", to: "pcre.txt")
+
+        let byteOffsetOutput = try runExecutableData([
+            "-P",
+            "-b",
+            "-o",
+            "(?<=Sherlock )Holmes",
+            temp.path("pcre.txt"),
+        ]) {}
+        let columnOutput = try runExecutableData([
+            "-P",
+            "--column",
+            "-o",
+            "(?<=Sherlock )Holmes",
+            temp.path("pcre.txt"),
+        ]) {}
+        let combinedOutput = try runExecutableData([
+            "-P",
+            "-n",
+            "-b",
+            "--column",
+            "-o",
+            "(?<=Sherlock )Holmes",
+            temp.path("pcre.txt"),
+        ]) {}
+        let columnWithoutLineOutput = try runExecutableData([
+            "-P",
+            "--no-line-number",
+            "--column",
+            "-o",
+            "(?<=Sherlock )Holmes",
+            temp.path("pcre.txt"),
+        ]) {}
+
+        #expect(byteOffsetOutput == Data("13:Holmes\n".utf8))
+        #expect(columnOutput == Data("1:14:Holmes\n".utf8))
+        #expect(combinedOutput == Data("1:14:13:Holmes\n".utf8))
+        #expect(columnWithoutLineOutput == Data("14:Holmes\n".utf8))
+    }
+
     @Test func pcre2FixedLookbehindExecutableFastPathCountOutputs() throws {
         let temp = try TemporaryDirectory()
         try temp.write("Mycroft Holmes\nSherlock Holmes and Sherlock Holmes\n", to: "pcre.txt")

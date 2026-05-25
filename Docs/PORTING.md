@@ -10,7 +10,7 @@ in-tree Swift compatibility engine; it does not link libpcre2.
 **Functional 1:1 with Rust ripgrep 15.1.0, including the streaming I/O
 architecture.** Verified via:
 
-- **114 Swift Testing cases** across 12 suites covering search, output formats,
+- **115 Swift Testing cases** across 12 suites covering search, output formats,
   ignore rules, file types, stdin, encodings, binary handling, parser
   diagnostics, mmap/worker pool, PCRE2, streaming haystack reads, and
   generated-asset drift.
@@ -47,10 +47,10 @@ The normal build has no package-manager or system-library dependency. PCRE2
 syntax compatibility is implemented in Swift/Foundation for the covered `-P`
 surface, with Swift-parsed fixed positive/negative lookaround literal and
 literal-backreference specializations that use the checked-in Darwin byte
-scanner for `-P -o`, line-numbered only-match output and count/path/quiet
-modes. The Darwin arm hot paths live in the checked-in `CRipgrepPlatform` shim
-because they provide measurable NEON/mmap throughput that Swift cannot
-currently express directly.
+scanner for `-P -o`, line-numbered, byte-offset and byte-column only-match
+output, plus count/path/quiet modes. The Darwin arm hot paths live in the
+checked-in `CRipgrepPlatform` shim because they provide measurable NEON/mmap
+throughput that Swift cannot currently express directly.
 
 File input flows through `HaystackReader` (mmap for regular files ≥ 16 KiB or
 when `--mmap` is forced, chunked 64 KiB buffered reads otherwise, stdin always
@@ -118,8 +118,8 @@ into a much smaller implementation:
    compatibility integration in `Sources/RipgrepCore/PatternMatcher.swift`.
    Fixed positive/negative lookaround literals and simple literal-group
    backreferences now avoid the Foundation regex path for single-file `-P -o`
-   output, line-numbered only-match output and count/path/quiet modes, and
-   remain byte-identical to Rust `rg`.
+   output, line-numbered/byte-offset/byte-column only-match output and
+   count/path/quiet modes, and remain byte-identical to Rust `rg`.
 
 2. **(Done 2026-05-24)** Enforced regex resource limits — see the size-budget
    guard in `Sources/RipgrepCore/PatternMatcher.swift`.
