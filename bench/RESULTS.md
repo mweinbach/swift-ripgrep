@@ -76,6 +76,18 @@ The key improvements since the 2026-05-24 baseline are:
 - Darwin default recursive search remains capped at four workers because this
   checkout benchmarked faster than the ripgrep-style 12-worker cap on the
   Linux tree, while `--threads N` still lets callers override it.
+  A 2026-05-25 smoke recheck with the 12-worker cap measured Swift
+  `PM_RESUME` at 4.998 s versus 4.680 s for Rust on the same Linux tree, so
+  the four-worker default remains the faster Darwin choice. Keeping that cap
+  measured Swift `PM_RESUME` at 2.596 s versus 3.972 s for Rust in a 3-run
+  smoke check.
+- `--quiet --files` has an early-exit walker for the plain single-root Darwin
+  path that checks files before descending once ignore files for the current
+  directory are loaded. A 2026-05-25 5-run smoke check measured Swift release at
+  46.5 ms versus Rust release at 5.5 ms on `/tmp/swift-rg-bench/linux`, down
+  from the 66.6 ms Swift no-PCRE2 checkpoint. Default `--files` in the same
+  smoke was 462.0 ms for Swift versus 88.2 ms for Rust, so ignore setup and
+  matching are still the largest traversal hotspot.
 
 ## Historical baseline — 2026-05-24
 

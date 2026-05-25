@@ -468,6 +468,29 @@ public struct FileWalker {
             )
         }
 
+        if stopAfterFirst, options.quiet, options.loggingMode == nil {
+            try walkFilePathsUntilFirstMatch(
+                contents: contents,
+                directoryPath: directoryPath,
+                logicalDirectoryPath: logicalDirectoryPath,
+                logicalDirectoryPathIsASCII: logicalDirectoryPathIsASCII,
+                relativePath: relativePath,
+                rootBase: rootBase,
+                rootDebugDisplayPath: rootDebugDisplayPath,
+                rootArgumentIsAbsolute: rootArgumentIsAbsolute,
+                vcsContext: directoryVCSContext,
+                messages: &messages,
+                warnings: &warnings,
+                diagnostics: &diagnostics,
+                filtered: &filtered,
+                ignoreStack: directoryIgnoreStack,
+                options: options,
+                didStop: &didStop,
+                emit: emit
+            )
+            return
+        }
+
         if options.noIgnore && options.hidden {
             for child in contents.children.reversed() {
                 if child.kind == .symbolicLink {
@@ -593,6 +616,140 @@ public struct FileWalker {
                 }
             }
         }
+    }
+
+    private func walkFilePathsUntilFirstMatch(
+        contents: FastDirectoryContents,
+        directoryPath: String,
+        logicalDirectoryPath: String,
+        logicalDirectoryPathIsASCII: Bool,
+        relativePath: String,
+        rootBase: URL,
+        rootDebugDisplayPath: String,
+        rootArgumentIsAbsolute: Bool,
+        vcsContext: Bool,
+        messages: inout [String],
+        warnings: inout [String],
+        diagnostics: inout [String],
+        filtered: inout Bool,
+        ignoreStack: IgnoreStack,
+        options: RipgrepOptions,
+        didStop: inout Bool,
+        emit: (String) -> Void
+    ) throws {
+        guard !didStop else {
+            return
+        }
+        if options.noIgnore && options.hidden {
+            for child in contents.children.reversed() where child.kind.isFile {
+                emit("")
+                didStop = true
+                return
+            }
+            for child in contents.children.reversed() where child.kind.isDirectory {
+                try walkFilePathsInOutputOrder(
+                    directoryPath: "\(directoryPath)/\(child.name)",
+                    logicalDirectoryPath: "\(logicalDirectoryPath)/\(child.name)",
+                    logicalDirectoryPathIsASCII: logicalDirectoryPathIsASCII && child.isASCII,
+                    relativePath: "",
+                    rootBase: rootBase,
+                    rootDebugDisplayPath: rootDebugDisplayPath,
+                    rootArgumentIsAbsolute: rootArgumentIsAbsolute,
+                    vcsContext: vcsContext,
+                    messages: &messages,
+                    warnings: &warnings,
+                    diagnostics: &diagnostics,
+                    filtered: &filtered,
+                    ignoreStack: ignoreStack,
+                    options: options,
+                    stopAfterFirst: true,
+                    didStop: &didStop,
+                    emit: emit
+                )
+                if didStop {
+                    return
+                }
+            }
+            return
+        }
+
+        for child in contents.children.reversed() where child.kind.isFile {
+            let childRelativePath = relativePath.isEmpty ? child.name : "\(relativePath)/\(child.name)"
+            guard shouldEmitFastFilePath(
+                child: child,
+                childRelativePath: childRelativePath,
+                isDirectory: false,
+                ignoreStack: ignoreStack,
+                options: options,
+                filtered: &filtered
+            ) else {
+                continue
+            }
+            emit("")
+            didStop = true
+            return
+        }
+
+        for child in contents.children.reversed() where child.kind.isDirectory {
+            let childRelativePath = relativePath.isEmpty ? child.name : "\(relativePath)/\(child.name)"
+            guard shouldEmitFastFilePath(
+                child: child,
+                childRelativePath: childRelativePath,
+                isDirectory: true,
+                ignoreStack: ignoreStack,
+                options: options,
+                filtered: &filtered
+            ) else {
+                continue
+            }
+            try walkFilePathsInOutputOrder(
+                directoryPath: "\(directoryPath)/\(child.name)",
+                logicalDirectoryPath: "\(logicalDirectoryPath)/\(child.name)",
+                logicalDirectoryPathIsASCII: logicalDirectoryPathIsASCII && child.isASCII,
+                relativePath: childRelativePath,
+                rootBase: rootBase,
+                rootDebugDisplayPath: rootDebugDisplayPath,
+                rootArgumentIsAbsolute: rootArgumentIsAbsolute,
+                vcsContext: vcsContext,
+                messages: &messages,
+                warnings: &warnings,
+                diagnostics: &diagnostics,
+                filtered: &filtered,
+                ignoreStack: ignoreStack,
+                options: options,
+                stopAfterFirst: true,
+                didStop: &didStop,
+                emit: emit
+            )
+            if didStop {
+                return
+            }
+        }
+    }
+
+    private func shouldEmitFastFilePath(
+        child: FastDirectoryChild,
+        childRelativePath: String,
+        isDirectory: Bool,
+        ignoreStack: IgnoreStack,
+        options: RipgrepOptions,
+        filtered: inout Bool
+    ) -> Bool {
+        if !options.hidden,
+           child.name.hasPrefix("."),
+           !isIncludedByIgnore(
+               relativePath: childRelativePath,
+               basename: child.name,
+               isDirectory: isDirectory,
+               ignoreStack: ignoreStack
+           ) {
+            return false
+        }
+        if !ignoreStack.allows(relativePath: childRelativePath, basename: child.name, isDirectory: isDirectory) {
+            filtered = true
+            return false
+        }
+        return true
     }
 
     private func fastDirectoryContents(atPath path: String) throws -> FastDirectoryContents {

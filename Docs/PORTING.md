@@ -52,9 +52,12 @@ that Swift cannot currently express directly.
 File input flows through `HaystackReader` (mmap for regular files ≥ 16 KiB or
 when `--mmap` is forced, chunked 64 KiB buffered reads otherwise, stdin always
 buffered). Per-haystack searches run inside a bounded Swift Concurrency
-`TaskGroup` driven by `--threads` (default `min(activeProcessorCount, 12)`,
-Rust's cap). Stdout buffering honours `--line-buffered` / `--block-buffered`
-via `setvbuf`, with the same TTY-based default that Rust ripgrep uses.
+`TaskGroup` driven by `--threads`; on Darwin the automatic worker cap is four
+because that benchmarks faster on the Linux tree, while non-Darwin keeps the
+Rust-shaped `min(activeProcessorCount, 12)` cap and explicit `--threads N`
+always overrides the default. Stdout buffering honours `--line-buffered` /
+`--block-buffered` via `setvbuf`, with the same TTY-based default that Rust
+ripgrep uses.
 
 Compared with Rust ripgrep, the port still collapses the upstream workspace
 into a much smaller implementation:
@@ -372,11 +375,12 @@ Owner: pair-agent-E (dispatched only after 2A lands). Touches:
 top of `search(options:stdin:)`), `Sources/RipgrepCore/RipgrepCLI.swift`
 (stdout flush wiring).
 
-- [x] Drive the per-haystack loop with a bounded `TaskGroup`. Default the
-      worker count to `min(ProcessInfo.processInfo.activeProcessorCount, 12)`
-      (matching the Rust ripgrep cap) and let `--threads N` override it
-      (clamped to ≥1). When `N == 1`, fall back to the existing sequential
-      path so behaviour is unchanged.
+- [x] Drive the per-haystack loop with a bounded `TaskGroup`. Explicit
+      `--threads N` overrides the automatic default (clamped to ≥1). When
+      `N == 1`, fall back to the existing sequential path so behaviour is
+      unchanged. The Darwin automatic cap is four workers after Linux tree
+      benchmarking; non-Darwin keeps the Rust-style
+      `min(ProcessInfo.processInfo.activeProcessorCount, 12)` cap.
 - [x] Preserve deterministic per-walk-order output: collect results into an
       array indexed by walk position and emit in that order. The existing
       tests assume stable ordering.
