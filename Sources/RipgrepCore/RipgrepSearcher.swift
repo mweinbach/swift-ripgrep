@@ -453,11 +453,10 @@ public struct RipgrepSearcher: @unchecked Sendable {
 
         let matcher = try PatternMatcher(options: options)
         guard let fastPath = matcher.byteLiteralFastPath(),
-              !fastPath.caseInsensitiveASCII,
               !fastPath.wordASCII,
               !fastPath.literals.isEmpty,
               fastPath.literals.allSatisfy({ !$0.isEmpty }),
-              (fastPath.literals.allSatisfy({ $0.count == 1 }) || fastPath.literals.count == 1),
+              canWriteDarwinSimpleByteLiteralFastPath(fastPath),
               let fileURL = options.roots.first?.standardizedFileURL else {
             return nil
         }
@@ -492,18 +491,26 @@ public struct RipgrepSearcher: @unchecked Sendable {
             }
             let baseAddress = rawBaseAddress.assumingMemoryBound(to: UInt8.self)
             if literals.count == 1,
-               let literal = literals.first,
-               literal.count > 1 {
+               let literal = literals.first {
                 var searchOffset = 0
                 var lastEmittedLineStart: Int?
                 while searchOffset < data.count, matchedLineCount < maxCount {
                     let foundPointer = literal.withUnsafeBufferPointer { needle in
-                        rg_memmem_simple(
-                            baseAddress.advanced(by: searchOffset),
-                            data.count - searchOffset,
-                            needle.baseAddress,
-                            needle.count
-                        )
+                        if fastPath.caseInsensitiveASCII {
+                            rg_memcasemem_ascii(
+                                baseAddress.advanced(by: searchOffset),
+                                data.count - searchOffset,
+                                needle.baseAddress,
+                                needle.count
+                            )
+                        } else {
+                            rg_memmem_simple(
+                                baseAddress.advanced(by: searchOffset),
+                                data.count - searchOffset,
+                                needle.baseAddress,
+                                needle.count
+                            )
+                        }
                     }
                     guard let rawFoundPointer = foundPointer else {
                         break
@@ -617,8 +624,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
               options.engineMode == .default,
               options.dfaSizeLimit == nil,
               options.regexSizeLimit == nil,
-              !options.ignoreCase,
-              !options.smartCase,
               !options.wordRegexp,
               !options.lineRegexp,
               !options.noUnicode,
@@ -661,6 +666,15 @@ public struct RipgrepSearcher: @unchecked Sendable {
             return false
         }
         return options.effectivePatterns.allSatisfy { !$0.isEmpty }
+    }
+
+    private func canWriteDarwinSimpleByteLiteralFastPath(_ fastPath: ByteLiteralFastPath) -> Bool {
+        if fastPath.caseInsensitiveASCII {
+            return fastPath.literals.count == 1 && fastPath.literals.allSatisfy { literal in
+                literal.allSatisfy { $0 < 0x80 }
+            }
+        }
+        return fastPath.literals.allSatisfy { $0.count == 1 } || fastPath.literals.count == 1
     }
 
     private func lineContainsAnyLiteral(_ line: UnsafePointer<UInt8>, count: Int, literals: [[UInt8]]) -> Bool {

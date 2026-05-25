@@ -47,6 +47,20 @@ struct MiscTests {
         #expect(results?.summary.filesWithMatches == 1)
         #expect(results?.summary.matchedLines == 1)
         #expect(output == Data("delta\n".utf8))
+
+        var ignoreCaseOptions = options
+        ignoreCaseOptions.pattern = "DELTA"
+        ignoreCaseOptions.ignoreCase = true
+        var ignoreCaseOutput = Data()
+        let ignoreCaseResults = try RipgrepSearcher().writeDarwinSimpleByteLiteralLines(options: ignoreCaseOptions) { buffer in
+            let bytes = buffer.bindMemory(to: UInt8.self)
+            guard let baseAddress = bytes.baseAddress else {
+                return
+            }
+            ignoreCaseOutput.append(baseAddress, count: bytes.count)
+        }
+        #expect(ignoreCaseResults?.summary.matchedLines == 1)
+        #expect(ignoreCaseOutput == Data("delta\n".utf8))
         #endif
     }
 
