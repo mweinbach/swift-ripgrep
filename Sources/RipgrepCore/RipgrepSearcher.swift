@@ -498,7 +498,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             || fixedNegativeLookbehindFastPath != nil
             || fixedNegativeLookaheadFastPath != nil
             || fixedBackreferenceFastPath != nil),
-           !(options.onlyMatching && options.printMode == .matchingLines && options.maxCount == nil) {
+           !canWriteDarwinFixedPCREFastPath(options: options) {
             return nil
         }
 
@@ -521,59 +521,59 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
 
         if let fixedLookbehindFastPath {
-            return writeDarwinFixedLookaroundOnlyMatches(
+            return writeDarwinFixedPCREFastPath(
                 data,
                 fileURL: fileURL,
                 literal: fixedLookbehindFastPath.literal,
                 prefix: fixedLookbehindFastPath.prefix,
                 suffix: nil,
-                wantsLineNumber: options.wantsLineNumber,
+                options: options,
                 writeBytes: writeBytes
             )
         }
         if let fixedLookaheadFastPath {
-            return writeDarwinFixedLookaroundOnlyMatches(
+            return writeDarwinFixedPCREFastPath(
                 data,
                 fileURL: fileURL,
                 literal: fixedLookaheadFastPath.literal,
                 prefix: nil,
                 suffix: fixedLookaheadFastPath.suffix,
-                wantsLineNumber: options.wantsLineNumber,
+                options: options,
                 writeBytes: writeBytes
             )
         }
         if let fixedNegativeLookbehindFastPath {
-            return writeDarwinFixedLookaroundOnlyMatches(
+            return writeDarwinFixedPCREFastPath(
                 data,
                 fileURL: fileURL,
                 literal: fixedNegativeLookbehindFastPath.literal,
                 prefix: fixedNegativeLookbehindFastPath.prefix,
                 prefixShouldMatch: false,
                 suffix: nil,
-                wantsLineNumber: options.wantsLineNumber,
+                options: options,
                 writeBytes: writeBytes
             )
         }
         if let fixedNegativeLookaheadFastPath {
-            return writeDarwinFixedLookaroundOnlyMatches(
+            return writeDarwinFixedPCREFastPath(
                 data,
                 fileURL: fileURL,
                 literal: fixedNegativeLookaheadFastPath.literal,
                 prefix: nil,
                 suffix: fixedNegativeLookaheadFastPath.suffix,
                 suffixShouldMatch: false,
-                wantsLineNumber: options.wantsLineNumber,
+                options: options,
                 writeBytes: writeBytes
             )
         }
         if let fixedBackreferenceFastPath {
-            return writeDarwinFixedLookaroundOnlyMatches(
+            return writeDarwinFixedPCREFastPath(
                 data,
                 fileURL: fileURL,
                 literal: fixedBackreferenceFastPath,
                 prefix: nil,
                 suffix: nil,
-                wantsLineNumber: options.wantsLineNumber,
+                options: options,
                 writeBytes: writeBytes
             )
         }
@@ -954,12 +954,14 @@ public struct RipgrepSearcher: @unchecked Sendable {
         if needsDecodedFallback {
             return nil
         }
-        if countMatchesOnly && totalMatchCount > 0 {
-            writeDarwinDecimalLine(totalMatchCount, writeBytes: writeBytes)
-        } else if countOnly && matchedLineCount > 0 {
-            writeDarwinDecimalLine(matchedLineCount, writeBytes: writeBytes)
-        } else if (filesWithMatches && matchedLineCount > 0) || (filesWithoutMatch && matchedLineCount == 0) {
-            writeDarwinPathLine(fileURL.path, writeBytes: writeBytes)
+        if !options.quiet {
+            if countMatchesOnly && totalMatchCount > 0 {
+                writeDarwinDecimalLine(totalMatchCount, writeBytes: writeBytes)
+            } else if countOnly && matchedLineCount > 0 {
+                writeDarwinDecimalLine(matchedLineCount, writeBytes: writeBytes)
+            } else if (filesWithMatches && matchedLineCount > 0) || (filesWithoutMatch && matchedLineCount == 0) {
+                writeDarwinPathLine(fileURL.path, writeBytes: writeBytes)
+            }
         }
 
         let reportedMatches = totalMatchCount > 0 ? totalMatchCount : matchedLineCount
@@ -984,7 +986,17 @@ public struct RipgrepSearcher: @unchecked Sendable {
     }
 
     #if canImport(Darwin)
-    private func writeDarwinFixedLookaroundOnlyMatches(
+    private func canWriteDarwinFixedPCREFastPath(options: RipgrepOptions) -> Bool {
+        options.quiet
+            || (options.onlyMatching && options.printMode == .matchingLines && options.maxCount == nil)
+            || (!options.onlyMatching
+                && (options.printMode == .count
+                    || options.printMode == .countMatches
+                    || options.printMode == .filesWithMatches
+                    || options.printMode == .filesWithoutMatch))
+    }
+
+    private func writeDarwinFixedPCREFastPath(
         _ data: Data,
         fileURL: URL,
         literal: [UInt8],
@@ -992,11 +1004,19 @@ public struct RipgrepSearcher: @unchecked Sendable {
         prefixShouldMatch: Bool = true,
         suffix: [UInt8]?,
         suffixShouldMatch: Bool = true,
-        wantsLineNumber: Bool,
+        options: RipgrepOptions,
         writeBytes: (UnsafeRawBufferPointer) -> Void
     ) -> SearchResults {
         var matchedLineCount = 0
         var totalMatchCount = 0
+        var bytesSearched = data.count
+        let onlyMatching = options.onlyMatching && options.printMode == .matchingLines
+        let countOnly = options.printMode == .count
+        let countMatchesOnly = options.printMode == .countMatches
+        let filesWithMatches = options.printMode == .filesWithMatches
+        let filesWithoutMatch = options.printMode == .filesWithoutMatch
+        let stopAfterFirstMatch = options.quiet || filesWithMatches || filesWithoutMatch
+        let maxCount = options.maxCount ?? Int.max
 
         data.withUnsafeBytes { rawBytes in
             guard let rawBaseAddress = rawBytes.baseAddress else {
@@ -1024,7 +1044,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         let suffixBaseAddress = suffix == nil ? nil : suffixBytes.baseAddress
 
                         var searchOffset = 0
-                        while searchOffset <= data.count - literalBytes.count {
+                        var shouldStop = false
+                        while searchOffset <= data.count - literalBytes.count, !shouldStop {
                             let foundPointer = rg_memmem_simple(
                                 baseAddress.advanced(by: searchOffset),
                                 data.count - searchOffset,
@@ -1063,16 +1084,21 @@ public struct RipgrepSearcher: @unchecked Sendable {
                                     matchedLineCount += 1
                                     lastMatchedLineStart = currentLineStart
                                 }
-                                if wantsLineNumber {
-                                    writeDarwinLineNumberPrefix(currentLineNumber, writeBytes: writeBytes)
-                                }
-                                writeBytes(UnsafeRawBufferPointer(
-                                    start: rawBaseAddress.advanced(by: matchStart),
-                                    count: literalBytes.count
-                                ))
-                                var newline = UInt8(ascii: "\n")
-                                withUnsafeBytes(of: &newline) { buffer in
-                                    writeBytes(buffer)
+                                if stopAfterFirstMatch || (countOnly && matchedLineCount == maxCount) {
+                                    bytesSearched = matchEnd
+                                    shouldStop = true
+                                } else if onlyMatching {
+                                    if options.wantsLineNumber {
+                                        writeDarwinLineNumberPrefix(currentLineNumber, writeBytes: writeBytes)
+                                    }
+                                    writeBytes(UnsafeRawBufferPointer(
+                                        start: rawBaseAddress.advanced(by: matchStart),
+                                        count: literalBytes.count
+                                    ))
+                                    var newline = UInt8(ascii: "\n")
+                                    withUnsafeBytes(of: &newline) { buffer in
+                                        writeBytes(buffer)
+                                    }
                                 }
                             }
 
@@ -1083,13 +1109,24 @@ public struct RipgrepSearcher: @unchecked Sendable {
             }
         }
 
+        if !options.quiet {
+            if countMatchesOnly && totalMatchCount > 0 {
+                writeDarwinDecimalLine(totalMatchCount, writeBytes: writeBytes)
+            } else if countOnly && matchedLineCount > 0 {
+                writeDarwinDecimalLine(matchedLineCount, writeBytes: writeBytes)
+            } else if (filesWithMatches && matchedLineCount > 0) || (filesWithoutMatch && matchedLineCount == 0) {
+                writeDarwinPathLine(fileURL.path, writeBytes: writeBytes)
+            }
+        }
+
+        let reportedMatches = totalMatchCount > 0 ? totalMatchCount : matchedLineCount
         let fileResult = SearchFileResult(
             fileURL: fileURL,
             matches: [],
-            bytesSearched: data.count,
+            bytesSearched: bytesSearched,
             searched: true,
             supplementalMatchedLines: matchedLineCount,
-            supplementalMatches: totalMatchCount
+            supplementalMatches: reportedMatches
         )
         return SearchResults(
             files: [fileResult],
@@ -1097,7 +1134,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 filesSearched: 1,
                 filesWithMatches: matchedLineCount > 0 ? 1 : 0,
                 matchedLines: matchedLineCount,
-                totalMatches: totalMatchCount
+                totalMatches: reportedMatches
             )
         )
     }

@@ -40,6 +40,43 @@ struct PCRE2Tests {
         #expect(output == Data("2:Holmes\n2:Holmes\n".utf8))
     }
 
+    @Test func pcre2FixedLookbehindExecutableFastPathCountOutputs() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("Mycroft Holmes\nSherlock Holmes and Sherlock Holmes\n", to: "pcre.txt")
+
+        let countOutput = try runExecutableData(["-P", "-c", "(?<=Sherlock )Holmes", temp.path("pcre.txt")]) {}
+        let countMatchesOutput = try runExecutableData([
+            "-P",
+            "--count-matches",
+            "(?<=Sherlock )Holmes",
+            temp.path("pcre.txt"),
+        ]) {}
+
+        #expect(countOutput == Data("1\n".utf8))
+        #expect(countMatchesOutput == Data("2\n".utf8))
+    }
+
+    @Test func pcre2FixedLookbehindExecutableFastPathPathOutputs() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("Mycroft Holmes\nSherlock Holmes\n", to: "pcre.txt")
+
+        let matchingOutput = try runExecutableData([
+            "-P",
+            "--files-with-matches",
+            "(?<=Sherlock )Holmes",
+            temp.path("pcre.txt"),
+        ]) {}
+        let nonmatchingOutput = try runExecutableData([
+            "-P",
+            "--files-without-match",
+            "(?<=Nobody )Holmes",
+            temp.path("pcre.txt"),
+        ]) {}
+
+        #expect(matchingOutput == Data("\(temp.path("pcre.txt"))\n".utf8))
+        #expect(nonmatchingOutput == Data("\(temp.path("pcre.txt"))\n".utf8))
+    }
+
     @Test func pcre2FixedNegativeLookbehindLiteralOnlyMatchesWithoutPrefix() throws {
         let temp = try TemporaryDirectory()
         try temp.write("Sherlock Holmes\nMycroft Holmes\nHolmes\n", to: "pcre.txt")
@@ -128,6 +165,23 @@ struct PCRE2Tests {
         let output = try runExecutableData(["-P", "-n", "-o", #"(a)(b)\2"#, temp.path("pcre.txt")]) {}
 
         #expect(output == Data("1:abb\n3:abb\n".utf8))
+    }
+
+    @Test func pcre2QuietSuppressesFixedFastPathOutput() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("Mycroft Holmes\nSherlock Holmes\n", to: "pcre.txt")
+        var output: [String] = []
+        var errors: [String] = []
+
+        let exitCode = RipgrepCLI.run(
+            arguments: ["-q", "-P", "-c", "(?<=Sherlock )Holmes", temp.path("pcre.txt")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+
+        #expect(exitCode == 0)
+        #expect(output.isEmpty)
+        #expect(errors.isEmpty)
     }
 
     @Test func pcre2LiteralBackreferenceCapturesReplacement() throws {

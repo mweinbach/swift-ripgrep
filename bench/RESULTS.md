@@ -54,6 +54,14 @@ the executable Darwin byte writer too. On the 193 MiB subtitles corpus,
 Rust PCRE2 oracle and measured Swift release at 140.5 ms versus 10.717 s for
 the previous Swift formatted path and 2.709 s for Rust PCRE2 in 10-run checks.
 
+Count-oriented fixed PCRE2 output now stays on that same byte path. On the
+193 MiB subtitles corpus, `-P -c '(?<=Sherlock )Holmes'` measured Swift
+release at 144.5 ms versus 299.4 ms before this slice and 2.365 s for Rust
+PCRE2 in 10-run checks. `-P --count-matches '(?<=Sherlock )Holmes'` measured
+Swift release at 146.8 ms versus 302.9 ms before this slice and 2.378 s for
+Rust PCRE2. This slice also fixed quiet count output so `-q -c` remains silent
+like Rust while preserving the match exit status.
+
 The recursive Linux-kernel traversal/search path now matches or beats Rust in
 this environment for the default literal search. A fresh confirmation run used
 2 warm-ups and 7 timed iterations for the default Swift worker count and Rust
@@ -122,6 +130,9 @@ The key improvements since the 2026-05-24 baseline are:
   shapes writes the numeric prefix directly in the same Darwin byte-output
   path, cutting representative fixed-lookbehind formatted output from
   10.717 s to 140.5 ms while preserving byte-identical Rust output;
+- fixed PCRE2 count/count-matches/path/quiet modes now use the same direct
+  byte scanner, cutting representative fixed-lookbehind count output from
+  299.4 ms to 144.5 ms and restoring Rust-compatible silent `-q -c` output;
 - Darwin default recursive search remains capped at four workers because this
   checkout benchmarked faster than the ripgrep-style 12-worker cap on the
   Linux tree, while `--threads N` still lets callers override it.
