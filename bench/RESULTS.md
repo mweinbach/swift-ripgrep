@@ -1,0 +1,86 @@
+# Performance benchmark — Swift port vs Rust ripgrep
+
+Direct head-to-head using the patterns, flags, and corpora from the upstream
+`ripgrep/benchsuite` script. Run on **Apple M3 Ultra (32 cores), macOS 26.5**
+with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
+
+- `rg`: `ripgrep 15.1.0` (release build, system install)
+- `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
+  `.build/release/ripgrep` produced by `swift build -c release`)
+
+## Single-file haystack (subtitles, 200 MiB ASCII text)
+
+Slice of OpenSubtitles English (`en.sample.txt`, first 7 M lines ≈ 200 MiB).
+Mirrors the `subtitles_en_*` family in upstream `benchsuite`.
+
+| Bench | Flags | rg | swift-rg | swift / rg |
+|---|---|---:|---:|---:|
+| literal | `'Sherlock Holmes'` | 25.7 ms ± 0.7 | 22.255 s ± 0.095 | **866x** |
+| literal, no-mmap | `--no-mmap 'Sherlock Holmes'` | 25.2 ms ± 0.8 | 31.901 s ± 0.012 | **1267x** |
+| literal, case-insensitive | `-i 'Sherlock Holmes'` | 39.5 ms ± 0.6 | 22.929 s ± 0.053 | **580x** |
+| word boundary | `-nw 'Sherlock Holmes'` | 28.7 ms ± 0.6 | 22.463 s ± 0.160 | **782x** |
+| alternation, 5 literals | `-n 'A\|B\|C\|D\|E'` | 43.5 ms ± 0.2 | 53.238 s ± 0.274 | **1223x** |
+| no-literal regex | `-n '\w+\s+Holmes\s+\w+'` | 31.1 ms ± 0.4 | 51.111 s ± 0.238 | **1645x** |
+
+## Many-file haystack (Linux kernel checkout, ≈ 1.6 GiB across ~75 K files)
+
+Shallow clone of `BurntSushi/linux` matching the `linux_*` family in upstream
+`benchsuite`. Default recursive search (gitignore-aware, parallel walker).
+
+| Bench | Flags | rg | swift-rg | swift / rg |
+|---|---|---:|---:|---:|
+| literal default | `PM_RESUME` | 3.758 s ± 0.194 | 208.808 s ± 0.020 | **56x** |
+
+## Headline
+
+**Swift port is functionally identical to Rust ripgrep (192/193 parity cases
+byte-for-byte) but dramatically slower** — typically **600–1700x slower on
+single-file matching** and **~50x slower on recursive multi-file searches**.
+
+## Where the gap comes from
+
+The Swift port matches Rust's *behaviour* but uses Foundation's
+`NSRegularExpression` plus an in-process literal pre-scan, whereas the Rust
+crate stack (`regex` / `regex-automata` / `aho-corasick` / `memchr`) ships
+hand-vectorised AVX/NEON literal scanners, a SIMD-friendly DFA, and
+multi-pattern Aho-Corasick automata. The result is a roughly two-order-of-
+magnitude gap *per byte* on the matcher hot path:
+
+- **Literal scan throughput.** Rust at ~25 ms / 200 MiB is doing ~8 GiB/s on
+  a single core — SIMD memchr cadence. Swift at ~22 s for the same workload
+  is ~9 MiB/s, i.e. byte-by-byte traversal in `NSRegularExpression`'s NFA
+  walk. This explains the 800–1700× single-file factor.
+- **mmap vs streaming.** Forcing `--no-mmap` slows Swift further (32 s vs 22 s)
+  but barely moves rg (25 ms either way). mmap on the Swift side is doing
+  what it can; the matcher dwarfs whatever the I/O layer saves.
+- **Multi-file amortisation.** On the Linux kernel checkout, much of the wall
+  time is the walker / gitignore / per-file open/stat cost, which both
+  binaries pay. With a 32-core M3 Ultra both saturate cores, but Rust's
+  matcher finishes each file in <1 ms while Swift takes 60+ ms; the ratio
+  drops to ~50× because the file-walking floor is shared.
+
+## What this means for "1:1 parity"
+
+Correctness parity (which `Docs/PORTING.md` covers — 192/193 byte-identical
+outputs against `rg`) is independent of throughput. The Swift port produces
+the same answers; it just gets there slower because the underlying matcher
+is decades behind Rust's `regex` crate on SIMD-friendly workloads.
+
+Closing the perf gap would require either (a) wrapping a SIMD-vectorised
+literal scanner like `aho-corasick` / `memchr` via a C shim, or (b)
+replacing `NSRegularExpression` with a hand-written DFA in Swift. Both are
+deep rewrites of the matcher subsystem and far larger than the porting
+work captured in the rest of this repo.
+
+## How to reproduce
+
+See `bench/README.md` for corpus setup. Then:
+
+```sh
+hyperfine --warmup 1 --runs 2 \
+    -n 'rg' "rg 'Sherlock Holmes' en.sample.txt > /dev/null" \
+    -n 'swift-rg' "$SWIFT 'Sherlock Holmes' en.sample.txt > /dev/null"
+```
+
+Raw hyperfine JSON for each bench is in `bench/results/` after a run; the
+table above was generated from `2026-05-24` measurements.

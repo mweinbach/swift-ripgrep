@@ -1,0 +1,42 @@
+=== Performance benchmarks (Apple M3 Ultra, 32 cores) ===
+rg: ripgrep 15.1.0
+swift-rg: ripgrep 15.1.0 (rev 4519153e5e)
+Started: Sun May 24 20:17:41 EDT 2026
+
+### sub_literal
+  Time (mean ± σ):      25.7 ms ±   0.7 ms    [User: 10.2 ms, System: 14.4 ms]
+  Time (mean ± σ):     22.255 s ±  0.095 s    [User: 21.915 s, System: 0.384 s]
+  867.31 ± 25.08 times faster than swift-rg
+
+### sub_literal_no_mmap
+  Time (mean ± σ):      25.2 ms ±   0.8 ms    [User: 10.0 ms, System: 14.1 ms]
+  Time (mean ± σ):     31.901 s ±  0.012 s    [User: 31.501 s, System: 0.432 s]
+ 1266.76 ± 42.17 times faster than swift-rg
+
+### sub_literal_casei
+  Time (mean ± σ):      39.5 ms ±   0.6 ms    [User: 24.8 ms, System: 13.7 ms]
+  Time (mean ± σ):     22.929 s ±  0.053 s    [User: 22.579 s, System: 0.388 s]
+  580.02 ± 9.21 times faster than swift-rg
+
+### sub_word
+  Time (mean ± σ):      28.7 ms ±   0.6 ms    [User: 14.1 ms, System: 13.6 ms]
+  Time (mean ± σ):     22.463 s ±  0.160 s    [User: 22.102 s, System: 0.388 s]
+  781.57 ± 18.22 times faster than swift-rg
+
+### sub_alternate
+  Time (mean ± σ):      43.5 ms ±   0.2 ms    [User: 28.6 ms, System: 13.8 ms]
+  Time (mean ± σ):     53.238 s ±  0.274 s    [User: 52.687 s, System: 0.529 s]
+ 1223.37 ± 9.37 times faster than swift-rg
+
+### sub_no_literal
+  Time (mean ± σ):      31.1 ms ±   0.4 ms    [User: 15.8 ms, System: 14.0 ms]
+  Time (mean ± σ):     51.111 s ±  0.238 s    [User: 50.590 s, System: 0.520 s]
+ 1644.89 ± 24.57 times faster than swift-rg
+
+### linux_literal
+  Time (mean ± σ):      3.758 s ±  0.194 s    [User: 0.345 s, System: 44.370 s]
+  Time (mean ± σ):     208.808 s ±  0.020 s    [User: 978.724 s, System: 16.334 s]
+   55.56 ± 2.87 times faster than swift-rg
+
+
+Finished: Sun May 24 20:38:33 EDT 2026
