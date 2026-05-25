@@ -552,7 +552,7 @@ public struct FileWalker {
             let childRelativePath = relativePath.isEmpty ? child.name : "\(relativePath)/\(child.name)"
             let isDirectory = child.kind.isDirectory
             if !options.hidden,
-               child.name.hasPrefix("."),
+               isHiddenName(child.name),
                !isIncludedByIgnore(
                    relativePath: childRelativePath,
                    basename: child.name,
@@ -747,7 +747,7 @@ public struct FileWalker {
         filtered: inout Bool
     ) -> Bool {
         if !options.hidden,
-           child.name.hasPrefix("."),
+           isHiddenName(child.name),
            !isIncludedByIgnore(
                relativePath: childRelativePath,
                basename: child.name,
@@ -840,7 +840,7 @@ public struct FileWalker {
             if name == "." || name == ".." {
                 continue
             }
-            if !includeHidden, name.hasPrefix(".") {
+            if !includeHidden, isHiddenName(name) {
                 continue
             }
             switch try fastDirectoryEntryKind(entry.d_type, path: path, name: name) {
@@ -1531,7 +1531,7 @@ public struct FileWalker {
     }
 
     private func isHiddenName(_ name: String) -> Bool {
-        name.hasPrefix(".")
+        name.utf8.first == UInt8(ascii: ".")
     }
 
     private func isIncludedByIgnore(relativePath: String, basename: String? = nil, isDirectory: Bool, ignoreStack: IgnoreStack) -> Bool {

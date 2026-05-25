@@ -374,7 +374,7 @@ public struct GlobMatcher: Equatable {
         }
         switch matcher {
         case .exact(let expected):
-            return value.hasSuffix("/\(expected)")
+            return hasPathComponentSuffix(expected, in: value)
         case .any:
             return true
         case .prefix, .prefixSuffix, .suffix, .contains, .simpleGlob:
@@ -391,6 +391,15 @@ public struct GlobMatcher: Equatable {
             }
             return false
         }
+    }
+
+    private func hasPathComponentSuffix(_ suffix: String, in value: String) -> Bool {
+        guard value.hasSuffix(suffix),
+              let suffixStart = value.index(value.endIndex, offsetBy: -suffix.count, limitedBy: value.startIndex),
+              suffixStart > value.startIndex else {
+            return false
+        }
+        return value[value.index(before: suffixStart)] == "/"
     }
 
     private static func compileFastMatcher(
