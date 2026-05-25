@@ -131,6 +131,12 @@ The key improvements since the 2026-05-24 baseline are:
   44.3 ms versus Rust release at 6.5 ms on `/tmp/swift-rg-bench/linux`, down
   from the 66.6 ms Swift no-PCRE2 checkpoint. Ignore setup and matching remain
   the largest traversal hotspot.
+- Directory-local ignore loading now skips debug display-path rendering when
+  debug/trace logging is disabled, and trusts ignore-file names already seen by
+  the Darwin directory scan instead of repeating a `FileManager.fileExists`
+  preflight. A same-machine 30-run A/B against checkpoint `4f40289` measured
+  default Swift release `--files` at 323.9 ms versus 327.2 ms and
+  `--quiet --files` at 49.5 ms versus 53.9 ms on `/tmp/swift-rg-bench/linux`.
 - Quiet no-ignore file listing now has a narrower existence-only Darwin walker.
   The same Linux tree measured `--no-ignore --hidden --quiet --files` at
   31.0 ms for Swift versus 5.3 ms for Rust, down from the prior 53.4 ms Swift

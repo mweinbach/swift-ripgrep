@@ -2265,6 +2265,7 @@ public struct FileWalker {
         caseInsensitive: Bool? = nil,
         ignoreExplicitRootMatch: Bool = false,
         emitDiagnostics: Bool = true,
+        skipMissingFileCheck: Bool = false,
         options: RipgrepOptions
     ) {
         let loaded = loadMatcher(
@@ -2277,6 +2278,7 @@ public struct FileWalker {
             displayPath: displayPath,
             caseInsensitive: caseInsensitive ?? options.ignoreFileCaseInsensitive,
             ignoreExplicitRootMatch: ignoreExplicitRootMatch,
+            skipMissingFileCheck: skipMissingFileCheck,
             collectDiagnostics: emitDiagnostics && options.loggingMode != .none
         )
         ignoreStack.append(loaded.matcher)
@@ -2298,9 +2300,10 @@ public struct FileWalker {
         displayPath: String? = nil,
         caseInsensitive: Bool = false,
         ignoreExplicitRootMatch: Bool = false,
+        skipMissingFileCheck: Bool = false,
         collectDiagnostics: Bool = false
     ) -> LoadedIgnoreMatcher {
-        if !reportLoadErrors {
+        if !reportLoadErrors && !skipMissingFileCheck {
             var isDirectory: ObjCBool = false
             guard fileManager.fileExists(atPath: fileURL.path, isDirectory: &isDirectory),
                   !isDirectory.boolValue else {
@@ -2573,6 +2576,8 @@ public struct FileWalker {
         options: RipgrepOptions
     ) {
         let scopeDirectory = logicalDirectory ?? directoryURL
+        let shouldRenderIgnoreDiagnostics = options.loggingMode != nil
+        let localIgnoreEntriesWereScanned = directoryContents != nil
         if !options.noIgnoreDot {
             if directoryContents?.hasIgnore != false {
                 let ignoreURL = directoryURL.appendingPathComponent(".ignore")
@@ -2583,12 +2588,15 @@ public struct FileWalker {
                     diagnostics: &diagnostics,
                     rootBase: rootBase,
                     scopeDirectory: scopeDirectory,
-                    displayPath: ignoreFileDebugDisplayPath(
-                        for: scopeDirectory.appendingPathComponent(".ignore"),
-                        rootBase: rootBase,
-                        rootDisplayPath: rootDebugDisplayPath,
-                        rootArgumentIsAbsolute: rootArgumentIsAbsolute
-                    ),
+                    displayPath: shouldRenderIgnoreDiagnostics
+                        ? ignoreFileDebugDisplayPath(
+                            for: scopeDirectory.appendingPathComponent(".ignore"),
+                            rootBase: rootBase,
+                            rootDisplayPath: rootDebugDisplayPath,
+                            rootArgumentIsAbsolute: rootArgumentIsAbsolute
+                        )
+                        : nil,
+                    skipMissingFileCheck: localIgnoreEntriesWereScanned,
                     options: options
                 )
             }
@@ -2601,12 +2609,15 @@ public struct FileWalker {
                     diagnostics: &diagnostics,
                     rootBase: rootBase,
                     scopeDirectory: scopeDirectory,
-                    displayPath: ignoreFileDebugDisplayPath(
-                        for: scopeDirectory.appendingPathComponent(".rgignore"),
-                        rootBase: rootBase,
-                        rootDisplayPath: rootDebugDisplayPath,
-                        rootArgumentIsAbsolute: rootArgumentIsAbsolute
-                    ),
+                    displayPath: shouldRenderIgnoreDiagnostics
+                        ? ignoreFileDebugDisplayPath(
+                            for: scopeDirectory.appendingPathComponent(".rgignore"),
+                            rootBase: rootBase,
+                            rootDisplayPath: rootDebugDisplayPath,
+                            rootArgumentIsAbsolute: rootArgumentIsAbsolute
+                        )
+                        : nil,
+                    skipMissingFileCheck: localIgnoreEntriesWereScanned,
                     options: options
                 )
             }
@@ -2621,12 +2632,15 @@ public struct FileWalker {
                 diagnostics: &diagnostics,
                 rootBase: rootBase,
                 scopeDirectory: scopeDirectory,
-                displayPath: ignoreFileDebugDisplayPath(
-                    for: scopeDirectory.appendingPathComponent(".gitignore"),
-                    rootBase: rootBase,
-                    rootDisplayPath: rootDebugDisplayPath,
-                    rootArgumentIsAbsolute: rootArgumentIsAbsolute
-                ),
+                displayPath: shouldRenderIgnoreDiagnostics
+                    ? ignoreFileDebugDisplayPath(
+                        for: scopeDirectory.appendingPathComponent(".gitignore"),
+                        rootBase: rootBase,
+                        rootDisplayPath: rootDebugDisplayPath,
+                        rootArgumentIsAbsolute: rootArgumentIsAbsolute
+                    )
+                    : nil,
+                skipMissingFileCheck: localIgnoreEntriesWereScanned,
                 options: options
             )
         }
@@ -2641,12 +2655,14 @@ public struct FileWalker {
                 diagnostics: &diagnostics,
                 rootBase: rootBase,
                 scopeDirectory: scopeDirectory,
-                displayPath: ignoreFileDebugDisplayPath(
-                    for: scopeDirectory.appendingPathComponent(".git/info/exclude"),
-                    rootBase: rootBase,
-                    rootDisplayPath: rootDebugDisplayPath,
-                    rootArgumentIsAbsolute: rootArgumentIsAbsolute
-                ),
+                displayPath: shouldRenderIgnoreDiagnostics
+                    ? ignoreFileDebugDisplayPath(
+                        for: scopeDirectory.appendingPathComponent(".git/info/exclude"),
+                        rootBase: rootBase,
+                        rootDisplayPath: rootDebugDisplayPath,
+                        rootArgumentIsAbsolute: rootArgumentIsAbsolute
+                    )
+                    : nil,
                 options: options
             )
         }
