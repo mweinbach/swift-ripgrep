@@ -1134,6 +1134,178 @@ static rg_darwin_literal_file_result rg_darwin_write_byte_set_bytes(
     result.bytes_searched = haystack_len;
     return result;
 }
+
+static rg_darwin_literal_file_result rg_darwin_write_multi_literal_bytes(
+    const uint8_t *base,
+    size_t haystack_len,
+    const uint8_t *literals,
+    const size_t *literal_offsets,
+    const size_t *literal_lengths,
+    size_t literal_count
+) {
+    rg_darwin_literal_file_result result = { .status = -2, .matched_line_count = 0, .total_match_count = 0, .bytes_searched = 0 };
+
+    if (haystack_len >= 3 && base[0] == 0xEF && base[1] == 0xBB && base[2] == 0xBF) {
+        return result;
+    }
+    if (haystack_len >= 2
+        && ((base[0] == 0xFF && base[1] == 0xFE) || (base[0] == 0xFE && base[1] == 0xFF))) {
+        return result;
+    }
+    const size_t binary_check_len = haystack_len < (64 * 1024) ? haystack_len : (64 * 1024);
+    if (memchr(base, 0, binary_check_len) != NULL) {
+        return result;
+    }
+
+    if (literal_count > 64) {
+        return result;
+    }
+    for (size_t literal_index = 0; literal_index < literal_count; literal_index++) {
+        if (literal_lengths[literal_index] == 0) {
+            return result;
+        }
+    }
+
+    rg_output_buffer output = { .bytes = malloc(1024 * 1024), .length = 0, .capacity = 1024 * 1024 };
+    if (output.bytes == NULL) {
+        result.status = -1;
+        return result;
+    }
+
+    size_t max_literal_len = 0;
+    for (size_t literal_index = 0; literal_index < literal_count; literal_index++) {
+        if (literal_lengths[literal_index] > max_literal_len) {
+            max_literal_len = literal_lengths[literal_index];
+        }
+    }
+
+#if defined(__APPLE__) && defined(__aarch64__)
+    uint8x16_t first_vectors[literal_count];
+    uint8x16_t tail_vectors[literal_count];
+    for (size_t literal_index = 0; literal_index < literal_count; literal_index++) {
+        const uint8_t *literal = literals + literal_offsets[literal_index];
+        const size_t literal_len = literal_lengths[literal_index];
+        first_vectors[literal_index] = vdupq_n_u8(literal[0]);
+        tail_vectors[literal_index] = vdupq_n_u8(literal[literal_len - 1]);
+    }
+#endif
+
+    size_t cursor = 0;
+    size_t last_emitted_line_start = (size_t)-1;
+    while (cursor < haystack_len) {
+        size_t match_start = (size_t)-1;
+
+#if defined(__APPLE__) && defined(__aarch64__)
+        if (max_literal_len > 0 && cursor + max_literal_len + 15 <= haystack_len) {
+            uint8x16_t candidate_lanes = vdupq_n_u8(0);
+            const uint8x16_t first_bytes = vld1q_u8(base + cursor);
+            for (size_t literal_index = 0; literal_index < literal_count; literal_index++) {
+                const size_t literal_len = literal_lengths[literal_index];
+                const uint8x16_t tail_bytes = vld1q_u8(base + cursor + literal_len - 1);
+                candidate_lanes = vorrq_u8(
+                    candidate_lanes,
+                    vandq_u8(
+                        vceqq_u8(first_bytes, first_vectors[literal_index]),
+                        vceqq_u8(tail_bytes, tail_vectors[literal_index])
+                    )
+                );
+            }
+            if (vmaxvq_u8(candidate_lanes) != 0) {
+                uint8_t matching_lanes[16];
+                vst1q_u8(matching_lanes, candidate_lanes);
+                for (int lane = 0; lane < 16; lane++) {
+                    if (matching_lanes[lane] == 0) {
+                        continue;
+                    }
+                    const size_t candidate_start = cursor + (size_t)lane;
+                    for (size_t literal_index = 0; literal_index < literal_count; literal_index++) {
+                        const uint8_t *literal = literals + literal_offsets[literal_index];
+                        const size_t literal_len = literal_lengths[literal_index];
+                        if (candidate_start + literal_len <= haystack_len
+                            && base[candidate_start] == literal[0]
+                            && base[candidate_start + literal_len - 1] == literal[literal_len - 1]
+                            && (literal_len <= 2
+                                || memcmp(base + candidate_start + 1, literal + 1, literal_len - 2) == 0)) {
+                            match_start = candidate_start;
+                            break;
+                        }
+                    }
+                    if (match_start != (size_t)-1) {
+                        break;
+                    }
+                }
+            }
+            if (match_start == (size_t)-1) {
+                cursor += 16;
+                continue;
+            }
+        } else
+#endif
+        {
+            while (cursor < haystack_len && match_start == (size_t)-1) {
+                for (size_t literal_index = 0; literal_index < literal_count; literal_index++) {
+                    const uint8_t *literal = literals + literal_offsets[literal_index];
+                    const size_t literal_len = literal_lengths[literal_index];
+                    if (cursor + literal_len <= haystack_len
+                        && base[cursor] == literal[0]
+                        && base[cursor + literal_len - 1] == literal[literal_len - 1]
+                        && (literal_len <= 2
+                            || memcmp(base + cursor + 1, literal + 1, literal_len - 2) == 0)) {
+                        match_start = cursor;
+                        break;
+                    }
+                }
+                if (match_start == (size_t)-1) {
+                    cursor++;
+                }
+            }
+            if (match_start == (size_t)-1) {
+                break;
+            }
+        }
+
+        size_t line_start = match_start;
+        while (line_start > 0 && base[line_start - 1] != '\n') {
+            line_start--;
+        }
+        const void *newline = memchr(base + match_start, '\n', haystack_len - match_start);
+        const size_t output_end = newline == NULL
+            ? haystack_len
+            : (size_t)(((const uint8_t *)newline - base) + 1);
+        if (line_start == last_emitted_line_start) {
+            cursor = output_end;
+            continue;
+        }
+
+        if (rg_output_buffer_write(&output, base + line_start, output_end - line_start) != 0) {
+            free(output.bytes);
+            result.status = -1;
+            return result;
+        }
+        if (newline == NULL) {
+            uint8_t terminator = '\n';
+            if (rg_output_buffer_write(&output, &terminator, 1) != 0) {
+                free(output.bytes);
+                result.status = -1;
+                return result;
+            }
+        }
+        result.matched_line_count++;
+        last_emitted_line_start = line_start;
+        cursor = output_end;
+    }
+
+    if (rg_output_buffer_flush(&output) != 0) {
+        free(output.bytes);
+        result.status = -1;
+        return result;
+    }
+    free(output.bytes);
+    result.total_match_count = result.matched_line_count;
+    result.status = result.matched_line_count > 0 ? 1 : 0;
+    result.bytes_searched = haystack_len;
+    return result;
+}
 #endif
 
 rg_darwin_literal_file_result rg_darwin_write_literal_file_lines(
@@ -1491,6 +1663,73 @@ rg_darwin_literal_file_result rg_darwin_write_byte_set_file_lines(
     }
 
     result = rg_darwin_write_byte_set_bytes(base, haystack_len, needles, needle_count);
+    munmap(base, haystack_len);
+    return result;
+#endif
+}
+
+rg_darwin_literal_file_result rg_darwin_write_multi_literal_file_lines(
+    const char *path,
+    const uint8_t *literals,
+    const size_t *literal_offsets,
+    const size_t *literal_lengths,
+    size_t literal_count
+) {
+    rg_darwin_literal_file_result result = { .status = -2, .matched_line_count = 0, .total_match_count = 0, .bytes_searched = 0 };
+#ifndef __APPLE__
+    (void)path;
+    (void)literals;
+    (void)literal_offsets;
+    (void)literal_lengths;
+    (void)literal_count;
+    return result;
+#else
+    if (path == NULL
+        || literals == NULL
+        || literal_offsets == NULL
+        || literal_lengths == NULL
+        || literal_count == 0) {
+        return result;
+    }
+
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        result.status = -1;
+        return result;
+    }
+
+    struct stat file_stat;
+    if (fstat(fd, &file_stat) != 0) {
+        close(fd);
+        result.status = -1;
+        return result;
+    }
+    if ((file_stat.st_mode & S_IFMT) != S_IFREG) {
+        close(fd);
+        return result;
+    }
+    if (file_stat.st_size <= 0) {
+        close(fd);
+        result.status = 0;
+        return result;
+    }
+
+    const size_t haystack_len = (size_t)file_stat.st_size;
+    uint8_t *base = mmap(NULL, haystack_len, PROT_READ, MAP_PRIVATE, fd, 0);
+    close(fd);
+    if (base == MAP_FAILED) {
+        result.status = -1;
+        return result;
+    }
+
+    result = rg_darwin_write_multi_literal_bytes(
+        base,
+        haystack_len,
+        literals,
+        literal_offsets,
+        literal_lengths,
+        literal_count
+    );
     munmap(base, haystack_len);
     return result;
 #endif

@@ -47,6 +47,14 @@ Swift release at 270.7 ms versus 3.896 s for Rust in 3-run checks.
 `--count-matches 'A|B|C|D|E'` measured Swift at 164.7 ms versus 3.660 s for
 Rust, also with byte-identical output.
 
+Multi-byte literal regex alternations now avoid the Foundation regex path for
+plain full-line output. On the 193 MiB subtitles corpus, `Sherlock|Watson`
+produced byte-identical output to the sibling Rust oracle and measured Swift
+release at 80.3 ms after the direct Darwin scanner, down from 21.7 s on the
+previous Swift path. System Rust release measured 42.6 ms on the same 20-run
+check, so this slice removes the pathological fallback while leaving a smaller
+multi-literal scanner gap to close.
+
 A 3-run PCRE compatibility check for `-P -o '(?<=Sherlock )Holmes'` on the
 same 193 MiB file produced byte-identical output to Rust and measured Swift at
 141.4 ms versus Rust PCRE2 at 214.9 ms (**0.66x**). The same query took about
@@ -136,6 +144,10 @@ The key improvements since the 2026-05-24 baseline are:
   byte-set scanner with correct per-match output, measuring 270.7 ms and
   164.7 ms respectively on the representative subtitles corpus while matching
   Rust byte-for-byte;
+- plain multi-byte literal alternation line output now uses a vendored
+  Darwin/arm scanner and a Swift sparse fallback for field/count variants,
+  cutting `Sherlock|Watson` on the subtitles corpus from about 21.7 s to
+  80.3 ms while preserving byte-identical Rust output;
 - NEON-backed literal, byte-counting, and byte-set scanning in
   `CRipgrepPlatform`;
 - suppressed optional ignore-file loads now check existence before attempting
@@ -268,6 +280,12 @@ benchmarks:
   walker. A 30-run A/B against checkpoint `16ea768` measured
   `--no-ignore --files` at 178.0 ms versus 177.1 ms baseline, and
   `--no-ignore --hidden --files` at 179.2 ms versus 176.3 ms baseline.
+- Routing default ignore-aware `--files` through a direct stdout byte writer
+  instead of the existing string-emitting fast walker preserved sorted output
+  but did not improve the Linux-tree benchmark. A 2026-05-25 7-run check
+  measured Swift release `--files` at 338.5 ms versus the preceding 323.0 ms
+  smoke on `/tmp/swift-rg-bench/linux`, with Rust at 159.8 ms and the existing
+  Swift no-ignore direct writer at 167.8 ms.
 
 ## Historical baseline — 2026-05-24
 

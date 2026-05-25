@@ -204,7 +204,8 @@ public enum RipgrepCLI {
                 if stdout == nil,
                    let streamedResults = try searcher.writeDarwinSimpleByteLiteralLines(
                     options: options,
-                    writeBytes: writeStdout
+                    writeBytes: writeStdout,
+                    allowDirectStdout: true
                    ) {
                     results = streamedResults
                 } else if let streamedResults = try searcher.streamPlainMatchingLines(options: options, emit: { line in

@@ -259,6 +259,44 @@ struct MiscTests {
         #expect(lineNumberResults?.summary.matchedLines == 2)
         #expect(lineNumberOutput == Data("2:bravo\n4:delta\n".utf8))
 
+        var multiByteAlternationOptions = options
+        multiByteAlternationOptions.pattern = "bravo|delta"
+        multiByteAlternationOptions.lineNumber = true
+        var multiByteAlternationOutput = Data()
+        let multiByteAlternationResults = try RipgrepSearcher()
+            .writeDarwinSimpleByteLiteralLines(options: multiByteAlternationOptions) { buffer in
+                let bytes = buffer.bindMemory(to: UInt8.self)
+                guard let baseAddress = bytes.baseAddress else {
+                    return
+                }
+                multiByteAlternationOutput.append(baseAddress, count: bytes.count)
+            }
+        #expect(multiByteAlternationResults?.summary.matchedLines == 2)
+        #expect(multiByteAlternationOutput == Data("2:bravo\n4:delta\n".utf8))
+
+        var multiByteCountOptions = multiByteAlternationOptions
+        multiByteCountOptions.lineNumber = false
+        multiByteCountOptions.printMode = .count
+        var multiByteCountOutput = Data()
+        let multiByteCountResults = try RipgrepSearcher()
+            .writeDarwinSimpleByteLiteralLines(options: multiByteCountOptions) { buffer in
+                let bytes = buffer.bindMemory(to: UInt8.self)
+                guard let baseAddress = bytes.baseAddress else {
+                    return
+                }
+                multiByteCountOutput.append(baseAddress, count: bytes.count)
+            }
+        #expect(multiByteCountResults?.summary.matchedLines == 2)
+        #expect(multiByteCountOutput == Data("2\n".utf8))
+
+        var multiByteCountMatchesOptions = multiByteCountOptions
+        multiByteCountMatchesOptions.printMode = .countMatches
+        let multiByteCountMatchesResults = try RipgrepSearcher()
+            .writeDarwinSimpleByteLiteralLines(options: multiByteCountMatchesOptions) { _ in
+                Issue.record("multi-byte count-matches should stay on the ordered span path")
+            }
+        #expect(multiByteCountMatchesResults == nil)
+
         var quietOptions = options
         quietOptions.quiet = true
         var quietOutput = Data()
@@ -316,6 +354,14 @@ struct MiscTests {
         ], fixture: {})
 
         #expect(String(decoding: output, as: UTF8.self) == "bravo\ndelta\n")
+
+        let multiByteOutput = try runExecutableData([
+            "-n",
+            "bravo|delta",
+            root.path("letters.txt"),
+        ], fixture: {})
+
+        #expect(String(decoding: multiByteOutput, as: UTF8.self) == "2:bravo\n4:delta\n")
 
         let onlyMatchingOutput = try runExecutableData([
             "-o",
