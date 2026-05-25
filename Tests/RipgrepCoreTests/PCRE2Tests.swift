@@ -58,6 +58,24 @@ struct PCRE2Tests {
         #expect(output == ["abb"])
     }
 
+    @Test func pcre2LiteralBackreferenceExecutableFastPathOnlyMatchingOutput() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("abba\nabca\nabba\n", to: "pcre.txt")
+
+        let output = try runExecutableData(["-P", "-o", #"(a)(b)\2"#, temp.path("pcre.txt")]) {}
+
+        #expect(output == Data("abb\nabb\n".utf8))
+    }
+
+    @Test func pcre2LiteralBackreferenceCapturesReplacement() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("abba\nabca\n", to: "pcre.txt")
+
+        let output = try run(["-P", "-r", "$2/$1", #"(a)(b)\2"#, temp.path("pcre.txt")])
+
+        #expect(output == ["b/aa"])
+    }
+
     @Test func automaticEngineFallsBackToPCRE2() throws {
         let temp = try TemporaryDirectory()
         try temp.write("ab\nac\n", to: "pcre.txt")

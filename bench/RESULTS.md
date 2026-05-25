@@ -33,6 +33,12 @@ The matching fixed-lookahead shape is on the same byte path:
 `-P -o 'Sherlock(?= Holmes)'` produced byte-identical output and measured
 Swift at 145.5 ms versus Rust PCRE2 at 216.0 ms (**0.67x**) in a 3-run check.
 
+Simple literal-group backreferences now take the same in-tree byte-output path
+for single-file `-P -o`. On a 74 MiB repeated `abba abca Sherlock Holmes`
+corpus, `-P -o '(a)(b)\2'` produced byte-identical output to Rust and measured
+Swift release at 229.3 ms versus 19.239 s for the previous Swift Foundation
+regex path and 2.912 s for the sibling Rust PCRE2 oracle in 10-run checks.
+
 The recursive Linux-kernel traversal/search path now matches or beats Rust in
 this environment for the default literal search. A fresh confirmation run used
 2 warm-ups and 7 timed iterations for the default Swift worker count and Rust
@@ -89,6 +95,10 @@ The key improvements since the 2026-05-24 baseline are:
   shapes now use an in-tree Swift parser plus Darwin byte scanning for
   `-P -o`, preserving Rust output while avoiding Foundation regex work on the
   hot path;
+- PCRE2 literal-group backreferences such as `(a)(b)\2` now use the same
+  in-tree parser and Darwin byte-output path for single-file `-P -o`, while
+  still preserving capture replacement semantics through the non-executable
+  matcher path;
 - Darwin default recursive search remains capped at four workers because this
   checkout benchmarked faster than the ripgrep-style 12-worker cap on the
   Linux tree, while `--threads N` still lets callers override it.

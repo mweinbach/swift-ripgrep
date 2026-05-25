@@ -384,6 +384,14 @@ public struct PatternMatcher {
         return regex.fixedPositiveLookaheadFastPath
     }
 
+    func fixedLiteralBackreferenceFastPath() -> [UInt8]? {
+        guard patterns.count == 1,
+              case .pcre2(let regex) = patterns[0] else {
+            return nil
+        }
+        return regex.fixedLiteralBackreferenceFastPath
+    }
+
     private static func makeByteLiteralFastPath(
         patterns: [CompiledPattern],
         options: RipgrepOptions,

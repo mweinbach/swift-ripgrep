@@ -480,12 +480,16 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let matcher = try PatternMatcher(options: options)
         let fixedLookbehindFastPath = matcher.fixedPositiveLookbehindFastPath()
         let fixedLookaheadFastPath = matcher.fixedPositiveLookaheadFastPath()
+        let fixedBackreferenceFastPath = matcher.fixedLiteralBackreferenceFastPath()
         let byteLiteralFastPath = matcher.byteLiteralFastPath()
         guard let fileURL = options.roots.first?.standardizedFileURL,
-              fixedLookbehindFastPath != nil || fixedLookaheadFastPath != nil || byteLiteralFastPath != nil else {
+              fixedLookbehindFastPath != nil
+                || fixedLookaheadFastPath != nil
+                || fixedBackreferenceFastPath != nil
+                || byteLiteralFastPath != nil else {
             return nil
         }
-        if (fixedLookbehindFastPath != nil || fixedLookaheadFastPath != nil),
+        if (fixedLookbehindFastPath != nil || fixedLookaheadFastPath != nil || fixedBackreferenceFastPath != nil),
            !(options.onlyMatching && options.printMode == .matchingLines && !options.wantsLineNumber && options.maxCount == nil) {
             return nil
         }
@@ -525,6 +529,16 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 literal: fixedLookaheadFastPath.literal,
                 prefix: nil,
                 suffix: fixedLookaheadFastPath.suffix,
+                writeBytes: writeBytes
+            )
+        }
+        if let fixedBackreferenceFastPath {
+            return writeDarwinFixedLookaroundOnlyMatches(
+                data,
+                fileURL: fileURL,
+                literal: fixedBackreferenceFastPath,
+                prefix: nil,
+                suffix: nil,
                 writeBytes: writeBytes
             )
         }

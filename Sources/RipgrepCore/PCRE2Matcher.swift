@@ -17,6 +17,7 @@ final class PCRE2CompiledPattern {
         case regex(NSRegularExpression)
         case fixedPositiveLookbehind(prefix: [UInt8], literal: [UInt8])
         case fixedPositiveLookahead(literal: [UInt8], suffix: [UInt8])
+        case fixedLiteralBackreference(literal: [UInt8], captureRanges: [Range<Int>])
     }
 
     let source: String
@@ -36,6 +37,13 @@ final class PCRE2CompiledPattern {
         return (literal, suffix)
     }
 
+    var fixedLiteralBackreferenceFastPath: [UInt8]? {
+        guard case .fixedLiteralBackreference(let literal, _) = matcher else {
+            return nil
+        }
+        return literal
+    }
+
     init(pattern: String, options: RipgrepOptions) throws {
         self.source = pattern
         #if canImport(CRipgrepPlatform)
@@ -52,6 +60,14 @@ final class PCRE2CompiledPattern {
             self.matcher = .fixedPositiveLookahead(
                 literal: Array(lookahead.literal.utf8),
                 suffix: Array(lookahead.suffix.utf8)
+            )
+            return
+        }
+        if !options.effectiveIgnoreCase,
+           let backreference = Self.fixedLiteralBackreference(pattern) {
+            self.matcher = .fixedLiteralBackreference(
+                literal: Array(backreference.literal.utf8),
+                captureRanges: backreference.captureRanges
             )
             return
         }
@@ -85,6 +101,8 @@ final class PCRE2CompiledPattern {
             return Self.fixedPositiveLookbehindMatches(prefix: prefix, literal: literal, in: text)
         case .fixedPositiveLookahead(let literal, let suffix):
             return Self.fixedPositiveLookaheadMatches(literal: literal, suffix: suffix, in: text)
+        case .fixedLiteralBackreference(let literal, let captureRanges):
+            return Self.fixedLiteralBackreferenceMatches(literal: literal, captureRanges: captureRanges, in: text)
         }
     }
 
@@ -151,6 +169,51 @@ final class PCRE2CompiledPattern {
         !text.contains { character in
             #"\\.[]{}()+*?^$|"#.contains(character)
         }
+    }
+
+    private static func fixedLiteralBackreference(_ pattern: String) -> (literal: String, captureRanges: [Range<Int>])? {
+        var groups: [String] = []
+        var captureRanges: [Range<Int>] = []
+        var literal = ""
+        var byteOffset = 0
+        var index = pattern.startIndex
+
+        while index < pattern.endIndex, pattern[index] == "(" {
+            let groupStart = pattern.index(after: index)
+            guard let close = pattern[groupStart...].firstIndex(of: ")") else {
+                return nil
+            }
+            let group = String(pattern[groupStart..<close])
+            guard !group.isEmpty,
+                  !group.contains("\n"),
+                  !group.contains("\r"),
+                  group.utf8.allSatisfy({ $0 < 0x80 }),
+                  isPlainPCRELiteral(group) else {
+                return nil
+            }
+            let groupByteCount = group.utf8.count
+            groups.append(group)
+            captureRanges.append(byteOffset..<byteOffset + groupByteCount)
+            literal += group
+            byteOffset += groupByteCount
+            index = pattern.index(after: close)
+        }
+
+        guard !groups.isEmpty,
+              index < pattern.endIndex,
+              pattern[index] == "\\" else {
+            return nil
+        }
+        let referenceIndex = pattern.index(after: index)
+        guard referenceIndex < pattern.endIndex,
+              let reference = pattern[referenceIndex].wholeNumberValue,
+              reference > 0,
+              reference <= groups.count,
+              pattern.index(after: referenceIndex) == pattern.endIndex else {
+            return nil
+        }
+        literal += groups[reference - 1]
+        return (literal, captureRanges)
     }
 
     private static func fixedPositiveLookbehindMatches(
@@ -257,6 +320,59 @@ final class PCRE2CompiledPattern {
                         }
                         searchOffset = matchOffset + max(literalBytes.count, 1)
                     }
+                }
+            }
+        }
+        return matches
+        #else
+        return []
+        #endif
+    }
+
+    private static func fixedLiteralBackreferenceMatches(
+        literal: [UInt8],
+        captureRanges: [Range<Int>],
+        in text: String
+    ) -> [PCRE2Match] {
+        #if canImport(CRipgrepPlatform)
+        var matches: [PCRE2Match] = []
+        let originalText = text
+        var utf8Text = text
+        utf8Text.withUTF8 { bytes in
+            guard let baseAddress = bytes.baseAddress else {
+                return
+            }
+            literal.withUnsafeBufferPointer { literalBytes in
+                guard let literalBase = literalBytes.baseAddress, !literalBytes.isEmpty else {
+                    return
+                }
+                var searchOffset = 0
+                while searchOffset <= bytes.count - literalBytes.count,
+                      let found = rg_memmem_simple(
+                        baseAddress.advanced(by: searchOffset),
+                        bytes.count - searchOffset,
+                        literalBase,
+                        literalBytes.count
+                      ) {
+                    let matchOffset = baseAddress.distance(to: found)
+                    let matchEnd = matchOffset + literalBytes.count
+                    if let range = stringRange(startByte: matchOffset, endByte: matchEnd, in: originalText) {
+                        var captures: [Range<String.Index>?] = [range]
+                        captures.reserveCapacity(captureRanges.count + 1)
+                        for captureRange in captureRanges {
+                            captures.append(stringRange(
+                                startByte: matchOffset + captureRange.lowerBound,
+                                endByte: matchOffset + captureRange.upperBound,
+                                in: originalText
+                            ))
+                        }
+                        matches.append(PCRE2Match(
+                            range: range,
+                            byteRange: matchOffset..<matchEnd,
+                            captures: captures
+                        ))
+                    }
+                    searchOffset = matchOffset + literalBytes.count
                 }
             }
         }
