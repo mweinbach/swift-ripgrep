@@ -953,19 +953,21 @@ public struct RipgrepSearcher: @unchecked Sendable {
             if options.printMode == .matchingLines,
                canOmitMatchSpans(options: options),
                !fastPath.caseInsensitiveASCII,
-               !fastPath.wordASCII,
                fastPath.literals.count == 1,
                let literal = fastPath.literals.first,
                !literal.isEmpty {
-                return searchDarwinPlainLiteralLines(
+                if let literalResult = searchDarwinPlainLiteralLines(
                     data: data,
                     fileURL: fileURL,
                     bytes: bytes,
                     baseAddress: baseAddress,
                     literal: literal,
                     maxCount: maxCount,
-                    needsLineNumbers: options.lineNumber
-                )
+                    needsLineNumbers: options.lineNumber,
+                    requiresWordBoundary: fastPath.wordASCII
+                ) {
+                    return literalResult
+                }
             }
             if options.printMode == .matchingLines,
                canOmitMatchSpans(options: options),
@@ -1470,8 +1472,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
         baseAddress: UnsafePointer<UInt8>,
         literal: [UInt8],
         maxCount: Int,
-        needsLineNumbers: Bool
-    ) -> SearchFileResult {
+        needsLineNumbers: Bool,
+        requiresWordBoundary: Bool
+    ) -> SearchFileResult? {
         #if canImport(Darwin)
         let dataCount = data.count
         var matches: [SearchMatch] = []
@@ -1511,27 +1514,44 @@ public struct RipgrepSearcher: @unchecked Sendable {
             while lineStart > 0, bytes[lineStart - 1] != UInt8(ascii: "\n") {
                 lineStart -= 1
             }
-            if lineStart != lastEmittedLineStart {
-                let newlinePointer = memchr(
-                    baseAddress.advanced(by: matchStart),
-                    Int32(UInt8(ascii: "\n")),
-                    dataCount - matchStart
-                )
-                let lineEnd: Int
-                let terminator: String
-                if let newlinePointer {
-                    lineEnd = baseAddress.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self))
-                    terminator = "\n"
-                } else {
-                    lineEnd = dataCount
-                    terminator = ""
+            let newlinePointer = memchr(
+                baseAddress.advanced(by: matchStart),
+                Int32(UInt8(ascii: "\n")),
+                dataCount - matchStart
+            )
+            let lineEnd: Int
+            let terminator: String
+            if let newlinePointer {
+                lineEnd = baseAddress.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self))
+                terminator = "\n"
+            } else {
+                lineEnd = dataCount
+                terminator = ""
+            }
+            if requiresWordBoundary {
+                switch asciiWordBoundaryState(
+                    bytes: bytes,
+                    lineStart: lineStart,
+                    lineEnd: lineEnd,
+                    matchStart: matchStart,
+                    matchEnd: matchStart + literal.count
+                ) {
+                case .bounded:
+                    break
+                case .notBounded:
+                    searchOffset = max(matchStart + 1, searchOffset + 1)
+                    continue
+                case .needsDecodedFallback:
+                    return nil
                 }
+            }
+            if lineStart != lastEmittedLineStart {
                 if needsLineNumbers {
                     advanceLineNumber(to: lineStart)
                 }
                 let lineData = Data(bytes: baseAddress.advanced(by: lineStart), count: lineEnd - lineStart)
                 guard let line = String(data: lineData, encoding: .utf8) else {
-                    return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: data.count, searched: false)
+                    return nil
                 }
                 matches.append(SearchMatch(
                     fileURL: fileURL,
@@ -1559,7 +1579,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             searched: true
         )
         #else
-        return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: data.count, searched: false)
+        return nil
         #endif
     }
 
