@@ -46,15 +46,25 @@ struct RipgrepCommand {
             return nil
         }
 
-        let useMmap: Bool
+        enum DarwinLiteralPreflightMode {
+            case mmap
+            case noMmap
+            case asciiCaseInsensitive
+        }
+
+        let mode: DarwinLiteralPreflightMode
         let pattern: String
         let path: String
         if arguments.count == 2 {
-            useMmap = true
+            mode = .mmap
             pattern = arguments[0]
             path = arguments[1]
         } else if arguments.count == 3, arguments[0] == "--no-mmap" {
-            useMmap = false
+            mode = .noMmap
+            pattern = arguments[1]
+            path = arguments[2]
+        } else if arguments.count == 3, arguments[0] == "-i" || arguments[0] == "--ignore-case" {
+            mode = .asciiCaseInsensitive
             pattern = arguments[1]
             path = arguments[2]
         } else {
@@ -68,24 +78,33 @@ struct RipgrepCommand {
         }
 
         let literal = Array(pattern.utf8)
-        guard !literal.isEmpty else {
+        guard !literal.isEmpty,
+              mode != .asciiCaseInsensitive || literal.allSatisfy({ $0 < 0x80 }) else {
             return nil
         }
 
         let result = path.withCString { pathPointer in
             literal.withUnsafeBufferPointer { needle in
-                if useMmap {
+                switch mode {
+                case .mmap:
                     return rg_darwin_write_literal_file_lines(
                         pathPointer,
                         needle.baseAddress,
                         needle.count
                     )
+                case .noMmap:
+                    return rg_darwin_write_literal_file_lines_no_mmap(
+                        pathPointer,
+                        needle.baseAddress,
+                        needle.count
+                    )
+                case .asciiCaseInsensitive:
+                    return rg_darwin_write_literal_file_lines_ascii_case_insensitive(
+                        pathPointer,
+                        needle.baseAddress,
+                        needle.count
+                    )
                 }
-                return rg_darwin_write_literal_file_lines_no_mmap(
-                    pathPointer,
-                    needle.baseAddress,
-                    needle.count
-                )
             }
         }
         guard result.status >= 0 else {

@@ -218,7 +218,9 @@ static rg_darwin_literal_file_result rg_darwin_write_literal_bytes(
     const uint8_t *base,
     size_t haystack_len,
     const uint8_t *needle,
-    size_t needle_len
+    size_t needle_len,
+    const size_t shifts[256],
+    int ascii_case_insensitive
 ) {
     rg_darwin_literal_file_result result = { .status = -2, .matched_line_count = 0, .total_match_count = 0, .bytes_searched = 0 };
 
@@ -238,7 +240,9 @@ static rg_darwin_literal_file_result rg_darwin_write_literal_bytes(
     size_t search_offset = 0;
     size_t last_emitted_line_start = (size_t)-1;
     while (search_offset < haystack_len) {
-        const uint8_t *found = rg_memmem_simple(base + search_offset, haystack_len - search_offset, needle, needle_len);
+        const uint8_t *found = ascii_case_insensitive
+            ? rg_memcasemem_ascii_prepared(base + search_offset, haystack_len - search_offset, needle, needle_len, shifts)
+            : rg_memmem_simple(base + search_offset, haystack_len - search_offset, needle, needle_len);
         if (found == NULL) {
             break;
         }
@@ -293,6 +297,46 @@ static rg_darwin_literal_file_result rg_darwin_write_literal_bytes(
     result.bytes_searched = haystack_len;
     return result;
 }
+
+static rg_darwin_literal_file_result rg_darwin_write_literal_bytes_case_sensitive(
+    const uint8_t *base,
+    size_t haystack_len,
+    const uint8_t *needle,
+    size_t needle_len
+) {
+    return rg_darwin_write_literal_bytes(base, haystack_len, needle, needle_len, NULL, 0);
+}
+
+static rg_darwin_literal_file_result rg_darwin_write_literal_bytes_case_insensitive(
+    const uint8_t *base,
+    size_t haystack_len,
+    const uint8_t *needle,
+    size_t needle_len
+) {
+    rg_darwin_literal_file_result result = { .status = -2, .matched_line_count = 0, .total_match_count = 0, .bytes_searched = 0 };
+    uint8_t *folded = malloc(needle_len);
+    if (folded == NULL) {
+        result.status = -1;
+        return result;
+    }
+
+    size_t shifts[256];
+    for (size_t index = 0; index < 256; ++index) {
+        shifts[index] = needle_len;
+    }
+    for (size_t index = 0; index < needle_len; ++index) {
+        folded[index] = rg_ascii_lower(needle[index]);
+    }
+    if (needle_len > 1) {
+        for (size_t index = 0; index + 1 < needle_len; ++index) {
+            shifts[folded[index]] = needle_len - 1 - index;
+        }
+    }
+
+    result = rg_darwin_write_literal_bytes(base, haystack_len, folded, needle_len, shifts, 1);
+    free(folded);
+    return result;
+}
 #endif
 
 rg_darwin_literal_file_result rg_darwin_write_literal_file_lines(
@@ -340,7 +384,7 @@ rg_darwin_literal_file_result rg_darwin_write_literal_file_lines(
         return result;
     }
 
-    result = rg_darwin_write_literal_bytes(base, haystack_len, needle, needle_len);
+    result = rg_darwin_write_literal_bytes_case_sensitive(base, haystack_len, needle, needle_len);
     munmap(base, haystack_len);
     return result;
 #endif
@@ -411,8 +455,65 @@ rg_darwin_literal_file_result rg_darwin_write_literal_file_lines_no_mmap(
     }
     close(fd);
 
-    result = rg_darwin_write_literal_bytes(buffer, bytes_read, needle, needle_len);
+    result = rg_darwin_write_literal_bytes_case_sensitive(buffer, bytes_read, needle, needle_len);
     free(buffer);
+    return result;
+#endif
+}
+
+rg_darwin_literal_file_result rg_darwin_write_literal_file_lines_ascii_case_insensitive(
+    const char *path,
+    const uint8_t *needle,
+    size_t needle_len
+) {
+    rg_darwin_literal_file_result result = { .status = -2, .matched_line_count = 0, .total_match_count = 0, .bytes_searched = 0 };
+#ifndef __APPLE__
+    (void)path;
+    (void)needle;
+    (void)needle_len;
+    return result;
+#else
+    if (path == NULL || needle == NULL || needle_len == 0) {
+        return result;
+    }
+    for (size_t index = 0; index < needle_len; ++index) {
+        if (needle[index] >= 0x80) {
+            return result;
+        }
+    }
+
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        result.status = -1;
+        return result;
+    }
+
+    struct stat file_stat;
+    if (fstat(fd, &file_stat) != 0) {
+        close(fd);
+        result.status = -1;
+        return result;
+    }
+    if ((file_stat.st_mode & S_IFMT) != S_IFREG) {
+        close(fd);
+        return result;
+    }
+    if (file_stat.st_size <= 0) {
+        close(fd);
+        result.status = 0;
+        return result;
+    }
+
+    const size_t haystack_len = (size_t)file_stat.st_size;
+    uint8_t *base = mmap(NULL, haystack_len, PROT_READ, MAP_PRIVATE, fd, 0);
+    close(fd);
+    if (base == MAP_FAILED) {
+        result.status = -1;
+        return result;
+    }
+
+    result = rg_darwin_write_literal_bytes_case_insensitive(base, haystack_len, needle, needle_len);
+    munmap(base, haystack_len);
     return result;
 #endif
 }
