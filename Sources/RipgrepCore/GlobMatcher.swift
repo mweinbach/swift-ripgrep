@@ -357,6 +357,15 @@ public struct GlobMatcher: Equatable {
         let starCount = pattern.reduce(0) { count, character in
             character == "*" ? count + 1 : count
         }
+        #if canImport(Darwin)
+        if pattern.hasPrefix("**/") {
+            let suffix = String(pattern.dropFirst(3))
+            if !suffix.isEmpty,
+               suffix.rangeOfCharacter(from: CharacterSet(charactersIn: "*?[]")) == nil {
+                return .exact(suffix)
+            }
+        }
+        #endif
         if hasSimpleGlobMeta {
             #if canImport(Darwin)
             if let simpleGlob = compileSimpleGlob(pattern, basenameOnly: basenameOnly) {
