@@ -135,6 +135,15 @@ public struct RipgrepSearcher: @unchecked Sendable {
             .haystacksWithMessages(for: options)
     }
 
+    public func streamFilePathsWithMessages(
+        options: RipgrepOptions,
+        emit: (String) -> Void
+    ) throws -> FilePathStreamResults? {
+        try FileWalker(fileManager: fileManager)
+            .withEnvironment(environment)
+            .streamFilePathsWithMessages(for: options, emit: emit)
+    }
+
     public func search(options: RipgrepOptions) throws -> SearchResults {
         try search(options: options, stdin: nil)
     }

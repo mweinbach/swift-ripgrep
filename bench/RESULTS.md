@@ -30,16 +30,19 @@ this environment for the default literal search. A fresh confirmation run used
 
 | Bench | Flags | rg | swift-rg | swift / rg |
 |---|---|---:|---:|---:|
-| Linux tree files | `--files` | 88.4 ms | 1.43 s | **16.14x** |
-| Linux tree files, quiet | `--quiet --files` | 6.23 ms | 42.2 ms | **6.77x** |
-| Linux tree literal | `PM_RESUME` | 4.04 s | 2.53 s | **0.63x** |
+| Linux tree files | `--files` | 88.9 ms | 472.0 ms | **5.31x** |
+| Linux tree files, no ignore/hidden | `--no-ignore --hidden --files` | 83.5 ms | 205.2 ms | **2.46x** |
+| Linux tree files, quiet | `--quiet --files` | 6.23 ms | 55.9 ms | **8.97x** |
+| Linux tree literal | `PM_RESUME` | 3.92 s | 2.37 s | **0.61x** |
 
 The Linux-tree comparisons above have byte-identical sorted output, including
-the 79,353-path `--files` set. Natural output order still differs from Rust for
-this corpus because the Swift walker preserves its own deterministic traversal
-order under parallel search. The latest traversal slice reduced the Swift
-`--files` median from 2.55 s to 1.43 s and the Swift `PM_RESUME` median from
-3.52 s to 2.53 s versus the previous 9d99dd0 checkpoint on the same corpus.
+the 79,353-path `--files` set, and the Swift `--files` natural output remains
+byte-identical to the previous Swift checkpoint. Natural output order still
+differs from Rust for this corpus because the Swift walker preserves its own
+deterministic traversal order under parallel search. The latest traversal slice
+reduced the Swift `--files` median from 1.43 s to 472.0 ms, the `--no-ignore
+--hidden --files` median to 205.2 ms, and the Swift `PM_RESUME` median from
+2.53 s to 2.37 s versus the previous 0ae4c30 checkpoint on the same corpus.
 
 The key improvements since the 2026-05-24 baseline are:
 
@@ -59,6 +62,13 @@ The key improvements since the 2026-05-24 baseline are:
   threads child metadata and relative paths through recursion;
 - `--quiet --files` now stops after the first searchable haystack when sorting
   and debug logging are off, while preserving missing-root diagnostics;
+- plain single-root Darwin `--files` now streams paths from a string/POSIX
+  walker without materializing `URL` haystacks, and batches stdout writes
+  through a reusable 64 KiB buffer;
+- ignore matching skips regex fallbacks after ASCII simple-glob misses, avoids
+  regex compilation for exact/prefix/suffix fast rules, passes child basenames
+  through the ignore stack to avoid repeated path slicing, and has an even
+  thinner no-ignore/hidden traversal branch;
 - path rendering skips Unicode precomposition for ASCII paths and `--files`
   output no longer materializes a second full path-string array;
 - byte-literal fast-path detection is cached per worker matcher, and the

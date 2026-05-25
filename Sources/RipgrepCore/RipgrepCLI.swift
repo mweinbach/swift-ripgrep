@@ -85,6 +85,39 @@ public enum RipgrepCLI {
                 let printer = StandardPrinter(options: options)
 
                 if options.mode == .files {
+                    var filePathOutputBuffer = Data()
+                    if !options.quiet,
+                       let filePathResults = try searcher.streamFilePathsWithMessages(options: options, emit: { line in
+                           if stdout == nil {
+                               filePathOutputBuffer.append(contentsOf: line.utf8)
+                               filePathOutputBuffer.append(UInt8(ascii: "\n"))
+                               if filePathOutputBuffer.count >= 64 * 1024 {
+                                   writeStdout(filePathOutputBuffer)
+                                   filePathOutputBuffer.removeAll(keepingCapacity: true)
+                               }
+                           } else {
+                               emitStdout(line, stdout: stdout, suppressNewlineForTrailingNul: options.nullPathTerminator)
+                           }
+                       }) {
+                        if !filePathOutputBuffer.isEmpty {
+                            writeStdout(filePathOutputBuffer)
+                        }
+                        for diagnostic in filePathResults.diagnostics {
+                            stderr("rg: \(diagnostic)")
+                        }
+                        if !options.noMessages {
+                            for message in filePathResults.messages {
+                                stderr("rg: \(message)")
+                            }
+                        }
+                        if !filePathResults.messages.isEmpty {
+                            if filePathResults.count == 0 {
+                                return 2
+                            }
+                            return 2
+                        }
+                        return filePathResults.count == 0 ? 1 : 0
+                    }
                     let walkResults = try searcher.walkFilesWithMessages(options: options)
                     var stdinAdjustedFiles: [URL]?
                     if options.useStdin {

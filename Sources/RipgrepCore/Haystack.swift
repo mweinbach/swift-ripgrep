@@ -47,6 +47,14 @@ public struct FileWalkResults: Equatable {
     }
 }
 
+public struct FilePathStreamResults: Equatable {
+    public let count: Int
+    public let messages: [String]
+    public let warnings: [String]
+    public let diagnostics: [String]
+    public let filtered: Bool
+}
+
 private struct LoadedIgnoreMatcher {
     let matcher: GlobMatcher
     let messages: [String]
@@ -79,6 +87,43 @@ private struct WalkMetadata {
     let fileSize: UInt64?
 }
 
+#if canImport(Darwin)
+private struct FastDirectoryChild {
+    let name: String
+    let isASCII: Bool
+    let kind: FastDirectoryEntryKind
+}
+
+private struct FastDirectoryContents {
+    let children: [FastDirectoryChild]
+    let hasGitMarker: Bool
+    let hasGitignore: Bool
+    let hasIgnore: Bool
+    let hasRgignore: Bool
+}
+
+private enum FastDirectoryEntryKind: Equatable {
+    case directory
+    case file
+    case symbolicLink
+    case other
+
+    var isDirectory: Bool {
+        if case .directory = self {
+            return true
+        }
+        return false
+    }
+
+    var isFile: Bool {
+        if case .file = self {
+            return true
+        }
+        return false
+    }
+}
+#endif
+
 public struct FileWalker {
     private let fileManager: FileManager
     private let environment: [String: String]
@@ -101,6 +146,83 @@ public struct FileWalker {
             throw RipgrepError.message(message)
         }
         return results.haystacks
+    }
+
+    public func streamFilePathsWithMessages(
+        for options: RipgrepOptions,
+        emit: (String) -> Void
+    ) throws -> FilePathStreamResults? {
+        #if canImport(Darwin)
+        guard canFastWalkFilePaths(options: options),
+              options.effectiveRoots.count == 1 else {
+            return nil
+        }
+        var messages: [String] = []
+        var warnings: [String] = []
+        var diagnostics: [String] = []
+        var filtered = false
+        var emittedCount = 0
+        let root = options.effectiveRoots[0]
+        let rootExists = fileManager.fileExists(atPath: root.path)
+        guard rootExists else {
+            let displayPath = rootDisplayPath(at: 0, root: root, options: options)
+            messages.append(missingRootMessage(displayPath, options: options, hasExistingRoot: false))
+            return FilePathStreamResults(count: 0, messages: messages, warnings: warnings, diagnostics: diagnostics, filtered: false)
+        }
+
+        let rootURL = root.standardizedFileURL
+        let rootBase = rootBase(for: rootURL)
+        guard rootBase.standardizedFileURL.path == rootURL.path else {
+            return nil
+        }
+        let rootArgument = options.rootPathArguments.first ?? ""
+        guard !rootArgument.isEmpty,
+              (rootArgument as NSString).isAbsolutePath,
+              URL(fileURLWithPath: rootArgument).standardizedFileURL.path == rootURL.path,
+              isDirectoryPath(rootURL.path) else {
+            return nil
+        }
+
+        var rootIgnoreStack = IgnoreStack()
+        appendExplicitIgnoreFiles(
+            to: &rootIgnoreStack,
+            rootBase: rootBase,
+            warnings: &warnings,
+            diagnostics: &diagnostics,
+            options: options
+        )
+        appendGlobalIgnoreFile(to: &rootIgnoreStack, rootBase: rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
+        appendParentIgnoreFiles(to: &rootIgnoreStack, rootBase: rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
+        let rootVCSContext = options.noRequireGit || isInGitRepository(rootBase)
+        try walkFilePathsInOutputOrder(
+            directoryPath: rootURL.path,
+            logicalDirectoryPath: rootURL.path,
+            logicalDirectoryPathIsASCII: rootURL.path.utf8.allSatisfy { $0 < 0x80 },
+            relativePath: "",
+            rootBase: rootBase,
+            rootDebugDisplayPath: rootDisplayPath(at: 0, root: root, options: options),
+            rootArgumentIsAbsolute: true,
+            vcsContext: rootVCSContext,
+            messages: &messages,
+            warnings: &warnings,
+            diagnostics: &diagnostics,
+            filtered: &filtered,
+            ignoreStack: rootIgnoreStack,
+            options: options
+        ) { path in
+            emittedCount += 1
+            emit(path)
+        }
+        return FilePathStreamResults(
+            count: emittedCount,
+            messages: messages,
+            warnings: warnings,
+            diagnostics: diagnostics,
+            filtered: filtered
+        )
+        #else
+        return nil
+        #endif
     }
 
     public func haystacksWithMessages(for options: RipgrepOptions) throws -> FileWalkResults {
@@ -251,6 +373,327 @@ public struct FileWalker {
         return options.rootPathArguments[offset]
     }
 
+    #if canImport(Darwin)
+    private func canFastWalkFilePaths(options: RipgrepOptions) -> Bool {
+        return options.mode == .files
+            && !options.useStdin
+            && !options.nullPathTerminator
+            && options.sortMode == nil
+            && options.pathSeparator == nil
+            && options.colorMode != .always
+            && options.colorMode != .ansi
+            && options.colorChanges.isEmpty
+            && !options.hyperlinkFormat.isEnabled
+            && options.globPatterns.isEmpty
+            && options.caseInsensitiveGlobPatterns.isEmpty
+            && options.typeChanges.isEmpty
+            && options.maxFileSize == nil
+            && options.maxDepth == nil
+            && !options.followSymlinks
+            && !options.oneFileSystem
+    }
+
+    private func hasLoadableIgnoreFiles(
+        hasGitMarker: Bool,
+        hasGitignore: Bool,
+        hasIgnore: Bool,
+        hasRgignore: Bool,
+        vcsContext: Bool,
+        options: RipgrepOptions
+    ) -> Bool {
+        if !options.noIgnoreDot && (hasIgnore || hasRgignore) {
+            return true
+        }
+        let shouldLoadVCSIgnore = !options.noIgnoreVCS && (options.noRequireGit || vcsContext)
+        return shouldLoadVCSIgnore && (hasGitignore || (!options.noIgnoreExclude && hasGitMarker))
+    }
+
+    private func walkFilePathsInOutputOrder(
+        directoryPath: String,
+        logicalDirectoryPath: String,
+        logicalDirectoryPathIsASCII: Bool,
+        relativePath: String,
+        rootBase: URL,
+        rootDebugDisplayPath: String,
+        rootArgumentIsAbsolute: Bool,
+        vcsContext: Bool,
+        messages: inout [String],
+        warnings: inout [String],
+        diagnostics: inout [String],
+        filtered: inout Bool,
+        ignoreStack: IgnoreStack,
+        options: RipgrepOptions,
+        emit: (String) -> Void
+    ) throws {
+        let contents = try fastDirectoryContents(atPath: directoryPath)
+        let directoryVCSContext = vcsContext || (!options.noIgnoreVCS && contents.hasGitMarker)
+        var directoryIgnoreStack = ignoreStack
+        if !options.noIgnore && hasLoadableIgnoreFiles(
+            hasGitMarker: contents.hasGitMarker,
+            hasGitignore: contents.hasGitignore,
+            hasIgnore: contents.hasIgnore,
+            hasRgignore: contents.hasRgignore,
+            vcsContext: directoryVCSContext,
+            options: options
+        ) {
+            let directoryURL = URL(fileURLWithPath: directoryPath, isDirectory: true)
+            let logicalDirectoryURL = URL(fileURLWithPath: logicalDirectoryPath, isDirectory: true)
+            appendIgnoreFiles(
+                in: directoryURL,
+                logicalDirectory: logicalDirectoryURL,
+                to: &directoryIgnoreStack,
+                warnings: &warnings,
+                diagnostics: &diagnostics,
+                rootBase: rootBase,
+                rootDebugDisplayPath: rootDebugDisplayPath,
+                rootArgumentIsAbsolute: rootArgumentIsAbsolute,
+                vcsContext: directoryVCSContext,
+                directoryContents: DirectoryContents(
+                    children: [],
+                    hasGitMarker: contents.hasGitMarker,
+                    hasGitignore: contents.hasGitignore,
+                    hasIgnore: contents.hasIgnore,
+                    hasRgignore: contents.hasRgignore
+                ),
+                options: options
+            )
+        }
+
+        if options.noIgnore && options.hidden {
+            for child in contents.children.reversed() {
+                if child.kind == .symbolicLink {
+                    continue
+                }
+                if child.kind.isDirectory {
+                    try walkFilePathsInOutputOrder(
+                        directoryPath: "\(directoryPath)/\(child.name)",
+                        logicalDirectoryPath: "\(logicalDirectoryPath)/\(child.name)",
+                        logicalDirectoryPathIsASCII: logicalDirectoryPathIsASCII && child.isASCII,
+                        relativePath: "",
+                        rootBase: rootBase,
+                        rootDebugDisplayPath: rootDebugDisplayPath,
+                        rootArgumentIsAbsolute: rootArgumentIsAbsolute,
+                        vcsContext: directoryVCSContext,
+                        messages: &messages,
+                        warnings: &warnings,
+                        diagnostics: &diagnostics,
+                        filtered: &filtered,
+                        ignoreStack: directoryIgnoreStack,
+                        options: options,
+                        emit: emit
+                    )
+                } else if child.kind.isFile {
+                    emit(outputPath(
+                        logicalDirectoryPath: logicalDirectoryPath,
+                        logicalDirectoryPathIsASCII: logicalDirectoryPathIsASCII,
+                        child: child
+                    ))
+                }
+            }
+            return
+        }
+
+        for child in contents.children.reversed() {
+            if child.kind == .symbolicLink {
+                continue
+            }
+            let childRelativePath = relativePath.isEmpty ? child.name : "\(relativePath)/\(child.name)"
+            let isDirectory = child.kind.isDirectory
+            if !options.hidden,
+               child.name.hasPrefix("."),
+               !isIncludedByIgnore(
+                   relativePath: childRelativePath,
+                   basename: child.name,
+                   isDirectory: isDirectory,
+                   ignoreStack: directoryIgnoreStack
+               ) {
+                debugHiddenMatch(
+                    displayPath: debugDisplayPath(
+                        path: logicalDirectoryPath,
+                        childName: child.name,
+                        relativePath: childRelativePath,
+                        rootDisplayPath: rootDebugDisplayPath,
+                        rootArgumentIsAbsolute: rootArgumentIsAbsolute
+                    ),
+                    options: options,
+                    diagnostics: &diagnostics
+                )
+                continue
+            }
+            if !directoryIgnoreStack.allows(relativePath: childRelativePath, basename: child.name, isDirectory: isDirectory) {
+                let childPath = "\(logicalDirectoryPath)/\(child.name)"
+                debugIgnoreMatch(
+                    path: childPath,
+                    displayPath: debugDisplayPath(
+                        path: logicalDirectoryPath,
+                        childName: child.name,
+                        relativePath: childRelativePath,
+                        rootDisplayPath: rootDebugDisplayPath,
+                        rootArgumentIsAbsolute: rootArgumentIsAbsolute
+                    ),
+                    relativePath: childRelativePath,
+                    isDirectory: isDirectory,
+                    ignoreStack: directoryIgnoreStack,
+                    options: options,
+                    diagnostics: &diagnostics
+                )
+                filtered = true
+                continue
+            }
+            if child.kind.isDirectory {
+                try walkFilePathsInOutputOrder(
+                    directoryPath: "\(directoryPath)/\(child.name)",
+                    logicalDirectoryPath: "\(logicalDirectoryPath)/\(child.name)",
+                    logicalDirectoryPathIsASCII: logicalDirectoryPathIsASCII && child.isASCII,
+                    relativePath: childRelativePath,
+                    rootBase: rootBase,
+                    rootDebugDisplayPath: rootDebugDisplayPath,
+                    rootArgumentIsAbsolute: rootArgumentIsAbsolute,
+                    vcsContext: directoryVCSContext,
+                    messages: &messages,
+                    warnings: &warnings,
+                    diagnostics: &diagnostics,
+                    filtered: &filtered,
+                    ignoreStack: directoryIgnoreStack,
+                    options: options,
+                    emit: emit
+                )
+            } else if child.kind.isFile {
+                emit(outputPath(
+                    logicalDirectoryPath: logicalDirectoryPath,
+                    logicalDirectoryPathIsASCII: logicalDirectoryPathIsASCII,
+                    child: child
+                ))
+            }
+        }
+    }
+
+    private func fastDirectoryContents(atPath path: String) throws -> FastDirectoryContents {
+        guard let directory = opendir(path) else {
+            throw NSError(
+                domain: NSPOSIXErrorDomain,
+                code: Int(errno),
+                userInfo: [NSFilePathErrorKey: path]
+            )
+        }
+        defer {
+            closedir(directory)
+        }
+
+        var children: [FastDirectoryChild] = []
+        var hasGitMarker = false
+        var hasGitignore = false
+        var hasIgnore = false
+        var hasRgignore = false
+        while let entryPointer = readdir(directory) {
+            let entry = entryPointer.pointee
+            let name = withUnsafePointer(to: entry.d_name) { pointer in
+                pointer.withMemoryRebound(to: CChar.self, capacity: Int(entry.d_namlen) + 1) {
+                    String(cString: $0)
+                }
+            }
+            if name == "." || name == ".." {
+                continue
+            }
+            switch name {
+            case ".git":
+                hasGitMarker = true
+            case ".gitignore":
+                hasGitignore = true
+            case ".ignore":
+                hasIgnore = true
+            case ".rgignore":
+                hasRgignore = true
+            default:
+                break
+            }
+            let kind = try fastDirectoryEntryKind(entry.d_type, path: path, name: name)
+            children.append(FastDirectoryChild(
+                name: name,
+                isASCII: name.utf8.allSatisfy { $0 < 0x80 },
+                kind: kind
+            ))
+        }
+        return FastDirectoryContents(
+            children: children,
+            hasGitMarker: hasGitMarker,
+            hasGitignore: hasGitignore,
+            hasIgnore: hasIgnore,
+            hasRgignore: hasRgignore
+        )
+    }
+
+    private func outputPath(
+        logicalDirectoryPath: String,
+        logicalDirectoryPathIsASCII: Bool,
+        child: FastDirectoryChild
+    ) -> String {
+        let path = "\(logicalDirectoryPath)/\(child.name)"
+        return logicalDirectoryPathIsASCII && child.isASCII ? path : normalizedOutputPath(path)
+    }
+
+    private func fastDirectoryEntryKind(_ type: UInt8, path: String, name: String) throws -> FastDirectoryEntryKind {
+        switch Int32(type) {
+        case DT_DIR:
+            return .directory
+        case DT_REG:
+            return .file
+        case DT_LNK:
+            return .symbolicLink
+        case DT_UNKNOWN:
+            var statBuffer = stat()
+            let childPath = "\(path)/\(name)"
+            guard lstat(childPath, &statBuffer) == 0 else {
+                throw NSError(
+                    domain: NSPOSIXErrorDomain,
+                    code: Int(errno),
+                    userInfo: [NSFilePathErrorKey: childPath]
+                )
+            }
+            switch statBuffer.st_mode & S_IFMT {
+            case S_IFDIR:
+                return .directory
+            case S_IFREG:
+                return .file
+            case S_IFLNK:
+                return .symbolicLink
+            default:
+                return .other
+            }
+        default:
+            return .other
+        }
+    }
+
+    private func isDirectoryPath(_ path: String) -> Bool {
+        var statBuffer = stat()
+        guard lstat(path, &statBuffer) == 0 else {
+            return false
+        }
+        return (statBuffer.st_mode & S_IFMT) == S_IFDIR
+    }
+
+    private func normalizedOutputPath(_ path: String) -> String {
+        path.utf8.allSatisfy { $0 < 0x80 } ? path : path.precomposedStringWithCanonicalMapping
+    }
+
+    private func debugDisplayPath(
+        path: String,
+        childName: String,
+        relativePath: String,
+        rootDisplayPath: String,
+        rootArgumentIsAbsolute: Bool
+    ) -> String {
+        if rootArgumentIsAbsolute {
+            return "\(path)/\(childName)"
+        }
+        guard !relativePath.isEmpty else {
+            return rootDisplayPath
+        }
+        return "\(rootDisplayPath)/\(relativePath)"
+    }
+    #endif
+
     private func walk(
         _ url: URL,
         physicalURL: URL?,
@@ -317,7 +760,12 @@ public struct FileWalker {
                !options.hidden,
                isHiddenName(fileName ?? url.lastPathComponent),
                (isDirectory || !typeRegistry.selectedTypeAllows(path: relativePath)),
-               !isIncludedByIgnore(relativePath: relativePath, isDirectory: isDirectory, ignoreStack: ignoreStack) {
+               !isIncludedByIgnore(
+                   relativePath: relativePath,
+                   basename: fileName,
+                   isDirectory: isDirectory,
+                   ignoreStack: ignoreStack
+               ) {
                 debugHiddenMatch(
                     displayPath: debugDisplayPath(
                         for: url,
@@ -330,7 +778,7 @@ public struct FileWalker {
                 )
                 return
             }
-            if !isIncludedByOverride && !ignoreStack.allows(relativePath: relativePath, isDirectory: isDirectory) {
+            if !isIncludedByOverride && !ignoreStack.allows(relativePath: relativePath, basename: fileName, isDirectory: isDirectory) {
                 debugIgnoreMatch(
                     path: url.path,
                     displayPath: debugDisplayPath(
@@ -418,10 +866,20 @@ public struct FileWalker {
             return
         }
 
-        let directoryContents = try directoryContents(at: resolvedURL)
+        let directoryContents = try directoryContents(
+            at: resolvedURL,
+            preferDirectoryEntryMetadata: prefersDirectoryEntryMetadata(options: options)
+        )
         let directoryVCSContext = vcsContext || (!options.noIgnoreVCS && directoryContents.hasGitMarker)
         var directoryIgnoreStack = ignoreStack
-        if !options.noIgnore {
+        if !options.noIgnore && hasLoadableIgnoreFiles(
+            hasGitMarker: directoryContents.hasGitMarker,
+            hasGitignore: directoryContents.hasGitignore,
+            hasIgnore: directoryContents.hasIgnore,
+            hasRgignore: directoryContents.hasRgignore,
+            vcsContext: directoryVCSContext,
+            options: options
+        ) {
             appendIgnoreFiles(
                 in: resolvedURL,
                 logicalDirectory: url,
@@ -477,7 +935,7 @@ public struct FileWalker {
         }
     }
 
-    private func directoryContents(at url: URL) throws -> DirectoryContents {
+    private func directoryContents(at url: URL, preferDirectoryEntryMetadata: Bool) throws -> DirectoryContents {
         #if canImport(Darwin)
         guard let directory = opendir(url.path) else {
             throw NSError(
@@ -518,11 +976,12 @@ public struct FileWalker {
             default:
                 break
             }
-            let childMetadata = try metadata(
-                named: name,
-                directoryFileDescriptor: directoryFileDescriptor,
-                followingSymlinks: false
-            )
+            let childMetadata = try directoryEntryMetadata(entry.d_type, preferDirectoryEntryMetadata: preferDirectoryEntryMetadata)
+                ?? metadata(
+                    named: name,
+                    directoryFileDescriptor: directoryFileDescriptor,
+                    followingSymlinks: false
+                )
             children.append(DirectoryChild(
                 url: url.appendingPathComponent(name),
                 name: name,
@@ -576,6 +1035,16 @@ public struct FileWalker {
             hasIgnore: hasIgnore,
             hasRgignore: hasRgignore
         )
+        #endif
+    }
+
+    private func prefersDirectoryEntryMetadata(options: RipgrepOptions) -> Bool {
+        #if canImport(Darwin)
+        options.mode == .files
+            && options.maxFileSize == nil
+            && !options.followSymlinks
+        #else
+        false
         #endif
     }
 
@@ -633,6 +1102,25 @@ public struct FileWalker {
             )
         }
         return metadata(from: statBuffer, followingSymlinks: followingSymlinks)
+    }
+
+    private func directoryEntryMetadata(
+        _ type: UInt8,
+        preferDirectoryEntryMetadata: Bool
+    ) -> WalkMetadata? {
+        guard preferDirectoryEntryMetadata else {
+            return nil
+        }
+        switch Int32(type) {
+        case DT_DIR:
+            return WalkMetadata(isDirectory: true, isRegularFile: false, isSymbolicLink: false, fileSize: nil)
+        case DT_REG:
+            return WalkMetadata(isDirectory: false, isRegularFile: true, isSymbolicLink: false, fileSize: nil)
+        case DT_LNK:
+            return WalkMetadata(isDirectory: false, isRegularFile: false, isSymbolicLink: true, fileSize: nil)
+        default:
+            return nil
+        }
     }
 
     private func metadata(from statBuffer: stat, followingSymlinks: Bool) -> WalkMetadata {
@@ -812,8 +1300,8 @@ public struct FileWalker {
         name.hasPrefix(".")
     }
 
-    private func isIncludedByIgnore(relativePath: String, isDirectory: Bool, ignoreStack: IgnoreStack) -> Bool {
-        ignoreStack.decision(relativePath: relativePath, isDirectory: isDirectory) == .include
+    private func isIncludedByIgnore(relativePath: String, basename: String? = nil, isDirectory: Bool, ignoreStack: IgnoreStack) -> Bool {
+        ignoreStack.decision(relativePath: relativePath, basename: basename, isDirectory: isDirectory) == .include
     }
 
     private func rootBase(for root: URL) -> URL {

@@ -70,9 +70,20 @@ public struct GlobMatcher: Equatable {
             self.anchored = anchored
             self.basenameOnly = basenameOnly
             self.sourcePath = sourcePath
-            self.fastMatcher = GlobMatcher.compileFastMatcher(source, basenameOnly: basenameOnly, caseInsensitive: caseInsensitive)
-            self.regex = GlobMatcher.compileGlobRegex(source, caseInsensitive: caseInsensitive)
-            self.anywhereRegex = GlobMatcher.compileGlobRegex("**/\(source)", caseInsensitive: caseInsensitive)
+            let fastMatcher = GlobMatcher.compileFastMatcher(source, basenameOnly: basenameOnly, caseInsensitive: caseInsensitive)
+            let needsRegexFallback: Bool
+            if let fastMatcher {
+                if case .simpleGlob = fastMatcher {
+                    needsRegexFallback = true
+                } else {
+                    needsRegexFallback = false
+                }
+            } else {
+                needsRegexFallback = true
+            }
+            self.fastMatcher = fastMatcher
+            self.regex = needsRegexFallback ? GlobMatcher.compileGlobRegex(source, caseInsensitive: caseInsensitive) : nil
+            self.anywhereRegex = needsRegexFallback ? GlobMatcher.compileGlobRegex("**/\(source)", caseInsensitive: caseInsensitive) : nil
         }
 
         static public func == (lhs: Rule, rhs: Rule) -> Bool {
@@ -177,13 +188,17 @@ public struct GlobMatcher: Equatable {
     }
 
     public func decision(relativePath: String, isDirectory: Bool) -> Decision? {
+        decision(relativePath: relativePath, basename: nil, isDirectory: isDirectory)
+    }
+
+    public func decision(relativePath: String, basename pathBasename: String?, isDirectory: Bool) -> Decision? {
         guard let scopedPath = scopedPath(for: relativePath) else {
             return nil
         }
         #if canImport(Darwin)
-        let pathBasename = hasBasenameOnlyRules ? basename(scopedPath) : nil
+        let pathBasename = hasBasenameOnlyRules ? (pathBasename ?? basename(scopedPath)) : nil
         #else
-        let pathBasename = basename(scopedPath)
+        let pathBasename = pathBasename ?? basename(scopedPath)
         #endif
         var matchedDecision: Decision?
         for rule in rules where matches(rule, relativePath: scopedPath, basename: pathBasename, isDirectory: isDirectory) {
@@ -193,13 +208,17 @@ public struct GlobMatcher: Equatable {
     }
 
     public func matchingRule(relativePath: String, isDirectory: Bool) -> Rule? {
+        matchingRule(relativePath: relativePath, basename: nil, isDirectory: isDirectory)
+    }
+
+    public func matchingRule(relativePath: String, basename pathBasename: String?, isDirectory: Bool) -> Rule? {
         guard let scopedPath = scopedPath(for: relativePath) else {
             return nil
         }
         #if canImport(Darwin)
-        let pathBasename = hasBasenameOnlyRules ? basename(scopedPath) : nil
+        let pathBasename = hasBasenameOnlyRules ? (pathBasename ?? basename(scopedPath)) : nil
         #else
-        let pathBasename = basename(scopedPath)
+        let pathBasename = pathBasename ?? basename(scopedPath)
         #endif
         var matchedRule: Rule?
         for rule in rules where matches(rule, relativePath: scopedPath, basename: pathBasename, isDirectory: isDirectory) {
@@ -292,6 +311,7 @@ public struct GlobMatcher: Equatable {
                     }
                     return matches(regex, value)
                 }
+                return false
             } else {
                 return false
             }
@@ -645,9 +665,16 @@ public struct IgnoreStack {
     }
 
     public func allows(relativePath: String, isDirectory: Bool) -> Bool {
+        allows(relativePath: relativePath, basename: nil, isDirectory: isDirectory)
+    }
+
+    public func allows(relativePath: String, basename: String?, isDirectory: Bool) -> Bool {
+        guard !matchers.isEmpty else {
+            return true
+        }
         var allowed = true
         for matcher in matchers {
-            if let decision = matcher.decision(relativePath: relativePath, isDirectory: isDirectory) {
+            if let decision = matcher.decision(relativePath: relativePath, basename: basename, isDirectory: isDirectory) {
                 allowed = decision == .include
             }
         }
@@ -658,10 +685,21 @@ public struct IgnoreStack {
         matchingRule(relativePath: relativePath, isDirectory: isDirectory)?.decision
     }
 
+    public func decision(relativePath: String, basename: String?, isDirectory: Bool) -> GlobMatcher.Decision? {
+        matchingRule(relativePath: relativePath, basename: basename, isDirectory: isDirectory)?.decision
+    }
+
     public func matchingRule(relativePath: String, isDirectory: Bool) -> GlobMatcher.Rule? {
+        matchingRule(relativePath: relativePath, basename: nil, isDirectory: isDirectory)
+    }
+
+    public func matchingRule(relativePath: String, basename: String?, isDirectory: Bool) -> GlobMatcher.Rule? {
+        guard !matchers.isEmpty else {
+            return nil
+        }
         var matchedRule: GlobMatcher.Rule?
         for matcher in matchers {
-            if let rule = matcher.matchingRule(relativePath: relativePath, isDirectory: isDirectory) {
+            if let rule = matcher.matchingRule(relativePath: relativePath, basename: basename, isDirectory: isDirectory) {
                 matchedRule = rule
             }
         }
