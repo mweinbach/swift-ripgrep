@@ -16,6 +16,8 @@ public struct GlobMatcher: Equatable {
         let anchored: Bool
         let basenameOnly: Bool
         let sourcePath: String?
+        let regex: NSRegularExpression?
+        let anywhereRegex: NSRegularExpression?
 
         init(pattern: String, decision: Decision, caseInsensitive: Bool, sourcePath: String?) {
             var source = pattern.replacingOccurrences(of: #"\/"#, with: "/")
@@ -46,6 +48,20 @@ public struct GlobMatcher: Equatable {
             self.anchored = anchored
             self.basenameOnly = basenameOnly
             self.sourcePath = sourcePath
+            self.regex = GlobMatcher.compileGlobRegex(source, caseInsensitive: caseInsensitive)
+            self.anywhereRegex = GlobMatcher.compileGlobRegex("**/\(source)", caseInsensitive: caseInsensitive)
+        }
+
+        static public func == (lhs: Rule, rhs: Rule) -> Bool {
+            lhs.originalPattern == rhs.originalPattern
+                && lhs.pattern == rhs.pattern
+                && lhs.actualPattern == rhs.actualPattern
+                && lhs.decision == rhs.decision
+                && lhs.caseInsensitive == rhs.caseInsensitive
+                && lhs.directoryOnly == rhs.directoryOnly
+                && lhs.anchored == rhs.anchored
+                && lhs.basenameOnly == rhs.basenameOnly
+                && lhs.sourcePath == rhs.sourcePath
         }
     }
 
@@ -176,39 +192,49 @@ public struct GlobMatcher: Equatable {
             return false
         }
         if rule.anchored {
-            return matchesGlob(rule.pattern, relativePath, caseInsensitive: rule.caseInsensitive)
+            return matchesGlob(rule, relativePath)
         }
         if rule.basenameOnly {
-            if overrideSemantics, rule.decision == .include {
-                guard let basename = pathComponents(relativePath).last else {
-                    return false
-                }
-                return matchesGlob(rule.pattern, basename, caseInsensitive: rule.caseInsensitive)
+            guard let basename = pathComponents(relativePath).last else {
+                return false
             }
-            return pathComponents(relativePath).contains { component in
-                matchesGlob(rule.pattern, component, caseInsensitive: rule.caseInsensitive)
-            }
+            return matchesGlob(rule, basename)
         }
         if slashPatternsMatchAnywhere && !rule.anchored {
-            return matchesGlob("**/\(rule.pattern)", relativePath, caseInsensitive: rule.caseInsensitive)
-                || matchesGlob(rule.pattern, relativePath, caseInsensitive: rule.caseInsensitive)
+            return matchesGlobAnywhere(rule, relativePath) || matchesGlob(rule, relativePath)
         }
-        return matchesGlob(rule.pattern, relativePath, caseInsensitive: rule.caseInsensitive)
+        return matchesGlob(rule, relativePath)
     }
 
     private func pathComponents(_ path: String) -> [String] {
         path.split(separator: "/").map(String.init)
     }
 
-    private func matchesGlob(_ pattern: String, _ value: String, caseInsensitive: Bool) -> Bool {
-        let regex = "^\(regexSource(for: pattern))$"
-        let options: String.CompareOptions = caseInsensitive
-            ? [.regularExpression, .caseInsensitive]
-            : .regularExpression
-        return value.range(of: regex, options: options) != nil
+    private func matchesGlob(_ rule: Rule, _ value: String) -> Bool {
+        guard let regex = rule.regex else {
+            return false
+        }
+        return matches(regex, value)
     }
 
-    private func regexSource(for pattern: String) -> String {
+    private func matchesGlobAnywhere(_ rule: Rule, _ value: String) -> Bool {
+        guard let regex = rule.anywhereRegex else {
+            return false
+        }
+        return matches(regex, value)
+    }
+
+    private func matches(_ regex: NSRegularExpression, _ value: String) -> Bool {
+        let range = NSRange(value.startIndex..., in: value)
+        return regex.firstMatch(in: value, range: range) != nil
+    }
+
+    private static func compileGlobRegex(_ pattern: String, caseInsensitive: Bool) -> NSRegularExpression? {
+        let options: NSRegularExpression.Options = caseInsensitive ? [.caseInsensitive] : []
+        return try? NSRegularExpression(pattern: "^\(regexSource(for: pattern))$", options: options)
+    }
+
+    private static func regexSource(for pattern: String) -> String {
         var source = ""
         var index = pattern.startIndex
 

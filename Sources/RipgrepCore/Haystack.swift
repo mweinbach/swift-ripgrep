@@ -208,7 +208,7 @@ public struct FileWalker {
         options: RipgrepOptions
     ) throws -> [Haystack] {
         let metadataURL = physicalURL ?? url
-        let values = try url.resourceValues(forKeys: [
+        let values = try metadataURL.resourceValues(forKeys: [
             .isDirectoryKey,
             .isRegularFileKey,
             .isSymbolicLinkKey,
@@ -283,15 +283,19 @@ public struct FileWalker {
             return []
         }
         let resolvedValues: URLResourceValues
-        do {
-            resolvedValues = try resolvedURL.resourceValues(forKeys: [
-                .isDirectoryKey,
-                .isRegularFileKey,
-                .nameKey,
-            ])
-        } catch {
-            messages.append(fileSystemMessage(for: url, error: error))
-            return []
+        if values.isSymbolicLink == true && (options.followSymlinks || isExplicit) {
+            do {
+                resolvedValues = try resolvedURL.resourceValues(forKeys: [
+                    .isDirectoryKey,
+                    .isRegularFileKey,
+                    .nameKey,
+                ])
+            } catch {
+                messages.append(fileSystemMessage(for: url, error: error))
+                return []
+            }
+        } else {
+            resolvedValues = values
         }
 
         if resolvedValues.isRegularFile == true {

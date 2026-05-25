@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#endif
 
 private struct FileSearchOutcome: Sendable {
     let result: SearchFileResult
@@ -944,6 +947,23 @@ public struct RipgrepSearcher: @unchecked Sendable {
             guard let baseAddress = bytes.baseAddress else {
                 return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: data.count)
             }
+            if options.printMode == .matchingLines,
+               canOmitMatchSpans(options: options),
+               !fastPath.caseInsensitiveASCII {
+                let wholeFileMatch = byteLiteralWholeFileMatch(
+                    fastPath: fastPath,
+                    bytes: bytes,
+                    lineEnd: dataCount
+                )
+                if !wholeFileMatch.needsDecodedFallback, !wholeFileMatch.hasMatch {
+                    return SearchFileResult(
+                        fileURL: fileURL,
+                        matches: [],
+                        bytesSearched: data.count,
+                        searched: true
+                    )
+                }
+            }
 
             func scanLine(end lineEnd: Int, terminator: String) -> Bool {
                 if options.printMode == .matchingLines,
@@ -1399,6 +1419,28 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 )
             }
         ))
+    }
+
+    private func byteLiteralWholeFileMatch(
+        fastPath: ByteLiteralFastPath,
+        bytes: UnsafeBufferPointer<UInt8>,
+        lineEnd: Int
+    ) -> ByteLineScan {
+        #if canImport(Darwin)
+        if !fastPath.caseInsensitiveASCII,
+           !fastPath.wordASCII,
+           fastPath.literals.count == 1,
+           let literal = fastPath.literals.first {
+            guard !literal.isEmpty else {
+                return ByteLineScan(hasMatch: false, needsDecodedFallback: false)
+            }
+            let found = literal.withUnsafeBufferPointer { needle in
+                memmem(bytes.baseAddress, lineEnd, needle.baseAddress, needle.count) != nil
+            }
+            return ByteLineScan(hasMatch: found, needsDecodedFallback: false)
+        }
+        #endif
+        return byteLiteralLineMatch(fastPath: fastPath, bytes: bytes, lineStart: 0, lineEnd: lineEnd)
     }
 
     private func byteLiteralLineMatch(

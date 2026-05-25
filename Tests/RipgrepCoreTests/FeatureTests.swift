@@ -3323,6 +3323,15 @@ struct FeatureTests {
             slashScoped.path("src/main.rs"),
             slashScoped.path("src/vendor/keep.rs"),
         ])
+
+        let reinclude = try TemporaryDirectory()
+        try reinclude.createDirectory(".git")
+        try reinclude.createDirectory("tools/perf/include/perf")
+        try reinclude.write("perf\n!include/perf/\n", to: "tools/perf/.gitignore")
+        try reinclude.write("needle\n", to: "tools/perf/include/perf/perf_dlfilter.h")
+        #expect(try run(["--sort", "path", "--files", reinclude.path("tools/perf")]) == [
+            reinclude.path("tools/perf/include/perf/perf_dlfilter.h"),
+        ])
     }
 
     @Test("honors git info exclude and its toggle")
