@@ -240,6 +240,68 @@ public struct FileWalker {
         #endif
     }
 
+    func writeDarwinFilePathsWithMessages(
+        for options: RipgrepOptions,
+        stopAfterFirst: Bool = false,
+        writeBytes: (UnsafeRawBufferPointer) -> Void
+    ) throws -> FilePathStreamResults? {
+        #if canImport(Darwin)
+        guard canFastWalkFilePaths(options: options),
+              options.effectiveRoots.count == 1,
+              options.noIgnore,
+              options.hidden,
+              !stopAfterFirst else {
+            return nil
+        }
+        var messages: [String] = []
+        var outputBuffer = Data()
+        outputBuffer.reserveCapacity(64 * 1024)
+
+        let root = options.effectiveRoots[0]
+        let rootExists = fileManager.fileExists(atPath: root.path)
+        guard rootExists else {
+            let displayPath = rootDisplayPath(at: 0, root: root, options: options)
+            messages.append(missingRootMessage(displayPath, options: options, hasExistingRoot: false))
+            return FilePathStreamResults(count: 0, messages: messages, warnings: [], diagnostics: [], filtered: false)
+        }
+
+        let rootURL = root.standardizedFileURL
+        let rootBase = rootBase(for: rootURL)
+        guard rootBase.standardizedFileURL.path == rootURL.path else {
+            return nil
+        }
+        let rootArgument = options.rootPathArguments.first ?? ""
+        guard !rootArgument.isEmpty,
+              (rootArgument as NSString).isAbsolutePath,
+              URL(fileURLWithPath: rootArgument).standardizedFileURL.path == rootURL.path,
+              isDirectoryPath(rootURL.path) else {
+            return nil
+        }
+
+        var emittedCount = 0
+        var logicalPathBytes = Array(rootURL.path.utf8)
+        try writeDarwinNoIgnoreHiddenFilePathsInOutputOrder(
+            directoryPath: rootURL.path,
+            logicalPathBytes: &logicalPathBytes,
+            logicalPathIsASCII: rootURL.path.utf8.allSatisfy { $0 < 0x80 },
+            emittedCount: &emittedCount,
+            outputBuffer: &outputBuffer,
+            writeBytes: writeBytes
+        )
+        flushDarwinFilePathOutputBuffer(&outputBuffer, writeBytes: writeBytes)
+
+        return FilePathStreamResults(
+            count: emittedCount,
+            messages: messages,
+            warnings: [],
+            diagnostics: [],
+            filtered: false
+        )
+        #else
+        return nil
+        #endif
+    }
+
     public func haystacksWithMessages(for options: RipgrepOptions) throws -> FileWalkResults {
         var haystacks: [Haystack] = []
         var messages: [String] = []
@@ -746,6 +808,101 @@ public struct FileWalker {
             if didStop {
                 return
             }
+        }
+    }
+
+    private func writeDarwinNoIgnoreHiddenFilePathsInOutputOrder(
+        directoryPath: String,
+        logicalPathBytes: inout [UInt8],
+        logicalPathIsASCII: Bool,
+        emittedCount: inout Int,
+        outputBuffer: inout Data,
+        writeBytes: (UnsafeRawBufferPointer) -> Void
+    ) throws {
+        let contents = try fastDirectoryContents(atPath: directoryPath, collectIgnoreMarkers: false)
+        let directoryPathPrefix = directoryPath + "/"
+
+        for child in contents.children.reversed() {
+            if child.kind == .symbolicLink {
+                continue
+            }
+            if child.kind.isDirectory {
+                let previousLogicalPathCount = logicalPathBytes.count
+                logicalPathBytes.append(UInt8(ascii: "/"))
+                appendUTF8(child.name, to: &logicalPathBytes)
+                try writeDarwinNoIgnoreHiddenFilePathsInOutputOrder(
+                    directoryPath: directoryPathPrefix + child.name,
+                    logicalPathBytes: &logicalPathBytes,
+                    logicalPathIsASCII: logicalPathIsASCII && child.isASCII,
+                    emittedCount: &emittedCount,
+                    outputBuffer: &outputBuffer,
+                    writeBytes: writeBytes
+                )
+                logicalPathBytes.removeSubrange(previousLogicalPathCount...)
+            } else if child.kind.isFile {
+                emittedCount += 1
+                appendDarwinFilePathLine(
+                    logicalPathBytes: logicalPathBytes,
+                    logicalPathIsASCII: logicalPathIsASCII,
+                    child: child,
+                    outputBuffer: &outputBuffer
+                )
+                if outputBuffer.count >= 64 * 1024 {
+                    flushDarwinFilePathOutputBuffer(&outputBuffer, writeBytes: writeBytes)
+                }
+            }
+        }
+    }
+
+    private func appendDarwinFilePathLine(
+        logicalPathBytes: [UInt8],
+        logicalPathIsASCII: Bool,
+        child: FastDirectoryChild,
+        outputBuffer: inout Data
+    ) {
+        if logicalPathIsASCII && child.isASCII {
+            outputBuffer.append(contentsOf: logicalPathBytes)
+            outputBuffer.append(UInt8(ascii: "/"))
+            appendUTF8(child.name, to: &outputBuffer)
+            outputBuffer.append(UInt8(ascii: "\n"))
+            return
+        }
+
+        var pathBytes = logicalPathBytes
+        pathBytes.append(UInt8(ascii: "/"))
+        appendUTF8(child.name, to: &pathBytes)
+        let path = String(decoding: pathBytes, as: UTF8.self).precomposedStringWithCanonicalMapping
+        appendUTF8(path, to: &outputBuffer)
+        outputBuffer.append(UInt8(ascii: "\n"))
+    }
+
+    private func flushDarwinFilePathOutputBuffer(
+        _ outputBuffer: inout Data,
+        writeBytes: (UnsafeRawBufferPointer) -> Void
+    ) {
+        guard !outputBuffer.isEmpty else {
+            return
+        }
+        outputBuffer.withUnsafeBytes { bytes in
+            writeBytes(bytes)
+        }
+        outputBuffer.removeAll(keepingCapacity: true)
+    }
+
+    private func appendUTF8(_ string: String, to bytes: inout [UInt8]) {
+        var string = string
+        string.withUTF8 { buffer in
+            bytes.append(contentsOf: buffer)
+        }
+    }
+
+    private func appendUTF8(_ string: String, to data: inout Data) {
+        var string = string
+        string.withUTF8 { buffer in
+            guard let baseAddress = buffer.baseAddress, !buffer.isEmpty else {
+                return
+            }
+            data.append(baseAddress, count: buffer.count)
         }
     }
 

@@ -86,6 +86,30 @@ public enum RipgrepCLI {
 
                 if options.mode == .files {
                     var filePathOutputBuffer = Data()
+                    if stdout == nil,
+                       let filePathResults = try searcher.writeDarwinFilePathsWithMessages(
+                        options: options,
+                        stopAfterFirst: options.quiet,
+                        writeBytes: writeStdout
+                       ) {
+                        for diagnostic in filePathResults.diagnostics {
+                            stderr("rg: \(diagnostic)")
+                        }
+                        if !options.noMessages {
+                            for message in filePathResults.messages {
+                                stderr("rg: \(message)")
+                            }
+                        }
+                        if !filePathResults.messages.isEmpty {
+                            if filePathResults.count == 0 {
+                                return 2
+                            }
+                            if !options.quiet {
+                                return 2
+                            }
+                        }
+                        return filePathResults.count == 0 ? 1 : 0
+                    }
                     if let filePathResults = try searcher.streamFilePathsWithMessages(
                         options: options,
                         stopAfterFirst: options.quiet,

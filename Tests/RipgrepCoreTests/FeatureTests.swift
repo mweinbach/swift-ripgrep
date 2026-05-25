@@ -2914,6 +2914,33 @@ struct FeatureTests {
         #expect(Set(try run(["--files", "--hidden", root.url.path]).map { URL(fileURLWithPath: $0).lastPathComponent }) == Set([".hidden.txt", "visible.txt"]))
         #expect(Set(pathBasenames(try run(["--hidden", "e", root.url.path]))) == Set([".hidden.txt", "visible.txt"]))
 
+        let executableRoot = try TemporaryDirectory()
+        try executableRoot.write("visible\n", to: "visible.txt")
+        try executableRoot.write("secret\n", to: ".hidden.txt")
+        try executableRoot.write("nested\n", to: ".hidden-dir/nested.txt")
+        try executableRoot.write("unicode\n", to: "café.txt")
+        try FileManager.default.createSymbolicLink(
+            at: executableRoot.url.appendingPathComponent("link.txt"),
+            withDestinationURL: executableRoot.url.appendingPathComponent("visible.txt")
+        )
+        let executableFileList = try runExecutableData([
+            "--no-ignore",
+            "--hidden",
+            "--files",
+            executableRoot.url.path,
+        ]) {}
+        let executableRootPrefix = executableRoot.url.path + "/"
+        let executableRelativePaths = String(decoding: executableFileList, as: UTF8.self)
+            .split(separator: "\n")
+            .map(String.init)
+            .map { path in
+                path.hasPrefix(executableRootPrefix)
+                    ? String(path.dropFirst(executableRootPrefix.count))
+                    : path
+            }
+            .sorted()
+        #expect(executableRelativePaths == [".hidden-dir/nested.txt", ".hidden.txt", "café.txt", "visible.txt"])
+
         let whitelisted = try TemporaryDirectory()
         try whitelisted.createDirectory("subdir")
         try whitelisted.write("text\n", to: "subdir/.foo.txt")

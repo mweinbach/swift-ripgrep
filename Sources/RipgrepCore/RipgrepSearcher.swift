@@ -145,6 +145,16 @@ public struct RipgrepSearcher: @unchecked Sendable {
             .streamFilePathsWithMessages(for: options, stopAfterFirst: stopAfterFirst, emit: emit)
     }
 
+    func writeDarwinFilePathsWithMessages(
+        options: RipgrepOptions,
+        stopAfterFirst: Bool = false,
+        writeBytes: (UnsafeRawBufferPointer) -> Void
+    ) throws -> FilePathStreamResults? {
+        try FileWalker(fileManager: fileManager)
+            .withEnvironment(environment)
+            .writeDarwinFilePathsWithMessages(for: options, stopAfterFirst: stopAfterFirst, writeBytes: writeBytes)
+    }
+
     public func search(options: RipgrepOptions) throws -> SearchResults {
         try search(options: options, stdin: nil)
     }
