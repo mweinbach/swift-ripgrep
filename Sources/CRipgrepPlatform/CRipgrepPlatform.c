@@ -337,6 +337,141 @@ static rg_darwin_literal_file_result rg_darwin_write_literal_bytes_case_insensit
     free(folded);
     return result;
 }
+
+static int rg_ascii_is_word(uint8_t byte) {
+    return (byte >= 'A' && byte <= 'Z')
+        || (byte >= 'a' && byte <= 'z')
+        || (byte >= '0' && byte <= '9')
+        || byte == '_';
+}
+
+static int rg_ascii_is_regex_space(uint8_t byte) {
+    return byte == ' ' || byte == '\t' || byte == '\n' || byte == '\r' || byte == '\f' || byte == '\v';
+}
+
+static int rg_has_surrounding_ascii_words(
+    const uint8_t *base,
+    size_t line_start,
+    size_t line_end,
+    size_t literal_start,
+    size_t literal_end
+) {
+    if (literal_start <= line_start || literal_end >= line_end) {
+        return 0;
+    }
+
+    size_t before_space_start = literal_start;
+    while (before_space_start > line_start && rg_ascii_is_regex_space(base[before_space_start - 1])) {
+        before_space_start--;
+    }
+    if (before_space_start == literal_start) {
+        return 0;
+    }
+
+    size_t before_word_start = before_space_start;
+    while (before_word_start > line_start && rg_ascii_is_word(base[before_word_start - 1])) {
+        before_word_start--;
+    }
+    if (before_word_start == before_space_start) {
+        return 0;
+    }
+
+    size_t after_space_end = literal_end;
+    while (after_space_end < line_end && rg_ascii_is_regex_space(base[after_space_end])) {
+        after_space_end++;
+    }
+    if (after_space_end == literal_end) {
+        return 0;
+    }
+
+    size_t after_word_end = after_space_end;
+    while (after_word_end < line_end && rg_ascii_is_word(base[after_word_end])) {
+        after_word_end++;
+    }
+    return after_word_end > after_space_end;
+}
+
+static rg_darwin_literal_file_result rg_darwin_write_surrounding_words_bytes(
+    const uint8_t *base,
+    size_t haystack_len,
+    const uint8_t *literal,
+    size_t literal_len
+) {
+    rg_darwin_literal_file_result result = { .status = -2, .matched_line_count = 0, .total_match_count = 0, .bytes_searched = 0 };
+
+    if (haystack_len >= 3 && base[0] == 0xEF && base[1] == 0xBB && base[2] == 0xBF) {
+        return result;
+    }
+    if (haystack_len >= 2
+        && ((base[0] == 0xFF && base[1] == 0xFE) || (base[0] == 0xFE && base[1] == 0xFF))) {
+        return result;
+    }
+    const size_t binary_check_len = haystack_len < (64 * 1024) ? haystack_len : (64 * 1024);
+    if (memchr(base, 0, binary_check_len) != NULL) {
+        return result;
+    }
+
+    size_t search_offset = 0;
+    size_t last_emitted_line_start = (size_t)-1;
+    while (search_offset < haystack_len) {
+        const uint8_t *found = rg_memmem_simple(base + search_offset, haystack_len - search_offset, literal, literal_len);
+        if (found == NULL) {
+            break;
+        }
+
+        const size_t literal_start = (size_t)(found - base);
+        const size_t literal_end = literal_start + literal_len;
+        size_t line_start = literal_start;
+        while (line_start > 0 && base[line_start - 1] != '\n') {
+            line_start--;
+        }
+        const void *newline = memchr(found, '\n', haystack_len - literal_start);
+        const size_t line_end = newline == NULL
+            ? haystack_len
+            : (size_t)((const uint8_t *)newline - base);
+
+        if (rg_has_surrounding_ascii_words(base, line_start, line_end, literal_start, literal_end)) {
+            result.total_match_count++;
+            if (line_start != last_emitted_line_start) {
+                const size_t output_end = newline == NULL ? haystack_len : line_end + 1;
+                const size_t output_len = output_end - line_start;
+                size_t bytes_written = 0;
+                while (bytes_written < output_len) {
+                    ssize_t written = write(STDOUT_FILENO, base + line_start + bytes_written, output_len - bytes_written);
+                    if (written < 0) {
+                        if (errno == EINTR) {
+                            continue;
+                        }
+                        result.status = -1;
+                        return result;
+                    }
+                    if (written == 0) {
+                        result.status = -1;
+                        return result;
+                    }
+                    bytes_written += (size_t)written;
+                }
+                if (newline == NULL) {
+                    uint8_t terminator = '\n';
+                    while (write(STDOUT_FILENO, &terminator, 1) < 0) {
+                        if (errno != EINTR) {
+                            result.status = -1;
+                            return result;
+                        }
+                    }
+                }
+                result.matched_line_count++;
+                last_emitted_line_start = line_start;
+            }
+        }
+
+        search_offset = literal_end;
+    }
+
+    result.status = result.matched_line_count > 0 ? 1 : 0;
+    result.bytes_searched = haystack_len;
+    return result;
+}
 #endif
 
 rg_darwin_literal_file_result rg_darwin_write_literal_file_lines(
@@ -513,6 +648,58 @@ rg_darwin_literal_file_result rg_darwin_write_literal_file_lines_ascii_case_inse
     }
 
     result = rg_darwin_write_literal_bytes_case_insensitive(base, haystack_len, needle, needle_len);
+    munmap(base, haystack_len);
+    return result;
+#endif
+}
+
+rg_darwin_literal_file_result rg_darwin_write_surrounding_words_file_lines(
+    const char *path,
+    const uint8_t *literal,
+    size_t literal_len
+) {
+    rg_darwin_literal_file_result result = { .status = -2, .matched_line_count = 0, .total_match_count = 0, .bytes_searched = 0 };
+#ifndef __APPLE__
+    (void)path;
+    (void)literal;
+    (void)literal_len;
+    return result;
+#else
+    if (path == NULL || literal == NULL || literal_len == 0) {
+        return result;
+    }
+
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        result.status = -1;
+        return result;
+    }
+
+    struct stat file_stat;
+    if (fstat(fd, &file_stat) != 0) {
+        close(fd);
+        result.status = -1;
+        return result;
+    }
+    if ((file_stat.st_mode & S_IFMT) != S_IFREG) {
+        close(fd);
+        return result;
+    }
+    if (file_stat.st_size <= 0) {
+        close(fd);
+        result.status = 0;
+        return result;
+    }
+
+    const size_t haystack_len = (size_t)file_stat.st_size;
+    uint8_t *base = mmap(NULL, haystack_len, PROT_READ, MAP_PRIVATE, fd, 0);
+    close(fd);
+    if (base == MAP_FAILED) {
+        result.status = -1;
+        return result;
+    }
+
+    result = rg_darwin_write_surrounding_words_bytes(base, haystack_len, literal, literal_len);
     munmap(base, haystack_len);
     return result;
 #endif

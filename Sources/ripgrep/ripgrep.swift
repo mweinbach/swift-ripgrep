@@ -50,6 +50,7 @@ struct RipgrepCommand {
             case mmap
             case noMmap
             case asciiCaseInsensitive
+            case surroundingWords
         }
 
         let mode: DarwinLiteralPreflightMode
@@ -69,6 +70,29 @@ struct RipgrepCommand {
             path = arguments[2]
         } else {
             return nil
+        }
+
+        if mode == .mmap,
+           let literal = surroundingWordsLiteral(pattern),
+           path != "-" {
+            let literalBytes = Array(literal.utf8)
+            guard !literalBytes.isEmpty,
+                  literalBytes.allSatisfy({ $0 < 0x80 }) else {
+                return nil
+            }
+            let result = path.withCString { pathPointer in
+                literalBytes.withUnsafeBufferPointer { needle in
+                    rg_darwin_write_surrounding_words_file_lines(
+                        pathPointer,
+                        needle.baseAddress,
+                        needle.count
+                    )
+                }
+            }
+            guard result.status >= 0 else {
+                return nil
+            }
+            return result.status > 0 ? 0 : 1
         }
 
         guard !pattern.hasPrefix("-"),
@@ -104,6 +128,12 @@ struct RipgrepCommand {
                         needle.baseAddress,
                         needle.count
                     )
+                case .surroundingWords:
+                    return rg_darwin_write_surrounding_words_file_lines(
+                        pathPointer,
+                        needle.baseAddress,
+                        needle.count
+                    )
                 }
             }
         }
@@ -119,6 +149,21 @@ struct RipgrepCommand {
         }
         let regexSyntax = "\\.^$*+?()[]{}|"
         return !pattern.contains { regexSyntax.contains($0) }
+    }
+
+    private static func surroundingWordsLiteral(_ pattern: String) -> String? {
+        let prefix = #"\w+\s+"#
+        let suffix = #"\s+\w+"#
+        guard pattern.hasPrefix(prefix), pattern.hasSuffix(suffix) else {
+            return nil
+        }
+        let literalStart = pattern.index(pattern.startIndex, offsetBy: prefix.count)
+        let literalEnd = pattern.index(pattern.endIndex, offsetBy: -suffix.count)
+        let literal = String(pattern[literalStart..<literalEnd])
+        guard isPlainDarwinLiteral(literal) else {
+            return nil
+        }
+        return literal
     }
     #endif
 }
