@@ -48,6 +48,12 @@ corpus, `-P -o '(a)(b)\2'` produced byte-identical output to Rust and measured
 Swift release at 229.3 ms versus 19.239 s for the previous Swift Foundation
 regex path and 2.912 s for the sibling Rust PCRE2 oracle in 10-run checks.
 
+Line-numbered only-match output for the same fixed PCRE2 family now stays on
+the executable Darwin byte writer too. On the 193 MiB subtitles corpus,
+`-P -n -o '(?<=Sherlock )Holmes'` produced byte-identical output to the sibling
+Rust PCRE2 oracle and measured Swift release at 140.5 ms versus 10.717 s for
+the previous Swift formatted path and 2.709 s for Rust PCRE2 in 10-run checks.
+
 The recursive Linux-kernel traversal/search path now matches or beats Rust in
 this environment for the default literal search. A fresh confirmation run used
 2 warm-ups and 7 timed iterations for the default Swift worker count and Rust
@@ -112,6 +118,10 @@ The key improvements since the 2026-05-24 baseline are:
   in-tree parser and Darwin byte-output path for single-file `-P -o`, while
   still preserving capture replacement semantics through the non-executable
   matcher path;
+- line-numbered `-P -n -o` output for those fixed lookaround/backreference
+  shapes writes the numeric prefix directly in the same Darwin byte-output
+  path, cutting representative fixed-lookbehind formatted output from
+  10.717 s to 140.5 ms while preserving byte-identical Rust output;
 - Darwin default recursive search remains capped at four workers because this
   checkout benchmarked faster than the ripgrep-style 12-worker cap on the
   Linux tree, while `--threads N` still lets callers override it.

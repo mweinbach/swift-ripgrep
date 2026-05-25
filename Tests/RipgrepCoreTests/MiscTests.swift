@@ -146,6 +146,21 @@ struct MiscTests {
         #expect(onlyMatchingResults?.summary.totalMatches == 1)
         #expect(onlyMatchingOutput == Data("delta\n".utf8))
 
+        var onlyMatchingLineNumberOptions = onlyMatchingOptions
+        onlyMatchingLineNumberOptions.lineNumber = true
+        var onlyMatchingLineNumberOutput = Data()
+        let onlyMatchingLineNumberResults = try RipgrepSearcher()
+            .writeDarwinSimpleByteLiteralLines(options: onlyMatchingLineNumberOptions) { buffer in
+                let bytes = buffer.bindMemory(to: UInt8.self)
+                guard let baseAddress = bytes.baseAddress else {
+                    return
+                }
+                onlyMatchingLineNumberOutput.append(baseAddress, count: bytes.count)
+            }
+        #expect(onlyMatchingLineNumberResults?.summary.matchedLines == 1)
+        #expect(onlyMatchingLineNumberResults?.summary.totalMatches == 1)
+        #expect(onlyMatchingLineNumberOutput == Data("4:delta\n".utf8))
+
         var filesWithOptions = options
         filesWithOptions.printMode = .filesWithMatches
         var filesWithOutput = Data()

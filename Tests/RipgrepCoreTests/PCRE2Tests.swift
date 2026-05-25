@@ -31,6 +31,15 @@ struct PCRE2Tests {
         #expect(output == Data("Holmes\nHolmes\n".utf8))
     }
 
+    @Test func pcre2FixedLookbehindExecutableFastPathLineNumberOnlyMatchingOutput() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("Mycroft Holmes\nSherlock Holmes and Sherlock Holmes\n", to: "pcre.txt")
+
+        let output = try runExecutableData(["-P", "-n", "-o", "(?<=Sherlock )Holmes", temp.path("pcre.txt")]) {}
+
+        #expect(output == Data("2:Holmes\n2:Holmes\n".utf8))
+    }
+
     @Test func pcre2FixedNegativeLookbehindLiteralOnlyMatchesWithoutPrefix() throws {
         let temp = try TemporaryDirectory()
         try temp.write("Sherlock Holmes\nMycroft Holmes\nHolmes\n", to: "pcre.txt")
@@ -85,6 +94,15 @@ struct PCRE2Tests {
         #expect(output == Data("Sherlock\nSherlock\n".utf8))
     }
 
+    @Test func pcre2FixedNegativeLookaheadExecutableFastPathLineNumberOnlyMatchingOutput() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("Sherlock Holmes\nSherlock Watson\nSherlock\n", to: "pcre.txt")
+
+        let output = try runExecutableData(["-P", "-n", "-o", "Sherlock(?! Holmes)", temp.path("pcre.txt")]) {}
+
+        #expect(output == Data("2:Sherlock\n3:Sherlock\n".utf8))
+    }
+
     @Test func pcre2BackreferenceOnlyMatching() throws {
         let temp = try TemporaryDirectory()
         try temp.write("abba\nabca\n", to: "pcre.txt")
@@ -101,6 +119,15 @@ struct PCRE2Tests {
         let output = try runExecutableData(["-P", "-o", #"(a)(b)\2"#, temp.path("pcre.txt")]) {}
 
         #expect(output == Data("abb\nabb\n".utf8))
+    }
+
+    @Test func pcre2LiteralBackreferenceExecutableFastPathLineNumberOnlyMatchingOutput() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("abba\nabca\nabba\n", to: "pcre.txt")
+
+        let output = try runExecutableData(["-P", "-n", "-o", #"(a)(b)\2"#, temp.path("pcre.txt")]) {}
+
+        #expect(output == Data("1:abb\n3:abb\n".utf8))
     }
 
     @Test func pcre2LiteralBackreferenceCapturesReplacement() throws {

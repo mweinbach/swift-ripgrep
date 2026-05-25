@@ -498,7 +498,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             || fixedNegativeLookbehindFastPath != nil
             || fixedNegativeLookaheadFastPath != nil
             || fixedBackreferenceFastPath != nil),
-           !(options.onlyMatching && options.printMode == .matchingLines && !options.wantsLineNumber && options.maxCount == nil) {
+           !(options.onlyMatching && options.printMode == .matchingLines && options.maxCount == nil) {
             return nil
         }
 
@@ -527,6 +527,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 literal: fixedLookbehindFastPath.literal,
                 prefix: fixedLookbehindFastPath.prefix,
                 suffix: nil,
+                wantsLineNumber: options.wantsLineNumber,
                 writeBytes: writeBytes
             )
         }
@@ -537,6 +538,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 literal: fixedLookaheadFastPath.literal,
                 prefix: nil,
                 suffix: fixedLookaheadFastPath.suffix,
+                wantsLineNumber: options.wantsLineNumber,
                 writeBytes: writeBytes
             )
         }
@@ -548,6 +550,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 prefix: fixedNegativeLookbehindFastPath.prefix,
                 prefixShouldMatch: false,
                 suffix: nil,
+                wantsLineNumber: options.wantsLineNumber,
                 writeBytes: writeBytes
             )
         }
@@ -559,6 +562,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 prefix: nil,
                 suffix: fixedNegativeLookaheadFastPath.suffix,
                 suffixShouldMatch: false,
+                wantsLineNumber: options.wantsLineNumber,
                 writeBytes: writeBytes
             )
         }
@@ -569,6 +573,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 literal: fixedBackreferenceFastPath,
                 prefix: nil,
                 suffix: nil,
+                wantsLineNumber: options.wantsLineNumber,
                 writeBytes: writeBytes
             )
         }
@@ -814,6 +819,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                                 lastMatchedLineStart = lineStart
                             }
                             if onlyMatching {
+                                writeLineNumberPrefix(for: lineStart)
                                 writeBytes(UnsafeRawBufferPointer(
                                     start: rawBaseAddress.advanced(by: matchStart),
                                     count: literal.count
@@ -986,6 +992,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         prefixShouldMatch: Bool = true,
         suffix: [UInt8]?,
         suffixShouldMatch: Bool = true,
+        wantsLineNumber: Bool,
         writeBytes: (UnsafeRawBufferPointer) -> Void
     ) -> SearchResults {
         var matchedLineCount = 0
@@ -1002,6 +1009,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 dataCount: data.count,
                 from: currentLineStart
             )
+            var currentLineNumber = 1
             var lastMatchedLineStart: Int?
             let prefixBytesStorage = prefix ?? []
             let suffixBytesStorage = suffix ?? []
@@ -1048,11 +1056,15 @@ public struct RipgrepSearcher: @unchecked Sendable {
                                         dataCount: data.count,
                                         from: currentLineStart
                                     )
+                                    currentLineNumber += 1
                                 }
                                 totalMatchCount += 1
                                 if lastMatchedLineStart != currentLineStart {
                                     matchedLineCount += 1
                                     lastMatchedLineStart = currentLineStart
+                                }
+                                if wantsLineNumber {
+                                    writeDarwinLineNumberPrefix(currentLineNumber, writeBytes: writeBytes)
                                 }
                                 writeBytes(UnsafeRawBufferPointer(
                                     start: rawBaseAddress.advanced(by: matchStart),
@@ -1125,6 +1137,23 @@ public struct RipgrepSearcher: @unchecked Sendable {
             }
         }
         return true
+    }
+
+    private func writeDarwinLineNumberPrefix(_ value: Int, writeBytes: (UnsafeRawBufferPointer) -> Void) {
+        withUnsafeTemporaryAllocation(of: UInt8.self, capacity: 32) { buffer in
+            var cursor = buffer.count - 1
+            buffer[cursor] = UInt8(ascii: ":")
+            var number = value
+            repeat {
+                cursor -= 1
+                buffer[cursor] = UInt8(number % 10) + UInt8(ascii: "0")
+                number /= 10
+            } while number > 0
+            writeBytes(UnsafeRawBufferPointer(
+                start: buffer.baseAddress?.advanced(by: cursor),
+                count: buffer.count - cursor
+            ))
+        }
     }
 
     private func findNextDarwinNewline(
@@ -1206,7 +1235,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !options.crlf,
               !options.invertMatch,
               !options.stopOnNonmatch,
-              (!options.onlyMatching || (options.printMode == .matchingLines && !options.wantsLineNumber && options.maxCount == nil)),
+              (!options.onlyMatching || (options.printMode == .matchingLines && options.maxCount == nil)),
               (options.printMode != .countMatches || options.maxCount == nil),
               options.replacement == nil,
               !options.json,
