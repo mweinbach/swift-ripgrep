@@ -5,6 +5,8 @@ public struct PatternMatcher {
     private let patternSources: [String]
     private let patterns: [CompiledPattern]
     private let requiredLiteralPrefilters: [String]?
+    private let byteLiteralFastPathCache: ByteLiteralFastPath?
+    private let byteRequiredLiteralPrefilterCache: ByteLiteralFastPath?
     public let usesByteSemantics: Bool
 
     public init(options: RipgrepOptions) throws {
@@ -18,11 +20,7 @@ public struct PatternMatcher {
             usesByteSemantics: usesByteSemantics
         )
 
-        self.options = options
-        self.patternSources = patternSources
-        self.usesByteSemantics = usesByteSemantics
-        self.requiredLiteralPrefilters = requiredLiteralPrefilters
-        self.patterns = try patternSources.flatMap { pattern -> [CompiledPattern] in
+        let patterns = try patternSources.flatMap { pattern -> [CompiledPattern] in
             if options.wordRegexp && pattern.isEmpty {
                 return [.emptyWordBoundary]
             }
@@ -120,6 +118,22 @@ public struct PatternMatcher {
                 }
             }
         }
+
+        self.options = options
+        self.patternSources = patternSources
+        self.usesByteSemantics = usesByteSemantics
+        self.requiredLiteralPrefilters = requiredLiteralPrefilters
+        self.patterns = patterns
+        self.byteLiteralFastPathCache = Self.makeByteLiteralFastPath(
+            patterns: patterns,
+            options: options,
+            usesByteSemantics: usesByteSemantics
+        )
+        self.byteRequiredLiteralPrefilterCache = Self.makeByteRequiredLiteralPrefilter(
+            requiredLiteralPrefilters: requiredLiteralPrefilters,
+            options: options,
+            usesByteSemantics: usesByteSemantics
+        )
     }
 
     private static func lineTerminatorPatternError(terminator: String) -> String {
@@ -347,6 +361,18 @@ public struct PatternMatcher {
     }
 
     func byteLiteralFastPath() -> ByteLiteralFastPath? {
+        return byteLiteralFastPathCache
+    }
+
+    func byteRequiredLiteralPrefilter() -> ByteLiteralFastPath? {
+        return byteRequiredLiteralPrefilterCache
+    }
+
+    private static func makeByteLiteralFastPath(
+        patterns: [CompiledPattern],
+        options: RipgrepOptions,
+        usesByteSemantics: Bool
+    ) -> ByteLiteralFastPath? {
         guard !options.lineRegexp,
               !options.invertMatch,
               !options.multiline,
@@ -374,7 +400,11 @@ public struct PatternMatcher {
         )
     }
 
-    func byteRequiredLiteralPrefilter() -> ByteLiteralFastPath? {
+    private static func makeByteRequiredLiteralPrefilter(
+        requiredLiteralPrefilters: [String]?,
+        options: RipgrepOptions,
+        usesByteSemantics: Bool
+    ) -> ByteLiteralFastPath? {
         guard !options.effectiveIgnoreCase,
               !options.fixedStrings,
               !options.lineRegexp,

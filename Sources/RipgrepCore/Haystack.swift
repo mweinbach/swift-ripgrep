@@ -163,7 +163,8 @@ public struct FileWalker {
                 .standardizedFileURL
                 .path
             let cwdPrefix = cwdPath.hasSuffix("/") ? cwdPath : "\(cwdPath)/"
-            let walked = try walk(
+            var walked: [Haystack] = []
+            try walk(
                 root.standardizedFileURL,
                 physicalURL: nil,
                 isExplicit: true,
@@ -183,7 +184,8 @@ public struct FileWalker {
                 ignoreStack: rootIgnoreStack,
                 overrides: overrides,
                 typeRegistry: typeRegistry,
-                options: options
+                options: options,
+                haystacks: &walked
             )
             haystacks.append(contentsOf: sorted(walked, options: options))
         }
@@ -232,8 +234,9 @@ public struct FileWalker {
         ignoreStack: IgnoreStack,
         overrides: GlobMatcher,
         typeRegistry: FileTypeRegistry,
-        options: RipgrepOptions
-    ) throws -> [Haystack] {
+        options: RipgrepOptions,
+        haystacks: inout [Haystack]
+    ) throws {
         let metadataURL = physicalURL ?? url
         #if canImport(Darwin)
         let metadataKeys: Set<URLResourceKey> = [
@@ -285,7 +288,7 @@ public struct FileWalker {
             #endif
             if isExcludedByOverride {
                 debug("ignoring \(url.path): override glob", options: options, diagnostics: &diagnostics)
-                return []
+                return
             }
             if !isIncludedByOverride,
                !options.hidden,
@@ -302,7 +305,7 @@ public struct FileWalker {
                     options: options,
                     diagnostics: &diagnostics
                 )
-                return []
+                return
             }
             if !isIncludedByOverride && !ignoreStack.allows(relativePath: relativePath, isDirectory: isDirectory) {
                 debugIgnoreMatch(
@@ -320,16 +323,16 @@ public struct FileWalker {
                     diagnostics: &diagnostics
                 )
                 filtered = true
-                return []
+                return
             }
             if !isDirectory && !isIncludedByOverride && !typeRegistry.allows(path: relativePath) {
                 debug("ignoring \(url.path): file type filter", options: options, diagnostics: &diagnostics)
-                return []
+                return
             }
         }
 
         if values.isSymbolicLink == true && !options.followSymlinks && !isExplicit {
-            return []
+            return
         }
 
         let resolvedURL = values.isSymbolicLink == true && (options.followSymlinks || isExplicit)
@@ -339,7 +342,7 @@ public struct FileWalker {
            (options.followSymlinks || isExplicit),
            !fileManager.fileExists(atPath: resolvedURL.path) {
             messages.append(fileSystemMessage(for: url, errno: ENOENT))
-            return []
+            return
         }
         let resolvedValues: URLResourceValues
         if values.isSymbolicLink == true && (options.followSymlinks || isExplicit) {
@@ -351,7 +354,7 @@ public struct FileWalker {
                 ])
             } catch {
                 messages.append(fileSystemMessage(for: url, error: error))
-                return []
+                return
             }
         } else {
             resolvedValues = values
@@ -363,24 +366,25 @@ public struct FileWalker {
                let fileSize = values.fileSize,
                UInt64(fileSize) > maxFileSize {
                 debug("ignoring \(url.path): \(fileSize) bytes exceeds max filesize \(maxFileSize)", options: options, diagnostics: &diagnostics)
-                return []
+                return
             }
-            return [Haystack(
+            haystacks.append(Haystack(
                 url: url,
                 isExplicit: isExplicit,
                 overridePath: overridePath,
                 fileSize: resolvedValues.fileSize.map { UInt64(max(0, $0)) },
                 isRegularFile: true
-            )]
+            ))
+            return
         }
 
         guard resolvedValues.isDirectory == true else {
-            return []
+            return
         }
         let resolvedDirectoryPath = resolvedURL.standardizedFileURL.path
         if let ancestor = ancestors.last(where: { $0.physicalPath == resolvedDirectoryPath }) {
             messages.append("File system loop found: \(url.path) points to an ancestor \(ancestor.logicalURL.path)")
-            return []
+            return
         }
         if !isExplicit,
            options.oneFileSystem,
@@ -388,11 +392,11 @@ public struct FileWalker {
            let currentVolume = volumeIdentifier(for: resolvedURL),
            currentVolume != rootVolume {
             debug("ignoring \(url.path): different file system", options: options, diagnostics: &diagnostics)
-            return []
+            return
         }
         if let maxDepth = options.maxDepth, depth >= maxDepth {
             debug("ignoring \(url.path): max depth \(maxDepth)", options: options, diagnostics: &diagnostics)
-            return []
+            return
         }
 
         let directoryVCSContext = vcsContext || (!options.noIgnoreVCS && hasGitMarker(in: resolvedURL))
@@ -427,10 +431,9 @@ public struct FileWalker {
             options: []
         )
 
-        var haystacks: [Haystack] = []
         for child in children {
             let childURL = url.appendingPathComponent(child.lastPathComponent)
-            haystacks.append(contentsOf: try walk(
+            try walk(
                 childURL,
                 physicalURL: child,
                 isExplicit: false,
@@ -450,10 +453,10 @@ public struct FileWalker {
                 ignoreStack: directoryIgnoreStack,
                 overrides: overrides,
                 typeRegistry: typeRegistry,
-                options: options
-            ))
+                options: options,
+                haystacks: &haystacks
+            )
         }
-        return haystacks
     }
 
     private func fileSystemMessage(for url: URL, error: Error) -> String {

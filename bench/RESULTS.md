@@ -24,12 +24,12 @@ benchmarks below use `/tmp/swift-rg-bench/subtitles/en.small.txt` (193 MiB).
 | required-literal regex with lines | `-n '\w+\s+Holmes\s+\w+'` | 33.7 ms | 32.3 ms | **0.96x** |
 
 The recursive Linux-kernel literal search now matches or beats Rust in this
-environment. A fresh confirmation run used 1 warm-up and 3 timed iterations
+environment. A fresh confirmation run used 2 warm-ups and 6 timed iterations
 for the default Swift worker count and Rust `rg`:
 
 | Bench | Flags | rg | swift-rg | swift / rg |
 |---|---|---:|---:|---:|
-| Linux tree literal | `PM_RESUME` | 3.73 s | 3.60 s | **0.96x** |
+| Linux tree literal | `PM_RESUME` | 3.91 s | 3.51 s | **0.89x** |
 
 The Linux-tree comparison above has byte-identical sorted output. Natural
 output order still differs from Rust for this corpus because the Swift walker
@@ -44,6 +44,11 @@ The key improvements since the 2026-05-24 baseline are:
   `CRipgrepPlatform`;
 - suppressed optional ignore-file loads now check existence before attempting
   UTF-8 reads, avoiding exception-heavy traversal misses;
+- recursive walking now appends into a single accumulator instead of returning
+  and merging per-directory arrays, cutting same-load Swift `PM_RESUME` median
+  from 3.58 s to 3.46 s;
+- byte-literal fast-path detection is cached per worker matcher, and the
+  streaming fallback probe reuses walker metadata instead of restatting files;
 - Darwin default recursive search remains capped at four workers because this
   checkout benchmarked faster than the ripgrep-style 12-worker cap on the
   Linux tree, while `--threads N` still lets callers override it.

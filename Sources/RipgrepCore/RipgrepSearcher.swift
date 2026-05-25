@@ -1238,7 +1238,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         func canStreamLineByLine() -> Bool {
             guard !shouldPreprocess(haystack, options: options),
                   decompressionCommand(for: fileURL, options: options) == nil,
-                  (try? HaystackReader.selectedPath(forFileAt: fileURL, options: options)) == .buffered,
+                  (try? HaystackReader.selectedPath(for: haystack, options: options)) == .buffered,
                   !options.multiline,
                   !options.nullData,
                   !options.json,
