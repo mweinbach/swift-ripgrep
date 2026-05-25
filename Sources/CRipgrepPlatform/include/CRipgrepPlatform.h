@@ -18,4 +18,10 @@ const uint8_t *rg_memcasemem_ascii(
     size_t needle_len
 );
 
+size_t rg_memcount_byte(
+    const uint8_t *haystack,
+    size_t haystack_len,
+    uint8_t byte
+);
+
 #endif

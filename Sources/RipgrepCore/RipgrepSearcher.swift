@@ -1748,8 +1748,18 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !options.byteOffset,
               !options.vimgrep,
               !options.crlf,
-              options.maxColumns == nil,
-              let prefilter = matcher.byteRequiredLiteralPrefilter() else {
+              options.maxColumns == nil else {
+            return nil
+        }
+        if let fastResult = searchDarwinSurroundingWordsContents(
+            data,
+            fileURL: fileURL,
+            matcher: matcher,
+            options: options
+        ) {
+            return fastResult
+        }
+        guard let prefilter = matcher.byteRequiredLiteralPrefilter() else {
             return nil
         }
         if let fastResult = searchDarwinRegexRequiredLiteralContents(
@@ -1875,6 +1885,139 @@ public struct RipgrepSearcher: @unchecked Sendable {
         #endif
     }
 
+    private func searchDarwinSurroundingWordsContents(
+        _ data: Data,
+        fileURL: URL,
+        matcher: PatternMatcher,
+        options: RipgrepOptions
+    ) -> SearchFileResult? {
+        #if !canImport(Darwin)
+        return nil
+        #else
+        guard options.printMode == .matchingLines,
+              options.heading != true,
+              canOmitMatchSpans(options: options),
+              let literal = surroundingWordsLiteralPattern(options: options) else {
+            return nil
+        }
+
+        var matches: [SearchMatch] = []
+        let dataCount = data.count
+        var failedDecode = false
+
+        let result = data.withUnsafeBytes { rawBytes -> SearchFileResult? in
+            let bytes = rawBytes.bindMemory(to: UInt8.self)
+            guard let baseAddress = bytes.baseAddress else {
+                return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: data.count)
+            }
+
+            var searchOffset = 0
+            var lastMatchedLineStart: Int?
+            var lineNumber = 1
+            var lineCountOffset = 0
+
+            func advanceLineNumber(to targetOffset: Int) {
+                guard lineCountOffset < targetOffset else {
+                    return
+                }
+                lineNumber += Int(rg_memcount_byte(
+                    baseAddress.advanced(by: lineCountOffset),
+                    targetOffset - lineCountOffset,
+                    UInt8(ascii: "\n")
+                ))
+                lineCountOffset = targetOffset
+            }
+
+            while searchOffset < dataCount {
+                let foundPointer = literal.withUnsafeBufferPointer { needle in
+                    rg_memmem_simple(
+                        baseAddress.advanced(by: searchOffset),
+                        dataCount - searchOffset,
+                        needle.baseAddress,
+                        needle.count
+                    )
+                }
+                guard let rawFoundPointer = foundPointer else {
+                    break
+                }
+
+                let matchStart = baseAddress.distance(to: rawFoundPointer)
+                var lineStart = matchStart
+                while lineStart > 0, bytes[lineStart - 1] != UInt8(ascii: "\n") {
+                    lineStart -= 1
+                }
+                if lastMatchedLineStart == lineStart {
+                    searchOffset = max(matchStart + 1, searchOffset + 1)
+                    continue
+                }
+
+                let newlinePointer = memchr(
+                    rawFoundPointer,
+                    Int32(UInt8(ascii: "\n")),
+                    dataCount - matchStart
+                )
+                let lineEnd: Int
+                let terminator: String
+                if let newlinePointer {
+                    lineEnd = baseAddress.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self))
+                    terminator = "\n"
+                } else {
+                    lineEnd = dataCount
+                    terminator = ""
+                }
+
+                var matched = asciiSurroundingWordsMatch(
+                    bytes: bytes,
+                    lineStart: lineStart,
+                    lineEnd: lineEnd,
+                    literalStart: matchStart,
+                    literalEnd: matchStart + literal.count
+                )
+                if !matched && lineContainsNonASCII(bytes: bytes, lineStart: lineStart, lineEnd: lineEnd) {
+                    let lineData = Data(bytes: baseAddress.advanced(by: lineStart), count: lineEnd - lineStart)
+                    guard let line = String(data: lineData, encoding: .utf8) else {
+                        failedDecode = true
+                        break
+                    }
+                    matched = !decodedLiteralFallbackSpans(matcher: matcher, options: options, line: line).isEmpty
+                }
+
+                if matched {
+                    lastMatchedLineStart = lineStart
+                    let lineData = Data(bytes: baseAddress.advanced(by: lineStart), count: lineEnd - lineStart)
+                    guard let line = String(data: lineData, encoding: .utf8) else {
+                        failedDecode = true
+                        break
+                    }
+                    advanceLineNumber(to: lineStart)
+                    matches.append(SearchMatch(
+                        fileURL: fileURL,
+                        lineNumber: lineNumber,
+                        column: nil,
+                        line: line,
+                        lineTerminator: terminator,
+                        absoluteOffset: lineStart,
+                        matchCount: 1,
+                        spans: []
+                    ))
+                }
+                searchOffset = max(matchStart + 1, searchOffset + 1)
+            }
+
+            guard !failedDecode else {
+                return nil
+            }
+            return SearchFileResult(
+                fileURL: fileURL,
+                matches: matches,
+                bytesSearched: data.count,
+                searched: true
+            )
+        }
+        return result
+        #endif
+    }
+
     private func searchDarwinRegexRequiredLiteralContents(
         _ data: Data,
         fileURL: URL,
@@ -1886,7 +2029,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
         return nil
         #else
         guard options.printMode == .matchingLines,
-              !options.wantsLineNumber,
               options.heading != true,
               !prefilter.caseInsensitiveASCII,
               !prefilter.wordASCII,
@@ -1912,20 +2054,15 @@ public struct RipgrepSearcher: @unchecked Sendable {
             var lineCountOffset = 0
 
             func advanceLineNumber(to targetOffset: Int) {
-                while lineCountOffset < targetOffset {
-                    let remaining = targetOffset - lineCountOffset
-                    guard let newlinePointer = memchr(
-                        baseAddress.advanced(by: lineCountOffset),
-                        Int32(UInt8(ascii: "\n")),
-                        remaining
-                    ) else {
-                        lineCountOffset = targetOffset
-                        return
-                    }
-                    let newlineOffset = baseAddress.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self))
-                    lineNumber += 1
-                    lineCountOffset = newlineOffset + 1
+                guard options.wantsLineNumber, lineCountOffset < targetOffset else {
+                    return
                 }
+                lineNumber += Int(rg_memcount_byte(
+                    baseAddress.advanced(by: lineCountOffset),
+                    targetOffset - lineCountOffset,
+                    UInt8(ascii: "\n")
+                ))
+                lineCountOffset = targetOffset
             }
 
             while searchOffset < dataCount {
@@ -2013,6 +2150,112 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
         return result
         #endif
+    }
+
+    private func surroundingWordsLiteralPattern(options: RipgrepOptions) -> [UInt8]? {
+        guard !options.effectiveIgnoreCase,
+              !options.fixedStrings,
+              !options.lineRegexp,
+              !options.invertMatch,
+              !options.multiline,
+              !options.nullData,
+              options.effectivePatterns.count == 1,
+              var pattern = options.effectivePatterns.first else {
+            return nil
+        }
+        if pattern.hasPrefix("(?-u)") {
+            pattern.removeFirst("(?-u)".count)
+        }
+        let prefix = #"\w+\s+"#
+        let suffix = #"\s+\w+"#
+        guard pattern.hasPrefix(prefix), pattern.hasSuffix(suffix) else {
+            return nil
+        }
+        let literalStart = pattern.index(pattern.startIndex, offsetBy: prefix.count)
+        let literalEnd = pattern.index(pattern.endIndex, offsetBy: -suffix.count)
+        let literal = String(pattern[literalStart..<literalEnd])
+        guard !literal.isEmpty,
+              literal.utf8.allSatisfy({ $0 < 0x80 }),
+              !literal.contains(where: { #"\.[]{}()+*?^$|"#.contains($0) }) else {
+            return nil
+        }
+        return Array(literal.utf8)
+    }
+
+    private func asciiSurroundingWordsMatch(
+        bytes: UnsafeBufferPointer<UInt8>,
+        lineStart: Int,
+        lineEnd: Int,
+        literalStart: Int,
+        literalEnd: Int
+    ) -> Bool {
+        guard literalStart >= lineStart, literalEnd <= lineEnd else {
+            return false
+        }
+
+        var beforeWhitespaceStart = literalStart
+        while beforeWhitespaceStart > lineStart,
+              isASCIIWhitespace(bytes[beforeWhitespaceStart - 1]) {
+            beforeWhitespaceStart -= 1
+        }
+        guard beforeWhitespaceStart < literalStart else {
+            return false
+        }
+
+        var wordStart = beforeWhitespaceStart
+        while wordStart > lineStart,
+              isASCIIWord(bytes[wordStart - 1]) {
+            wordStart -= 1
+        }
+        guard wordStart < beforeWhitespaceStart else {
+            return false
+        }
+
+        var afterWhitespaceEnd = literalEnd
+        while afterWhitespaceEnd < lineEnd,
+              isASCIIWhitespace(bytes[afterWhitespaceEnd]) {
+            afterWhitespaceEnd += 1
+        }
+        guard afterWhitespaceEnd > literalEnd else {
+            return false
+        }
+
+        var wordEnd = afterWhitespaceEnd
+        while wordEnd < lineEnd,
+              isASCIIWord(bytes[wordEnd]) {
+            wordEnd += 1
+        }
+        return wordEnd > afterWhitespaceEnd
+    }
+
+    private func lineContainsNonASCII(
+        bytes: UnsafeBufferPointer<UInt8>,
+        lineStart: Int,
+        lineEnd: Int
+    ) -> Bool {
+        guard lineStart < lineEnd else {
+            return false
+        }
+        for index in lineStart..<lineEnd where bytes[index] >= 0x80 {
+            return true
+        }
+        return false
+    }
+
+    private func isASCIIWord(_ byte: UInt8) -> Bool {
+        byte == UInt8(ascii: "_")
+            || (byte >= UInt8(ascii: "0") && byte <= UInt8(ascii: "9"))
+            || (byte >= UInt8(ascii: "A") && byte <= UInt8(ascii: "Z"))
+            || (byte >= UInt8(ascii: "a") && byte <= UInt8(ascii: "z"))
+    }
+
+    private func isASCIIWhitespace(_ byte: UInt8) -> Bool {
+        byte == UInt8(ascii: " ")
+            || byte == UInt8(ascii: "\t")
+            || byte == UInt8(ascii: "\n")
+            || byte == UInt8(ascii: "\r")
+            || byte == 0x0B
+            || byte == 0x0C
     }
 
     private func streamingByteLiteralFastPath(
@@ -2160,16 +2403,15 @@ public struct RipgrepSearcher: @unchecked Sendable {
         var bytesSearchedThroughMaxCount: Int?
 
         func advanceLineNumber(to targetOffset: Int) {
-            while lineCountOffset < targetOffset {
-                let remaining = targetOffset - lineCountOffset
-                guard let newlinePointer = memchr(baseAddress.advanced(by: lineCountOffset), Int32(UInt8(ascii: "\n")), remaining) else {
-                    lineCountOffset = targetOffset
-                    return
-                }
-                let newlineOffset = baseAddress.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self))
-                lineNumber += 1
-                lineCountOffset = newlineOffset + 1
+            guard lineCountOffset < targetOffset else {
+                return
             }
+            lineNumber += Int(rg_memcount_byte(
+                baseAddress.advanced(by: lineCountOffset),
+                targetOffset - lineCountOffset,
+                UInt8(ascii: "\n")
+            ))
+            lineCountOffset = targetOffset
         }
 
         while searchOffset < dataCount, matches.count < maxCount {
@@ -2317,16 +2559,15 @@ public struct RipgrepSearcher: @unchecked Sendable {
         var bytesSearchedThroughMaxCount: Int?
 
         func advanceLineNumber(to targetOffset: Int) {
-            while lineCountOffset < targetOffset {
-                let remaining = targetOffset - lineCountOffset
-                guard let newlinePointer = memchr(baseAddress.advanced(by: lineCountOffset), Int32(UInt8(ascii: "\n")), remaining) else {
-                    lineCountOffset = targetOffset
-                    return
-                }
-                let newlineOffset = baseAddress.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self))
-                lineNumber += 1
-                lineCountOffset = newlineOffset + 1
+            guard lineCountOffset < targetOffset else {
+                return
             }
+            lineNumber += Int(rg_memcount_byte(
+                baseAddress.advanced(by: lineCountOffset),
+                targetOffset - lineCountOffset,
+                UInt8(ascii: "\n")
+            ))
+            lineCountOffset = targetOffset
         }
 
         for lineStart in matchStarts {

@@ -83,3 +83,26 @@ const uint8_t *rg_memcasemem_ascii(
     }
     return NULL;
 }
+
+size_t rg_memcount_byte(
+    const uint8_t *haystack,
+    size_t haystack_len,
+    uint8_t byte
+) {
+    size_t count = 0;
+    size_t index = 0;
+    for (; index + 8 <= haystack_len; index += 8) {
+        count += haystack[index] == byte;
+        count += haystack[index + 1] == byte;
+        count += haystack[index + 2] == byte;
+        count += haystack[index + 3] == byte;
+        count += haystack[index + 4] == byte;
+        count += haystack[index + 5] == byte;
+        count += haystack[index + 6] == byte;
+        count += haystack[index + 7] == byte;
+    }
+    for (; index < haystack_len; index++) {
+        count += haystack[index] == byte;
+    }
+    return count;
+}
