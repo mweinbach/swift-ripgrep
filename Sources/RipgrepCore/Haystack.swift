@@ -1065,6 +1065,14 @@ public struct FileWalker {
         caseInsensitive: Bool = false,
         ignoreExplicitRootMatch: Bool = false
     ) -> LoadedIgnoreMatcher {
+        if !reportLoadErrors {
+            var isDirectory: ObjCBool = false
+            guard fileManager.fileExists(atPath: fileURL.path, isDirectory: &isDirectory),
+                  !isDirectory.boolValue else {
+                return LoadedIgnoreMatcher(matcher: GlobMatcher(patterns: []), messages: [], diagnostics: [])
+            }
+        }
+
         let contents: String
         do {
             contents = try String(contentsOf: fileURL, encoding: .utf8)
