@@ -241,10 +241,24 @@ public struct FileWalker {
         let overridePath = overridePath(for: url, rootArgumentIsAbsolute: rootArgumentIsAbsolute, cwdPrefix: cwdPrefix)
 
         if !isExplicit {
+            #if canImport(Darwin)
+            let overrideDecision: GlobMatcher.Decision? = overrides.isEmpty
+                ? nil
+                : overrides.decision(relativePath: overridePath, isDirectory: isDirectory)
+            #else
             let overrideDecision = overrides.decision(relativePath: overridePath, isDirectory: isDirectory)
+            #endif
             let isIncludedByOverride = overrideDecision == .include
-            if overrideDecision == .exclude
-                || (overrideDecision == nil && !overrides.allows(relativePath: overridePath, isDirectory: isDirectory)) {
+            #if canImport(Darwin)
+            let isExcludedByOverride = overrideDecision == .exclude
+                || (overrideDecision == nil
+                    && !overrides.isEmpty
+                    && !overrides.allows(relativePath: overridePath, isDirectory: isDirectory))
+            #else
+            let isExcludedByOverride = overrideDecision == .exclude
+                || (overrideDecision == nil && !overrides.allows(relativePath: overridePath, isDirectory: isDirectory))
+            #endif
+            if isExcludedByOverride {
                 debug("ignoring \(url.path): override glob", options: options, diagnostics: &diagnostics)
                 return []
             }

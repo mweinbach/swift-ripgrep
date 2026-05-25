@@ -13,6 +13,18 @@ public struct GlobMatcher: Equatable {
         case prefixSuffix(prefix: String, suffix: String)
         case suffix(String)
         case contains(String)
+        case simpleGlob(SimpleGlob)
+    }
+
+    fileprivate struct SimpleGlob: Equatable {
+        enum Token: Equatable {
+            case literal(UInt8)
+            case any
+            case star
+            case charClass([ClosedRange<UInt8>], negated: Bool)
+        }
+
+        let tokens: [Token]
     }
 
     public struct Rule: Equatable {
@@ -243,6 +255,13 @@ public struct GlobMatcher: Equatable {
 
     private func matchesGlob(_ rule: Rule, _ value: String) -> Bool {
         if let fastMatcher = rule.fastMatcher {
+            if case .simpleGlob = fastMatcher,
+               !value.utf8.allSatisfy({ $0 < 0x80 }) {
+                guard let regex = rule.regex else {
+                    return false
+                }
+                return matches(regex, value)
+            }
             return matchesFast(fastMatcher, value)
         }
         guard let regex = rule.regex else {
@@ -254,6 +273,13 @@ public struct GlobMatcher: Equatable {
     private func matchesGlobAnywhere(_ rule: Rule, _ value: String) -> Bool {
         if let fastMatcher = rule.fastMatcher, matchesFastAnywhere(fastMatcher, value) {
             return true
+        } else if let fastMatcher = rule.fastMatcher,
+                  case .simpleGlob = fastMatcher,
+                  !value.utf8.allSatisfy({ $0 < 0x80 }) {
+            guard let regex = rule.anywhereRegex else {
+                return false
+            }
+            return matches(regex, value)
         }
         guard let regex = rule.anywhereRegex else {
             return false
@@ -280,6 +306,8 @@ public struct GlobMatcher: Equatable {
             return value.hasSuffix(suffix)
         case .contains(let needle):
             return value.contains(needle)
+        case .simpleGlob(let glob):
+            return matchesSimpleGlob(glob, value)
         }
     }
 
@@ -292,7 +320,7 @@ public struct GlobMatcher: Equatable {
             return value.hasSuffix("/\(expected)")
         case .any:
             return true
-        case .prefix, .prefixSuffix, .suffix, .contains:
+        case .prefix, .prefixSuffix, .suffix, .contains, .simpleGlob:
             var cursor = value.startIndex
             while let slash = value[cursor...].firstIndex(of: "/") {
                 let next = value.index(after: slash)
@@ -316,12 +344,21 @@ public struct GlobMatcher: Equatable {
         guard !caseInsensitive else {
             return nil
         }
-        let metaCharacters = CharacterSet(charactersIn: "?[]{}\\")
-        guard pattern.rangeOfCharacter(from: metaCharacters) == nil else {
+        let unsupportedMetaCharacters = CharacterSet(charactersIn: "{}\\")
+        guard pattern.rangeOfCharacter(from: unsupportedMetaCharacters) == nil else {
             return nil
         }
+        let hasSimpleGlobMeta = pattern.contains("?") || pattern.contains("[") || pattern.contains("]")
         let starCount = pattern.reduce(0) { count, character in
             character == "*" ? count + 1 : count
+        }
+        if hasSimpleGlobMeta {
+            #if canImport(Darwin)
+            if basenameOnly, let simpleGlob = compileSimpleGlob(pattern) {
+                return .simpleGlob(simpleGlob)
+            }
+            #endif
+            return nil
         }
         if starCount == 0 {
             return .exact(pattern)
@@ -352,6 +389,134 @@ public struct GlobMatcher: Equatable {
             return needle.isEmpty ? .any : .contains(String(needle))
         }
         return nil
+    }
+
+    private func matchesSimpleGlob(_ glob: SimpleGlob, _ value: String) -> Bool {
+        let bytes = Array(value.utf8)
+        let tokens = glob.tokens
+        var tokenIndex = 0
+        var byteIndex = 0
+        var starTokenIndex: Int?
+        var starByteIndex = 0
+
+        while byteIndex < bytes.count {
+            if tokenIndex < tokens.count,
+               token(tokens[tokenIndex], matches: bytes[byteIndex]) {
+                tokenIndex += 1
+                byteIndex += 1
+            } else if tokenIndex < tokens.count, tokens[tokenIndex] == .star {
+                starTokenIndex = tokenIndex
+                tokenIndex += 1
+                starByteIndex = byteIndex
+            } else if let previousStarTokenIndex = starTokenIndex {
+                guard starByteIndex < bytes.count,
+                      bytes[starByteIndex] != UInt8(ascii: "/") else {
+                    return false
+                }
+                starByteIndex += 1
+                tokenIndex = previousStarTokenIndex + 1
+                byteIndex = starByteIndex
+            } else {
+                return false
+            }
+        }
+
+        while tokenIndex < tokens.count, tokens[tokenIndex] == .star {
+            tokenIndex += 1
+        }
+        return tokenIndex == tokens.count
+    }
+
+    private func token(_ token: SimpleGlob.Token, matches byte: UInt8) -> Bool {
+        guard byte != UInt8(ascii: "/") else {
+            return false
+        }
+        switch token {
+        case .literal(let expected):
+            return byte == expected
+        case .any:
+            return true
+        case .star:
+            return false
+        case .charClass(let ranges, let negated):
+            let contains = ranges.contains { $0.contains(byte) }
+            return negated ? !contains : contains
+        }
+    }
+
+    private static func compileSimpleGlob(_ pattern: String) -> SimpleGlob? {
+        guard pattern.utf8.allSatisfy({ $0 < 0x80 }) else {
+            return nil
+        }
+
+        var tokens: [SimpleGlob.Token] = []
+        let bytes = Array(pattern.utf8)
+        var index = 0
+        var sawSimpleGlobSyntax = false
+        while index < bytes.count {
+            switch bytes[index] {
+            case UInt8(ascii: "*"):
+                sawSimpleGlobSyntax = true
+                if tokens.last != .star {
+                    tokens.append(.star)
+                }
+                index += 1
+            case UInt8(ascii: "?"):
+                sawSimpleGlobSyntax = true
+                tokens.append(.any)
+                index += 1
+            case UInt8(ascii: "["):
+                guard let parsed = parseSimpleGlobClass(bytes, start: index) else {
+                    return nil
+                }
+                sawSimpleGlobSyntax = true
+                tokens.append(.charClass(parsed.ranges, negated: parsed.negated))
+                index = parsed.nextIndex
+            case UInt8(ascii: "]"):
+                return nil
+            default:
+                tokens.append(.literal(bytes[index]))
+                index += 1
+            }
+        }
+        return sawSimpleGlobSyntax ? SimpleGlob(tokens: tokens) : nil
+    }
+
+    private static func parseSimpleGlobClass(
+        _ bytes: [UInt8],
+        start: Int
+    ) -> (ranges: [ClosedRange<UInt8>], negated: Bool, nextIndex: Int)? {
+        var index = start + 1
+        guard index < bytes.count else {
+            return nil
+        }
+        var negated = false
+        if bytes[index] == UInt8(ascii: "!") || bytes[index] == UInt8(ascii: "^") {
+            negated = true
+            index += 1
+        }
+        guard index < bytes.count, bytes[index] != UInt8(ascii: "]") else {
+            return nil
+        }
+
+        var ranges: [ClosedRange<UInt8>] = []
+        while index < bytes.count, bytes[index] != UInt8(ascii: "]") {
+            let lower = bytes[index]
+            if index + 2 < bytes.count,
+               bytes[index + 1] == UInt8(ascii: "-"),
+               bytes[index + 2] != UInt8(ascii: "]") {
+                let upper = bytes[index + 2]
+                ranges.append(min(lower, upper)...max(lower, upper))
+                index += 3
+            } else {
+                ranges.append(lower...lower)
+                index += 1
+            }
+        }
+        guard index < bytes.count, bytes[index] == UInt8(ascii: "]") else {
+            return nil
+        }
+        return (ranges, negated, index + 1)
     }
 
     private static func compileGlobRegex(_ pattern: String, caseInsensitive: Bool) -> NSRegularExpression? {

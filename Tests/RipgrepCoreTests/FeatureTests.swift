@@ -3332,6 +3332,20 @@ struct FeatureTests {
         #expect(try run(["--sort", "path", "--files", reinclude.path("tools/perf")]) == [
             reinclude.path("tools/perf/include/perf/perf_dlfilter.h"),
         ])
+
+        let classReinclude = try TemporaryDirectory()
+        try classReinclude.createDirectory(".git")
+        try classReinclude.write(
+            "fake_sigreturn_*\n!*.[ch]\n",
+            to: ".gitignore"
+        )
+        try classReinclude.write("needle\n", to: "fake_sigreturn_bad_magic.c")
+        try classReinclude.write("needle\n", to: "fake_sigreturn_bad_magic.o")
+        try classReinclude.write("needle\n", to: "TODO")
+        #expect(try run(["--sort", "path", "--files", classReinclude.url.path]) == [
+            classReinclude.path("TODO"),
+            classReinclude.path("fake_sigreturn_bad_magic.c"),
+        ])
     }
 
     @Test("honors git info exclude and its toggle")
