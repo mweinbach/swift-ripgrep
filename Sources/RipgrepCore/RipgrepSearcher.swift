@@ -323,7 +323,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
               options.beforeContext == 0,
               options.afterContext == 0,
               !options.passthru,
-              !options.wordRegexp,
               !options.lineRegexp,
               !options.noUnicode,
               !options.wantsLineNumber,
@@ -453,7 +452,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
 
         let matcher = try PatternMatcher(options: options)
         guard let fastPath = matcher.byteLiteralFastPath(),
-              !fastPath.wordASCII,
               !fastPath.literals.isEmpty,
               fastPath.literals.allSatisfy({ !$0.isEmpty }),
               canWriteDarwinSimpleByteLiteralFastPath(fastPath),
@@ -484,12 +482,14 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let maxCount = options.maxCount ?? Int.max
         var matchedLineCount = 0
         var bytesSearched = data.count
+        var needsDecodedFallback = false
 
         data.withUnsafeBytes { rawBytes in
             guard let rawBaseAddress = rawBytes.baseAddress else {
                 return
             }
             let baseAddress = rawBaseAddress.assumingMemoryBound(to: UInt8.self)
+            let byteBuffer = UnsafeBufferPointer(start: baseAddress, count: data.count)
             if literals.count == 1,
                let literal = literals.first {
                 var searchOffset = 0
@@ -523,11 +523,32 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     if lastEmittedLineStart != lineStart {
                         let remaining = data.count - matchStart
                         let newlinePointer = memchr(rawFoundPointer, Int32(UInt8(ascii: "\n")), remaining)
+                        let lineEnd: Int
                         let outputEnd: Int
                         if let newlinePointer {
-                            outputEnd = baseAddress.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self)) + 1
+                            lineEnd = baseAddress.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self))
+                            outputEnd = lineEnd + 1
                         } else {
+                            lineEnd = data.count
                             outputEnd = data.count
+                        }
+                        if fastPath.wordASCII {
+                            switch asciiWordBoundaryState(
+                                bytes: byteBuffer,
+                                lineStart: lineStart,
+                                lineEnd: lineEnd,
+                                matchStart: matchStart,
+                                matchEnd: matchStart + literal.count
+                            ) {
+                            case .bounded:
+                                break
+                            case .notBounded:
+                                searchOffset = max(matchStart + 1, searchOffset + 1)
+                                continue
+                            case .needsDecodedFallback:
+                                needsDecodedFallback = true
+                                return
+                            }
                         }
                         matchedLineCount += 1
                         lastEmittedLineStart = lineStart
@@ -590,6 +611,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 lineStart = outputEnd
             }
         }
+        if needsDecodedFallback {
+            return nil
+        }
 
         let fileResult = SearchFileResult(
             fileURL: fileURL,
@@ -624,7 +648,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
               options.engineMode == .default,
               options.dfaSizeLimit == nil,
               options.regexSizeLimit == nil,
-              !options.wordRegexp,
               !options.lineRegexp,
               !options.noUnicode,
               !options.multiline,
@@ -670,6 +693,11 @@ public struct RipgrepSearcher: @unchecked Sendable {
 
     private func canWriteDarwinSimpleByteLiteralFastPath(_ fastPath: ByteLiteralFastPath) -> Bool {
         if fastPath.caseInsensitiveASCII {
+            return !fastPath.wordASCII && fastPath.literals.count == 1 && fastPath.literals.allSatisfy { literal in
+                literal.allSatisfy { $0 < 0x80 }
+            }
+        }
+        if fastPath.wordASCII {
             return fastPath.literals.count == 1 && fastPath.literals.allSatisfy { literal in
                 literal.allSatisfy { $0 < 0x80 }
             }

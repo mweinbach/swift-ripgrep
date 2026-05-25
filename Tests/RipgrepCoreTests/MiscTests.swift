@@ -61,6 +61,20 @@ struct MiscTests {
         }
         #expect(ignoreCaseResults?.summary.matchedLines == 1)
         #expect(ignoreCaseOutput == Data("delta\n".utf8))
+
+        var wordOptions = options
+        wordOptions.pattern = "ha"
+        wordOptions.wordRegexp = true
+        var wordOutput = Data()
+        let wordResults = try RipgrepSearcher().writeDarwinSimpleByteLiteralLines(options: wordOptions) { buffer in
+            let bytes = buffer.bindMemory(to: UInt8.self)
+            guard let baseAddress = bytes.baseAddress else {
+                return
+            }
+            wordOutput.append(baseAddress, count: bytes.count)
+        }
+        #expect(wordResults?.summary.matchedLines == 0)
+        #expect(wordOutput.isEmpty)
         #endif
     }
 
