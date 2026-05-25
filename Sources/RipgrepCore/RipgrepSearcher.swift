@@ -488,6 +488,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 && !options.lineRegexp
                 && !options.column
                 && !options.byteOffset
+            let streamByteLiterals = streamingByteLiteralFastPath(matcher: matcher, options: options)
 
             try HaystackReader.streamLines(haystack, options: options) { streamedLine, terminate in
                 lineNumber += 1
@@ -509,6 +510,69 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     fellBackToBufferedSearch = true
                     terminate = true
                     return
+                }
+                if let streamByteLiterals {
+                    let lineBytes = [UInt8](streamedLine.data)
+                    let spans = byteLiteralSpans(
+                        literals: streamByteLiterals,
+                        bytes: lineBytes,
+                        lineStart: 0,
+                        lineEnd: lineBytes.count
+                    )
+                    guard !spans.isEmpty else {
+                        return
+                    }
+                    switch options.printMode {
+                    case .count:
+                        supplementalMatchedLines += 1
+                        return
+                    case .countMatches:
+                        supplementalMatches += spans.count
+                        return
+                    case .filesWithMatches, .filesWithoutMatch:
+                        matches.append(SearchMatch(
+                            fileURL: fileURL,
+                            lineNumber: lineNumber,
+                            column: nil,
+                            line: "",
+                            lineTerminator: "",
+                            absoluteOffset: streamedLine.absoluteOffset,
+                            matchCount: spans.count,
+                            spans: []
+                        ))
+                        terminate = true
+                        return
+                    case .matchingLines:
+                        guard let lineText = String(data: streamedLine.data, encoding: .utf8) else {
+                            fellBackToBufferedSearch = true
+                            terminate = true
+                            return
+                        }
+                        let lineTerminator = String(data: streamedLine.terminator, encoding: .utf8) ?? ""
+                        matches.append(SearchMatch(
+                            fileURL: fileURL,
+                            lineNumber: lineNumber,
+                            column: nil,
+                            line: lineText,
+                            lineTerminator: lineTerminator,
+                            absoluteOffset: streamedLine.absoluteOffset,
+                            matchCount: spans.count,
+                            spans: spans.map { span in
+                                let textBytes = lineBytes[span.startByte..<span.endByte]
+                                return MatchSpan(
+                                    startColumn: span.startByte + 1,
+                                    endColumn: span.endByte + 1,
+                                    startByte: span.startByte,
+                                    endByte: span.endByte,
+                                    text: String(decoding: textBytes, as: UTF8.self)
+                                )
+                            }
+                        ))
+                        if matches.count >= maxCount {
+                            terminate = true
+                        }
+                        return
+                    }
                 }
                 guard let lineText = String(data: lineData, encoding: .utf8) else {
                     fellBackToBufferedSearch = true
@@ -712,6 +776,15 @@ public struct RipgrepSearcher: @unchecked Sendable {
             ))
         }
 
+        if let fastResult = searchRawLiteralContents(
+            data,
+            fileURL: fileURL,
+            matcher: matcher,
+            options: options
+        ) {
+            return FileSearchOutcome(result: fastResult)
+        }
+
         let contents = decode(data, options: options)
         let result = searchContents(
             contents,
@@ -731,6 +804,234 @@ public struct RipgrepSearcher: @unchecked Sendable {
             supplementalMatchedLines: result.supplementalMatchedLines,
             supplementalMatches: result.supplementalMatches
         ))
+    }
+
+    private func searchRawLiteralContents(
+        _ data: Data,
+        fileURL: URL,
+        matcher: PatternMatcher,
+        options: RipgrepOptions
+    ) -> SearchFileResult? {
+        guard case .automatic = options.encodingMode,
+              !data.starts(with: [0xEF, 0xBB, 0xBF]),
+              !data.starts(with: [0xFF, 0xFE]),
+              !data.starts(with: [0xFE, 0xFF]),
+              !options.json,
+              !options.stats,
+              options.beforeContext == 0,
+              options.afterContext == 0,
+              !options.passthru,
+              options.replacement == nil,
+              !options.stopOnNonmatch,
+              options.maxCount == nil,
+              !options.onlyMatching,
+              !options.column,
+              !options.byteOffset,
+              !options.vimgrep,
+              options.maxColumns == nil,
+              let literals = matcher.byteLiteralFastPath() else {
+            return nil
+        }
+
+        let bytes = [UInt8](data)
+        var matches: [SearchMatch] = []
+        var supplementalMatchedLines = 0
+        var supplementalMatches = 0
+        var lineStart = 0
+        var lineNumber = 1
+        var bytesSearchedThroughMaxCount: Int?
+        var failedDecode = false
+        let maxCount = options.maxCount ?? Int.max
+
+        func scanLine(end lineEnd: Int, terminator: String) -> Bool {
+            let spans = byteLiteralSpans(
+                literals: literals,
+                bytes: bytes,
+                lineStart: lineStart,
+                lineEnd: lineEnd
+            )
+            guard !spans.isEmpty else {
+                return false
+            }
+
+            switch options.printMode {
+            case .count:
+                supplementalMatchedLines += 1
+                return false
+            case .countMatches:
+                supplementalMatches += spans.count
+                return false
+            case .filesWithMatches:
+                matches.append(SearchMatch(
+                    fileURL: fileURL,
+                    lineNumber: lineNumber,
+                    column: nil,
+                    line: "",
+                    lineTerminator: "",
+                    absoluteOffset: lineStart,
+                    matchCount: spans.count,
+                    spans: []
+                ))
+                return true
+            case .filesWithoutMatch:
+                matches.append(SearchMatch(
+                    fileURL: fileURL,
+                    lineNumber: lineNumber,
+                    column: nil,
+                    line: "",
+                    lineTerminator: "",
+                    absoluteOffset: lineStart,
+                    matchCount: spans.count,
+                    spans: []
+                ))
+                return true
+            case .matchingLines:
+                guard matches.count < maxCount else {
+                    return true
+                }
+                let lineBytes = bytes[lineStart..<lineEnd]
+                guard let line = String(data: Data(lineBytes), encoding: .utf8) else {
+                    failedDecode = true
+                    return true
+                }
+                matches.append(SearchMatch(
+                    fileURL: fileURL,
+                    lineNumber: lineNumber,
+                    column: nil,
+                    line: line,
+                    lineTerminator: terminator,
+                    absoluteOffset: lineStart,
+                    matchCount: spans.count,
+                    spans: spans.map { span in
+                        let textBytes = bytes[(lineStart + span.startByte)..<(lineStart + span.endByte)]
+                        return MatchSpan(
+                            startColumn: span.startByte + 1,
+                            endColumn: span.endByte + 1,
+                            startByte: span.startByte,
+                            endByte: span.endByte,
+                            text: String(decoding: textBytes, as: UTF8.self)
+                        )
+                    }
+                ))
+                if matches.count == maxCount {
+                    bytesSearchedThroughMaxCount = lineEnd + terminator.utf8.count
+                    return true
+                }
+                return false
+            }
+        }
+
+        var index = 0
+        while index < bytes.count {
+            if bytes[index] == UInt8(ascii: "\n") {
+                if scanLine(end: index, terminator: "\n") {
+                    break
+                }
+                index += 1
+                lineStart = index
+                lineNumber += 1
+                continue
+            }
+            index += 1
+        }
+        if lineStart < bytes.count || bytes.last != UInt8(ascii: "\n") {
+            _ = scanLine(end: bytes.count, terminator: "")
+        }
+        if failedDecode {
+            return nil
+        }
+
+        return SearchFileResult(
+            fileURL: fileURL,
+            matches: matches,
+            bytesSearched: bytesSearchedThroughMaxCount ?? data.count,
+            searched: true,
+            supplementalMatchedLines: supplementalMatchedLines,
+            supplementalMatches: supplementalMatches
+        )
+    }
+
+    private func streamingByteLiteralFastPath(
+        matcher: PatternMatcher,
+        options: RipgrepOptions
+    ) -> [[UInt8]]? {
+        guard case .automatic = options.encodingMode,
+              !options.json,
+              !options.stats,
+              options.beforeContext == 0,
+              options.afterContext == 0,
+              !options.passthru,
+              options.replacement == nil,
+              !options.stopOnNonmatch,
+              options.maxCount == nil,
+              !options.onlyMatching,
+              !options.column,
+              !options.byteOffset,
+              !options.vimgrep,
+              options.maxColumns == nil,
+              options.printMode != .filesWithMatches,
+              options.printMode != .filesWithoutMatch else {
+            return nil
+        }
+        return matcher.byteLiteralFastPath()
+    }
+
+    private func byteLiteralSpans(
+        literals: [[UInt8]],
+        bytes: [UInt8],
+        lineStart: Int,
+        lineEnd: Int
+    ) -> [MatchSpan] {
+        var spans: [MatchSpan] = []
+        for literal in literals where literal.count <= lineEnd - lineStart {
+            var index = lineStart
+            while index + literal.count <= lineEnd {
+                guard let first = literal.first else {
+                    break
+                }
+                while index + literal.count <= lineEnd, bytes[index] != first {
+                    index += 1
+                }
+                guard index + literal.count <= lineEnd else {
+                    break
+                }
+                var matched = true
+                for offset in 1..<literal.count where bytes[index + offset] != literal[offset] {
+                    matched = false
+                    break
+                }
+                if matched {
+                    spans.append(MatchSpan(
+                        startColumn: index - lineStart + 1,
+                        endColumn: index - lineStart + literal.count + 1,
+                        startByte: index - lineStart,
+                        endByte: index - lineStart + literal.count,
+                        text: ""
+                    ))
+                    index += literal.count
+                } else {
+                    index += 1
+                }
+            }
+        }
+        return deduplicatedByteSpans(spans.sorted {
+            if $0.startByte == $1.startByte {
+                return $0.endByte < $1.endByte
+            }
+            return $0.startByte < $1.startByte
+        })
+    }
+
+    private func deduplicatedByteSpans(_ spans: [MatchSpan]) -> [MatchSpan] {
+        var output: [MatchSpan] = []
+        var seen: Set<String> = []
+        for span in spans {
+            let key = "\(span.startByte):\(span.endByte)"
+            if seen.insert(key).inserted {
+                output.append(span)
+            }
+        }
+        return output
     }
 
     private func jsonBinaryDisplayMatches(

@@ -336,6 +336,28 @@ public struct PatternMatcher {
         return !literals.contains { literalContains($0, in: line) }
     }
 
+    public func byteLiteralFastPath() -> [Array<UInt8>]? {
+        guard !options.effectiveIgnoreCase,
+              !options.wordRegexp,
+              !options.lineRegexp,
+              !options.invertMatch,
+              !options.multiline,
+              !options.nullData,
+              !usesByteSemantics else {
+            return nil
+        }
+        let literals = patterns.compactMap { pattern -> String? in
+            guard case .literal(let literal) = pattern, !literal.isEmpty else {
+                return nil
+            }
+            return literal
+        }
+        guard literals.count == patterns.count else {
+            return nil
+        }
+        return literals.map { Array($0.utf8) }
+    }
+
     public func positiveSpans(in line: String) -> [MatchSpan] {
         matchSpans(from: filteredCandidates(in: line), in: line)
     }
