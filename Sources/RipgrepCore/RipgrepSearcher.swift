@@ -494,6 +494,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let filesWithMatches = options.printMode == .filesWithMatches
         let filesWithoutMatch = options.printMode == .filesWithoutMatch
         let pathOnly = filesWithMatches || filesWithoutMatch
+        let countMatchesOnly = options.printMode == .countMatches
+        let onlyMatching = options.onlyMatching
+        var totalMatchCount = 0
 
         data.withUnsafeBytes { rawBytes in
             guard let rawBaseAddress = rawBytes.baseAddress else {
@@ -632,6 +635,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                let literal = literals.first {
                 var searchOffset = 0
                 var lastEmittedLineStart: Int?
+                var lastMatchedLineStart: Int?
                 var foldedLiteral: [UInt8] = []
                 var caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
                 if fastPath.caseInsensitiveASCII {
@@ -703,6 +707,25 @@ public struct RipgrepSearcher: @unchecked Sendable {
                                 needsDecodedFallback = true
                                 return
                             }
+                        }
+                        if countMatchesOnly || onlyMatching {
+                            totalMatchCount += 1
+                            if lastMatchedLineStart != lineStart {
+                                matchedLineCount += 1
+                                lastMatchedLineStart = lineStart
+                            }
+                            if onlyMatching {
+                                writeBytes(UnsafeRawBufferPointer(
+                                    start: rawBaseAddress.advanced(by: matchStart),
+                                    count: literal.count
+                                ))
+                                var newline = UInt8(ascii: "\n")
+                                withUnsafeBytes(of: &newline) { buffer in
+                                    writeBytes(buffer)
+                                }
+                            }
+                            searchOffset = matchStart + literal.count
+                            continue
                         }
                         matchedLineCount += 1
                         lastEmittedLineStart = lineStart
@@ -828,19 +851,22 @@ public struct RipgrepSearcher: @unchecked Sendable {
         if needsDecodedFallback {
             return nil
         }
-        if countOnly && matchedLineCount > 0 {
+        if countMatchesOnly && totalMatchCount > 0 {
+            writeDarwinDecimalLine(totalMatchCount, writeBytes: writeBytes)
+        } else if countOnly && matchedLineCount > 0 {
             writeDarwinDecimalLine(matchedLineCount, writeBytes: writeBytes)
         } else if (filesWithMatches && matchedLineCount > 0) || (filesWithoutMatch && matchedLineCount == 0) {
             writeDarwinPathLine(fileURL.path, writeBytes: writeBytes)
         }
 
+        let reportedMatches = totalMatchCount > 0 ? totalMatchCount : matchedLineCount
         let fileResult = SearchFileResult(
             fileURL: fileURL,
             matches: [],
             bytesSearched: bytesSearched,
             searched: true,
             supplementalMatchedLines: matchedLineCount,
-            supplementalMatches: matchedLineCount
+            supplementalMatches: reportedMatches
         )
         return SearchResults(
             files: [fileResult],
@@ -848,7 +874,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 filesSearched: 1,
                 filesWithMatches: matchedLineCount > 0 ? 1 : 0,
                 matchedLines: matchedLineCount,
-                totalMatches: matchedLineCount
+                totalMatches: reportedMatches
             )
         )
         #endif
@@ -895,6 +921,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
     private func canWriteDarwinSimpleByteLiteralLines(options: RipgrepOptions) -> Bool {
         guard (options.printMode == .matchingLines
             || options.printMode == .count
+            || options.printMode == .countMatches
             || options.printMode == .filesWithMatches
             || options.printMode == .filesWithoutMatch),
               options.rootPathArguments.count == 1,
@@ -912,7 +939,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !options.crlf,
               !options.invertMatch,
               !options.stopOnNonmatch,
-              !options.onlyMatching,
+              (!options.onlyMatching || (options.printMode == .matchingLines && !options.wantsLineNumber && options.maxCount == nil)),
+              (options.printMode != .countMatches || options.maxCount == nil),
               options.replacement == nil,
               !options.json,
               !options.stats,

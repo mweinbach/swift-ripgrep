@@ -116,6 +116,36 @@ struct MiscTests {
         #expect(countNoMatchResults?.summary.matchedLines == 0)
         #expect(countNoMatchOutput.isEmpty)
 
+        var countMatchesOptions = options
+        countMatchesOptions.pattern = "a"
+        countMatchesOptions.printMode = .countMatches
+        var countMatchesOutput = Data()
+        let countMatchesResults = try RipgrepSearcher().writeDarwinSimpleByteLiteralLines(options: countMatchesOptions) { buffer in
+            let bytes = buffer.bindMemory(to: UInt8.self)
+            guard let baseAddress = bytes.baseAddress else {
+                return
+            }
+            countMatchesOutput.append(baseAddress, count: bytes.count)
+        }
+        #expect(countMatchesResults?.summary.matchedLines == 4)
+        #expect(countMatchesResults?.summary.totalMatches == 5)
+        #expect(countMatchesOutput == Data("5\n".utf8))
+
+        var onlyMatchingOptions = options
+        onlyMatchingOptions.pattern = "delta"
+        onlyMatchingOptions.onlyMatching = true
+        var onlyMatchingOutput = Data()
+        let onlyMatchingResults = try RipgrepSearcher().writeDarwinSimpleByteLiteralLines(options: onlyMatchingOptions) { buffer in
+            let bytes = buffer.bindMemory(to: UInt8.self)
+            guard let baseAddress = bytes.baseAddress else {
+                return
+            }
+            onlyMatchingOutput.append(baseAddress, count: bytes.count)
+        }
+        #expect(onlyMatchingResults?.summary.matchedLines == 1)
+        #expect(onlyMatchingResults?.summary.totalMatches == 1)
+        #expect(onlyMatchingOutput == Data("delta\n".utf8))
+
         var filesWithOptions = options
         filesWithOptions.printMode = .filesWithMatches
         var filesWithOutput = Data()
