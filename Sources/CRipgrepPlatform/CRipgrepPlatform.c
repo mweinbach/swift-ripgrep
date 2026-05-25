@@ -414,6 +414,200 @@ static rg_darwin_literal_file_result rg_darwin_write_literal_bytes_case_sensitiv
     return rg_darwin_write_literal_bytes(base, haystack_len, needle, needle_len, NULL, 0);
 }
 
+static int rg_write_all_stdout(const uint8_t *bytes, size_t length);
+
+static rg_darwin_literal_file_result rg_darwin_read_literal_fd_full(
+    int fd,
+    size_t haystack_len,
+    const uint8_t *needle,
+    size_t needle_len
+) {
+    rg_darwin_literal_file_result result = { .status = -2, .matched_line_count = 0, .total_match_count = 0, .bytes_searched = 0 };
+    uint8_t *buffer = malloc(haystack_len);
+    if (buffer == NULL) {
+        result.status = -1;
+        return result;
+    }
+
+    size_t bytes_read = 0;
+    while (bytes_read < haystack_len) {
+        ssize_t count = read(fd, buffer + bytes_read, haystack_len - bytes_read);
+        if (count < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            free(buffer);
+            result.status = -1;
+            return result;
+        }
+        if (count == 0) {
+            break;
+        }
+        bytes_read += (size_t)count;
+    }
+
+    result = rg_darwin_write_literal_bytes_case_sensitive(buffer, bytes_read, needle, needle_len);
+    free(buffer);
+    return result;
+}
+
+static int rg_darwin_process_literal_complete_lines(
+    const uint8_t *base,
+    size_t length,
+    const uint8_t *needle,
+    size_t needle_len,
+    int final_chunk,
+    rg_darwin_literal_file_result *result
+) {
+    size_t search_offset = 0;
+    size_t last_emitted_line_start = (size_t)-1;
+    while (search_offset < length) {
+        const uint8_t *found = rg_memmem_simple(base + search_offset, length - search_offset, needle, needle_len);
+        if (found == NULL) {
+            break;
+        }
+
+        const size_t match_start = (size_t)(found - base);
+        result->total_match_count++;
+
+        size_t line_start = match_start;
+        while (line_start > 0 && base[line_start - 1] != '\n') {
+            line_start--;
+        }
+
+        if (line_start != last_emitted_line_start) {
+            const void *newline = memchr(found, '\n', length - match_start);
+            const size_t output_end = newline == NULL
+                ? length
+                : (size_t)(((const uint8_t *)newline - base) + 1);
+            if (rg_write_all_stdout(base + line_start, output_end - line_start) != 0) {
+                result->status = -1;
+                return -1;
+            }
+            if (final_chunk && newline == NULL) {
+                uint8_t terminator = '\n';
+                if (rg_write_all_stdout(&terminator, 1) != 0) {
+                    result->status = -1;
+                    return -1;
+                }
+            }
+            result->matched_line_count++;
+            last_emitted_line_start = line_start;
+        }
+
+        search_offset = match_start + needle_len;
+    }
+    return 0;
+}
+
+static const uint8_t *rg_last_newline(const uint8_t *bytes, size_t length) {
+    for (size_t index = length; index > 0; --index) {
+        if (bytes[index - 1] == '\n') {
+            return bytes + index - 1;
+        }
+    }
+    return NULL;
+}
+
+static rg_darwin_literal_file_result rg_darwin_stream_literal_fd_lines(
+    int fd,
+    size_t haystack_len,
+    const uint8_t *needle,
+    size_t needle_len
+) {
+    rg_darwin_literal_file_result result = { .status = -2, .matched_line_count = 0, .total_match_count = 0, .bytes_searched = 0 };
+    const size_t chunk_size = 1024 * 1024;
+    const size_t carry_capacity = 64 * 1024;
+    const size_t buffer_capacity = chunk_size + carry_capacity + needle_len;
+    uint8_t *buffer = malloc(buffer_capacity);
+    if (buffer == NULL) {
+        result.status = -1;
+        return result;
+    }
+
+    size_t carry_len = 0;
+    size_t bytes_read = 0;
+    int checked_binary_prefix = 0;
+    for (;;) {
+        ssize_t count = read(fd, buffer + carry_len, chunk_size);
+        if (count < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            free(buffer);
+            result.status = -1;
+            return result;
+        }
+
+        const size_t bytes_in_buffer = carry_len + (count > 0 ? (size_t)count : 0);
+        bytes_read += count > 0 ? (size_t)count : 0;
+
+        if (!checked_binary_prefix) {
+            if (bytes_in_buffer >= 3 && buffer[0] == 0xEF && buffer[1] == 0xBB && buffer[2] == 0xBF) {
+                free(buffer);
+                return result;
+            }
+            if (bytes_in_buffer >= 2
+                && ((buffer[0] == 0xFF && buffer[1] == 0xFE) || (buffer[0] == 0xFE && buffer[1] == 0xFF))) {
+                free(buffer);
+                return result;
+            }
+            const size_t binary_check_len = bytes_in_buffer < (64 * 1024) ? bytes_in_buffer : (64 * 1024);
+            if (memchr(buffer, 0, binary_check_len) != NULL) {
+                free(buffer);
+                return result;
+            }
+            checked_binary_prefix = bytes_in_buffer >= (64 * 1024) || bytes_read == haystack_len || count == 0;
+        }
+
+        if (count == 0) {
+            if (rg_darwin_process_literal_complete_lines(buffer, bytes_in_buffer, needle, needle_len, 1, &result) != 0) {
+                free(buffer);
+                return result;
+            }
+            break;
+        }
+
+        const uint8_t *last_newline = rg_last_newline(buffer, bytes_in_buffer);
+        if (last_newline == NULL) {
+            if (bytes_in_buffer > carry_capacity) {
+                free(buffer);
+                if (lseek(fd, 0, SEEK_SET) < 0) {
+                    result.status = -1;
+                    return result;
+                }
+                return rg_darwin_read_literal_fd_full(fd, haystack_len, needle, needle_len);
+            }
+            carry_len = bytes_in_buffer;
+            continue;
+        }
+
+        const size_t process_len = (size_t)(last_newline - buffer) + 1;
+        if (rg_darwin_process_literal_complete_lines(buffer, process_len, needle, needle_len, 0, &result) != 0) {
+            free(buffer);
+            return result;
+        }
+
+        carry_len = bytes_in_buffer - process_len;
+        if (carry_len > 0) {
+            memmove(buffer, buffer + process_len, carry_len);
+        }
+        if (carry_len > carry_capacity) {
+            free(buffer);
+            if (lseek(fd, 0, SEEK_SET) < 0) {
+                result.status = -1;
+                return result;
+            }
+            return rg_darwin_read_literal_fd_full(fd, haystack_len, needle, needle_len);
+        }
+    }
+
+    free(buffer);
+    result.status = result.matched_line_count > 0 ? 1 : 0;
+    result.bytes_searched = bytes_read;
+    return result;
+}
+
 static rg_darwin_literal_file_result rg_darwin_write_literal_bytes_case_insensitive(
     const uint8_t *base,
     size_t haystack_len,
@@ -913,35 +1107,8 @@ rg_darwin_literal_file_result rg_darwin_write_literal_file_lines_no_mmap(
         return result;
     }
 
-    const size_t haystack_len = (size_t)file_stat.st_size;
-    uint8_t *buffer = malloc(haystack_len);
-    if (buffer == NULL) {
-        close(fd);
-        result.status = -1;
-        return result;
-    }
-
-    size_t bytes_read = 0;
-    while (bytes_read < haystack_len) {
-        ssize_t count = read(fd, buffer + bytes_read, haystack_len - bytes_read);
-        if (count < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
-            free(buffer);
-            close(fd);
-            result.status = -1;
-            return result;
-        }
-        if (count == 0) {
-            break;
-        }
-        bytes_read += (size_t)count;
-    }
+    result = rg_darwin_stream_literal_fd_lines(fd, (size_t)file_stat.st_size, needle, needle_len);
     close(fd);
-
-    result = rg_darwin_write_literal_bytes_case_sensitive(buffer, bytes_read, needle, needle_len);
-    free(buffer);
     return result;
 #endif
 }
