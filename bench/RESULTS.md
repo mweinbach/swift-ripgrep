@@ -23,11 +23,13 @@ benchmarks below use `/tmp/swift-rg-bench/subtitles/en.small.txt` (193 MiB).
 | byte alternation, 5 literals | `'A\|B\|C\|D\|E'` | 128.2 ms | 97.6 ms | **0.76x** |
 | required-literal regex with lines | `-n '\w+\s+Holmes\s+\w+'` | 33.7 ms | 32.3 ms | **0.96x** |
 
-The recursive Linux-kernel literal search is also much closer:
+The recursive Linux-kernel literal search now matches or beats Rust in this
+environment. A fresh confirmation run used 1 warm-up and 3 timed iterations
+for the default Swift worker count and Rust `rg`:
 
 | Bench | Flags | rg | swift-rg | swift / rg |
 |---|---|---:|---:|---:|
-| Linux tree literal | `PM_RESUME` | 3.65 s | 5.03 s | **1.38x** |
+| Linux tree literal | `PM_RESUME` | 3.73 s | 3.60 s | **0.96x** |
 
 The Linux-tree comparison above has byte-identical sorted output. Natural
 output order still differs from Rust for this corpus because the Swift walker
