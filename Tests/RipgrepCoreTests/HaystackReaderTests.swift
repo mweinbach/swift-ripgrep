@@ -4,13 +4,19 @@ import Testing
 
 @Suite("Haystack reader", .serialized)
 struct HaystackReaderTests {
-    @Test("small files use the buffered reader")
-    func smallFilesUseBufferedReader() throws {
+    @Test("small files use the platform automatic reader")
+    func smallFilesUsePlatformAutomaticReader() throws {
         let root = try TemporaryDirectory()
         try root.write("hello\n", to: "small.txt")
         let options = RipgrepOptions()
 
-        #expect(try HaystackReader.selectedPath(forFileAt: URL(fileURLWithPath: root.path("small.txt")), options: options) == .buffered)
+        #if canImport(Darwin)
+        let expectedPath = HaystackReader.ReadPath.mmap
+        #else
+        let expectedPath = HaystackReader.ReadPath.buffered
+        #endif
+
+        #expect(try HaystackReader.selectedPath(forFileAt: URL(fileURLWithPath: root.path("small.txt")), options: options) == expectedPath)
         #expect(try HaystackReader.read(Haystack(url: URL(fileURLWithPath: root.path("small.txt")), isExplicit: true), options: options) == Data("hello\n".utf8))
     }
 

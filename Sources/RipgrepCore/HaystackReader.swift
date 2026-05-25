@@ -8,7 +8,11 @@ struct HaystackReader {
     }
 
     static let bufferedChunkSize = 64 * 1024
+    #if canImport(Darwin)
+    static let automaticMmapThreshold = UInt64(1)
+    #else
     static let automaticMmapThreshold = UInt64(16 * 1024)
+    #endif
     static let defaultMaxBufferBytes = 256 * 1024 * 1024
 
     struct StreamedLine {
