@@ -61,25 +61,29 @@ const uint8_t *rg_memcasemem_ascii(
         return NULL;
     }
 
-    const uint8_t first = rg_ascii_lower(needle[0]);
-    const uint8_t *cursor = haystack;
-    const uint8_t *end = haystack + haystack_len - needle_len + 1;
-    while (cursor < end) {
-        while (cursor < end && rg_ascii_lower(*cursor) != first) {
-            cursor++;
+    size_t shifts[256];
+    for (size_t index = 0; index < 256; ++index) {
+        shifts[index] = needle_len;
+    }
+    for (size_t index = 0; index + 1 < needle_len; ++index) {
+        shifts[rg_ascii_lower(needle[index])] = needle_len - 1 - index;
+    }
+
+    size_t cursor = 0;
+    while (cursor + needle_len <= haystack_len) {
+        const uint8_t tail = rg_ascii_lower(haystack[cursor + needle_len - 1]);
+        if (tail == rg_ascii_lower(needle[needle_len - 1])) {
+            size_t offset = 0;
+            while (offset < needle_len
+                   && rg_ascii_lower(haystack[cursor + offset]) == rg_ascii_lower(needle[offset])) {
+                offset++;
+            }
+            if (offset == needle_len) {
+                return haystack + cursor;
+            }
         }
-        if (cursor >= end) {
-            return NULL;
-        }
-        size_t offset = 1;
-        while (offset < needle_len
-               && rg_ascii_lower(cursor[offset]) == rg_ascii_lower(needle[offset])) {
-            offset++;
-        }
-        if (offset == needle_len) {
-            return cursor;
-        }
-        cursor++;
+        const size_t shift = shifts[tail];
+        cursor += shift == 0 ? 1 : shift;
     }
     return NULL;
 }
