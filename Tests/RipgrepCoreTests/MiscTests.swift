@@ -75,6 +75,20 @@ struct MiscTests {
         #expect(mmapResults?.summary.matchedLines == 1)
         #expect(mmapOutput == Data("delta\n".utf8))
 
+        var fixedOptions = options
+        fixedOptions.pattern = "charlie"
+        fixedOptions.fixedStrings = true
+        var fixedOutput = Data()
+        let fixedResults = try RipgrepSearcher().writeDarwinSimpleByteLiteralLines(options: fixedOptions) { buffer in
+            let bytes = buffer.bindMemory(to: UInt8.self)
+            guard let baseAddress = bytes.baseAddress else {
+                return
+            }
+            fixedOutput.append(baseAddress, count: bytes.count)
+        }
+        #expect(fixedResults?.summary.matchedLines == 1)
+        #expect(fixedOutput == Data("charlie\n".utf8))
+
         var wordOptions = options
         wordOptions.pattern = "ha"
         wordOptions.wordRegexp = true
