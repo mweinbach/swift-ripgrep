@@ -32,6 +32,8 @@ private struct SearchWorkItem: Sendable {
     let url: URL
     let isExplicit: Bool
     let overridePath: String
+    let fileSize: UInt64?
+    let isRegularFile: Bool?
 }
 
 private actor ParallelSearchState {
@@ -825,7 +827,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 index: index,
                 url: haystack.url,
                 isExplicit: haystack.isExplicit,
-                overridePath: haystack.overridePath
+                overridePath: haystack.overridePath,
+                fileSize: haystack.fileSize,
+                isRegularFile: haystack.isRegularFile
             )
         }
         return try runParallelSearch(items: items, options: options, workerCount: min(workerCount, items.count))
@@ -876,7 +880,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         let haystack = Haystack(
                             url: item.url,
                             isExplicit: item.isExplicit,
-                            overridePath: item.overridePath
+                            overridePath: item.overridePath,
+                            fileSize: item.fileSize,
+                            isRegularFile: item.isRegularFile
                         )
                         let outcome = searchFile(haystack, matcher: matcher, options: options)
                         await state.store(item, outcome: outcome)
