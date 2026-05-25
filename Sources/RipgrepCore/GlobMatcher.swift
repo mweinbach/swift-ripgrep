@@ -354,7 +354,7 @@ public struct GlobMatcher: Equatable {
         }
         if hasSimpleGlobMeta {
             #if canImport(Darwin)
-            if basenameOnly, let simpleGlob = compileSimpleGlob(pattern) {
+            if let simpleGlob = compileSimpleGlob(pattern, basenameOnly: basenameOnly) {
                 return .simpleGlob(simpleGlob)
             }
             #endif
@@ -388,6 +388,11 @@ public struct GlobMatcher: Equatable {
             let needle = pattern.dropFirst().dropLast()
             return needle.isEmpty ? .any : .contains(String(needle))
         }
+        #if canImport(Darwin)
+        if let simpleGlob = compileSimpleGlob(pattern, basenameOnly: basenameOnly) {
+            return .simpleGlob(simpleGlob)
+        }
+        #endif
         return nil
     }
 
@@ -428,24 +433,27 @@ public struct GlobMatcher: Equatable {
     }
 
     private func token(_ token: SimpleGlob.Token, matches byte: UInt8) -> Bool {
-        guard byte != UInt8(ascii: "/") else {
-            return false
-        }
         switch token {
         case .literal(let expected):
             return byte == expected
         case .any:
-            return true
+            return byte != UInt8(ascii: "/")
         case .star:
             return false
         case .charClass(let ranges, let negated):
+            guard byte != UInt8(ascii: "/") else {
+                return false
+            }
             let contains = ranges.contains { $0.contains(byte) }
             return negated ? !contains : contains
         }
     }
 
-    private static func compileSimpleGlob(_ pattern: String) -> SimpleGlob? {
+    private static func compileSimpleGlob(_ pattern: String, basenameOnly: Bool) -> SimpleGlob? {
         guard pattern.utf8.allSatisfy({ $0 < 0x80 }) else {
+            return nil
+        }
+        if !basenameOnly, pattern.contains("**") {
             return nil
         }
 

@@ -3324,6 +3324,20 @@ struct FeatureTests {
             slashScoped.path("src/vendor/keep.rs"),
         ])
 
+        let anchoredSlashGlob = try TemporaryDirectory()
+        try anchoredSlashGlob.createDirectory(".git")
+        try anchoredSlashGlob.createDirectory("arch/arm64/include/generated")
+        try anchoredSlashGlob.createDirectory("arch/arm64/include/manual")
+        try anchoredSlashGlob.createDirectory("src/arch/arm64/include/generated")
+        try anchoredSlashGlob.write("/arch/*/include/generated/\n", to: ".gitignore")
+        try anchoredSlashGlob.write("needle\n", to: "arch/arm64/include/generated/skip.h")
+        try anchoredSlashGlob.write("needle\n", to: "arch/arm64/include/manual/keep.h")
+        try anchoredSlashGlob.write("needle\n", to: "src/arch/arm64/include/generated/keep.h")
+        #expect(try run(["--sort", "path", "--files", anchoredSlashGlob.url.path]) == [
+            anchoredSlashGlob.path("arch/arm64/include/manual/keep.h"),
+            anchoredSlashGlob.path("src/arch/arm64/include/generated/keep.h"),
+        ])
+
         let reinclude = try TemporaryDirectory()
         try reinclude.createDirectory(".git")
         try reinclude.createDirectory("tools/perf/include/perf")

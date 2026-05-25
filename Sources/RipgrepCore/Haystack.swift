@@ -231,14 +231,25 @@ public struct FileWalker {
         options: RipgrepOptions
     ) throws -> [Haystack] {
         let metadataURL = physicalURL ?? url
-        let values = try metadataURL.resourceValues(forKeys: [
+        #if canImport(Darwin)
+        let metadataKeys: Set<URLResourceKey> = [
+            .isDirectoryKey,
+            .isRegularFileKey,
+            .isSymbolicLinkKey,
+            .nameKey,
+            .fileSizeKey,
+        ]
+        #else
+        let metadataKeys: Set<URLResourceKey> = [
             .isDirectoryKey,
             .isRegularFileKey,
             .isSymbolicLinkKey,
             .nameKey,
             .fileSizeKey,
             .volumeIdentifierKey,
-        ])
+        ]
+        #endif
+        let values = try metadataURL.resourceValues(forKeys: metadataKeys)
         let isDirectory = values.isDirectory == true
         let relativePath = relativePath(for: url, rootBase: rootBase, rootBasePrefix: rootBasePrefix)
         let overridePath = overridePath(for: url, rootArgumentIsAbsolute: rootArgumentIsAbsolute, cwdPrefix: cwdPrefix)
