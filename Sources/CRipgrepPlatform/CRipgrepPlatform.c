@@ -88,6 +88,48 @@ const uint8_t *rg_memcasemem_ascii(
     return NULL;
 }
 
+const uint8_t *rg_memcasemem_ascii_prepared(
+    const uint8_t *haystack,
+    size_t haystack_len,
+    const uint8_t *folded_needle,
+    size_t needle_len,
+    const size_t shifts[256]
+) {
+    if (needle_len == 0) {
+        return haystack;
+    }
+    if (haystack_len < needle_len) {
+        return NULL;
+    }
+    if (needle_len == 1) {
+        const uint8_t folded = folded_needle[0];
+        for (size_t index = 0; index < haystack_len; ++index) {
+            if (rg_ascii_lower(haystack[index]) == folded) {
+                return haystack + index;
+            }
+        }
+        return NULL;
+    }
+
+    size_t cursor = 0;
+    while (cursor + needle_len <= haystack_len) {
+        const uint8_t tail = rg_ascii_lower(haystack[cursor + needle_len - 1]);
+        if (tail == folded_needle[needle_len - 1]) {
+            size_t offset = 0;
+            while (offset < needle_len
+                   && rg_ascii_lower(haystack[cursor + offset]) == folded_needle[offset]) {
+                offset++;
+            }
+            if (offset == needle_len) {
+                return haystack + cursor;
+            }
+        }
+        const size_t shift = shifts[tail];
+        cursor += shift == 0 ? 1 : shift;
+    }
+    return NULL;
+}
+
 void rg_byte_set_init(
     uint8_t table[256],
     const uint8_t *needles,

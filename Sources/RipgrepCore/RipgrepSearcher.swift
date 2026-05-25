@@ -537,16 +537,32 @@ public struct RipgrepSearcher: @unchecked Sendable {
                let literal = literals.first {
                 var searchOffset = 0
                 var lastEmittedLineStart: Int?
+                var foldedLiteral: [UInt8] = []
+                var caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
+                if fastPath.caseInsensitiveASCII {
+                    foldedLiteral = literal.map(asciiLowercase)
+                    if literal.count > 1 {
+                        for index in 0..<(foldedLiteral.count - 1) {
+                            caseInsensitiveShifts[Int(foldedLiteral[index])] = literal.count - 1 - index
+                        }
+                    }
+                }
                 while searchOffset < data.count, matchedLineCount < maxCount {
-                    let foundPointer = literal.withUnsafeBufferPointer { needle in
-                        if fastPath.caseInsensitiveASCII {
-                            rg_memcasemem_ascii(
-                                baseAddress.advanced(by: searchOffset),
-                                data.count - searchOffset,
-                                needle.baseAddress,
-                                needle.count
-                            )
-                        } else {
+                    let foundPointer: UnsafePointer<UInt8>?
+                    if fastPath.caseInsensitiveASCII {
+                        foundPointer = foldedLiteral.withUnsafeBufferPointer { foldedNeedle in
+                            caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
+                                rg_memcasemem_ascii_prepared(
+                                    baseAddress.advanced(by: searchOffset),
+                                    data.count - searchOffset,
+                                    foldedNeedle.baseAddress,
+                                    foldedNeedle.count,
+                                    shifts.baseAddress
+                                )
+                            }
+                        }
+                    } else {
+                        foundPointer = literal.withUnsafeBufferPointer { needle in
                             rg_memmem_simple(
                                 baseAddress.advanced(by: searchOffset),
                                 data.count - searchOffset,
