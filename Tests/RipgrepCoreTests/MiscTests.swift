@@ -316,6 +316,20 @@ struct MiscTests {
         ], fixture: {})
 
         #expect(String(decoding: output, as: UTF8.self) == "bravo\ndelta\n")
+
+        let onlyMatchingOutput = try runExecutableData([
+            "-o",
+            "b|d",
+            root.path("letters.txt"),
+        ], fixture: {})
+        let countMatchesOutput = try runExecutableData([
+            "--count-matches",
+            "b|d",
+            root.path("letters.txt"),
+        ], fixture: {})
+
+        #expect(onlyMatchingOutput == Data("b\nd\n".utf8))
+        #expect(countMatchesOutput == Data("2\n".utf8))
         #endif
     }
 

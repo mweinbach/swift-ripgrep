@@ -40,6 +40,13 @@ to Rust and measured Swift release at 87.7 ms versus 1.090 s for Rust in
 72.8 ms versus 1.420 s for Rust. These whole-line field cases previously fell
 through the formatted Swift path at about 11.0 s on the same corpus.
 
+Single-byte alternation only-match and count-match output now stays correct on
+the byte-set scanner instead of printing whole lines. On the 193 MiB subtitles
+corpus, `-o 'A|B|C|D|E'` produced byte-identical output to Rust and measured
+Swift release at 270.7 ms versus 3.896 s for Rust in 3-run checks.
+`--count-matches 'A|B|C|D|E'` measured Swift at 164.7 ms versus 3.660 s for
+Rust, also with byte-identical output.
+
 A 3-run PCRE compatibility check for `-P -o '(?<=Sherlock )Holmes'` on the
 same 193 MiB file produced byte-identical output to Rust and measured Swift at
 141.4 ms versus Rust PCRE2 at 214.9 ms (**0.66x**). The same query took about
@@ -125,6 +132,10 @@ The key improvements since the 2026-05-24 baseline are:
   the same direct line writer, cutting representative line field output from
   about 11.0 s to 72.8-87.7 ms while preserving Rust field ordering and
   byte-identical output;
+- single-byte alternation `-o` and `--count-matches` output now stays on the
+  byte-set scanner with correct per-match output, measuring 270.7 ms and
+  164.7 ms respectively on the representative subtitles corpus while matching
+  Rust byte-for-byte;
 - NEON-backed literal, byte-counting, and byte-set scanning in
   `CRipgrepPlatform`;
 - suppressed optional ignore-file loads now check existence before attempting

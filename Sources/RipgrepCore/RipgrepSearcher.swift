@@ -580,7 +580,11 @@ public struct RipgrepSearcher: @unchecked Sendable {
 
         guard let fastPath = byteLiteralFastPath,
               !fastPath.literals.isEmpty,
-              fastPath.literals.allSatisfy({ !$0.isEmpty }),
+              fastPath.literals.allSatisfy({ !$0.isEmpty }) else {
+            return nil
+        }
+        let fastPathByteSet = singleByteLiteralSet(fastPath.literals)
+        guard (!options.onlyMatching || fastPath.literals.count == 1 || fastPathByteSet != nil),
               (!options.byteOffset && !options.column
                 || (options.printMode == .matchingLines && fastPath.literals.count == 1)),
               canWriteDarwinSimpleByteLiteralFastPath(fastPath) else {
@@ -882,8 +886,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 return
             }
 
-            if let byteSet = singleByteLiteralSet(literals) {
+            if let byteSet = fastPathByteSet {
                 var searchOffset = 0
+                var lastMatchedLineStart: Int?
                 while searchOffset < data.count, matchedLineCount < maxCount {
                     let foundPointer = byteSet.withUnsafeBufferPointer { needles in
                         rg_memchr_any_bytes(
@@ -908,6 +913,33 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         outputEnd = baseAddress.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self)) + 1
                     } else {
                         outputEnd = data.count
+                    }
+                    if countMatchesOnly || onlyMatching {
+                        totalMatchCount += 1
+                        if lastMatchedLineStart != lineStart {
+                            matchedLineCount += 1
+                            lastMatchedLineStart = lineStart
+                        }
+                        if onlyMatching {
+                            advanceLineNumber(to: lineStart)
+                            writeDarwinOnlyMatchingPrefixes(
+                                lineNumber: lineNumber,
+                                column: matchStart - lineStart + 1,
+                                byteOffset: matchStart,
+                                options: options,
+                                writeBytes: writeBytes
+                            )
+                            writeBytes(UnsafeRawBufferPointer(
+                                start: rawBaseAddress.advanced(by: matchStart),
+                                count: 1
+                            ))
+                            var newline = UInt8(ascii: "\n")
+                            withUnsafeBytes(of: &newline) { buffer in
+                                writeBytes(buffer)
+                            }
+                        }
+                        searchOffset = matchStart + 1
+                        continue
                     }
                     matchedLineCount += 1
                     if !countOnly {
