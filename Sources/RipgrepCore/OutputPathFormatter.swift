@@ -113,11 +113,19 @@ struct OutputPathFormatter {
     }
 
     private func normalizedPath(_ path: String, applyingPathSeparator: Bool) -> String {
-        let normalizedPath = path.precomposedStringWithCanonicalMapping
+        let normalizedPath = path.utf8.allSatisfy(\.isASCII)
+            ? path
+            : path.precomposedStringWithCanonicalMapping
         guard applyingPathSeparator, let pathSeparator = options.pathSeparator else {
             return normalizedPath
         }
         return String(normalizedPath.map { $0 == "/" ? pathSeparator : $0 })
+    }
+}
+
+private extension UInt8 {
+    var isASCII: Bool {
+        self < 0x80
     }
 }
 

@@ -23,17 +23,23 @@ benchmarks below use `/tmp/swift-rg-bench/subtitles/en.small.txt` (193 MiB).
 | byte alternation, 5 literals | `'A\|B\|C\|D\|E'` | 128.2 ms | 97.6 ms | **0.76x** |
 | required-literal regex with lines | `-n '\w+\s+Holmes\s+\w+'` | 33.7 ms | 32.3 ms | **0.96x** |
 
-The recursive Linux-kernel literal search now matches or beats Rust in this
-environment. A fresh confirmation run used 2 warm-ups and 6 timed iterations
-for the default Swift worker count and Rust `rg`:
+The recursive Linux-kernel traversal/search path now matches or beats Rust in
+this environment for the default literal search. A fresh confirmation run used
+2 warm-ups and 6 timed iterations for the default Swift worker count and Rust
+`rg`:
 
 | Bench | Flags | rg | swift-rg | swift / rg |
 |---|---|---:|---:|---:|
-| Linux tree literal | `PM_RESUME` | 3.91 s | 3.51 s | **0.89x** |
+| Linux tree files | `--files` | 88.4 ms | 1.43 s | **16.14x** |
+| Linux tree files, quiet | `--quiet --files` | 6.23 ms | 42.2 ms | **6.77x** |
+| Linux tree literal | `PM_RESUME` | 4.04 s | 2.53 s | **0.63x** |
 
-The Linux-tree comparison above has byte-identical sorted output. Natural
-output order still differs from Rust for this corpus because the Swift walker
-preserves its own deterministic traversal order under parallel search.
+The Linux-tree comparisons above have byte-identical sorted output, including
+the 79,353-path `--files` set. Natural output order still differs from Rust for
+this corpus because the Swift walker preserves its own deterministic traversal
+order under parallel search. The latest traversal slice reduced the Swift
+`--files` median from 2.55 s to 1.43 s and the Swift `PM_RESUME` median from
+3.52 s to 2.53 s versus the previous 9d99dd0 checkpoint on the same corpus.
 
 The key improvements since the 2026-05-24 baseline are:
 
@@ -47,6 +53,14 @@ The key improvements since the 2026-05-24 baseline are:
 - recursive walking now appends into a single accumulator instead of returning
   and merging per-directory arrays, cutting same-load Swift `PM_RESUME` median
   from 3.58 s to 3.46 s;
+- Darwin traversal now uses POSIX `fstatat` metadata instead of per-entry
+  `URL.resourceValues`, avoids Foundation resource prefetch for directory
+  listings, records ignore marker names while reading directory entries, and
+  threads child metadata and relative paths through recursion;
+- `--quiet --files` now stops after the first searchable haystack when sorting
+  and debug logging are off, while preserving missing-root diagnostics;
+- path rendering skips Unicode precomposition for ASCII paths and `--files`
+  output no longer materializes a second full path-string array;
 - byte-literal fast-path detection is cached per worker matcher, and the
   streaming fallback probe reuses walker metadata instead of restatting files;
 - Darwin default recursive search remains capped at four workers because this

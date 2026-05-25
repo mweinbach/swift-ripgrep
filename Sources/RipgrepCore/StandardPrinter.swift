@@ -188,7 +188,11 @@ public struct StandardPrinter {
     }
 
     public func paths(_ urls: [URL]) -> [String] {
-        urls.map { "\(renderPath(for: $0))\(pathTerminator())" }
+        urls.map { path(for: $0) }
+    }
+
+    public func path(for url: URL) -> String {
+        "\(renderPath(for: url))\(pathTerminator())"
     }
 
     private func format(_ match: SearchMatch, showPath: Bool) -> String {

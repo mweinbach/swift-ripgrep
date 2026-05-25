@@ -3026,6 +3026,17 @@ struct FeatureTests {
         output = []
         errors = []
         exitCode = RipgrepCLI.run(
+            arguments: ["--files", "--quiet", root.url.path, "missing"],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(output.isEmpty)
+        #expect(errors == ["rg: missing: No such file or directory (os error 2)"])
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
             arguments: ["--files", "--quiet", "missing"],
             stdout: { output.append($0) },
             stderr: { errors.append($0) }

@@ -86,13 +86,22 @@ public enum RipgrepCLI {
 
                 if options.mode == .files {
                     let walkResults = try searcher.walkFilesWithMessages(options: options)
-                    var files = walkResults.haystacks.map(\.url)
+                    var stdinAdjustedFiles: [URL]?
                     if options.useStdin {
-                        files = filesModePathsWithStdin(files, options: options)
+                        stdinAdjustedFiles = filesModePathsWithStdin(walkResults.haystacks.map(\.url), options: options)
                     }
+                    let hasFiles = stdinAdjustedFiles?.isEmpty == false || (stdinAdjustedFiles == nil && !walkResults.haystacks.isEmpty)
                     if !options.quiet {
-                        for line in printer.paths(files) {
-                            emitStdout(line, stdout: stdout, suppressNewlineForTrailingNul: options.nullPathTerminator)
+                        if let stdinAdjustedFiles {
+                            for url in stdinAdjustedFiles {
+                                let line = printer.path(for: url)
+                                emitStdout(line, stdout: stdout, suppressNewlineForTrailingNul: options.nullPathTerminator)
+                            }
+                        } else {
+                            for haystack in walkResults.haystacks {
+                                let line = printer.path(for: haystack.url)
+                                emitStdout(line, stdout: stdout, suppressNewlineForTrailingNul: options.nullPathTerminator)
+                            }
                         }
                     }
                     for diagnostic in walkResults.diagnostics {
@@ -104,14 +113,14 @@ public enum RipgrepCLI {
                         }
                     }
                     if !walkResults.messages.isEmpty {
-                        if files.isEmpty {
+                        if !hasFiles {
                             return 2
                         }
                         if !options.quiet {
                             return 2
                         }
                     }
-                    return files.isEmpty ? 1 : 0
+                    return hasFiles ? 0 : 1
                 }
                 if options.mode == .types {
                     var registry = FileTypeRegistry()

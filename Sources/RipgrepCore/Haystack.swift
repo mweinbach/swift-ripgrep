@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#endif
 
 public struct Haystack: Equatable, Sendable {
     public let url: URL
@@ -55,6 +58,27 @@ private struct DirectoryVisit {
     let physicalPath: String
 }
 
+private struct DirectoryChild {
+    let url: URL
+    let name: String
+    let metadata: WalkMetadata?
+}
+
+private struct DirectoryContents {
+    let children: [DirectoryChild]
+    let hasGitMarker: Bool
+    let hasGitignore: Bool
+    let hasIgnore: Bool
+    let hasRgignore: Bool
+}
+
+private struct WalkMetadata {
+    let isDirectory: Bool
+    let isRegularFile: Bool
+    let isSymbolicLink: Bool
+    let fileSize: UInt64?
+}
+
 public struct FileWalker {
     private let fileManager: FileManager
     private let environment: [String: String]
@@ -106,6 +130,10 @@ public struct FileWalker {
             throw RipgrepError.message(error)
         }
 
+        let shouldStopAfterFirstHaystack = options.mode == .files
+            && options.quiet
+            && options.sortMode == nil
+            && options.loggingMode == nil
         let rootExistence = options.effectiveRoots.map { fileManager.fileExists(atPath: $0.path) }
         let hasExistingRoot = rootExistence.contains(true)
         for (offset, root) in options.effectiveRoots.enumerated() {
@@ -117,6 +145,9 @@ public struct FileWalker {
             guard offset < rootExistence.count, rootExistence[offset] else {
                 let displayPath = rootDisplayPath(at: offset, root: root, options: options)
                 messages.append(missingRootMessage(displayPath, options: options, hasExistingRoot: hasExistingRoot))
+                continue
+            }
+            if shouldStopAfterFirstHaystack && !haystacks.isEmpty {
                 continue
             }
             let rootBase = rootBase(for: root.standardizedFileURL)
@@ -158,6 +189,8 @@ public struct FileWalker {
             let rootVolume = options.oneFileSystem ? volumeIdentifier(for: root.standardizedFileURL) : nil
             let rootBasePath = rootBase.standardizedFileURL.path
             let rootBasePrefix = rootBasePath.hasSuffix("/") ? rootBasePath : "\(rootBasePath)/"
+            let rootPath = root.standardizedFileURL.path
+            let rootRelativePathOverride = rootPath == rootBasePath ? "" : nil
             let rootVCSContext = options.noRequireGit || isInGitRepository(rootBase)
             let cwdPath = URL(fileURLWithPath: fileManager.currentDirectoryPath, isDirectory: true)
                 .standardizedFileURL
@@ -185,7 +218,11 @@ public struct FileWalker {
                 overrides: overrides,
                 typeRegistry: typeRegistry,
                 options: options,
-                haystacks: &walked
+                haystacks: &walked,
+                metadataOverride: nil,
+                relativePathOverride: rootRelativePathOverride,
+                fileName: nil,
+                shouldStopAfterFirstHaystack: shouldStopAfterFirstHaystack
             )
             haystacks.append(contentsOf: sorted(walked, options: options))
         }
@@ -235,30 +272,16 @@ public struct FileWalker {
         overrides: GlobMatcher,
         typeRegistry: FileTypeRegistry,
         options: RipgrepOptions,
-        haystacks: inout [Haystack]
+        haystacks: inout [Haystack],
+        metadataOverride: WalkMetadata? = nil,
+        relativePathOverride: String? = nil,
+        fileName: String? = nil,
+        shouldStopAfterFirstHaystack: Bool = false
     ) throws {
         let metadataURL = physicalURL ?? url
-        #if canImport(Darwin)
-        let metadataKeys: Set<URLResourceKey> = [
-            .isDirectoryKey,
-            .isRegularFileKey,
-            .isSymbolicLinkKey,
-            .nameKey,
-            .fileSizeKey,
-        ]
-        #else
-        let metadataKeys: Set<URLResourceKey> = [
-            .isDirectoryKey,
-            .isRegularFileKey,
-            .isSymbolicLinkKey,
-            .nameKey,
-            .fileSizeKey,
-            .volumeIdentifierKey,
-        ]
-        #endif
-        let values = try metadataURL.resourceValues(forKeys: metadataKeys)
-        let isDirectory = values.isDirectory == true
-        let relativePath = relativePath(for: url, rootBase: rootBase, rootBasePrefix: rootBasePrefix)
+        let values = try metadataOverride ?? metadata(for: metadataURL, followingSymlinks: false)
+        let isDirectory = values.isDirectory
+        let relativePath = relativePathOverride ?? relativePath(for: url, rootBase: rootBase, rootBasePrefix: rootBasePrefix)
         #if canImport(Darwin)
         let needsOverridePath = !overrides.isEmpty || (options.preprocessor != nil && !options.preGlobPatterns.isEmpty)
         let overridePath = needsOverridePath
@@ -292,7 +315,7 @@ public struct FileWalker {
             }
             if !isIncludedByOverride,
                !options.hidden,
-               isHidden(url),
+               isHiddenName(fileName ?? url.lastPathComponent),
                (isDirectory || !typeRegistry.selectedTypeAllows(path: relativePath)),
                !isIncludedByIgnore(relativePath: relativePath, isDirectory: isDirectory, ignoreStack: ignoreStack) {
                 debugHiddenMatch(
@@ -331,27 +354,23 @@ public struct FileWalker {
             }
         }
 
-        if values.isSymbolicLink == true && !options.followSymlinks && !isExplicit {
+        if values.isSymbolicLink && !options.followSymlinks && !isExplicit {
             return
         }
 
-        let resolvedURL = values.isSymbolicLink == true && (options.followSymlinks || isExplicit)
+        let resolvedURL = values.isSymbolicLink && (options.followSymlinks || isExplicit)
             ? url.resolvingSymlinksInPath()
             : metadataURL
-        if values.isSymbolicLink == true,
+        if values.isSymbolicLink,
            (options.followSymlinks || isExplicit),
            !fileManager.fileExists(atPath: resolvedURL.path) {
             messages.append(fileSystemMessage(for: url, errno: ENOENT))
             return
         }
-        let resolvedValues: URLResourceValues
-        if values.isSymbolicLink == true && (options.followSymlinks || isExplicit) {
+        let resolvedValues: WalkMetadata
+        if values.isSymbolicLink && (options.followSymlinks || isExplicit) {
             do {
-                resolvedValues = try resolvedURL.resourceValues(forKeys: [
-                    .isDirectoryKey,
-                    .isRegularFileKey,
-                    .nameKey,
-                ])
+                resolvedValues = try metadata(for: resolvedURL, followingSymlinks: true)
             } catch {
                 messages.append(fileSystemMessage(for: url, error: error))
                 return
@@ -360,11 +379,11 @@ public struct FileWalker {
             resolvedValues = values
         }
 
-        if resolvedValues.isRegularFile == true {
+        if resolvedValues.isRegularFile {
             if !isExplicit,
                let maxFileSize = options.maxFileSize,
                let fileSize = values.fileSize,
-               UInt64(fileSize) > maxFileSize {
+               fileSize > maxFileSize {
                 debug("ignoring \(url.path): \(fileSize) bytes exceeds max filesize \(maxFileSize)", options: options, diagnostics: &diagnostics)
                 return
             }
@@ -372,13 +391,13 @@ public struct FileWalker {
                 url: url,
                 isExplicit: isExplicit,
                 overridePath: overridePath,
-                fileSize: resolvedValues.fileSize.map { UInt64(max(0, $0)) },
+                fileSize: resolvedValues.fileSize,
                 isRegularFile: true
             ))
             return
         }
 
-        guard resolvedValues.isDirectory == true else {
+        guard resolvedValues.isDirectory else {
             return
         }
         let resolvedDirectoryPath = resolvedURL.standardizedFileURL.path
@@ -399,7 +418,8 @@ public struct FileWalker {
             return
         }
 
-        let directoryVCSContext = vcsContext || (!options.noIgnoreVCS && hasGitMarker(in: resolvedURL))
+        let directoryContents = try directoryContents(at: resolvedURL)
+        let directoryVCSContext = vcsContext || (!options.noIgnoreVCS && directoryContents.hasGitMarker)
         var directoryIgnoreStack = ignoreStack
         if !options.noIgnore {
             appendIgnoreFiles(
@@ -412,6 +432,7 @@ public struct FileWalker {
                 rootDebugDisplayPath: rootDebugDisplayPath,
                 rootArgumentIsAbsolute: rootArgumentIsAbsolute,
                 vcsContext: directoryVCSContext,
+                directoryContents: directoryContents,
                 options: options
             )
         }
@@ -420,22 +441,12 @@ public struct FileWalker {
             logicalURL: url,
             physicalPath: resolvedDirectoryPath
         )]
-        let children = try fileManager.contentsOfDirectory(
-            at: resolvedURL,
-            includingPropertiesForKeys: [
-                .isDirectoryKey,
-                .isRegularFileKey,
-                .isSymbolicLinkKey,
-                .nameKey,
-            ],
-            options: []
-        )
-
-        for child in children {
-            let childURL = url.appendingPathComponent(child.lastPathComponent)
+        for child in directoryContents.children {
+            let childURL = url.appendingPathComponent(child.name)
+            let childRelativePath = relativePath.isEmpty ? child.name : "\(relativePath)/\(child.name)"
             try walk(
                 childURL,
-                physicalURL: child,
+                physicalURL: child.url,
                 isExplicit: false,
                 depth: depth + 1,
                 ancestors: childAncestors,
@@ -454,10 +465,185 @@ public struct FileWalker {
                 overrides: overrides,
                 typeRegistry: typeRegistry,
                 options: options,
-                haystacks: &haystacks
+                haystacks: &haystacks,
+                metadataOverride: child.metadata,
+                relativePathOverride: childRelativePath,
+                fileName: child.name,
+                shouldStopAfterFirstHaystack: shouldStopAfterFirstHaystack
             )
+            if shouldStopAfterFirstHaystack && !haystacks.isEmpty {
+                break
+            }
         }
     }
+
+    private func directoryContents(at url: URL) throws -> DirectoryContents {
+        #if canImport(Darwin)
+        guard let directory = opendir(url.path) else {
+            throw NSError(
+                domain: NSPOSIXErrorDomain,
+                code: Int(errno),
+                userInfo: [NSFilePathErrorKey: url.path]
+            )
+        }
+        defer {
+            closedir(directory)
+        }
+
+        var children: [DirectoryChild] = []
+        var hasGitMarker = false
+        var hasGitignore = false
+        var hasIgnore = false
+        var hasRgignore = false
+        let directoryFileDescriptor = dirfd(directory)
+        while let entryPointer = readdir(directory) {
+            let entry = entryPointer.pointee
+            let name = withUnsafePointer(to: entry.d_name) { pointer in
+                pointer.withMemoryRebound(to: CChar.self, capacity: Int(entry.d_namlen) + 1) {
+                    String(cString: $0)
+                }
+            }
+            if name == "." || name == ".." {
+                continue
+            }
+            switch name {
+            case ".git":
+                hasGitMarker = true
+            case ".gitignore":
+                hasGitignore = true
+            case ".ignore":
+                hasIgnore = true
+            case ".rgignore":
+                hasRgignore = true
+            default:
+                break
+            }
+            let childMetadata = try metadata(
+                named: name,
+                directoryFileDescriptor: directoryFileDescriptor,
+                followingSymlinks: false
+            )
+            children.append(DirectoryChild(
+                url: url.appendingPathComponent(name),
+                name: name,
+                metadata: childMetadata
+            ))
+        }
+        return DirectoryContents(
+            children: children,
+            hasGitMarker: hasGitMarker,
+            hasGitignore: hasGitignore,
+            hasIgnore: hasIgnore,
+            hasRgignore: hasRgignore
+        )
+        #else
+        let urls = try fileManager.contentsOfDirectory(
+            at: url,
+            includingPropertiesForKeys: [
+                .isDirectoryKey,
+                .isRegularFileKey,
+                .isSymbolicLinkKey,
+                .nameKey,
+            ],
+            options: []
+        )
+        var children: [DirectoryChild] = []
+        children.reserveCapacity(urls.count)
+        var hasGitMarker = false
+        var hasGitignore = false
+        var hasIgnore = false
+        var hasRgignore = false
+        for child in urls {
+            let name = child.lastPathComponent
+            switch name {
+            case ".git":
+                hasGitMarker = true
+            case ".gitignore":
+                hasGitignore = true
+            case ".ignore":
+                hasIgnore = true
+            case ".rgignore":
+                hasRgignore = true
+            default:
+                break
+            }
+            children.append(DirectoryChild(url: child, name: name, metadata: nil))
+        }
+        return DirectoryContents(
+            children: children,
+            hasGitMarker: hasGitMarker,
+            hasGitignore: hasGitignore,
+            hasIgnore: hasIgnore,
+            hasRgignore: hasRgignore
+        )
+        #endif
+    }
+
+    private func metadata(for url: URL, followingSymlinks: Bool) throws -> WalkMetadata {
+        #if canImport(Darwin)
+        var statBuffer = stat()
+        let status = url.path.withCString { path in
+            Darwin.fstatat(AT_FDCWD, path, &statBuffer, followingSymlinks ? 0 : AT_SYMLINK_NOFOLLOW)
+        }
+        guard status == 0 else {
+            throw NSError(
+                domain: NSPOSIXErrorDomain,
+                code: Int(errno),
+                userInfo: [NSFilePathErrorKey: url.path]
+            )
+        }
+        return metadata(from: statBuffer, followingSymlinks: followingSymlinks)
+        #else
+        let values = try url.resourceValues(forKeys: [
+            .isDirectoryKey,
+            .isRegularFileKey,
+            .isSymbolicLinkKey,
+            .fileSizeKey,
+            .volumeIdentifierKey,
+        ])
+        return WalkMetadata(
+            isDirectory: values.isDirectory == true,
+            isRegularFile: values.isRegularFile == true,
+            isSymbolicLink: !followingSymlinks && values.isSymbolicLink == true,
+            fileSize: values.fileSize.map { UInt64(max(0, $0)) }
+        )
+        #endif
+    }
+
+    #if canImport(Darwin)
+    private func metadata(
+        named name: String,
+        directoryFileDescriptor: Int32,
+        followingSymlinks: Bool
+    ) throws -> WalkMetadata {
+        var statBuffer = stat()
+        let status = name.withCString { childName in
+            Darwin.fstatat(
+                directoryFileDescriptor,
+                childName,
+                &statBuffer,
+                followingSymlinks ? 0 : AT_SYMLINK_NOFOLLOW
+            )
+        }
+        guard status == 0 else {
+            throw NSError(
+                domain: NSPOSIXErrorDomain,
+                code: Int(errno),
+                userInfo: [NSFilePathErrorKey: name]
+            )
+        }
+        return metadata(from: statBuffer, followingSymlinks: followingSymlinks)
+    }
+
+    private func metadata(from statBuffer: stat, followingSymlinks: Bool) -> WalkMetadata {
+        WalkMetadata(
+            isDirectory: (statBuffer.st_mode & S_IFMT) == S_IFDIR,
+            isRegularFile: (statBuffer.st_mode & S_IFMT) == S_IFREG,
+            isSymbolicLink: !followingSymlinks && (statBuffer.st_mode & S_IFMT) == S_IFLNK,
+            fileSize: statBuffer.st_size >= 0 ? UInt64(statBuffer.st_size) : 0
+        )
+    }
+    #endif
 
     private func fileSystemMessage(for url: URL, error: Error) -> String {
         if let cocoaError = error as? CocoaError,
@@ -619,7 +805,11 @@ public struct FileWalker {
     }
 
     private func isHidden(_ url: URL) -> Bool {
-        url.lastPathComponent.hasPrefix(".")
+        isHiddenName(url.lastPathComponent)
+    }
+
+    private func isHiddenName(_ name: String) -> Bool {
+        name.hasPrefix(".")
     }
 
     private func isIncludedByIgnore(relativePath: String, isDirectory: Bool, ignoreStack: IgnoreStack) -> Bool {
@@ -1335,45 +1525,50 @@ public struct FileWalker {
         rootDebugDisplayPath: String,
         rootArgumentIsAbsolute: Bool,
         vcsContext: Bool,
+        directoryContents: DirectoryContents? = nil,
         options: RipgrepOptions
     ) {
         let scopeDirectory = logicalDirectory ?? directoryURL
         if !options.noIgnoreDot {
-            let ignoreURL = directoryURL.appendingPathComponent(".ignore")
-            appendLoadedMatcher(
-                from: ignoreURL,
-                to: &ignoreStack,
-                warnings: &warnings,
-                diagnostics: &diagnostics,
-                rootBase: rootBase,
-                scopeDirectory: scopeDirectory,
-                displayPath: ignoreFileDebugDisplayPath(
-                    for: scopeDirectory.appendingPathComponent(".ignore"),
+            if directoryContents?.hasIgnore != false {
+                let ignoreURL = directoryURL.appendingPathComponent(".ignore")
+                appendLoadedMatcher(
+                    from: ignoreURL,
+                    to: &ignoreStack,
+                    warnings: &warnings,
+                    diagnostics: &diagnostics,
                     rootBase: rootBase,
-                    rootDisplayPath: rootDebugDisplayPath,
-                    rootArgumentIsAbsolute: rootArgumentIsAbsolute
-                ),
-                options: options
-            )
-            let rgignoreURL = directoryURL.appendingPathComponent(".rgignore")
-            appendLoadedMatcher(
-                from: rgignoreURL,
-                to: &ignoreStack,
-                warnings: &warnings,
-                diagnostics: &diagnostics,
-                rootBase: rootBase,
-                scopeDirectory: scopeDirectory,
-                displayPath: ignoreFileDebugDisplayPath(
-                    for: scopeDirectory.appendingPathComponent(".rgignore"),
+                    scopeDirectory: scopeDirectory,
+                    displayPath: ignoreFileDebugDisplayPath(
+                        for: scopeDirectory.appendingPathComponent(".ignore"),
+                        rootBase: rootBase,
+                        rootDisplayPath: rootDebugDisplayPath,
+                        rootArgumentIsAbsolute: rootArgumentIsAbsolute
+                    ),
+                    options: options
+                )
+            }
+            if directoryContents?.hasRgignore != false {
+                let rgignoreURL = directoryURL.appendingPathComponent(".rgignore")
+                appendLoadedMatcher(
+                    from: rgignoreURL,
+                    to: &ignoreStack,
+                    warnings: &warnings,
+                    diagnostics: &diagnostics,
                     rootBase: rootBase,
-                    rootDisplayPath: rootDebugDisplayPath,
-                    rootArgumentIsAbsolute: rootArgumentIsAbsolute
-                ),
-                options: options
-            )
+                    scopeDirectory: scopeDirectory,
+                    displayPath: ignoreFileDebugDisplayPath(
+                        for: scopeDirectory.appendingPathComponent(".rgignore"),
+                        rootBase: rootBase,
+                        rootDisplayPath: rootDebugDisplayPath,
+                        rootArgumentIsAbsolute: rootArgumentIsAbsolute
+                    ),
+                    options: options
+                )
+            }
         }
         let shouldLoadVCSIgnore = !options.noIgnoreVCS && (options.noRequireGit || vcsContext)
-        if shouldLoadVCSIgnore {
+        if shouldLoadVCSIgnore, directoryContents?.hasGitignore != false {
             let gitignoreURL = directoryURL.appendingPathComponent(".gitignore")
             appendLoadedMatcher(
                 from: gitignoreURL,
@@ -1393,6 +1588,7 @@ public struct FileWalker {
         }
         if !options.noIgnoreExclude,
            shouldLoadVCSIgnore,
+           directoryContents?.hasGitMarker != false,
            let excludeURL = gitInfoExcludeURL(for: directoryURL) {
             appendLoadedMatcher(
                 from: excludeURL,
