@@ -469,12 +469,13 @@ public struct RipgrepSearcher: @unchecked Sendable {
 
         let matcher = try PatternMatcher(options: options)
         let fixedLookbehindFastPath = matcher.fixedPositiveLookbehindFastPath()
+        let fixedLookaheadFastPath = matcher.fixedPositiveLookaheadFastPath()
         let byteLiteralFastPath = matcher.byteLiteralFastPath()
         guard let fileURL = options.roots.first?.standardizedFileURL,
-              fixedLookbehindFastPath != nil || byteLiteralFastPath != nil else {
+              fixedLookbehindFastPath != nil || fixedLookaheadFastPath != nil || byteLiteralFastPath != nil else {
             return nil
         }
-        if fixedLookbehindFastPath != nil,
+        if (fixedLookbehindFastPath != nil || fixedLookaheadFastPath != nil),
            !(options.onlyMatching && options.printMode == .matchingLines && !options.wantsLineNumber && options.maxCount == nil) {
             return nil
         }
@@ -498,11 +499,22 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
 
         if let fixedLookbehindFastPath {
-            return writeDarwinFixedLookbehindOnlyMatches(
+            return writeDarwinFixedLookaroundOnlyMatches(
                 data,
                 fileURL: fileURL,
-                prefix: fixedLookbehindFastPath.prefix,
                 literal: fixedLookbehindFastPath.literal,
+                prefix: fixedLookbehindFastPath.prefix,
+                suffix: nil,
+                writeBytes: writeBytes
+            )
+        }
+        if let fixedLookaheadFastPath {
+            return writeDarwinFixedLookaroundOnlyMatches(
+                data,
+                fileURL: fileURL,
+                literal: fixedLookaheadFastPath.literal,
+                prefix: nil,
+                suffix: fixedLookaheadFastPath.suffix,
                 writeBytes: writeBytes
             )
         }
@@ -912,11 +924,12 @@ public struct RipgrepSearcher: @unchecked Sendable {
     }
 
     #if canImport(Darwin)
-    private func writeDarwinFixedLookbehindOnlyMatches(
+    private func writeDarwinFixedLookaroundOnlyMatches(
         _ data: Data,
         fileURL: URL,
-        prefix: [UInt8],
         literal: [UInt8],
+        prefix: [UInt8]?,
+        suffix: [UInt8]?,
         writeBytes: (UnsafeRawBufferPointer) -> Void
     ) -> SearchResults {
         var matchedLineCount = 0
@@ -934,57 +947,67 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 from: currentLineStart
             )
             var lastMatchedLineStart: Int?
+            let prefixBytesStorage = prefix ?? []
+            let suffixBytesStorage = suffix ?? []
 
-            prefix.withUnsafeBufferPointer { prefixBytes in
+            prefixBytesStorage.withUnsafeBufferPointer { prefixBytes in
                 literal.withUnsafeBufferPointer { literalBytes in
-                    guard let prefixBaseAddress = prefixBytes.baseAddress,
-                          let literalBaseAddress = literalBytes.baseAddress else {
-                        return
-                    }
-
-                    var searchOffset = 0
-                    while searchOffset <= data.count - literalBytes.count {
-                        let foundPointer = rg_memmem_simple(
-                            baseAddress.advanced(by: searchOffset),
-                            data.count - searchOffset,
-                            literalBaseAddress,
-                            literalBytes.count
-                        )
-                        guard let foundPointer else {
-                            break
+                    suffixBytesStorage.withUnsafeBufferPointer { suffixBytes in
+                        guard let literalBaseAddress = literalBytes.baseAddress else {
+                            return
                         }
+                        let prefixBaseAddress = prefix == nil ? nil : prefixBytes.baseAddress
+                        let suffixBaseAddress = suffix == nil ? nil : suffixBytes.baseAddress
 
-                        let matchStart = baseAddress.distance(to: foundPointer)
-                        if matchStart >= prefixBytes.count,
-                           memcmp(
-                            baseAddress.advanced(by: matchStart - prefixBytes.count),
-                            prefixBaseAddress,
-                            prefixBytes.count
-                           ) == 0 {
-                            while matchStart > currentLineEnd {
-                                currentLineStart = min(currentLineEnd + 1, data.count)
-                                currentLineEnd = findNextDarwinNewline(
-                                    baseAddress: baseAddress,
-                                    dataCount: data.count,
-                                    from: currentLineStart
-                                )
+                        var searchOffset = 0
+                        while searchOffset <= data.count - literalBytes.count {
+                            let foundPointer = rg_memmem_simple(
+                                baseAddress.advanced(by: searchOffset),
+                                data.count - searchOffset,
+                                literalBaseAddress,
+                                literalBytes.count
+                            )
+                            guard let foundPointer else {
+                                break
                             }
-                            totalMatchCount += 1
-                            if lastMatchedLineStart != currentLineStart {
-                                matchedLineCount += 1
-                                lastMatchedLineStart = currentLineStart
+
+                            let matchStart = baseAddress.distance(to: foundPointer)
+                            let matchEnd = matchStart + literalBytes.count
+                            if matchesFixedLookaround(
+                                baseAddress: baseAddress,
+                                dataCount: data.count,
+                                matchStart: matchStart,
+                                matchEnd: matchEnd,
+                                prefixBytes: prefixBytes,
+                                prefixBaseAddress: prefixBaseAddress,
+                                suffixBytes: suffixBytes,
+                                suffixBaseAddress: suffixBaseAddress
+                            ) {
+                                while matchStart > currentLineEnd {
+                                    currentLineStart = min(currentLineEnd + 1, data.count)
+                                    currentLineEnd = findNextDarwinNewline(
+                                        baseAddress: baseAddress,
+                                        dataCount: data.count,
+                                        from: currentLineStart
+                                    )
+                                }
+                                totalMatchCount += 1
+                                if lastMatchedLineStart != currentLineStart {
+                                    matchedLineCount += 1
+                                    lastMatchedLineStart = currentLineStart
+                                }
+                                writeBytes(UnsafeRawBufferPointer(
+                                    start: rawBaseAddress.advanced(by: matchStart),
+                                    count: literalBytes.count
+                                ))
+                                var newline = UInt8(ascii: "\n")
+                                withUnsafeBytes(of: &newline) { buffer in
+                                    writeBytes(buffer)
+                                }
                             }
-                            writeBytes(UnsafeRawBufferPointer(
-                                start: rawBaseAddress.advanced(by: matchStart),
-                                count: literalBytes.count
-                            ))
-                            var newline = UInt8(ascii: "\n")
-                            withUnsafeBytes(of: &newline) { buffer in
-                                writeBytes(buffer)
-                            }
+
+                            searchOffset = matchStart + max(literalBytes.count, 1)
                         }
-
-                        searchOffset = matchStart + max(literalBytes.count, 1)
                     }
                 }
             }
@@ -1007,6 +1030,39 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 totalMatches: totalMatchCount
             )
         )
+    }
+
+    private func matchesFixedLookaround(
+        baseAddress: UnsafePointer<UInt8>,
+        dataCount: Int,
+        matchStart: Int,
+        matchEnd: Int,
+        prefixBytes: UnsafeBufferPointer<UInt8>,
+        prefixBaseAddress: UnsafePointer<UInt8>?,
+        suffixBytes: UnsafeBufferPointer<UInt8>,
+        suffixBaseAddress: UnsafePointer<UInt8>?
+    ) -> Bool {
+        if let prefixBaseAddress {
+            guard matchStart >= prefixBytes.count,
+                  memcmp(
+                    baseAddress.advanced(by: matchStart - prefixBytes.count),
+                    prefixBaseAddress,
+                    prefixBytes.count
+                  ) == 0 else {
+                return false
+            }
+        }
+        if let suffixBaseAddress {
+            guard matchEnd + suffixBytes.count <= dataCount,
+                  memcmp(
+                    baseAddress.advanced(by: matchEnd),
+                    suffixBaseAddress,
+                    suffixBytes.count
+                  ) == 0 else {
+                return false
+            }
+        }
+        return true
     }
 
     private func findNextDarwinNewline(

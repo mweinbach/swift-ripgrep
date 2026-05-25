@@ -376,6 +376,14 @@ public struct PatternMatcher {
         return regex.fixedPositiveLookbehindFastPath
     }
 
+    func fixedPositiveLookaheadFastPath() -> (literal: [UInt8], suffix: [UInt8])? {
+        guard patterns.count == 1,
+              case .pcre2(let regex) = patterns[0] else {
+            return nil
+        }
+        return regex.fixedPositiveLookaheadFastPath
+    }
+
     private static func makeByteLiteralFastPath(
         patterns: [CompiledPattern],
         options: RipgrepOptions,
@@ -749,7 +757,7 @@ public struct PatternMatcher {
         usesByteSemantics: Bool
     ) -> String? {
         if options.engineMode != .default,
-           let literal = PCRE2CompiledPattern.fixedPositiveLookbehindLiteral(pattern) {
+           let literal = PCRE2CompiledPattern.fixedPositiveLookaroundLiteral(pattern) {
             let folded = options.effectiveIgnoreCase ? foldedCase(literal, options: options) : literal
             return usesByteSemantics ? bytePattern(folded) : folded
         }

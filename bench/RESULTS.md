@@ -29,6 +29,10 @@ same 193 MiB file produced byte-identical output to Rust and measured Swift at
 25.3 s through the Foundation-regex path before the in-tree fixed-lookbehind
 specialization.
 
+The matching fixed-lookahead shape is on the same byte path:
+`-P -o 'Sherlock(?= Holmes)'` produced byte-identical output and measured
+Swift at 145.5 ms versus Rust PCRE2 at 216.0 ms (**0.67x**) in a 3-run check.
+
 The recursive Linux-kernel traversal/search path now matches or beats Rust in
 this environment for the default literal search. A fresh confirmation run used
 2 warm-ups and 7 timed iterations for the default Swift worker count and Rust
@@ -80,8 +84,8 @@ The key improvements since the 2026-05-24 baseline are:
   output no longer materializes a second full path-string array;
 - byte-literal fast-path detection is cached per worker matcher, and the
   streaming fallback probe reuses walker metadata instead of restatting files;
-- PCRE2 is no longer linked, and the common fixed positive-lookbehind literal
-  shape now uses an in-tree Swift parser plus Darwin byte scanning for
+- PCRE2 is no longer linked, and the common fixed positive-lookaround literal
+  shapes now use an in-tree Swift parser plus Darwin byte scanning for
   `-P -o`, preserving Rust output while avoiding Foundation regex work on the
   hot path;
 - Darwin default recursive search remains capped at four workers because this

@@ -10,7 +10,7 @@ in-tree Swift compatibility engine; it does not link libpcre2.
 **Functional 1:1 with Rust ripgrep 15.1.0, including the streaming I/O
 architecture.** Verified via:
 
-- **100 Swift Testing cases** across 12 suites covering search, output formats,
+- **102 Swift Testing cases** across 12 suites covering search, output formats,
   ignore rules, file types, stdin, encodings, binary handling, parser
   diagnostics, mmap/worker pool, PCRE2, streaming haystack reads, and
   generated-asset drift.
@@ -45,8 +45,8 @@ test suite that mirrors the Rust upstream split (`BinaryTests`, `FeatureTests`,
 
 The normal build has no package-manager or system-library dependency. PCRE2
 syntax compatibility is implemented in Swift/Foundation for the covered `-P`
-surface, with a Swift-parsed fixed positive-lookbehind literal specialization
-that uses the checked-in Darwin byte scanner for `-P -o`. The Darwin arm hot
+surface, with Swift-parsed fixed positive-lookaround literal specializations
+that use the checked-in Darwin byte scanner for `-P -o`. The Darwin arm hot
 paths live in the checked-in `CRipgrepPlatform` shim because they provide
 measurable NEON/mmap throughput that Swift cannot currently express directly.
 
@@ -114,7 +114,7 @@ into a much smaller implementation:
 1. **(Updated 2026-05-25)** PCRE2-style and auto-hybrid regex support without
    libpcre2 — see `Sources/RipgrepCore/PCRE2Matcher.swift` and the
    compatibility integration in `Sources/RipgrepCore/PatternMatcher.swift`.
-   Fixed positive-lookbehind literals now avoid the Foundation regex path for
+   Fixed positive-lookaround literals now avoid the Foundation regex path for
    single-file `-P -o` output and remain byte-identical to Rust `rg`.
 
 2. **(Done 2026-05-24)** Enforced regex resource limits — see the size-budget
