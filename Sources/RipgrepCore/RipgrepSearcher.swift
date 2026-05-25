@@ -586,13 +586,16 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 }
 
                 if let byteSet = singleByteLiteralSet(literals) {
-                    var table = [UInt8](repeating: 0, count: 256)
                     byteSet.withUnsafeBufferPointer { needles in
-                        rg_byte_set_init(&table, needles.baseAddress, needles.count)
-                    }
-                    if let foundPointer = rg_memchr_any_table(baseAddress, data.count, table) {
-                        matchedLineCount = 1
-                        bytesSearched = baseAddress.distance(to: foundPointer) + 1
+                        if let foundPointer = rg_memchr_any_bytes(
+                            baseAddress,
+                            data.count,
+                            needles.baseAddress,
+                            needles.count
+                        ) {
+                            matchedLineCount = 1
+                            bytesSearched = baseAddress.distance(to: foundPointer) + 1
+                        }
                     }
                 }
                 return
@@ -755,18 +758,16 @@ public struct RipgrepSearcher: @unchecked Sendable {
             }
 
             if let byteSet = singleByteLiteralSet(literals) {
-                var table = [UInt8](repeating: 0, count: 256)
-                byteSet.withUnsafeBufferPointer { needles in
-                    rg_byte_set_init(&table, needles.baseAddress, needles.count)
-                }
-
                 var searchOffset = 0
                 while searchOffset < data.count, matchedLineCount < maxCount {
-                    let foundPointer = rg_memchr_any_table(
-                        baseAddress.advanced(by: searchOffset),
-                        data.count - searchOffset,
-                        table
-                    )
+                    let foundPointer = byteSet.withUnsafeBufferPointer { needles in
+                        rg_memchr_any_bytes(
+                            baseAddress.advanced(by: searchOffset),
+                            data.count - searchOffset,
+                            needles.baseAddress,
+                            needles.count
+                        )
+                    }
                     guard let rawFoundPointer = foundPointer else {
                         break
                     }

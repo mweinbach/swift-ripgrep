@@ -246,6 +246,21 @@ struct MiscTests {
         #endif
     }
 
+    @Test("Darwin executable fast path preserves byte alternation output")
+    func darwinExecutableFastPathByteAlternation() throws {
+        #if canImport(Darwin)
+        let root = try TemporaryDirectory()
+        try root.write("alpha\nbravo\ncharlie\ndelta\n", to: "letters.txt")
+
+        let output = try runExecutableData([
+            "b|d",
+            root.path("letters.txt"),
+        ], fixture: {})
+
+        #expect(String(decoding: output, as: UTF8.self) == "bravo\ndelta\n")
+        #endif
+    }
+
     @Test("supports regex fixed string word and line matching")
     func supportsMatcherModes() throws {
         let root = try TemporaryDirectory()

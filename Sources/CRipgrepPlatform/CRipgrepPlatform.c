@@ -337,6 +337,51 @@ const uint8_t *rg_memchr_any_table(
     return NULL;
 }
 
+const uint8_t *rg_memchr_any_bytes(
+    const uint8_t *haystack,
+    size_t haystack_len,
+    const uint8_t *needles,
+    size_t needle_count
+) {
+    if (needle_count == 0) {
+        return NULL;
+    }
+    if (needle_count == 1) {
+        return memchr(haystack, needles[0], haystack_len);
+    }
+#if defined(__APPLE__) && defined(__aarch64__)
+    size_t index = 0;
+    uint8_t matching_lanes[16];
+    for (; index + 16 <= haystack_len; index += 16) {
+        const uint8x16_t bytes = vld1q_u8(haystack + index);
+        uint8x16_t matches = vceqq_u8(bytes, vdupq_n_u8(needles[0]));
+        for (size_t needle_index = 1; needle_index < needle_count; ++needle_index) {
+            matches = vorrq_u8(matches, vceqq_u8(bytes, vdupq_n_u8(needles[needle_index])));
+        }
+        if (vmaxvq_u8(matches) != 0) {
+            vst1q_u8(matching_lanes, matches);
+            for (int lane = 0; lane < 16; ++lane) {
+                if (matching_lanes[lane] != 0) {
+                    return haystack + index + (size_t)lane;
+                }
+            }
+        }
+    }
+    for (; index < haystack_len; ++index) {
+        for (size_t needle_index = 0; needle_index < needle_count; ++needle_index) {
+            if (haystack[index] == needles[needle_index]) {
+                return haystack + index;
+            }
+        }
+    }
+    return NULL;
+#else
+    uint8_t table[256];
+    rg_byte_set_init(table, needles, needle_count);
+    return rg_memchr_any_table(haystack, haystack_len, table);
+#endif
+}
+
 size_t rg_memcount_byte(
     const uint8_t *haystack,
     size_t haystack_len,
@@ -1038,9 +1083,6 @@ static rg_darwin_literal_file_result rg_darwin_write_byte_set_bytes(
         return result;
     }
 
-    uint8_t table[256];
-    rg_byte_set_init(table, needles, needle_count);
-
     rg_output_buffer output = { .bytes = malloc(1024 * 1024), .length = 0, .capacity = 1024 * 1024 };
     if (output.bytes == NULL) {
         result.status = -1;
@@ -1049,7 +1091,7 @@ static rg_darwin_literal_file_result rg_darwin_write_byte_set_bytes(
 
     size_t search_offset = 0;
     while (search_offset < haystack_len) {
-        const uint8_t *found = rg_memchr_any_table(base + search_offset, haystack_len - search_offset, table);
+        const uint8_t *found = rg_memchr_any_bytes(base + search_offset, haystack_len - search_offset, needles, needle_count);
         if (found == NULL) {
             break;
         }
