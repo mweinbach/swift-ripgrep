@@ -225,6 +225,27 @@ struct MiscTests {
         #endif
     }
 
+    @Test("Darwin executable fast path preserves surrounding-word line numbers")
+    func darwinExecutableFastPathSurroundingWordsLineNumbers() throws {
+        #if canImport(Darwin)
+        let root = try TemporaryDirectory()
+        try root.write("""
+        Holmes here
+        Mr Holmes returns
+        Holmes alone
+        Doctor Holmes arrives
+        """, to: "sherlock.txt")
+
+        let output = try runExecutableData([
+            "-n",
+            #"\w+\s+Holmes\s+\w+"#,
+            root.path("sherlock.txt"),
+        ], fixture: {})
+
+        #expect(String(decoding: output, as: UTF8.self) == "2:Mr Holmes returns\n4:Doctor Holmes arrives\n")
+        #endif
+    }
+
     @Test("supports regex fixed string word and line matching")
     func supportsMatcherModes() throws {
         let root = try TemporaryDirectory()

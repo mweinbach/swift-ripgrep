@@ -75,6 +75,12 @@ rg_darwin_literal_file_result rg_darwin_write_surrounding_words_file_lines(
     size_t literal_len
 );
 
+rg_darwin_literal_file_result rg_darwin_write_surrounding_words_file_lines_with_line_numbers(
+    const char *path,
+    const uint8_t *literal,
+    size_t literal_len
+);
+
 rg_darwin_literal_file_result rg_darwin_write_word_literal_file_lines(
     const char *path,
     const uint8_t *literal,

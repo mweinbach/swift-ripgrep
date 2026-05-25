@@ -51,6 +51,7 @@ struct RipgrepCommand {
             case noMmap
             case asciiCaseInsensitive
             case surroundingWords
+            case surroundingWordsWithLineNumbers
             case wordWithLineNumbers
         }
 
@@ -67,6 +68,12 @@ struct RipgrepCommand {
             path = arguments[2]
         } else if arguments.count == 3, arguments[0] == "-i" || arguments[0] == "--ignore-case" {
             mode = .asciiCaseInsensitive
+            pattern = arguments[1]
+            path = arguments[2]
+        } else if arguments.count == 3,
+                  arguments[0] == "-n" || arguments[0] == "--line-number",
+                  surroundingWordsLiteral(arguments[1]) != nil {
+            mode = .surroundingWordsWithLineNumbers
             pattern = arguments[1]
             path = arguments[2]
         } else if arguments.count == 3, arguments[0] == "-nw" || arguments[0] == "-wn" {
@@ -100,6 +107,29 @@ struct RipgrepCommand {
             let result = path.withCString { pathPointer in
                 literalBytes.withUnsafeBufferPointer { needle in
                     rg_darwin_write_surrounding_words_file_lines(
+                        pathPointer,
+                        needle.baseAddress,
+                        needle.count
+                    )
+                }
+            }
+            guard result.status >= 0 else {
+                return nil
+            }
+            return result.status > 0 ? 0 : 1
+        }
+
+        if mode == .surroundingWordsWithLineNumbers,
+           let literal = surroundingWordsLiteral(pattern),
+           path != "-" {
+            let literalBytes = Array(literal.utf8)
+            guard !literalBytes.isEmpty,
+                  literalBytes.allSatisfy({ $0 < 0x80 }) else {
+                return nil
+            }
+            let result = path.withCString { pathPointer in
+                literalBytes.withUnsafeBufferPointer { needle in
+                    rg_darwin_write_surrounding_words_file_lines_with_line_numbers(
                         pathPointer,
                         needle.baseAddress,
                         needle.count
@@ -165,6 +195,12 @@ struct RipgrepCommand {
                     )
                 case .surroundingWords:
                     return rg_darwin_write_surrounding_words_file_lines(
+                        pathPointer,
+                        needle.baseAddress,
+                        needle.count
+                    )
+                case .surroundingWordsWithLineNumbers:
+                    return rg_darwin_write_surrounding_words_file_lines_with_line_numbers(
                         pathPointer,
                         needle.baseAddress,
                         needle.count

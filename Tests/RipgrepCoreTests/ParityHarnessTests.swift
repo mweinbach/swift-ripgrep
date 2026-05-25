@@ -361,6 +361,23 @@ private func regressionParityCases() -> [ParityCase] {
         ParityCase(name: "regression::r1130_files_with_matches", fixture: { dir in try write("test", to: "foo", in: dir) }, arguments: ["--files-with-matches", "test", "foo"]),
         ParityCase(name: "regression::r1130_files_without_match", fixture: { dir in try write("test", to: "foo", in: dir) }, arguments: ["--files-without-match", "nada", "foo"]),
         ParityCase(name: "regression::r1159_invalid_flag", fixture: { _ in }, arguments: ["--wat"]),
+        ParityCase(name: "regression::r1203_reverse_suffix_literal_short", fixture: { dir in try write("153.230000\n", to: "test", in: dir) }, arguments: [#"\d\d\d00"#, "test"]),
+        ParityCase(name: "regression::r1203_reverse_suffix_literal_long", fixture: { dir in try write("153.230000\n", to: "test", in: dir) }, arguments: [#"\d\d\d000"#, "test"]),
+        ParityCase(name: "regression::r1223_no_dir_check_for_default_path", fixture: { dir in try createDirectory("-", in: dir); try write("{}\n", to: "a.json", in: dir); try write("some text\n", to: "a.txt", in: dir) }, arguments: ["a"], stdin: Data("a.json\na.txt\n".utf8)),
+        ParityCase(name: "regression::r1259_pattern_file_without_trailing_newline", fixture: { dir in try write("[foo]", to: "patterns-nonl", in: dir); try write("fz\n", to: "test", in: dir) }, arguments: ["-f", "patterns-nonl", "test"]),
+        ParityCase(name: "regression::r1259_pattern_file_with_trailing_newline", fixture: { dir in try write("[foo]\n", to: "patterns-nl", in: dir); try write("fz\n", to: "test", in: dir) }, arguments: ["-f", "patterns-nl", "test"]),
+        ParityCase(name: "regression::r1311_multi_line_term_replace", fixture: { dir in try write("hello\nworld\n", to: "input", in: dir) }, arguments: ["-U", "-r?", "-n", "\n", "input"]),
+        ParityCase(name: "regression::r1334_zero_patterns", fixture: { dir in try write("", to: "zero-patterns", in: dir); try write("one\ntwo\nthree\n", to: "haystack", in: dir) }, arguments: ["-f", "zero-patterns", "haystack"]),
+        ParityCase(name: "regression::r1334_one_empty_pattern", fixture: { dir in try write("\n", to: "one-pattern", in: dir); try write("one\ntwo\nthree\n", to: "haystack", in: dir) }, arguments: ["-f", "one-pattern", "haystack"]),
+        ParityCase(name: "regression::r1334_invert_zero_patterns", fixture: { dir in try write("", to: "zero-patterns", in: dir); try write("one\ntwo\nthree\n", to: "haystack", in: dir) }, arguments: ["-v", "-f", "zero-patterns", "haystack"]),
+        ParityCase(name: "regression::r1638_utf8_bom_column", fixture: { dir in try write(Data([0xEF, 0xBB, 0xBF, 0x78]), to: "foo", in: dir) }, arguments: ["--column", "x"]),
+        ParityCase(name: "regression::r1739_replacement_lineterm_match", fixture: { dir in try write("a\n", to: "test", in: dir) }, arguments: [#"-r${0}f"#, #".*"#, "test"]),
+        ParityCase(name: "regression::r1757_ignore_relative_root", fixture: { dir in try write("rust/target\n", to: ".ignore", in: dir); try write("needle", to: "rust/source.rs", in: dir); try write("needle", to: "rust/target/rustdoc-output.html", in: dir) }, arguments: ["--files-with-matches", "needle", "rust"]),
+        ParityCase(name: "regression::r1757_ignore_dot_relative_root", fixture: { dir in try write("rust/target\n", to: ".ignore", in: dir); try write("needle", to: "rust/source.rs", in: dir); try write("needle", to: "rust/target/rustdoc-output.html", in: dir) }, arguments: ["--files-with-matches", "needle", "./rust"]),
+        ParityCase(name: "regression::r2480_capture_group_replacement", fixture: { dir in try write("FooBar\n", to: "file", in: dir) }, arguments: ["-e", "Fo(oB)a(r)", "--replace", "${0}_${1}_${2}${3}", "file"]),
+        ParityCase(name: "regression::r2480_case_flag_does_not_leak_on_match", fixture: { dir in try write("FooBar\n", to: "file", in: dir) }, arguments: ["--only-matching", "-e", "(?i)foo", "-e", "bar", "file"]),
+        ParityCase(name: "regression::r2480_case_flag_does_not_leak_on_mismatch", fixture: { dir in try write("FooBar\n", to: "file", in: dir) }, arguments: ["--only-matching", "-e", "(?i)notfoo", "-e", "bar", "file"]),
+        ParityCase(name: "regression::r2574_ascii_word_domain", fixture: { dir in try write("some.domain.com\nsome.domain.com/x\n", to: "haystack", in: dir) }, arguments: ["--no-filename", "--no-unicode", "-w", "-o", #"(\w+\.)*domain\.(\w+)"#, "haystack"]),
     ]
 }
 
