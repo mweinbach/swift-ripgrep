@@ -163,7 +163,15 @@ public struct GlobMatcher: Equatable {
     }
 
     public func decision(relativePath: String, isDirectory: Bool) -> Decision? {
-        matchingRule(relativePath: relativePath, isDirectory: isDirectory)?.decision
+        guard let scopedPath = scopedPath(for: relativePath) else {
+            return nil
+        }
+        let pathBasename = basename(scopedPath)
+        var matchedDecision: Decision?
+        for rule in rules where matches(rule, relativePath: scopedPath, basename: pathBasename, isDirectory: isDirectory) {
+            matchedDecision = rule.decision
+        }
+        return matchedDecision
     }
 
     public func matchingRule(relativePath: String, isDirectory: Bool) -> Rule? {
@@ -244,6 +252,9 @@ public struct GlobMatcher: Equatable {
     }
 
     private func matchesGlobAnywhere(_ rule: Rule, _ value: String) -> Bool {
+        if let fastMatcher = rule.fastMatcher, matchesFastAnywhere(fastMatcher, value) {
+            return true
+        }
         guard let regex = rule.anywhereRegex else {
             return false
         }
@@ -269,6 +280,31 @@ public struct GlobMatcher: Equatable {
             return value.hasSuffix(suffix)
         case .contains(let needle):
             return value.contains(needle)
+        }
+    }
+
+    private func matchesFastAnywhere(_ matcher: FastMatcher, _ value: String) -> Bool {
+        if matchesFast(matcher, value) {
+            return true
+        }
+        switch matcher {
+        case .exact(let expected):
+            return value.hasSuffix("/\(expected)")
+        case .any:
+            return true
+        case .prefix, .prefixSuffix, .suffix, .contains:
+            var cursor = value.startIndex
+            while let slash = value[cursor...].firstIndex(of: "/") {
+                let next = value.index(after: slash)
+                guard next < value.endIndex else {
+                    return false
+                }
+                if matchesFast(matcher, String(value[next...])) {
+                    return true
+                }
+                cursor = next
+            }
+            return false
         }
     }
 
