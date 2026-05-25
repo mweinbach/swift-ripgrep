@@ -765,7 +765,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             )
         }
 
-        let binaryByteOffset = shouldCheckBinary(data, options: options) ? data.firstIndex(of: 0) : nil
+        let binaryByteOffset = shouldCheckBinary(data, options: options) ? firstNulByteOffset(in: data) : nil
         if let binaryByteOffset, !options.disablesBinaryDetection {
             let contents = decode(data, options: options)
             let result = searchContents(
@@ -4790,6 +4790,18 @@ public struct RipgrepSearcher: @unchecked Sendable {
             return true
         case .automatic:
             return !(data.starts(with: [0xFF, 0xFE]) || data.starts(with: [0xFE, 0xFF]))
+        }
+    }
+
+    private func firstNulByteOffset(in data: Data) -> Int? {
+        data.withUnsafeBytes { rawBytes in
+            guard let baseAddress = rawBytes.bindMemory(to: UInt8.self).baseAddress else {
+                return nil
+            }
+            guard let pointer = memchr(baseAddress, 0, data.count) else {
+                return nil
+            }
+            return baseAddress.distance(to: pointer.assumingMemoryBound(to: UInt8.self))
         }
     }
 
