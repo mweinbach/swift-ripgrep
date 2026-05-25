@@ -86,19 +86,25 @@ public enum RipgrepCLI {
 
                 if options.mode == .files {
                     var filePathOutputBuffer = Data()
-                    if !options.quiet,
-                       let filePathResults = try searcher.streamFilePathsWithMessages(options: options, emit: { line in
-                           if stdout == nil {
-                               filePathOutputBuffer.append(contentsOf: line.utf8)
-                               filePathOutputBuffer.append(UInt8(ascii: "\n"))
-                               if filePathOutputBuffer.count >= 64 * 1024 {
-                                   writeStdout(filePathOutputBuffer)
-                                   filePathOutputBuffer.removeAll(keepingCapacity: true)
-                               }
-                           } else {
-                               emitStdout(line, stdout: stdout, suppressNewlineForTrailingNul: options.nullPathTerminator)
-                           }
-                       }) {
+                    if let filePathResults = try searcher.streamFilePathsWithMessages(
+                        options: options,
+                        stopAfterFirst: options.quiet,
+                        emit: { line in
+                            guard !options.quiet else {
+                                return
+                            }
+                            if stdout == nil {
+                                filePathOutputBuffer.append(contentsOf: line.utf8)
+                                filePathOutputBuffer.append(UInt8(ascii: "\n"))
+                                if filePathOutputBuffer.count >= 64 * 1024 {
+                                    writeStdout(filePathOutputBuffer)
+                                    filePathOutputBuffer.removeAll(keepingCapacity: true)
+                                }
+                            } else {
+                                emitStdout(line, stdout: stdout, suppressNewlineForTrailingNul: options.nullPathTerminator)
+                            }
+                        }
+                    ) {
                         if !filePathOutputBuffer.isEmpty {
                             writeStdout(filePathOutputBuffer)
                         }
@@ -114,7 +120,9 @@ public enum RipgrepCLI {
                             if filePathResults.count == 0 {
                                 return 2
                             }
-                            return 2
+                            if !options.quiet {
+                                return 2
+                            }
                         }
                         return filePathResults.count == 0 ? 1 : 0
                     }

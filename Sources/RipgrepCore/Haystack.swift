@@ -150,6 +150,7 @@ public struct FileWalker {
 
     public func streamFilePathsWithMessages(
         for options: RipgrepOptions,
+        stopAfterFirst: Bool = false,
         emit: (String) -> Void
     ) throws -> FilePathStreamResults? {
         #if canImport(Darwin)
@@ -194,6 +195,7 @@ public struct FileWalker {
         appendGlobalIgnoreFile(to: &rootIgnoreStack, rootBase: rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
         appendParentIgnoreFiles(to: &rootIgnoreStack, rootBase: rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
         let rootVCSContext = options.noRequireGit || isInGitRepository(rootBase)
+        var didStop = false
         try walkFilePathsInOutputOrder(
             directoryPath: rootURL.path,
             logicalDirectoryPath: rootURL.path,
@@ -208,7 +210,9 @@ public struct FileWalker {
             diagnostics: &diagnostics,
             filtered: &filtered,
             ignoreStack: rootIgnoreStack,
-            options: options
+            options: options,
+            stopAfterFirst: stopAfterFirst,
+            didStop: &didStop
         ) { path in
             emittedCount += 1
             emit(path)
@@ -423,8 +427,13 @@ public struct FileWalker {
         filtered: inout Bool,
         ignoreStack: IgnoreStack,
         options: RipgrepOptions,
+        stopAfterFirst: Bool,
+        didStop: inout Bool,
         emit: (String) -> Void
     ) throws {
+        guard !didStop else {
+            return
+        }
         let contents = try fastDirectoryContents(atPath: directoryPath)
         let directoryVCSContext = vcsContext || (!options.noIgnoreVCS && contents.hasGitMarker)
         var directoryIgnoreStack = ignoreStack
@@ -480,14 +489,23 @@ public struct FileWalker {
                         filtered: &filtered,
                         ignoreStack: directoryIgnoreStack,
                         options: options,
+                        stopAfterFirst: stopAfterFirst,
+                        didStop: &didStop,
                         emit: emit
                     )
+                    if didStop {
+                        return
+                    }
                 } else if child.kind.isFile {
                     emit(outputPath(
                         logicalDirectoryPath: logicalDirectoryPath,
                         logicalDirectoryPathIsASCII: logicalDirectoryPathIsASCII,
                         child: child
                     ))
+                    if stopAfterFirst {
+                        didStop = true
+                        return
+                    }
                 }
             }
             return
@@ -556,14 +574,23 @@ public struct FileWalker {
                     filtered: &filtered,
                     ignoreStack: directoryIgnoreStack,
                     options: options,
+                    stopAfterFirst: stopAfterFirst,
+                    didStop: &didStop,
                     emit: emit
                 )
+                if didStop {
+                    return
+                }
             } else if child.kind.isFile {
                 emit(outputPath(
                     logicalDirectoryPath: logicalDirectoryPath,
                     logicalDirectoryPathIsASCII: logicalDirectoryPathIsASCII,
                     child: child
                 ))
+                if stopAfterFirst {
+                    didStop = true
+                    return
+                }
             }
         }
     }

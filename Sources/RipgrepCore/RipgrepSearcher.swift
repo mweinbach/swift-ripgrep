@@ -137,11 +137,12 @@ public struct RipgrepSearcher: @unchecked Sendable {
 
     public func streamFilePathsWithMessages(
         options: RipgrepOptions,
+        stopAfterFirst: Bool = false,
         emit: (String) -> Void
     ) throws -> FilePathStreamResults? {
         try FileWalker(fileManager: fileManager)
             .withEnvironment(environment)
-            .streamFilePathsWithMessages(for: options, emit: emit)
+            .streamFilePathsWithMessages(for: options, stopAfterFirst: stopAfterFirst, emit: emit)
     }
 
     public func search(options: RipgrepOptions) throws -> SearchResults {
@@ -1126,11 +1127,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         if let requested = options.threadCount {
             return requested <= 1 ? 1 : requested
         }
-        #if canImport(Darwin)
-        return max(1, min(ProcessInfo.processInfo.activeProcessorCount, 4))
-        #else
         return max(1, min(ProcessInfo.processInfo.activeProcessorCount, 12))
-        #endif
     }
 
     private func runParallelSearch(

@@ -369,11 +369,9 @@ struct RegressionTests {
         }
     }
 
-    @Test("reports PCRE2 unavailable")
-    func reportsPCRE2Unavailable() throws {
+    @Test("reports PCRE2 compatibility engine with isolated PATH")
+    func reportsPCRE2CompatibilityEngineWithIsolatedPath() throws {
         let root = try TemporaryDirectory()
-        try root.write("#!/bin/sh\nprintf '10.99\\n'\n", to: "pcre2-config")
-        try root.makeExecutable("pcre2-config")
 
         var output: [String] = []
         var errors: [String] = []
@@ -385,14 +383,8 @@ struct RegressionTests {
         )
 
         #expect(errors.isEmpty)
-        if exitCode == 0 {
-            #expect(output.count == 1)
-            #expect(output.first?.contains("PCRE2") == true)
-            #expect(output.first?.contains("is available") == true)
-        } else {
-            #expect(exitCode == 1)
-            #expect(output == ["PCRE2 is not available in this build of ripgrep."])
-        }
+        #expect(exitCode == 0)
+        #expect(output == ["PCRE2-compatible Swift regex engine is available (libpcre2 is not linked; JIT is unavailable)"])
     }
 
 }

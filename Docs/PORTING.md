@@ -2,8 +2,8 @@
 
 Baseline checked: `/Users/mweinbach/Projects/swift-harness/ripgrep` at
 `4519153e5e` (`ripgrep 15.1.0`). The Swift binary reports the same upstream
-revision and advertises `features:+pcre2` when the linked libpcre2-8 is
-available.
+revision and keeps the `-P`/`--engine=pcre2` surface available through the
+in-tree Swift compatibility engine; it does not link libpcre2.
 
 ## Status — 2026-05-24
 
@@ -36,12 +36,18 @@ controls runtime behaviour is wired to the corresponding subsystem.
 ## Current shape
 
 The Swift port is a SwiftPM package with one library target, one executable
-target, one system-module target (`CPCRE2`, wrapping Homebrew libpcre2-8) and
-one test target. It maps most of ripgrep's public CLI flags into
+target, one tiny Darwin arm performance shim (`CRipgrepPlatform`) and one test
+target. It maps most of ripgrep's public CLI flags into
 `RipgrepOptions`, carries generated help/man/completion resources, and uses a
 test suite that mirrors the Rust upstream split (`BinaryTests`, `FeatureTests`,
 `JSONTests`, `MiscTests`, `MultilineTests`, `RegressionTests`, plus
 `HaystackReaderTests`, `ParityHarnessTests` and `RipgrepTestSupport`).
+
+The normal build has no package-manager or system-library dependency. PCRE2
+syntax compatibility is implemented in Swift/Foundation for the covered `-P`
+surface, and the Darwin arm hot paths live in the checked-in
+`CRipgrepPlatform` shim because they provide measurable NEON/mmap throughput
+that Swift cannot currently express directly.
 
 File input flows through `HaystackReader` (mmap for regular files ≥ 16 KiB or
 when `--mmap` is forced, chunked 64 KiB buffered reads otherwise, stdin always
@@ -55,7 +61,8 @@ into a much smaller implementation:
 
 - Rust: `grep`, `regex`, `searcher`, `ignore`, `globset`, `printer`, `cli`,
   `matcher`, `pcre2` and the `rg` core binary.
-- Swift: `RipgrepCore` (plus `CPCRE2`) and the `ripgrep` executable.
+- Swift: `RipgrepCore`, the Darwin arm `CRipgrepPlatform` shim and the
+  `ripgrep` executable.
 
 ## Verified working areas
 
@@ -74,9 +81,10 @@ into a much smaller implementation:
   and default file types.
 - `--search-zip` works for checked `.gz`, `.bz2`, `.xz`, `.lzma`, `.br`,
   `.zst` and `.lz4` probes when the matching decompressor is available.
-- Real PCRE2 backend via `CPCRE2`/libpcre2-8 powers `-P`, `--engine=pcre2`,
-  `--engine=auto` (auto-hybrid fallback), `--pcre2-version`, and the
-  `--pcre2-unicode`/`--no-pcre2-unicode` UCP/UTF toggles.
+- In-tree PCRE2-compatible regex support powers `-P`, `--engine=pcre2`,
+  `--engine=auto` (auto-hybrid fallback), and the
+  `--pcre2-unicode`/`--no-pcre2-unicode` compatibility toggles without linking
+  libpcre2.
 - Default-engine size accounting honours `--regex-size-limit` and emits the
   Rust-compatible `compiled regex exceeds size limit of <N>` diagnostic when
   the budget is exceeded. `--dfa-size-limit` is plumbed in for the same
@@ -99,9 +107,9 @@ into a much smaller implementation:
 
 ## High-priority missing parity
 
-1. **(Done 2026-05-24)** Real PCRE2 and auto-hybrid regex support — see
-   `Sources/CPCRE2/`, `Sources/RipgrepCore/PCRE2Matcher.swift`, and the PCRE2
-   integration in `Sources/RipgrepCore/PatternMatcher.swift`.
+1. **(Updated 2026-05-25)** PCRE2-style and auto-hybrid regex support without
+   libpcre2 — see `Sources/RipgrepCore/PCRE2Matcher.swift` and the
+   compatibility integration in `Sources/RipgrepCore/PatternMatcher.swift`.
 
 2. **(Done 2026-05-24)** Enforced regex resource limits — see the size-budget
    guard in `Sources/RipgrepCore/PatternMatcher.swift`.
@@ -129,7 +137,7 @@ into a much smaller implementation:
    accounting. The Swift tests cover many patched cases, but the architecture is
    still more likely to drift on regex syntax and pathological edge cases. The
    auto-hybrid fallback (item 1) reduces the impact in practice because patterns
-   the default engine cannot handle now degrade gracefully to PCRE2. This is
+   the default engine cannot handle now degrade gracefully to the compatibility engine. This is
    best driven by running upstream regex fixture suites against the Swift
    binary and folding the diffs back into `PatternMatcher.swift` — an ongoing
    quality effort rather than a finite porting slice.
@@ -251,25 +259,22 @@ Three parallel work items are in flight. Each is owned by one sub-agent. The
 streaming/mmap/parallel rearch (item 4 above) is intentionally deferred — it is
 a multi-session undertaking that should follow this batch.
 
-### Wave 1A — PCRE2 backend + regex/DFA size limit enforcement
-Owner: pair-agent-A. Touches: `Package.swift`, new
-`Sources/CPCRE2/*` (system module) and `Sources/RipgrepCore/PCRE2*.swift`,
+### Wave 1A — PCRE2-style compatibility + regex/DFA size limit enforcement
+Owner: pair-agent-A. Touches: `Package.swift`,
+`Sources/RipgrepCore/PCRE2Matcher.swift`,
 `Sources/RipgrepCore/PatternMatcher.swift`, `Sources/RipgrepCore/RipgrepCLI.swift`.
 
-- [x] Add a `CPCRE2` system module target wrapping libpcre2-8 from Homebrew
-      (`/opt/homebrew/opt/pcre2`, header `pcre2.h`, lib `pcre2-8`). Use
-      `PCRE2_CODE_UNIT_WIDTH=8`. Make the link/include paths work when the
-      Homebrew prefix is `/opt/homebrew` (Apple silicon) or `/usr/local`
-      (Intel) via `unsafeFlags` driven by `pcre2-config` or a small fallback.
+- [x] Remove the libpcre2 dependency from the normal build. The current macOS
+      arm64 package links no `CPCRE2` system module, vendored archive,
+      Homebrew install, `pkg-config` output or `pcre2-config` output.
 - [x] Replace the "PCRE2 is not available" error path in
-      `PatternMatcher` with a real PCRE2-backed `CompiledPattern` case.
+      `PatternMatcher` with a Swift/Foundation-backed compatibility pattern.
       Implement `--engine=pcre2`, `-P`, `--engine=auto` (auto must try the
-      default engine first and fall back to PCRE2 when the default rejects the
-      pattern with the auto-hybrid diagnostic).
+      default engine first and fall back to the compatibility engine when the
+      default rejects the pattern with the auto-hybrid diagnostic).
 - [x] Wire `--no-pcre2-unicode` / `--pcre2-unicode` into PCRE2 compile
-      options (UCP/UTF flags) and `--pcre2-version` to return the real linked
-      PCRE2 version string. Update `RipgrepCLI` `features:-pcre2` to
-      `features:+pcre2` when PCRE2 is linked.
+      compatibility options and `--pcre2-version` to report the built-in
+      compatibility engine rather than a linked libpcre2 version.
 - [x] Enforce `--regex-size-limit` for the default (NSRegularExpression)
       engine using a heuristic that mirrors Rust's behaviour: refuse to
       compile when the estimated regex program size exceeds the limit, and

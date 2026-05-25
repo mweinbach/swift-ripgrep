@@ -1,5 +1,0 @@
-module CPCRE2 [system] {
-    header "CPCRE2.h"
-    link "pcre2-8"
-    export *
-}

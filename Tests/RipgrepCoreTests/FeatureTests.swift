@@ -2971,6 +2971,28 @@ struct FeatureTests {
         output = []
         errors = []
         exitCode = RipgrepCLI.run(
+            arguments: ["--quiet", "--files", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(output.isEmpty)
+        #expect(errors.isEmpty)
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--quiet", "--files", root.path("missing")],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 2)
+        #expect(output.isEmpty)
+        #expect(errors == ["rg: \(root.path("missing")): IO error for operation on \(root.path("missing")): No such file or directory (os error 2)"])
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
             arguments: ["--glob", "*.txt", "--glob", "!visible.txt", "visible", root.url.path],
             stdout: { output.append($0) },
             stderr: { errors.append($0) }

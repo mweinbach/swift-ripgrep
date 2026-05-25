@@ -48,7 +48,7 @@ struct PCRE2Tests {
         #expect(errors == ["rg: compiled regex exceeds size limit of 0"])
     }
 
-    @Test func pcre2VersionReportsLinkedLibrary() {
+    @Test func pcre2VersionReportsSwiftCompatibilityEngine() {
         var output: [String] = []
         var errors: [String] = []
 
@@ -60,8 +60,6 @@ struct PCRE2Tests {
 
         #expect(errors.isEmpty)
         #expect(exitCode == 0)
-        #expect(output.count == 1)
-        #expect(output.first?.hasPrefix("PCRE2 10.") == true)
-        #expect(output.first?.contains("JIT is") == true)
+        #expect(output == ["PCRE2-compatible Swift regex engine is available (libpcre2 is not linked; JIT is unavailable)"])
     }
 }
