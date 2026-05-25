@@ -490,6 +490,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         var bytesSearched = data.count
         var needsDecodedFallback = false
         let wantsLineNumber = options.wantsLineNumber
+        let countOnly = options.printMode == .count
 
         data.withUnsafeBytes { rawBytes in
             guard let rawBaseAddress = rawBytes.baseAddress else {
@@ -702,15 +703,17 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         }
                         matchedLineCount += 1
                         lastEmittedLineStart = lineStart
-                        writeLineNumberPrefix(for: lineStart)
-                        writeBytes(UnsafeRawBufferPointer(
-                            start: rawBaseAddress.advanced(by: lineStart),
-                            count: outputEnd - lineStart
-                        ))
-                        if newlinePointer == nil {
-                            var newline = UInt8(ascii: "\n")
-                            withUnsafeBytes(of: &newline) { buffer in
-                                writeBytes(buffer)
+                        if !countOnly {
+                            writeLineNumberPrefix(for: lineStart)
+                            writeBytes(UnsafeRawBufferPointer(
+                                start: rawBaseAddress.advanced(by: lineStart),
+                                count: outputEnd - lineStart
+                            ))
+                            if newlinePointer == nil {
+                                var newline = UInt8(ascii: "\n")
+                                withUnsafeBytes(of: &newline) { buffer in
+                                    writeBytes(buffer)
+                                }
                             }
                         }
                         if matchedLineCount == maxCount {
@@ -755,15 +758,17 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         outputEnd = data.count
                     }
                     matchedLineCount += 1
-                    writeLineNumberPrefix(for: lineStart)
-                    writeBytes(UnsafeRawBufferPointer(
-                        start: rawBaseAddress.advanced(by: lineStart),
-                        count: outputEnd - lineStart
-                    ))
-                    if newlinePointer == nil {
-                        var newline = UInt8(ascii: "\n")
-                        withUnsafeBytes(of: &newline) { buffer in
-                            writeBytes(buffer)
+                    if !countOnly {
+                        writeLineNumberPrefix(for: lineStart)
+                        writeBytes(UnsafeRawBufferPointer(
+                            start: rawBaseAddress.advanced(by: lineStart),
+                            count: outputEnd - lineStart
+                        ))
+                        if newlinePointer == nil {
+                            var newline = UInt8(ascii: "\n")
+                            withUnsafeBytes(of: &newline) { buffer in
+                                writeBytes(buffer)
+                            }
                         }
                     }
                     if matchedLineCount == maxCount {
@@ -795,15 +800,17 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     literals: literals
                 ) {
                     matchedLineCount += 1
-                    writeLineNumberPrefix(for: lineStart)
-                    writeBytes(UnsafeRawBufferPointer(
-                        start: rawBaseAddress.advanced(by: lineStart),
-                        count: outputEnd - lineStart
-                    ))
-                    if newlinePointer == nil {
-                        var newline = UInt8(ascii: "\n")
-                        withUnsafeBytes(of: &newline) { buffer in
-                            writeBytes(buffer)
+                    if !countOnly {
+                        writeLineNumberPrefix(for: lineStart)
+                        writeBytes(UnsafeRawBufferPointer(
+                            start: rawBaseAddress.advanced(by: lineStart),
+                            count: outputEnd - lineStart
+                        ))
+                        if newlinePointer == nil {
+                            var newline = UInt8(ascii: "\n")
+                            withUnsafeBytes(of: &newline) { buffer in
+                                writeBytes(buffer)
+                            }
                         }
                     }
                     if matchedLineCount == maxCount {
@@ -817,6 +824,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
         if needsDecodedFallback {
             return nil
+        }
+        if countOnly && matchedLineCount > 0 {
+            writeDarwinDecimalLine(matchedLineCount, writeBytes: writeBytes)
         }
 
         let fileResult = SearchFileResult(
@@ -853,8 +863,25 @@ public struct RipgrepSearcher: @unchecked Sendable {
         return bytes.isEmpty ? nil : bytes
     }
 
+    private func writeDarwinDecimalLine(_ value: Int, writeBytes: (UnsafeRawBufferPointer) -> Void) {
+        withUnsafeTemporaryAllocation(of: UInt8.self, capacity: 32) { buffer in
+            var cursor = buffer.count - 1
+            buffer[cursor] = UInt8(ascii: "\n")
+            var number = value
+            repeat {
+                cursor -= 1
+                buffer[cursor] = UInt8(number % 10) + UInt8(ascii: "0")
+                number /= 10
+            } while number > 0
+            writeBytes(UnsafeRawBufferPointer(
+                start: buffer.baseAddress?.advanced(by: cursor),
+                count: buffer.count - cursor
+            ))
+        }
+    }
+
     private func canWriteDarwinSimpleByteLiteralLines(options: RipgrepOptions) -> Bool {
-        guard options.printMode == .matchingLines,
+        guard (options.printMode == .matchingLines || options.printMode == .count),
               options.rootPathArguments.count == 1,
               options.roots.count == 1,
               !options.useStdin,
