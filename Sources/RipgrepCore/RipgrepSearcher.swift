@@ -572,6 +572,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
                             bytesSearched = outputEnd
                             break
                         }
+                        searchOffset = outputEnd
+                        continue
                     }
                     searchOffset = max(matchStart + 1, searchOffset + 1)
                 }
@@ -2046,8 +2048,11 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     literalEnd: matchStart + literal.count
                 )
                 if !matched && lineContainsNonASCII(bytes: bytes, lineStart: lineStart, lineEnd: lineEnd) {
-                    let lineData = Data(bytes: baseAddress.advanced(by: lineStart), count: lineEnd - lineStart)
-                    guard let line = String(data: lineData, encoding: .utf8) else {
+                    guard let line = utf8LineString(
+                        baseAddress: baseAddress,
+                        lineStart: lineStart,
+                        lineEnd: lineEnd
+                    ) else {
                         failedDecode = true
                         break
                     }
@@ -2056,8 +2061,11 @@ public struct RipgrepSearcher: @unchecked Sendable {
 
                 if matched {
                     lastMatchedLineStart = lineStart
-                    let lineData = Data(bytes: baseAddress.advanced(by: lineStart), count: lineEnd - lineStart)
-                    guard let line = String(data: lineData, encoding: .utf8) else {
+                    guard let line = utf8LineString(
+                        baseAddress: baseAddress,
+                        lineStart: lineStart,
+                        lineEnd: lineEnd
+                    ) else {
                         failedDecode = true
                         break
                     }
@@ -2072,6 +2080,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         matchCount: 1,
                         spans: []
                     ))
+                    searchOffset = newlinePointer == nil ? dataCount : lineEnd + 1
+                    continue
                 }
                 searchOffset = max(matchStart + 1, searchOffset + 1)
             }
@@ -2174,8 +2184,11 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     lineEnd = dataCount
                     terminator = ""
                 }
-                let lineData = Data(bytes: baseAddress.advanced(by: lineStart), count: lineEnd - lineStart)
-                guard let line = String(data: lineData, encoding: .utf8) else {
+                guard let line = utf8LineString(
+                    baseAddress: baseAddress,
+                    lineStart: lineStart,
+                    lineEnd: lineEnd
+                ) else {
                     failedDecode = true
                     break
                 }
@@ -2207,7 +2220,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         }
                     ))
                 }
-                searchOffset = max(matchStart + 1, searchOffset + 1)
+                searchOffset = newlinePointer == nil ? dataCount : lineEnd + 1
             }
 
             guard !failedDecode else {
@@ -2312,6 +2325,28 @@ public struct RipgrepSearcher: @unchecked Sendable {
             return true
         }
         return false
+    }
+
+    private func utf8LineString(
+        baseAddress: UnsafePointer<UInt8>,
+        lineStart: Int,
+        lineEnd: Int
+    ) -> String? {
+        var index = lineStart
+        while index < lineEnd {
+            if baseAddress[index] >= 0x80 {
+                let lineData = Data(bytes: baseAddress.advanced(by: lineStart), count: lineEnd - lineStart)
+                return String(data: lineData, encoding: .utf8)
+            }
+            index += 1
+        }
+        return String(
+            decoding: UnsafeBufferPointer(
+                start: baseAddress.advanced(by: lineStart),
+                count: lineEnd - lineStart
+            ),
+            as: UTF8.self
+        )
     }
 
     private func isASCIIWord(_ byte: UInt8) -> Bool {
