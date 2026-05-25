@@ -1216,6 +1216,10 @@ public struct RipgrepSearcher: @unchecked Sendable {
                canUseBufferedRawLiteralSearch(fileURL: fileURL) {
                 return nil
             }
+            if matcher.byteRequiredLiteralPrefilter() != nil,
+               canUseBufferedRawLiteralSearch(fileURL: fileURL) {
+                return nil
+            }
 
             try HaystackReader.streamLines(haystack, options: options) { streamedLine, terminate in
                 lineNumber += 1
