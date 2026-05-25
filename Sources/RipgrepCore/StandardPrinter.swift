@@ -36,6 +36,7 @@ public struct StandardPrinter {
     private func bodyLines(for results: SearchResults) -> [String] {
         switch options.printMode {
         case .matchingLines:
+            let shouldShowPath = showPath(for: results)
             if options.vimgrep {
                 return vimgrepLines(for: results, showPath: options.withFilename != false)
             }
@@ -43,20 +44,20 @@ public struct StandardPrinter {
                 return headingLines(for: results)
             }
             if options.passthru || options.beforeContext > 0 || options.afterContext > 0 {
-                return contextLines(for: results, showPath: showPath(for: results))
+                return contextLines(for: results, showPath: shouldShowPath)
             }
             if options.onlyMatching {
                 return results.files.flatMap { result in
-                    if let binaryLine = formatBinaryMatch(result, showPath: showPath(for: results)) {
+                    if let binaryLine = formatBinaryMatch(result, showPath: shouldShowPath) {
                         return [binaryLine]
                     }
-                    return result.matches.flatMap { formatOnlyMatching($0, showPath: showPath(for: results)) }
+                    return result.matches.flatMap { formatOnlyMatching($0, showPath: shouldShowPath) }
                 }
             }
             if options.multiline, options.replacement == nil {
                 return results.files.flatMap { result in
-                    let matchLines = multilineMatchLines(for: result, showPath: showPath(for: results))
-                    if let binaryLine = formatBinaryMatch(result, showPath: showPath(for: results)) {
+                    let matchLines = multilineMatchLines(for: result, showPath: shouldShowPath)
+                    if let binaryLine = formatBinaryMatch(result, showPath: shouldShowPath) {
                         if let offset = result.binaryByteOffset, offset < 64 * 1024 {
                             return [binaryLine]
                         }
@@ -66,8 +67,8 @@ public struct StandardPrinter {
                 }
             }
             return results.files.flatMap { result in
-                let matchLines = result.matches.flatMap { formatSearchMatch($0, showPath: showPath(for: results)) }
-                if let binaryLine = formatBinaryMatch(result, showPath: showPath(for: results)) {
+                let matchLines = result.matches.flatMap { formatSearchMatch($0, showPath: shouldShowPath) }
+                if let binaryLine = formatBinaryMatch(result, showPath: shouldShowPath) {
                     if (result.stoppedBinaryAfterMatch || result.shouldPrintMatchesBeforeBinary) && !matchLines.isEmpty {
                         return matchLines + [binaryLine]
                     }
@@ -79,20 +80,22 @@ public struct StandardPrinter {
                 return matchLines
             }
         case .count:
+            let shouldShowPath = showPath(for: results)
             return countResults(for: results).map { result in
                 let count = options.onlyMatching
                     ? onlyMatchingCount(for: result)
                     : options.multiline && options.effectivePatterns.contains(where: containsLineEndAnchor)
                         ? countMatchesCount(for: result)
                     : result.matches.isEmpty && result.hasBinaryMatch ? 1 : result.matches.count + result.supplementalMatchedLines
-                return countLine(count, fileURL: result.fileURL, showPath: showPath(for: results))
+                return countLine(count, fileURL: result.fileURL, showPath: shouldShowPath)
             }
         case .countMatches:
+            let shouldShowPath = showPath(for: results)
             return countResults(for: results).map { result in
                 let count = result.matches.isEmpty && result.hasBinaryMatch
                     ? 1
                     : countMatchesCount(for: result)
-                return countLine(count, fileURL: result.fileURL, showPath: showPath(for: results))
+                return countLine(count, fileURL: result.fileURL, showPath: shouldShowPath)
             }
         case .filesWithMatches:
             return results.files
