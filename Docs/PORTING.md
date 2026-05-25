@@ -10,14 +10,15 @@ available.
 **Functional 1:1 with Rust ripgrep 15.1.0, including the streaming I/O
 architecture.** Verified via:
 
-- **91 Swift Testing cases** across 12 suites covering search, output formats,
+- **92 Swift Testing cases** across 12 suites covering search, output formats,
   ignore rules, file types, stdin, encodings, binary handling, parser
   diagnostics, mmap/worker pool, PCRE2, streaming haystack reads, and
   generated-asset drift.
-- **205 parity-harness cases** drawn from Rust's own `tests/binary.rs`,
+- **226 parity-harness cases** drawn from Rust's own `tests/binary.rs`,
   `tests/multiline.rs`, `tests/json.rs`, `tests/misc.rs`, `tests/feature.rs`
   and `tests/regression.rs`, plus compressed-input probes for `.gz` /
-  `.bz2` / `.zst` / `.lz4`. **204 pass byte-for-byte** (including JSON
+  `.bz2` / `.xz` / `.lzma` / `.br` / `.zst` / `.lz4`. **225 pass
+  byte-for-byte** (including JSON
   output after stripping `elapsed`/`elapsed_total` timing values, which are
   inherently non-deterministic in Rust). The remaining 1 is skipped because
   APFS refuses to create the invalid-UTF-8 filename the upstream Rust fixture
@@ -71,7 +72,8 @@ into a much smaller implementation:
   max-depth, max-filesize, custom ignore files, `.ignore`, `.rgignore`,
   `.gitignore`, `.git/info/exclude`, global git ignore files, override globs
   and default file types.
-- `--search-zip` works for the checked `.xz` probe when `xz` is available.
+- `--search-zip` works for checked `.gz`, `.bz2`, `.xz`, `.lzma`, `.br`,
+  `.zst` and `.lz4` probes when the matching decompressor is available.
 - Real PCRE2 backend via `CPCRE2`/libpcre2-8 powers `-P`, `--engine=pcre2`,
   `--engine=auto` (auto-hybrid fallback), `--pcre2-version`, and the
   `--pcre2-unicode`/`--no-pcre2-unicode` UCP/UTF toggles.
@@ -211,9 +213,10 @@ to the capped accumulating path.
 
 - **(Done 2026-05-24)** True streaming line buffer for safe buffered file
   searches plus a heap cap on accumulating buffered reads (see Wave 3B).
-- Wider encoding probe coverage (more legacy codepages, GB18030 edge cases,
-  big5-hkscs).
-- Compressed-input probe coverage (`.gz`, `.bz2`, `.zst`, `.lz4`).
+- **(Done 2026-05-24)** Wider encoding probe coverage for GB18030 plane-2,
+  Big5-HKSCS extension bytes and EUC-KR.
+- **(Done 2026-05-24)** Compressed-input parity probes for `.gz`, `.bz2`,
+  `.xz`, `.lzma`, `.br`, `.zst` and `.lz4`.
 - Generated-asset refresh automation (`rg.help.*`, `rg.1`, shell
   completions) from the Rust checkout.
 
@@ -223,7 +226,11 @@ to the capped accumulating path.
   in `Tests/RipgrepCoreTests/ParityHarnessTests.swift` (fixtures under
   `Tests/Fixtures/parity/`). When the env var is unset the test skips so CI
   stays green; when set it diffs stdout/stderr/exit between
-  `.build/debug/ripgrep` and the installed `rg`.
+  `.build/debug/ripgrep` and Rust `rg`. Set `SWIFT_RIPGREP_RUST_BINARY` to a
+  source-built oracle such as
+  `/Users/mweinbach/Projects/swift-harness/ripgrep/target/debug/rg`; build
+  that oracle with `cargo build --bin rg --features pcre2` so PCRE2 parity
+  cases compare like-for-like.
 - **(Done 2026-05-24)** Test split mirroring the Rust upstream layout —
   `BinaryTests`, `FeatureTests`, `JSONTests`, `MiscTests`, `MultilineTests`,
   `RegressionTests`, plus `RipgrepTestSupport` for shared helpers.
@@ -232,8 +239,8 @@ to the capped accumulating path.
 - Add performance smoke tests for large files, many files, binary detection and
   compressed input before changing the search architecture.
 - Grow the parity harness fixture set — current coverage is text, binary,
-  gitignored, multiline and UTF-16LE; extend with more encodings, more
-  compressed inputs, and a few of the regex pathological cases.
+  gitignored, multiline, UTF-16LE, seven compressed formats and wider legacy
+  encodings; extend with a few of the regex pathological cases.
 - Keep the next slices narrow and checkpointable: streaming/mmap/parallel
   architecture (high-priority item 4), then asset-refresh automation and
   perf smoke tests.
@@ -314,7 +321,7 @@ files under `Sources/`.
       behaviour; do not silently drop tests.
 - [x] Add a `ParityHarnessTests.swift` (gated behind an env var such as
       `SWIFT_RIPGREP_PARITY=1`) that, when enabled, runs both
-      `.build/debug/ripgrep` and the installed `rg` over a small fixture set
+      `.build/debug/ripgrep` and Rust `rg` over a small fixture set
       (a tiny `Tests/Fixtures/parity/` tree with text, binary, gitignored,
       multiline and encoding samples) and diffs stdout/stderr/exit. When the
       env var is unset the test should skip cleanly so CI stays green.

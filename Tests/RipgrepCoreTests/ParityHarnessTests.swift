@@ -2,13 +2,13 @@ import Foundation
 import XCTest
 
 final class ParityHarnessTests: XCTestCase {
-    func testMatchesInstalledRipgrepOnSelectedFixtures() throws {
+    func testMatchesRustRipgrepOnSelectedFixtures() throws {
         guard ProcessInfo.processInfo.environment["SWIFT_RIPGREP_PARITY"] == "1" else {
-            throw XCTSkip("Set SWIFT_RIPGREP_PARITY=1 to run the installed rg parity harness.")
+            throw XCTSkip("Set SWIFT_RIPGREP_PARITY=1 to run the Rust rg parity harness.")
         }
 
         let packageRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
-        let rustRipgrep = try findInstalledRipgrep(packageRoot: packageRoot)
+        let rustRipgrep = try findRustRipgrep(packageRoot: packageRoot)
         let swiftRipgrep = try ensureSwiftRipgrepBinary(packageRoot: packageRoot)
 
         for parityCase in parityCases() {
@@ -98,6 +98,9 @@ private func compressedInputParityCases() -> [ParityCase] {
     let formats: [(name: String, ext: String, tool: String, encodeArgs: [String])] = [
         ("gz",  ".gz",  "gzip",  ["-c"]),
         ("bz2", ".bz2", "bzip2", ["-c"]),
+        ("xz",  ".xz",  "xz",    ["-c"]),
+        ("lzma", ".lzma", "xz",   ["--format=lzma", "-c"]),
+        ("br",  ".br",  "brotli", ["-c"]),
         ("zst", ".zst", "zstd",  ["-q", "-c"]),
         ("lz4", ".lz4", "lz4",   ["-q", "-c"]),
     ]
@@ -388,6 +391,10 @@ but Doctor Watson has to have it taken out for him and dusted,
         ParityCase(name: "feature::f1_utf16_auto", fixture: { dir in try write(Data([0xff, 0xfe, 0x28, 0x04, 0x35, 0x04, 0x40, 0x04, 0x3b, 0x04, 0x3e, 0x04, 0x3a, 0x04, 0x20, 0x00, 0x25, 0x04, 0x3e, 0x04, 0x3b, 0x04, 0x3c, 0x04, 0x41, 0x04]), to: "foo", in: dir) }, arguments: ["Шерлок Холмс"]),
         ParityCase(name: "feature::f1_utf16_explicit", fixture: { dir in try write(Data([0xff, 0xfe, 0x28, 0x04, 0x35, 0x04, 0x40, 0x04, 0x3b, 0x04, 0x3e, 0x04, 0x3a, 0x04, 0x20, 0x00, 0x25, 0x04, 0x3e, 0x04, 0x3b, 0x04, 0x3c, 0x04, 0x41, 0x04]), to: "foo", in: dir) }, arguments: ["-Eutf-16le", "Шерлок Холмс"]),
         ParityCase(name: "feature::f1_eucjp", fixture: { dir in try write(Data([0xa7, 0xba, 0xa7, 0xd6, 0xa7, 0xe2, 0xa7, 0xdd, 0xa7, 0xe0, 0xa7, 0xdc, 0x20, 0xa7, 0xb7, 0xa7, 0xe0, 0xa7, 0xdd, 0xa7, 0xde, 0xa7, 0xe3]), to: "foo", in: dir) }, arguments: ["-Eeuc-jp", "Шерлок Холмс"]),
+        ParityCase(name: "feature::f1_gb18030_plane2", fixture: { dir in try write(Data([0x95, 0x32, 0x83, 0x37]), to: "foo", in: dir) }, arguments: ["-Egb18030", "𠀋"]),
+        ParityCase(name: "feature::f1_big5_hkscs_via_big5", fixture: { dir in try write(Data([0x88, 0x57]), to: "foo", in: dir) }, arguments: ["-Ebig5", "Á"]),
+        ParityCase(name: "feature::f1_big5_hkscs_alias", fixture: { dir in try write(Data([0x88, 0x57]), to: "foo", in: dir) }, arguments: ["-Ebig5-hkscs", "Á"]),
+        ParityCase(name: "feature::f1_euckr", fixture: { dir in try write(Data([0xc7, 0xd1, 0xb1, 0xb9]), to: "foo", in: dir) }, arguments: ["-Eeuc-kr", "한국"]),
         ParityCase(name: "feature::f1_unknown_encoding", fixture: { _ in }, arguments: ["-Efoobar"]),
         ParityCase(name: "feature::f1_replacement_encoding", fixture: { _ in }, arguments: ["-Ecsiso2022kr"]),
         ParityCase(name: "feature::f7", fixture: { dir in try write(SHERLOCK, to: "sherlock", in: dir); try write("Sherlock\nHolmes", to: "pat", in: dir) }, arguments: ["-fpat", "sherlock"]),
@@ -692,7 +699,18 @@ private func write(_ data: Data, to relativePath: String, in dir: URL) throws {
     try data.write(to: fileURL, options: .atomic)
 }
 
-private func findInstalledRipgrep(packageRoot: URL) throws -> URL {
+private func findRustRipgrep(packageRoot: URL) throws -> URL {
+    if let configuredPath = ProcessInfo.processInfo.environment["SWIFT_RIPGREP_RUST_BINARY"],
+       !configuredPath.isEmpty
+    {
+        let configuredURL = URL(fileURLWithPath: configuredPath)
+        guard FileManager.default.isExecutableFile(atPath: configuredURL.path) else {
+            XCTFail("SWIFT_RIPGREP_RUST_BINARY is not executable: \(configuredPath)")
+            throw ParityHarnessError.missingRustRipgrep
+        }
+        return configuredURL
+    }
+
     let whichResult = try runProcess(
         executable: URL(fileURLWithPath: "/usr/bin/env"),
         arguments: ["which", "rg"],
@@ -703,7 +721,7 @@ private func findInstalledRipgrep(packageRoot: URL) throws -> URL {
             .split(whereSeparator: \.isNewline)
             .first
     else {
-        throw XCTSkip("Could not find installed rg with `which rg`.")
+        throw XCTSkip("Could not find Rust rg. Set SWIFT_RIPGREP_RUST_BINARY or put rg on PATH.")
     }
     return URL(fileURLWithPath: String(path))
 }
@@ -771,7 +789,7 @@ private func expectEqualData(_ actual: Data, _ expected: Data, stream: String, c
     \(stream) mismatch for \(caseName)
     --- swift-ripgrep
     \(render(actual))
-    --- installed rg
+    --- rust rg
     \(render(expected))
     """)
 }
@@ -780,7 +798,7 @@ private func renderComparison(swift: ProcessResult, rust: ProcessResult) -> Stri
     """
     --- swift-ripgrep
     \(render(swift))
-    --- installed rg
+    --- rust rg
     \(render(rust))
     """
 }
@@ -804,5 +822,5 @@ private func render(_ data: Data) -> String {
 
 private enum ParityHarnessError: Error {
     case buildFailed
+    case missingRustRipgrep
 }
-

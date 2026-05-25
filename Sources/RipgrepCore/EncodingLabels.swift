@@ -92,7 +92,7 @@ public struct TextEncoding: Equatable, Sendable {
     private static let xMacCyrillic = coreFoundation("x-mac-cyrillic", .macCyrillic)
     private static let gbk = coreFoundation("GBK", .GBK_95)
     private static let gb18030 = coreFoundation("gb18030", .GB_18030_2000)
-    private static let big5 = coreFoundation("Big5", .big5)
+    private static let big5 = coreFoundation("Big5", .big5_HKSCS_1999)
     private static let eucJP = coreFoundation("EUC-JP", .EUC_JP)
     private static let iso2022JP = coreFoundation("ISO-2022-JP", .ISO_2022_JP)
     private static let shiftJIS = coreFoundation("Shift_JIS", .shiftJIS)
