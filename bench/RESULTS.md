@@ -143,6 +143,27 @@ The key improvements since the 2026-05-24 baseline are:
   smoke. Default quiet listing remains around 52 ms because it still needs the
   ignore stack.
 
+### Rejected A/B checks — 2026-05-25
+
+The following plausible Darwin optimizations were measured against checkpoint
+`9049084` and backed out because they were neutral-to-slower on the Linux-tree
+benchmarks:
+
+- Replacing the Swift ASCII `GlobMatcher.containsFast` loop with the vendored
+  `rg_memmem_simple` C shim regressed a 30-run A/B: default `--files` measured
+  330.6 ms versus 324.5 ms at baseline, and `PM_RESUME` measured 2.339 s
+  versus 2.325 s.
+- Lazily compiling `NSRegularExpression` fallbacks for ASCII simple-glob ignore
+  rules also regressed the hot path: default `--files` measured 327.4 ms versus
+  324.0 ms, and `--quiet --files` measured 51.0 ms versus 40.7 ms.
+- Avoiding `String` decoding for regular-file entries in the quiet no-ignore
+  existence walker did not pay off: `--no-ignore --hidden --quiet --files`
+  measured 53.1 ms versus 49.3 ms, and visible-only no-ignore quiet measured
+  51.2 ms versus 47.4 ms.
+- Increasing file-list stdout batching from 64 KiB to 256 KiB was slower:
+  default `--files` measured 332.4 ms versus 323.7 ms, and
+  `--no-ignore --files` measured 181.1 ms versus 177.8 ms.
+
 ## Historical baseline — 2026-05-24
 
 ## Single-file haystack (subtitles, 200 MiB ASCII text)
