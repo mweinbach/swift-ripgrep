@@ -86,6 +86,7 @@ public enum RipgrepCLI {
 
                 if options.mode == .files {
                     var filePathOutputBuffer = Data()
+                    filePathOutputBuffer.reserveCapacity(64 * 1024)
                     if stdout == nil,
                        let filePathResults = try searcher.writeDarwinFilePathsWithMessages(
                         options: options,

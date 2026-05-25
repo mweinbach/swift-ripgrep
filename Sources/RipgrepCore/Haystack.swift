@@ -91,12 +91,14 @@ private struct WalkMetadata {
 private struct FastDirectoryChild {
     let name: String
     let isASCII: Bool
+    let isHidden: Bool
     let kind: FastDirectoryEntryKind
 }
 
 private struct FastDirectoryByteChild {
     let nameBytes: [UInt8]
     let isASCII: Bool
+    let isHidden: Bool
     let kind: FastDirectoryEntryKind
 }
 
@@ -284,9 +286,10 @@ public struct FileWalker {
         }
 
         var emittedCount = 0
-        var logicalPathBytes = Array(rootURL.path.utf8)
+        var directoryPathBytes = Array(rootURL.path.utf8)
+        var logicalPathBytes = directoryPathBytes
         try writeDarwinNoIgnoreFilePathsInOutputOrder(
-            directoryPath: rootURL.path,
+            directoryPathBytes: &directoryPathBytes,
             logicalPathBytes: &logicalPathBytes,
             logicalPathIsASCII: rootURL.path.utf8.allSatisfy { $0 < 0x80 },
             includeHidden: options.hidden,
@@ -628,7 +631,7 @@ public struct FileWalker {
             let childRelativePath = relativePathPrefix + child.name
             let isDirectory = child.kind.isDirectory
             if !options.hidden,
-               isHiddenName(child.name),
+               child.isHidden,
                !isIncludedByIgnore(
                    relativePath: childRelativePath,
                    basename: child.name,
@@ -818,7 +821,7 @@ public struct FileWalker {
     }
 
     private func writeDarwinNoIgnoreFilePathsInOutputOrder(
-        directoryPath: String,
+        directoryPathBytes: inout [UInt8],
         logicalPathBytes: inout [UInt8],
         logicalPathIsASCII: Bool,
         includeHidden: Bool,
@@ -826,23 +829,24 @@ public struct FileWalker {
         outputBuffer: inout Data,
         writeBytes: (UnsafeRawBufferPointer) -> Void
     ) throws {
-        let children = try fastDirectoryByteChildren(atPath: directoryPath)
-        let directoryPathPrefix = directoryPath + "/"
+        let children = try fastDirectoryByteChildren(atPathBytes: &directoryPathBytes)
 
         for child in children.reversed() {
             if child.kind == .symbolicLink {
                 continue
             }
-            if !includeHidden, isHiddenName(child.nameBytes) {
+            if !includeHidden, child.isHidden {
                 continue
             }
             if child.kind.isDirectory {
-                let childName = String(decoding: child.nameBytes, as: UTF8.self)
+                let previousDirectoryPathCount = directoryPathBytes.count
                 let previousLogicalPathCount = logicalPathBytes.count
+                directoryPathBytes.append(UInt8(ascii: "/"))
+                directoryPathBytes.append(contentsOf: child.nameBytes)
                 logicalPathBytes.append(UInt8(ascii: "/"))
                 logicalPathBytes.append(contentsOf: child.nameBytes)
                 try writeDarwinNoIgnoreFilePathsInOutputOrder(
-                    directoryPath: directoryPathPrefix + childName,
+                    directoryPathBytes: &directoryPathBytes,
                     logicalPathBytes: &logicalPathBytes,
                     logicalPathIsASCII: logicalPathIsASCII && child.isASCII,
                     includeHidden: includeHidden,
@@ -850,6 +854,7 @@ public struct FileWalker {
                     outputBuffer: &outputBuffer,
                     writeBytes: writeBytes
                 )
+                directoryPathBytes.removeSubrange(previousDirectoryPathCount...)
                 logicalPathBytes.removeSubrange(previousLogicalPathCount...)
             } else if child.kind.isFile {
                 emittedCount += 1
@@ -875,9 +880,9 @@ public struct FileWalker {
         outputBuffer: inout Data
     ) {
         if logicalPathIsASCII && childNameIsASCII {
-            outputBuffer.append(contentsOf: logicalPathBytes)
+            appendBytes(logicalPathBytes, to: &outputBuffer)
             outputBuffer.append(UInt8(ascii: "/"))
-            outputBuffer.append(contentsOf: childNameBytes)
+            appendBytes(childNameBytes, to: &outputBuffer)
             outputBuffer.append(UInt8(ascii: "\n"))
             return
         }
@@ -888,6 +893,15 @@ public struct FileWalker {
         let path = String(decoding: pathBytes, as: UTF8.self).precomposedStringWithCanonicalMapping
         appendUTF8(path, to: &outputBuffer)
         outputBuffer.append(UInt8(ascii: "\n"))
+    }
+
+    private func appendBytes(_ bytes: [UInt8], to data: inout Data) {
+        bytes.withUnsafeBufferPointer { buffer in
+            guard let baseAddress = buffer.baseAddress, !buffer.isEmpty else {
+                return
+            }
+            data.append(baseAddress, count: buffer.count)
+        }
     }
 
     private func flushDarwinFilePathOutputBuffer(
@@ -929,7 +943,7 @@ public struct FileWalker {
         filtered: inout Bool
     ) -> Bool {
         if !options.hidden,
-           isHiddenName(child.name),
+           child.isHidden,
            !isIncludedByIgnore(
                relativePath: childRelativePath,
                basename: child.name,
@@ -945,8 +959,9 @@ public struct FileWalker {
         return true
     }
 
-    private func fastDirectoryByteChildren(atPath path: String) throws -> [FastDirectoryByteChild] {
-        guard let directory = opendir(path) else {
+    private func fastDirectoryByteChildren(atPathBytes pathBytes: inout [UInt8]) throws -> [FastDirectoryByteChild] {
+        guard let directory = withTemporaryCString(pathBytes: &pathBytes, opendir) else {
+            let path = String(decoding: pathBytes, as: UTF8.self)
             throw NSError(
                 domain: NSPOSIXErrorDomain,
                 code: Int(errno),
@@ -970,14 +985,32 @@ public struct FileWalker {
             if isCurrentOrParentDirectoryName(nameBytes) {
                 continue
             }
-            let kind = try fastDirectoryEntryKind(entry.d_type, path: path, nameBytes: nameBytes)
+            let kind = try fastDirectoryEntryKind(
+                entry.d_type,
+                directoryPathBytes: &pathBytes,
+                nameBytes: nameBytes
+            )
             children.append(FastDirectoryByteChild(
                 nameBytes: nameBytes,
                 isASCII: nameBytes.allSatisfy { $0 < 0x80 },
+                isHidden: nameBytes.first == UInt8(ascii: "."),
                 kind: kind
             ))
         }
         return children
+    }
+
+    private func withTemporaryCString<Result>(
+        pathBytes: inout [UInt8],
+        _ body: (UnsafePointer<CChar>) throws -> Result
+    ) rethrows -> Result {
+        pathBytes.append(0)
+        defer {
+            pathBytes.removeLast()
+        }
+        return try pathBytes.withUnsafeBufferPointer { buffer in
+            try buffer.baseAddress!.withMemoryRebound(to: CChar.self, capacity: buffer.count, body)
+        }
     }
 
     private func fastDirectoryContents(atPath path: String, collectIgnoreMarkers: Bool = true) throws -> FastDirectoryContents {
@@ -1000,7 +1033,7 @@ public struct FileWalker {
         var hasRgignore = false
         while let entryPointer = readdir(directory) {
             let entry = entryPointer.pointee
-            let entryName = fastDirectoryEntryNameAndASCII(entry)
+            let entryName = fastDirectoryEntryNameAndFlags(entry)
             let name = entryName.name
             if name == "." || name == ".." {
                 continue
@@ -1023,6 +1056,7 @@ public struct FileWalker {
             children.append(FastDirectoryChild(
                 name: name,
                 isASCII: entryName.isASCII,
+                isHidden: entryName.isHidden,
                 kind: kind
             ))
         }
@@ -1049,17 +1083,19 @@ public struct FileWalker {
 
         while let entryPointer = readdir(directory) {
             let entry = entryPointer.pointee
-            let name = withUnsafePointer(to: entry.d_name) { pointer in
-                pointer.withMemoryRebound(to: CChar.self, capacity: Int(entry.d_namlen) + 1) {
-                    String(cString: $0)
+            let nameLength = Int(entry.d_namlen)
+            let nameBytes = withUnsafePointer(to: entry.d_name) { pointer in
+                pointer.withMemoryRebound(to: UInt8.self, capacity: nameLength + 1) { bytes in
+                    Array(UnsafeBufferPointer(start: bytes, count: nameLength))
                 }
             }
-            if name == "." || name == ".." {
+            if isCurrentOrParentDirectoryName(nameBytes) {
                 continue
             }
-            if !includeHidden, isHiddenName(name) {
+            if !includeHidden, nameBytes.first == UInt8(ascii: ".") {
                 continue
             }
+            let name = String(decoding: nameBytes, as: UTF8.self)
             switch try fastDirectoryEntryKind(entry.d_type, path: path, name: name) {
             case .file:
                 return true
@@ -1083,12 +1119,16 @@ public struct FileWalker {
         return logicalDirectoryPathIsASCII && child.isASCII ? path : normalizedOutputPath(path)
     }
 
-    private func fastDirectoryEntryNameAndASCII(_ entry: dirent) -> (name: String, isASCII: Bool) {
+    private func fastDirectoryEntryNameAndFlags(_ entry: dirent) -> (name: String, isASCII: Bool, isHidden: Bool) {
         return withUnsafePointer(to: entry.d_name) { pointer in
             let nameLength = Int(entry.d_namlen)
             return pointer.withMemoryRebound(to: UInt8.self, capacity: nameLength + 1) { bytes in
                 let buffer = UnsafeBufferPointer(start: bytes, count: nameLength)
-                return (String(decoding: buffer, as: UTF8.self), buffer.allSatisfy { $0 < 0x80 })
+                return (
+                    String(decoding: buffer, as: UTF8.self),
+                    buffer.allSatisfy { $0 < 0x80 },
+                    buffer.first == UInt8(ascii: ".")
+                )
             }
         }
     }
@@ -1126,7 +1166,7 @@ public struct FileWalker {
         }
     }
 
-    private func fastDirectoryEntryKind(_ type: UInt8, path: String, nameBytes: [UInt8]) throws -> FastDirectoryEntryKind {
+    private func fastDirectoryEntryKind(_ type: UInt8, directoryPathBytes: inout [UInt8], nameBytes: [UInt8]) throws -> FastDirectoryEntryKind {
         switch Int32(type) {
         case DT_DIR:
             return .directory
@@ -1135,7 +1175,34 @@ public struct FileWalker {
         case DT_LNK:
             return .symbolicLink
         case DT_UNKNOWN:
-            return try fastDirectoryEntryKind(type, path: path, name: String(decoding: nameBytes, as: UTF8.self))
+            let previousCount = directoryPathBytes.count
+            directoryPathBytes.append(UInt8(ascii: "/"))
+            directoryPathBytes.append(contentsOf: nameBytes)
+            defer {
+                directoryPathBytes.removeSubrange(previousCount...)
+            }
+            var statBuffer = stat()
+            let status = withTemporaryCString(pathBytes: &directoryPathBytes) { childPath in
+                Darwin.lstat(childPath, &statBuffer)
+            }
+            guard status == 0 else {
+                let childPath = String(decoding: directoryPathBytes, as: UTF8.self)
+                throw NSError(
+                    domain: NSPOSIXErrorDomain,
+                    code: Int(errno),
+                    userInfo: [NSFilePathErrorKey: childPath]
+                )
+            }
+            switch statBuffer.st_mode & S_IFMT {
+            case S_IFDIR:
+                return .directory
+            case S_IFREG:
+                return .file
+            case S_IFLNK:
+                return .symbolicLink
+            default:
+                return .other
+            }
         default:
             return .other
         }
