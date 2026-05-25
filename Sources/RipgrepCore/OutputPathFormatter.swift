@@ -43,7 +43,11 @@ struct OutputPathFormatter {
             return "<stdin>"
         }
 
+        #if canImport(Darwin)
+        let path = url.path
+        #else
         let path = url.standardizedFileURL.path
+        #endif
         if let rootedPath = displayPathFromRootArgument(for: path) {
             return normalizedPath(rootedPath, applyingPathSeparator: applyingPathSeparator)
         }
@@ -61,7 +65,11 @@ struct OutputPathFormatter {
     }
 
     private func isStdinSentinel(_ url: URL) -> Bool {
+        #if canImport(Darwin)
+        let path = url.path
+        #else
         let path = url.standardizedFileURL.path
+        #endif
         return path == "-"
             || path == "<stdin>"
             || (url.lastPathComponent == "<stdin>" && !FileManager.default.fileExists(atPath: path))
