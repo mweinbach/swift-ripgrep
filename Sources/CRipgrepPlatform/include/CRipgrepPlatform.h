@@ -4,6 +4,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
+typedef struct {
+    int status;
+    size_t matched_line_count;
+    size_t total_match_count;
+    size_t bytes_searched;
+} rg_darwin_literal_file_result;
+
 const uint8_t *rg_memmem_simple(
     const uint8_t *haystack,
     size_t haystack_len,
@@ -42,6 +49,12 @@ size_t rg_memcount_byte(
     const uint8_t *haystack,
     size_t haystack_len,
     uint8_t byte
+);
+
+rg_darwin_literal_file_result rg_darwin_write_literal_file_lines(
+    const char *path,
+    const uint8_t *needle,
+    size_t needle_len
 );
 
 #endif

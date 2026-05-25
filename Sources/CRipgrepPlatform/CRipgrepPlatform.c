@@ -1,5 +1,13 @@
 #include "CRipgrepPlatform.h"
 
+#ifdef __APPLE__
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+
+#include <errno.h>
 #include <string.h>
 
 static inline uint8_t rg_ascii_lower(uint8_t byte) {
@@ -202,4 +210,129 @@ size_t rg_memcount_byte(
         count += haystack[index] == byte;
     }
     return count;
+}
+
+rg_darwin_literal_file_result rg_darwin_write_literal_file_lines(
+    const char *path,
+    const uint8_t *needle,
+    size_t needle_len
+) {
+    rg_darwin_literal_file_result result = { .status = -2, .matched_line_count = 0, .total_match_count = 0, .bytes_searched = 0 };
+#ifndef __APPLE__
+    (void)path;
+    (void)needle;
+    (void)needle_len;
+    return result;
+#else
+    if (path == NULL || needle == NULL || needle_len == 0) {
+        return result;
+    }
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        result.status = -1;
+        return result;
+    }
+
+    struct stat file_stat;
+    if (fstat(fd, &file_stat) != 0) {
+        close(fd);
+        result.status = -1;
+        return result;
+    }
+    if ((file_stat.st_mode & S_IFMT) != S_IFREG) {
+        close(fd);
+        return result;
+    }
+    if (file_stat.st_size <= 0) {
+        close(fd);
+        result.status = 0;
+        return result;
+    }
+
+    const size_t haystack_len = (size_t)file_stat.st_size;
+    uint8_t *base = mmap(NULL, haystack_len, PROT_READ, MAP_PRIVATE, fd, 0);
+    close(fd);
+    if (base == MAP_FAILED) {
+        result.status = -1;
+        return result;
+    }
+
+    if (haystack_len >= 3 && base[0] == 0xEF && base[1] == 0xBB && base[2] == 0xBF) {
+        munmap(base, haystack_len);
+        return result;
+    }
+    if (haystack_len >= 2
+        && ((base[0] == 0xFF && base[1] == 0xFE) || (base[0] == 0xFE && base[1] == 0xFF))) {
+        munmap(base, haystack_len);
+        return result;
+    }
+
+    const size_t binary_check_len = haystack_len < (64 * 1024) ? haystack_len : (64 * 1024);
+    if (memchr(base, 0, binary_check_len) != NULL) {
+        munmap(base, haystack_len);
+        return result;
+    }
+
+    size_t search_offset = 0;
+    size_t last_emitted_line_start = (size_t)-1;
+    while (search_offset < haystack_len) {
+        const uint8_t *found = rg_memmem_simple(base + search_offset, haystack_len - search_offset, needle, needle_len);
+        if (found == NULL) {
+            break;
+        }
+
+        const size_t match_start = (size_t)(found - base);
+        result.total_match_count++;
+
+        size_t line_start = match_start;
+        while (line_start > 0 && base[line_start - 1] != '\n') {
+            line_start--;
+        }
+
+        if (line_start != last_emitted_line_start) {
+            const void *newline = memchr(found, '\n', haystack_len - match_start);
+            const size_t output_end = newline == NULL
+                ? haystack_len
+                : (size_t)(((const uint8_t *)newline - base) + 1);
+            const size_t output_len = output_end - line_start;
+            size_t bytes_written = 0;
+            while (bytes_written < output_len) {
+                ssize_t written = write(STDOUT_FILENO, base + line_start + bytes_written, output_len - bytes_written);
+                if (written < 0) {
+                    if (errno == EINTR) {
+                        continue;
+                    }
+                    munmap(base, haystack_len);
+                    result.status = -1;
+                    return result;
+                }
+                if (written == 0) {
+                    munmap(base, haystack_len);
+                    result.status = -1;
+                    return result;
+                }
+                bytes_written += (size_t)written;
+            }
+            if (newline == NULL) {
+                uint8_t terminator = '\n';
+                while (write(STDOUT_FILENO, &terminator, 1) < 0) {
+                    if (errno != EINTR) {
+                        munmap(base, haystack_len);
+                        result.status = -1;
+                        return result;
+                    }
+                }
+            }
+            result.matched_line_count++;
+            last_emitted_line_start = line_start;
+        }
+
+        search_offset = match_start + needle_len;
+    }
+
+    result.status = result.matched_line_count > 0 ? 1 : 0;
+    result.bytes_searched = haystack_len;
+    munmap(base, haystack_len);
+    return result;
+#endif
 }

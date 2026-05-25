@@ -99,7 +99,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "ripgrep",
-            dependencies: ["RipgrepCore"]
+            dependencies: ["RipgrepCore", "CRipgrepPlatform"]
         ),
         .testTarget(
             name: "RipgrepCoreTests",
