@@ -178,6 +178,11 @@ benchmarks:
 - Increasing file-list stdout batching from 64 KiB to 256 KiB was slower:
   default `--files` measured 332.4 ms versus 323.7 ms, and
   `--no-ignore --files` measured 181.1 ms versus 177.8 ms.
+- Skipping hidden `dirent` names before kind classification in the visible-only
+  no-ignore byte walker preserved output but did not improve the Linux-tree
+  walker. A 30-run A/B against checkpoint `16ea768` measured
+  `--no-ignore --files` at 178.0 ms versus 177.1 ms baseline, and
+  `--no-ignore --hidden --files` at 179.2 ms versus 176.3 ms baseline.
 
 ## Historical baseline — 2026-05-24
 
