@@ -184,6 +184,17 @@ public struct FileWalker {
             return nil
         }
 
+        if stopAfterFirst, options.quiet, options.noIgnore, options.loggingMode == nil {
+            let hasFile = try fastDirectoryTreeContainsFile(atPath: rootURL.path, includeHidden: options.hidden)
+            return FilePathStreamResults(
+                count: hasFile ? 1 : 0,
+                messages: messages,
+                warnings: warnings,
+                diagnostics: diagnostics,
+                filtered: false
+            )
+        }
+
         var rootIgnoreStack = IgnoreStack()
         appendExplicitIgnoreFiles(
             to: &rootIgnoreStack,
@@ -805,6 +816,45 @@ public struct FileWalker {
             hasIgnore: hasIgnore,
             hasRgignore: hasRgignore
         )
+    }
+
+    private func fastDirectoryTreeContainsFile(atPath path: String, includeHidden: Bool) throws -> Bool {
+        guard let directory = opendir(path) else {
+            throw NSError(
+                domain: NSPOSIXErrorDomain,
+                code: Int(errno),
+                userInfo: [NSFilePathErrorKey: path]
+            )
+        }
+        defer {
+            closedir(directory)
+        }
+
+        while let entryPointer = readdir(directory) {
+            let entry = entryPointer.pointee
+            let name = withUnsafePointer(to: entry.d_name) { pointer in
+                pointer.withMemoryRebound(to: CChar.self, capacity: Int(entry.d_namlen) + 1) {
+                    String(cString: $0)
+                }
+            }
+            if name == "." || name == ".." {
+                continue
+            }
+            if !includeHidden, name.hasPrefix(".") {
+                continue
+            }
+            switch try fastDirectoryEntryKind(entry.d_type, path: path, name: name) {
+            case .file:
+                return true
+            case .directory:
+                if try fastDirectoryTreeContainsFile(atPath: "\(path)/\(name)", includeHidden: includeHidden) {
+                    return true
+                }
+            case .symbolicLink, .other:
+                continue
+            }
+        }
+        return false
     }
 
     private func outputPath(

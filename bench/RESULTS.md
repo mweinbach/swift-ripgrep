@@ -88,6 +88,11 @@ The key improvements since the 2026-05-24 baseline are:
   from the 66.6 ms Swift no-PCRE2 checkpoint. Default `--files` in the same
   smoke was 462.0 ms for Swift versus 88.2 ms for Rust, so ignore setup and
   matching are still the largest traversal hotspot.
+- Quiet no-ignore file listing now has a narrower existence-only Darwin walker.
+  The same Linux tree measured `--no-ignore --hidden --quiet --files` at
+  31.0 ms for Swift versus 5.3 ms for Rust, down from the prior 53.4 ms Swift
+  smoke. Default quiet listing remains around 52 ms because it still needs the
+  ignore stack.
 
 ## Historical baseline — 2026-05-24
 
