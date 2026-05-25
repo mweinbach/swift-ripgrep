@@ -33,18 +33,6 @@ const uint8_t *rg_memcasemem_ascii_prepared(
     const size_t shifts[256]
 );
 
-void rg_byte_set_init(
-    uint8_t table[256],
-    const uint8_t *needles,
-    size_t needle_count
-);
-
-const uint8_t *rg_memchr_any_table(
-    const uint8_t *haystack,
-    size_t haystack_len,
-    const uint8_t table[256]
-);
-
 const uint8_t *rg_memchr_any_bytes(
     const uint8_t *haystack,
     size_t haystack_len,
