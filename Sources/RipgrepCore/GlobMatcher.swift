@@ -6,6 +6,14 @@ public struct GlobMatcher: Equatable {
         case exclude
     }
 
+    fileprivate enum FastMatcher: Equatable {
+        case any
+        case exact(String)
+        case prefix(String)
+        case suffix(String)
+        case contains(String)
+    }
+
     public struct Rule: Equatable {
         let originalPattern: String
         let pattern: String
@@ -16,6 +24,7 @@ public struct GlobMatcher: Equatable {
         let anchored: Bool
         let basenameOnly: Bool
         let sourcePath: String?
+        fileprivate let fastMatcher: FastMatcher?
         let regex: NSRegularExpression?
         let anywhereRegex: NSRegularExpression?
 
@@ -48,6 +57,7 @@ public struct GlobMatcher: Equatable {
             self.anchored = anchored
             self.basenameOnly = basenameOnly
             self.sourcePath = sourcePath
+            self.fastMatcher = GlobMatcher.compileFastMatcher(source, basenameOnly: basenameOnly, caseInsensitive: caseInsensitive)
             self.regex = GlobMatcher.compileGlobRegex(source, caseInsensitive: caseInsensitive)
             self.anywhereRegex = GlobMatcher.compileGlobRegex("**/\(source)", caseInsensitive: caseInsensitive)
         }
@@ -62,6 +72,7 @@ public struct GlobMatcher: Equatable {
                 && lhs.anchored == rhs.anchored
                 && lhs.basenameOnly == rhs.basenameOnly
                 && lhs.sourcePath == rhs.sourcePath
+                && lhs.fastMatcher == rhs.fastMatcher
         }
     }
 
@@ -195,7 +206,7 @@ public struct GlobMatcher: Equatable {
             return matchesGlob(rule, relativePath)
         }
         if rule.basenameOnly {
-            guard let basename = pathComponents(relativePath).last else {
+            guard let basename = basename(relativePath) else {
                 return false
             }
             return matchesGlob(rule, basename)
@@ -206,11 +217,24 @@ public struct GlobMatcher: Equatable {
         return matchesGlob(rule, relativePath)
     }
 
-    private func pathComponents(_ path: String) -> [String] {
-        path.split(separator: "/").map(String.init)
+    private func basename(_ path: String) -> String? {
+        guard !path.isEmpty else {
+            return nil
+        }
+        guard let slash = path.lastIndex(of: "/") else {
+            return path
+        }
+        let next = path.index(after: slash)
+        guard next < path.endIndex else {
+            return nil
+        }
+        return String(path[next...])
     }
 
     private func matchesGlob(_ rule: Rule, _ value: String) -> Bool {
+        if let fastMatcher = rule.fastMatcher {
+            return matchesFast(fastMatcher, value)
+        }
         guard let regex = rule.regex else {
             return false
         }
@@ -227,6 +251,60 @@ public struct GlobMatcher: Equatable {
     private func matches(_ regex: NSRegularExpression, _ value: String) -> Bool {
         let range = NSRange(value.startIndex..., in: value)
         return regex.firstMatch(in: value, range: range) != nil
+    }
+
+    private func matchesFast(_ matcher: FastMatcher, _ value: String) -> Bool {
+        switch matcher {
+        case .any:
+            return true
+        case .exact(let expected):
+            return value == expected
+        case .prefix(let prefix):
+            return value.hasPrefix(prefix)
+        case .suffix(let suffix):
+            return value.hasSuffix(suffix)
+        case .contains(let needle):
+            return value.contains(needle)
+        }
+    }
+
+    private static func compileFastMatcher(
+        _ pattern: String,
+        basenameOnly: Bool,
+        caseInsensitive: Bool
+    ) -> FastMatcher? {
+        guard !caseInsensitive else {
+            return nil
+        }
+        let metaCharacters = CharacterSet(charactersIn: "?[]{}\\")
+        guard pattern.rangeOfCharacter(from: metaCharacters) == nil else {
+            return nil
+        }
+        let starCount = pattern.reduce(0) { count, character in
+            character == "*" ? count + 1 : count
+        }
+        if starCount == 0 {
+            return .exact(pattern)
+        }
+        guard basenameOnly else {
+            return nil
+        }
+        if pattern == "*" {
+            return .any
+        }
+        if starCount == 1, pattern.hasPrefix("*") {
+            let suffix = String(pattern.dropFirst())
+            return suffix.isEmpty ? .any : .suffix(suffix)
+        }
+        if starCount == 1, pattern.hasSuffix("*") {
+            let prefix = String(pattern.dropLast())
+            return prefix.isEmpty ? .any : .prefix(prefix)
+        }
+        if starCount == 2, pattern.hasPrefix("*"), pattern.hasSuffix("*") {
+            let needle = pattern.dropFirst().dropLast()
+            return needle.isEmpty ? .any : .contains(String(needle))
+        }
+        return nil
     }
 
     private static func compileGlobRegex(_ pattern: String, caseInsensitive: Bool) -> NSRegularExpression? {
