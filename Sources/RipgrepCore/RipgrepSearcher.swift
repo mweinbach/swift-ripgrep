@@ -147,6 +147,10 @@ public struct RipgrepSearcher: @unchecked Sendable {
         guard canStreamPlainMatchingLines(options: options) else {
             return nil
         }
+        guard let root = options.roots.first,
+              !isDirectory(root.standardizedFileURL) else {
+            return nil
+        }
 
         let matcher = try PatternMatcher(options: options)
         guard !matcher.usesByteSemantics,
