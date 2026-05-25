@@ -959,7 +959,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             return requested <= 1 ? 1 : requested
         }
         #if canImport(Darwin)
-        return max(1, min(ProcessInfo.processInfo.activeProcessorCount, 4))
+        return max(1, min(ProcessInfo.processInfo.activeProcessorCount, 8))
         #else
         return max(1, min(ProcessInfo.processInfo.activeProcessorCount, 12))
         #endif
