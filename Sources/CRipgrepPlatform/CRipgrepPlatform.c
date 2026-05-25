@@ -88,6 +88,57 @@ const uint8_t *rg_memcasemem_ascii(
     return NULL;
 }
 
+void rg_byte_set_init(
+    uint8_t table[256],
+    const uint8_t *needles,
+    size_t needle_count
+) {
+    memset(table, 0, 256);
+    for (size_t index = 0; index < needle_count; ++index) {
+        table[needles[index]] = 1;
+    }
+}
+
+const uint8_t *rg_memchr_any_table(
+    const uint8_t *haystack,
+    size_t haystack_len,
+    const uint8_t table[256]
+) {
+    size_t index = 0;
+    for (; index + 8 <= haystack_len; index += 8) {
+        if (table[haystack[index]]) {
+            return haystack + index;
+        }
+        if (table[haystack[index + 1]]) {
+            return haystack + index + 1;
+        }
+        if (table[haystack[index + 2]]) {
+            return haystack + index + 2;
+        }
+        if (table[haystack[index + 3]]) {
+            return haystack + index + 3;
+        }
+        if (table[haystack[index + 4]]) {
+            return haystack + index + 4;
+        }
+        if (table[haystack[index + 5]]) {
+            return haystack + index + 5;
+        }
+        if (table[haystack[index + 6]]) {
+            return haystack + index + 6;
+        }
+        if (table[haystack[index + 7]]) {
+            return haystack + index + 7;
+        }
+    }
+    for (; index < haystack_len; ++index) {
+        if (table[haystack[index]]) {
+            return haystack + index;
+        }
+    }
+    return NULL;
+}
+
 size_t rg_memcount_byte(
     const uint8_t *haystack,
     size_t haystack_len,

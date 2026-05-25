@@ -578,6 +578,55 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 return
             }
 
+            if let byteSet = singleByteLiteralSet(literals) {
+                var table = [UInt8](repeating: 0, count: 256)
+                byteSet.withUnsafeBufferPointer { needles in
+                    rg_byte_set_init(&table, needles.baseAddress, needles.count)
+                }
+
+                var searchOffset = 0
+                while searchOffset < data.count, matchedLineCount < maxCount {
+                    let foundPointer = rg_memchr_any_table(
+                        baseAddress.advanced(by: searchOffset),
+                        data.count - searchOffset,
+                        table
+                    )
+                    guard let rawFoundPointer = foundPointer else {
+                        break
+                    }
+                    let matchStart = baseAddress.distance(to: rawFoundPointer)
+                    var lineStart = matchStart
+                    while lineStart > 0, baseAddress[lineStart - 1] != UInt8(ascii: "\n") {
+                        lineStart -= 1
+                    }
+                    let remaining = data.count - matchStart
+                    let newlinePointer = memchr(rawFoundPointer, Int32(UInt8(ascii: "\n")), remaining)
+                    let outputEnd: Int
+                    if let newlinePointer {
+                        outputEnd = baseAddress.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self)) + 1
+                    } else {
+                        outputEnd = data.count
+                    }
+                    matchedLineCount += 1
+                    writeBytes(UnsafeRawBufferPointer(
+                        start: rawBaseAddress.advanced(by: lineStart),
+                        count: outputEnd - lineStart
+                    ))
+                    if newlinePointer == nil {
+                        var newline = UInt8(ascii: "\n")
+                        withUnsafeBytes(of: &newline) { buffer in
+                            writeBytes(buffer)
+                        }
+                    }
+                    if matchedLineCount == maxCount {
+                        bytesSearched = outputEnd
+                        break
+                    }
+                    searchOffset = outputEnd
+                }
+                return
+            }
+
             var lineStart = 0
             while lineStart < data.count, matchedLineCount < maxCount {
                 let remaining = data.count - lineStart
@@ -639,6 +688,20 @@ public struct RipgrepSearcher: @unchecked Sendable {
             )
         )
         #endif
+    }
+
+    private func singleByteLiteralSet(_ literals: [[UInt8]]) -> [UInt8]? {
+        var seen = Set<UInt8>()
+        var bytes: [UInt8] = []
+        for literal in literals {
+            guard literal.count == 1, let byte = literal.first else {
+                return nil
+            }
+            if seen.insert(byte).inserted {
+                bytes.append(byte)
+            }
+        }
+        return bytes.isEmpty ? nil : bytes
     }
 
     private func canWriteDarwinSimpleByteLiteralLines(options: RipgrepOptions) -> Bool {
