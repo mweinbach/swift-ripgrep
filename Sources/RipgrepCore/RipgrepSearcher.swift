@@ -963,7 +963,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     baseAddress: baseAddress,
                     literal: literal,
                     maxCount: maxCount,
-                    needsLineNumbers: options.lineNumber,
                     requiresWordBoundary: fastPath.wordASCII
                 ) {
                     return literalResult
@@ -1472,7 +1471,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
         baseAddress: UnsafePointer<UInt8>,
         literal: [UInt8],
         maxCount: Int,
-        needsLineNumbers: Bool,
         requiresWordBoundary: Bool
     ) -> SearchFileResult? {
         #if canImport(Darwin)
@@ -1546,16 +1544,14 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 }
             }
             if lineStart != lastEmittedLineStart {
-                if needsLineNumbers {
-                    advanceLineNumber(to: lineStart)
-                }
+                advanceLineNumber(to: lineStart)
                 let lineData = Data(bytes: baseAddress.advanced(by: lineStart), count: lineEnd - lineStart)
                 guard let line = String(data: lineData, encoding: .utf8) else {
                     return nil
                 }
                 matches.append(SearchMatch(
                     fileURL: fileURL,
-                    lineNumber: needsLineNumbers ? lineNumber : 0,
+                    lineNumber: lineNumber,
                     column: nil,
                     line: line,
                     lineTerminator: terminator,
