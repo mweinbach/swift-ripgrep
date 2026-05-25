@@ -83,9 +83,10 @@ let package = Package(
             pkgConfig: "libpcre2-8",
             providers: [.brew(["pcre2"])]
         ),
+        .target(name: "CRipgrepPlatform"),
         .target(
             name: "RipgrepCore",
-            dependencies: ["CPCRE2"],
+            dependencies: ["CPCRE2", "CRipgrepPlatform"],
             resources: [
                 .process("Resources"),
             ],
