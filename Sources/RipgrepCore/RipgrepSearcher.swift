@@ -710,6 +710,67 @@ public struct RipgrepSearcher: @unchecked Sendable {
         return fastPath.literals.allSatisfy { $0.count == 1 } || fastPath.literals.count == 1
     }
 
+    private func searchDarwinPlainLiteralNoMatch(
+        _ data: Data,
+        fileURL: URL,
+        matcher: PatternMatcher,
+        options: RipgrepOptions
+    ) -> SearchFileResult? {
+        #if !canImport(Darwin)
+        return nil
+        #else
+        guard case .automatic = options.encodingMode,
+              options.binaryMode == .automatic,
+              !options.disablesBinaryDetection,
+              !data.starts(with: [0xEF, 0xBB, 0xBF]),
+              !data.starts(with: [0xFF, 0xFE]),
+              !data.starts(with: [0xFE, 0xFF]),
+              options.printMode == .matchingLines,
+              canOmitMatchSpans(options: options),
+              !options.json,
+              !options.stats,
+              options.beforeContext == 0,
+              options.afterContext == 0,
+              !options.passthru,
+              options.replacement == nil,
+              !options.stopOnNonmatch,
+              options.maxCount == nil,
+              !options.onlyMatching,
+              !options.column,
+              !options.byteOffset,
+              !options.vimgrep,
+              !options.crlf,
+              options.maxColumns == nil,
+              let fastPath = matcher.byteLiteralFastPath(),
+              !fastPath.caseInsensitiveASCII,
+              !fastPath.wordASCII,
+              fastPath.literals.count == 1,
+              let literal = fastPath.literals.first,
+              !literal.isEmpty else {
+            return nil
+        }
+
+        return data.withUnsafeBytes { rawBytes -> SearchFileResult? in
+            let bytes = rawBytes.bindMemory(to: UInt8.self)
+            guard let baseAddress = bytes.baseAddress else {
+                return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: data.count)
+            }
+            let found = literal.withUnsafeBufferPointer { needle in
+                rg_memmem_simple(baseAddress, data.count, needle.baseAddress, needle.count)
+            }
+            guard found == nil else {
+                return nil
+            }
+            return SearchFileResult(
+                fileURL: fileURL,
+                matches: [],
+                bytesSearched: data.count,
+                searched: true
+            )
+        }
+        #endif
+    }
+
     private func lineContainsAnyLiteral(_ line: UnsafePointer<UInt8>, count: Int, literals: [[UInt8]]) -> Bool {
         guard count > 0 else {
             return false
@@ -1202,6 +1263,15 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 options: options,
                 isExplicit: haystack.isExplicit
             )
+        }
+
+        if let noMatchResult = searchDarwinPlainLiteralNoMatch(
+            data,
+            fileURL: fileURL,
+            matcher: matcher,
+            options: options
+        ) {
+            return FileSearchOutcome(result: noMatchResult)
         }
 
         let binaryByteOffset = shouldCheckBinary(data, options: options) ? firstNulByteOffset(in: data) : nil
