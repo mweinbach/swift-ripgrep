@@ -489,6 +489,10 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 && !options.column
                 && !options.byteOffset
             let streamByteFastPath = streamingByteLiteralFastPath(matcher: matcher, options: options)
+            if streamByteFastPath != nil,
+               canUseBufferedRawLiteralSearch(fileURL: fileURL) {
+                return nil
+            }
 
             try HaystackReader.streamLines(haystack, options: options) { streamedLine, terminate in
                 lineNumber += 1
@@ -1048,6 +1052,14 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
         return matcher.byteLiteralFastPath()
         #endif
+    }
+
+    private func canUseBufferedRawLiteralSearch(fileURL: URL) -> Bool {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
+              let size = attributes[.size] as? NSNumber else {
+            return false
+        }
+        return size.intValue <= HaystackReader.defaultMaxBufferBytes
     }
 
     private struct ByteLiteralScan {
