@@ -5,19 +5,19 @@ Baseline checked: `/Users/mweinbach/Projects/swift-harness/ripgrep` at
 revision and keeps the `-P`/`--engine=pcre2` surface available through the
 in-tree Swift compatibility engine; it does not link libpcre2.
 
-## Status — 2026-05-24
+## Status — 2026-05-25
 
 **Functional 1:1 with Rust ripgrep 15.1.0, including the streaming I/O
 architecture.** Verified via:
 
-- **92 Swift Testing cases** across 12 suites covering search, output formats,
+- **100 Swift Testing cases** across 12 suites covering search, output formats,
   ignore rules, file types, stdin, encodings, binary handling, parser
   diagnostics, mmap/worker pool, PCRE2, streaming haystack reads, and
   generated-asset drift.
-- **226 parity-harness cases** drawn from Rust's own `tests/binary.rs`,
+- **193 parity-harness cases** drawn from Rust's own `tests/binary.rs`,
   `tests/multiline.rs`, `tests/json.rs`, `tests/misc.rs`, `tests/feature.rs`
   and `tests/regression.rs`, plus compressed-input probes for `.gz` /
-  `.bz2` / `.xz` / `.lzma` / `.br` / `.zst` / `.lz4`. **225 pass
+  `.bz2` / `.xz` / `.lzma` / `.br` / `.zst` / `.lz4`. **192 pass
   byte-for-byte** (including JSON
   output after stripping `elapsed`/`elapsed_total` timing values, which are
   inherently non-deterministic in Rust). The remaining 1 is skipped because
@@ -45,9 +45,10 @@ test suite that mirrors the Rust upstream split (`BinaryTests`, `FeatureTests`,
 
 The normal build has no package-manager or system-library dependency. PCRE2
 syntax compatibility is implemented in Swift/Foundation for the covered `-P`
-surface, and the Darwin arm hot paths live in the checked-in
-`CRipgrepPlatform` shim because they provide measurable NEON/mmap throughput
-that Swift cannot currently express directly.
+surface, with a Swift-parsed fixed positive-lookbehind literal specialization
+that uses the checked-in Darwin byte scanner for `-P -o`. The Darwin arm hot
+paths live in the checked-in `CRipgrepPlatform` shim because they provide
+measurable NEON/mmap throughput that Swift cannot currently express directly.
 
 File input flows through `HaystackReader` (mmap for regular files ≥ 16 KiB or
 when `--mmap` is forced, chunked 64 KiB buffered reads otherwise, stdin always
@@ -113,6 +114,8 @@ into a much smaller implementation:
 1. **(Updated 2026-05-25)** PCRE2-style and auto-hybrid regex support without
    libpcre2 — see `Sources/RipgrepCore/PCRE2Matcher.swift` and the
    compatibility integration in `Sources/RipgrepCore/PatternMatcher.swift`.
+   Fixed positive-lookbehind literals now avoid the Foundation regex path for
+   single-file `-P -o` output and remain byte-identical to Rust `rg`.
 
 2. **(Done 2026-05-24)** Enforced regex resource limits — see the size-budget
    guard in `Sources/RipgrepCore/PatternMatcher.swift`.
