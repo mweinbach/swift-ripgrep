@@ -51,6 +51,7 @@ struct RipgrepCommand {
             case noMmap
             case asciiCaseInsensitive
             case surroundingWords
+            case wordWithLineNumbers
         }
 
         let mode: DarwinLiteralPreflightMode
@@ -68,6 +69,22 @@ struct RipgrepCommand {
             mode = .asciiCaseInsensitive
             pattern = arguments[1]
             path = arguments[2]
+        } else if arguments.count == 3, arguments[0] == "-nw" || arguments[0] == "-wn" {
+            mode = .wordWithLineNumbers
+            pattern = arguments[1]
+            path = arguments[2]
+        } else if arguments.count == 4,
+                  (arguments[0] == "-n" || arguments[0] == "--line-number"),
+                  (arguments[1] == "-w" || arguments[1] == "--word-regexp") {
+            mode = .wordWithLineNumbers
+            pattern = arguments[2]
+            path = arguments[3]
+        } else if arguments.count == 4,
+                  (arguments[0] == "-w" || arguments[0] == "--word-regexp"),
+                  (arguments[1] == "-n" || arguments[1] == "--line-number") {
+            mode = .wordWithLineNumbers
+            pattern = arguments[2]
+            path = arguments[3]
         } else {
             return nil
         }
@@ -130,6 +147,12 @@ struct RipgrepCommand {
                     )
                 case .surroundingWords:
                     return rg_darwin_write_surrounding_words_file_lines(
+                        pathPointer,
+                        needle.baseAddress,
+                        needle.count
+                    )
+                case .wordWithLineNumbers:
+                    return rg_darwin_write_word_literal_file_lines(
                         pathPointer,
                         needle.baseAddress,
                         needle.count

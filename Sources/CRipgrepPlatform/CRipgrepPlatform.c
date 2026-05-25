@@ -349,6 +349,62 @@ static int rg_ascii_is_regex_space(uint8_t byte) {
     return byte == ' ' || byte == '\t' || byte == '\n' || byte == '\r' || byte == '\f' || byte == '\v';
 }
 
+static int rg_word_boundary_ascii(
+    const uint8_t *base,
+    size_t haystack_len,
+    size_t match_start,
+    size_t match_end
+) {
+    if (match_start > 0) {
+        const uint8_t before = base[match_start - 1];
+        if (before >= 0x80) {
+            return -1;
+        }
+        if (rg_ascii_is_word(before)) {
+            return 0;
+        }
+    }
+    if (match_end < haystack_len) {
+        const uint8_t after = base[match_end];
+        if (after >= 0x80) {
+            return -1;
+        }
+        if (rg_ascii_is_word(after)) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int rg_write_all_stdout(const uint8_t *bytes, size_t length) {
+    size_t bytes_written = 0;
+    while (bytes_written < length) {
+        ssize_t written = write(STDOUT_FILENO, bytes + bytes_written, length - bytes_written);
+        if (written < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            return -1;
+        }
+        if (written == 0) {
+            return -1;
+        }
+        bytes_written += (size_t)written;
+    }
+    return 0;
+}
+
+static int rg_write_decimal_colon(size_t value) {
+    uint8_t buffer[32];
+    size_t cursor = sizeof(buffer);
+    buffer[--cursor] = ':';
+    do {
+        buffer[--cursor] = (uint8_t)('0' + (value % 10));
+        value /= 10;
+    } while (value > 0);
+    return rg_write_all_stdout(buffer + cursor, sizeof(buffer) - cursor);
+}
+
 static int rg_has_surrounding_ascii_words(
     const uint8_t *base,
     size_t line_start,
@@ -466,6 +522,86 @@ static rg_darwin_literal_file_result rg_darwin_write_surrounding_words_bytes(
         }
 
         search_offset = literal_end;
+    }
+
+    result.status = result.matched_line_count > 0 ? 1 : 0;
+    result.bytes_searched = haystack_len;
+    return result;
+}
+
+static rg_darwin_literal_file_result rg_darwin_write_word_literal_bytes(
+    const uint8_t *base,
+    size_t haystack_len,
+    const uint8_t *literal,
+    size_t literal_len
+) {
+    rg_darwin_literal_file_result result = { .status = -2, .matched_line_count = 0, .total_match_count = 0, .bytes_searched = 0 };
+
+    if (haystack_len >= 3 && base[0] == 0xEF && base[1] == 0xBB && base[2] == 0xBF) {
+        return result;
+    }
+    if (haystack_len >= 2
+        && ((base[0] == 0xFF && base[1] == 0xFE) || (base[0] == 0xFE && base[1] == 0xFF))) {
+        return result;
+    }
+    const size_t binary_check_len = haystack_len < (64 * 1024) ? haystack_len : (64 * 1024);
+    if (memchr(base, 0, binary_check_len) != NULL) {
+        return result;
+    }
+
+    size_t search_offset = 0;
+    size_t last_emitted_line_start = (size_t)-1;
+    size_t line_count_offset = 0;
+    size_t line_number = 1;
+    while (search_offset < haystack_len) {
+        const uint8_t *found = rg_memmem_simple(base + search_offset, haystack_len - search_offset, literal, literal_len);
+        if (found == NULL) {
+            break;
+        }
+
+        const size_t match_start = (size_t)(found - base);
+        const size_t match_end = match_start + literal_len;
+        const int boundary = rg_word_boundary_ascii(base, haystack_len, match_start, match_end);
+        if (boundary < 0) {
+            return result;
+        }
+        if (boundary == 0) {
+            search_offset = match_start + 1;
+            continue;
+        }
+
+        result.total_match_count++;
+        size_t line_start = match_start;
+        while (line_start > 0 && base[line_start - 1] != '\n') {
+            line_start--;
+        }
+
+        if (line_start != last_emitted_line_start) {
+            if (line_count_offset < line_start) {
+                line_number += rg_memcount_byte(base + line_count_offset, line_start - line_count_offset, '\n');
+                line_count_offset = line_start;
+            }
+            const void *newline = memchr(found, '\n', haystack_len - match_start);
+            const size_t output_end = newline == NULL
+                ? haystack_len
+                : (size_t)(((const uint8_t *)newline - base) + 1);
+            if (rg_write_decimal_colon(line_number) != 0
+                || rg_write_all_stdout(base + line_start, output_end - line_start) != 0) {
+                result.status = -1;
+                return result;
+            }
+            if (newline == NULL) {
+                uint8_t terminator = '\n';
+                if (rg_write_all_stdout(&terminator, 1) != 0) {
+                    result.status = -1;
+                    return result;
+                }
+            }
+            result.matched_line_count++;
+            last_emitted_line_start = line_start;
+        }
+
+        search_offset = match_end;
     }
 
     result.status = result.matched_line_count > 0 ? 1 : 0;
@@ -700,6 +836,58 @@ rg_darwin_literal_file_result rg_darwin_write_surrounding_words_file_lines(
     }
 
     result = rg_darwin_write_surrounding_words_bytes(base, haystack_len, literal, literal_len);
+    munmap(base, haystack_len);
+    return result;
+#endif
+}
+
+rg_darwin_literal_file_result rg_darwin_write_word_literal_file_lines(
+    const char *path,
+    const uint8_t *literal,
+    size_t literal_len
+) {
+    rg_darwin_literal_file_result result = { .status = -2, .matched_line_count = 0, .total_match_count = 0, .bytes_searched = 0 };
+#ifndef __APPLE__
+    (void)path;
+    (void)literal;
+    (void)literal_len;
+    return result;
+#else
+    if (path == NULL || literal == NULL || literal_len == 0) {
+        return result;
+    }
+
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        result.status = -1;
+        return result;
+    }
+
+    struct stat file_stat;
+    if (fstat(fd, &file_stat) != 0) {
+        close(fd);
+        result.status = -1;
+        return result;
+    }
+    if ((file_stat.st_mode & S_IFMT) != S_IFREG) {
+        close(fd);
+        return result;
+    }
+    if (file_stat.st_size <= 0) {
+        close(fd);
+        result.status = 0;
+        return result;
+    }
+
+    const size_t haystack_len = (size_t)file_stat.st_size;
+    uint8_t *base = mmap(NULL, haystack_len, PROT_READ, MAP_PRIVATE, fd, 0);
+    close(fd);
+    if (base == MAP_FAILED) {
+        result.status = -1;
+        return result;
+    }
+
+    result = rg_darwin_write_word_literal_bytes(base, haystack_len, literal, literal_len);
     munmap(base, haystack_len);
     return result;
 #endif
