@@ -336,10 +336,8 @@ public struct PatternMatcher {
         return !literals.contains { literalContains($0, in: line) }
     }
 
-    public func byteLiteralFastPath() -> [Array<UInt8>]? {
-        guard !options.effectiveIgnoreCase,
-              !options.wordRegexp,
-              !options.lineRegexp,
+    func byteLiteralFastPath() -> ByteLiteralFastPath? {
+        guard !options.lineRegexp,
               !options.invertMatch,
               !options.multiline,
               !options.nullData,
@@ -355,7 +353,15 @@ public struct PatternMatcher {
         guard literals.count == patterns.count else {
             return nil
         }
-        return literals.map { Array($0.utf8) }
+        guard (!options.effectiveIgnoreCase && !options.wordRegexp)
+                || literals.allSatisfy({ $0.utf8.allSatisfy(\.isASCII) }) else {
+            return nil
+        }
+        return ByteLiteralFastPath(
+            literals: literals.map { Array($0.utf8) },
+            caseInsensitiveASCII: options.effectiveIgnoreCase,
+            wordASCII: options.wordRegexp
+        )
     }
 
     public func positiveSpans(in line: String) -> [MatchSpan] {
@@ -3231,6 +3237,18 @@ private enum CompiledPattern {
     case regex(NSRegularExpression)
     case pcre2(PCRE2CompiledPattern)
     case literal(String)
+}
+
+struct ByteLiteralFastPath {
+    let literals: [[UInt8]]
+    let caseInsensitiveASCII: Bool
+    let wordASCII: Bool
+}
+
+private extension UInt8 {
+    var isASCII: Bool {
+        self < 0x80
+    }
 }
 
 private struct MatchSpanIdentity: Hashable {

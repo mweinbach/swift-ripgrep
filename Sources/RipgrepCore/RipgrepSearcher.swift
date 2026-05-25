@@ -488,7 +488,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 && !options.lineRegexp
                 && !options.column
                 && !options.byteOffset
-            let streamByteLiterals = streamingByteLiteralFastPath(matcher: matcher, options: options)
+            let streamByteFastPath = streamingByteLiteralFastPath(matcher: matcher, options: options)
 
             try HaystackReader.streamLines(haystack, options: options) { streamedLine, terminate in
                 lineNumber += 1
@@ -511,14 +511,31 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     terminate = true
                     return
                 }
-                if let streamByteLiterals {
+                if let streamByteFastPath {
                     let lineBytes = [UInt8](streamedLine.data)
-                    let spans = byteLiteralSpans(
-                        literals: streamByteLiterals,
+                    let scan = byteLiteralSpans(
+                        fastPath: streamByteFastPath,
                         bytes: lineBytes,
                         lineStart: 0,
                         lineEnd: lineBytes.count
                     )
+                    let spans: [MatchSpan]
+                    var decodedLine: String?
+                    if scan.needsDecodedFallback {
+                        guard let lineText = String(data: streamedLine.data, encoding: .utf8) else {
+                            fellBackToBufferedSearch = true
+                            terminate = true
+                            return
+                        }
+                        decodedLine = lineText
+                        spans = decodedLiteralFallbackSpans(
+                            matcher: matcher,
+                            options: options,
+                            line: lineText
+                        )
+                    } else {
+                        spans = scan.spans
+                    }
                     guard !spans.isEmpty else {
                         return
                     }
@@ -543,10 +560,16 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         terminate = true
                         return
                     case .matchingLines:
-                        guard let lineText = String(data: streamedLine.data, encoding: .utf8) else {
-                            fellBackToBufferedSearch = true
-                            terminate = true
-                            return
+                        let lineText: String
+                        if let decodedLine {
+                            lineText = decodedLine
+                        } else {
+                            guard let decoded = String(data: streamedLine.data, encoding: .utf8) else {
+                                fellBackToBufferedSearch = true
+                                terminate = true
+                                return
+                            }
+                            lineText = decoded
                         }
                         let lineTerminator = String(data: streamedLine.terminator, encoding: .utf8) ?? ""
                         matches.append(SearchMatch(
@@ -831,8 +854,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !options.column,
               !options.byteOffset,
               !options.vimgrep,
+              !options.crlf,
               options.maxColumns == nil,
-              let literals = matcher.byteLiteralFastPath() else {
+              let fastPath = matcher.byteLiteralFastPath() else {
             return nil
         }
 
@@ -852,12 +876,32 @@ public struct RipgrepSearcher: @unchecked Sendable {
             }
 
             func scanLine(end lineEnd: Int, terminator: String) -> Bool {
-                let spans = byteLiteralSpans(
-                    literals: literals,
+                let scan = byteLiteralSpans(
+                    fastPath: fastPath,
                     bytes: bytes,
                     lineStart: lineStart,
                     lineEnd: lineEnd
                 )
+                if scan.needsDecodedFallback {
+                    guard let decodedLine = String(
+                        data: Data(bytes: baseAddress.advanced(by: lineStart), count: lineEnd - lineStart),
+                        encoding: .utf8
+                    ) else {
+                        failedDecode = true
+                        return true
+                    }
+                    let fallbackSpans = decodedLiteralFallbackSpans(
+                        matcher: matcher,
+                        options: options,
+                        line: decodedLine
+                    )
+                    return emitLine(spans: fallbackSpans, line: decodedLine, lineEnd: lineEnd, terminator: terminator)
+                }
+                let spans = scan.spans
+                return emitLine(spans: spans, line: nil, lineEnd: lineEnd, terminator: terminator)
+            }
+
+            func emitLine(spans: [MatchSpan], line decodedLine: String?, lineEnd: Int, terminator: String) -> Bool {
                 guard !spans.isEmpty else {
                     return false
                 }
@@ -897,13 +941,19 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     guard matches.count < maxCount else {
                         return true
                     }
-                    let lineData = Data(
-                        bytes: baseAddress.advanced(by: lineStart),
-                        count: lineEnd - lineStart
-                    )
-                    guard let line = String(data: lineData, encoding: .utf8) else {
-                        failedDecode = true
-                        return true
+                    let line: String
+                    if let decodedLine {
+                        line = decodedLine
+                    } else {
+                        let lineData = Data(
+                            bytes: baseAddress.advanced(by: lineStart),
+                            count: lineEnd - lineStart
+                        )
+                        guard let decoded = String(data: lineData, encoding: .utf8) else {
+                            failedDecode = true
+                            return true
+                        }
+                        line = decoded
                     }
                     matches.append(SearchMatch(
                         fileURL: fileURL,
@@ -973,7 +1023,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
     private func streamingByteLiteralFastPath(
         matcher: PatternMatcher,
         options: RipgrepOptions
-    ) -> [[UInt8]]? {
+    ) -> ByteLiteralFastPath? {
         #if !canImport(Darwin)
         return nil
         #else
@@ -990,6 +1040,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !options.column,
               !options.byteOffset,
               !options.vimgrep,
+              !options.crlf,
               options.maxColumns == nil,
               options.printMode != .filesWithMatches,
               options.printMode != .filesWithoutMatch else {
@@ -999,40 +1050,92 @@ public struct RipgrepSearcher: @unchecked Sendable {
         #endif
     }
 
+    private struct ByteLiteralScan {
+        var spans: [MatchSpan]
+        var needsDecodedFallback: Bool
+    }
+
+    private enum ByteWordBoundaryState {
+        case bounded
+        case notBounded
+        case needsDecodedFallback
+    }
+
+    private func decodedLiteralFallbackSpans(
+        matcher: PatternMatcher,
+        options: RipgrepOptions,
+        line: String
+    ) -> [MatchSpan] {
+        unicodeWordBoundedSpans(
+            matcher.spans(in: line),
+            decodedLine: line,
+            matcher: matcher,
+            rawLine: nil,
+            options: options
+        )
+    }
+
     private func byteLiteralSpans(
-        literals: [[UInt8]],
+        fastPath: ByteLiteralFastPath,
         bytes: [UInt8],
         lineStart: Int,
         lineEnd: Int
-    ) -> [MatchSpan] {
+    ) -> ByteLiteralScan {
         bytes.withUnsafeBufferPointer { buffer in
-            byteLiteralSpans(literals: literals, bytes: buffer, lineStart: lineStart, lineEnd: lineEnd)
+            byteLiteralSpans(fastPath: fastPath, bytes: buffer, lineStart: lineStart, lineEnd: lineEnd)
         }
     }
 
     private func byteLiteralSpans(
-        literals: [[UInt8]],
+        fastPath: ByteLiteralFastPath,
         bytes: UnsafeBufferPointer<UInt8>,
         lineStart: Int,
         lineEnd: Int
-    ) -> [MatchSpan] {
+    ) -> ByteLiteralScan {
+        if fastPath.caseInsensitiveASCII,
+           (lineStart..<lineEnd).contains(where: { isNonASCII(bytes[$0]) }) {
+            return ByteLiteralScan(spans: [], needsDecodedFallback: true)
+        }
         var spans: [MatchSpan] = []
-        for literal in literals where literal.count <= lineEnd - lineStart {
+        for literal in fastPath.literals where literal.count <= lineEnd - lineStart {
             var index = lineStart
             while index + literal.count <= lineEnd {
                 guard let first = literal.first else {
                     break
                 }
-                while index + literal.count <= lineEnd, bytes[index] != first {
+                while index + literal.count <= lineEnd,
+                      !byteEquals(bytes[index], first, caseInsensitiveASCII: fastPath.caseInsensitiveASCII) {
                     index += 1
                 }
                 guard index + literal.count <= lineEnd else {
                     break
                 }
                 var matched = true
-                for offset in 1..<literal.count where bytes[index + offset] != literal[offset] {
+                for offset in 1..<literal.count
+                    where !byteEquals(
+                        bytes[index + offset],
+                        literal[offset],
+                        caseInsensitiveASCII: fastPath.caseInsensitiveASCII
+                    ) {
                     matched = false
                     break
+                }
+                if matched && fastPath.wordASCII {
+                    switch asciiWordBoundaryState(
+                        bytes: bytes,
+                        lineStart: lineStart,
+                        lineEnd: lineEnd,
+                        matchStart: index,
+                        matchEnd: index + literal.count
+                    ) {
+                    case .bounded:
+                        break
+                    case .notBounded:
+                        index += 1
+                        continue
+                    case .needsDecodedFallback:
+                        return ByteLiteralScan(spans: spans, needsDecodedFallback: true)
+                    }
                 }
                 if matched {
                     spans.append(MatchSpan(
@@ -1048,12 +1151,66 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 }
             }
         }
-        return deduplicatedByteSpans(spans.sorted {
+        let sorted = spans.sorted {
             if $0.startByte == $1.startByte {
                 return $0.endByte < $1.endByte
             }
             return $0.startByte < $1.startByte
-        })
+        }
+        return ByteLiteralScan(spans: deduplicatedByteSpans(sorted), needsDecodedFallback: false)
+    }
+
+    private func byteEquals(_ lhs: UInt8, _ rhs: UInt8, caseInsensitiveASCII: Bool) -> Bool {
+        guard caseInsensitiveASCII else {
+            return lhs == rhs
+        }
+        return asciiLowercase(lhs) == asciiLowercase(rhs)
+    }
+
+    private func asciiLowercase(_ byte: UInt8) -> UInt8 {
+        (UInt8(ascii: "A")...UInt8(ascii: "Z")).contains(byte) ? byte + 32 : byte
+    }
+
+    private func asciiWordBoundaryState(
+        bytes: UnsafeBufferPointer<UInt8>,
+        lineStart: Int,
+        lineEnd: Int,
+        matchStart: Int,
+        matchEnd: Int
+    ) -> ByteWordBoundaryState {
+        let before = matchStart == lineStart ? nil : bytes[matchStart - 1]
+        let after = matchEnd == lineEnd ? nil : bytes[matchEnd]
+        if isNonASCII(before) || isNonASCII(after) {
+            return .needsDecodedFallback
+        }
+        let hasWordByte = (matchStart..<matchEnd).contains { isASCIIWordByte(bytes[$0]) }
+        guard hasWordByte else {
+            return !isASCIIWordByte(before) && !isASCIIWordByte(after) ? .bounded : .notBounded
+        }
+        if isASCIIWordByte(bytes[matchStart]), isASCIIWordByte(before) {
+            return .notBounded
+        }
+        if isASCIIWordByte(bytes[matchEnd - 1]), isASCIIWordByte(after) {
+            return .notBounded
+        }
+        return .bounded
+    }
+
+    private func isNonASCII(_ byte: UInt8?) -> Bool {
+        guard let byte else {
+            return false
+        }
+        return byte >= 0x80
+    }
+
+    private func isASCIIWordByte(_ byte: UInt8?) -> Bool {
+        guard let byte else {
+            return false
+        }
+        return (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(byte)
+            || (UInt8(ascii: "A")...UInt8(ascii: "Z")).contains(byte)
+            || (UInt8(ascii: "a")...UInt8(ascii: "z")).contains(byte)
+            || byte == UInt8(ascii: "_")
     }
 
     private func deduplicatedByteSpans(_ spans: [MatchSpan]) -> [MatchSpan] {
