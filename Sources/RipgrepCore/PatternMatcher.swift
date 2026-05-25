@@ -4,6 +4,7 @@ public struct PatternMatcher {
     private let options: RipgrepOptions
     private let patternSources: [String]
     private let patterns: [CompiledPattern]
+    private let requiredLiteralPrefilters: [String]?
     public let usesByteSemantics: Bool
 
     public init(options: RipgrepOptions) throws {
@@ -11,10 +12,16 @@ public struct PatternMatcher {
         let usesByteSemantics = options.fixedStrings
             ? options.noUnicode
             : patternSources.contains { Self.regexUsesByteSemantics(pattern: $0, options: options) }
+        let requiredLiteralPrefilters = Self.requiredLiteralPrefilters(
+            for: patternSources,
+            options: options,
+            usesByteSemantics: usesByteSemantics
+        )
 
         self.options = options
         self.patternSources = patternSources
         self.usesByteSemantics = usesByteSemantics
+        self.requiredLiteralPrefilters = requiredLiteralPrefilters
         self.patterns = try patternSources.flatMap { pattern -> [CompiledPattern] in
             if options.wordRegexp && pattern.isEmpty {
                 return [.emptyWordBoundary]
@@ -331,6 +338,9 @@ public struct PatternMatcher {
             return literal
         }
         guard literals.count == patterns.count else {
+            if let requiredLiteralPrefilters {
+                return !requiredLiteralPrefilters.contains { literalContains($0, in: line) }
+            }
             return false
         }
         return !literals.contains { literalContains($0, in: line) }
@@ -361,6 +371,26 @@ public struct PatternMatcher {
             literals: literals.map { Array($0.utf8) },
             caseInsensitiveASCII: options.effectiveIgnoreCase,
             wordASCII: options.wordRegexp
+        )
+    }
+
+    func byteRequiredLiteralPrefilter() -> ByteLiteralFastPath? {
+        guard !options.effectiveIgnoreCase,
+              !options.fixedStrings,
+              !options.lineRegexp,
+              !options.invertMatch,
+              !options.multiline,
+              !options.nullData,
+              !usesByteSemantics,
+              let requiredLiteralPrefilters,
+              !requiredLiteralPrefilters.isEmpty,
+              requiredLiteralPrefilters.allSatisfy({ $0.utf8.allSatisfy(\.isASCII) }) else {
+            return nil
+        }
+        return ByteLiteralFastPath(
+            literals: requiredLiteralPrefilters.map { Array($0.utf8) },
+            caseInsensitiveASCII: false,
+            wordASCII: false
         )
     }
 
@@ -655,6 +685,104 @@ public struct PatternMatcher {
         return alternatives.map {
             options.effectiveIgnoreCase ? foldedCase($0, options: options) : $0
         }
+    }
+
+    private static func requiredLiteralPrefilters(
+        for patterns: [String],
+        options: RipgrepOptions,
+        usesByteSemantics: Bool
+    ) -> [String]? {
+        guard !options.fixedStrings,
+              !options.multiline,
+              !options.nullData,
+              !options.crlf,
+              !usesByteSemantics else {
+            return nil
+        }
+        let literals = patterns.compactMap {
+            requiredLiteralPrefilter(for: $0, options: options, usesByteSemantics: usesByteSemantics)
+        }
+        return literals.count == patterns.count ? literals : nil
+    }
+
+    private static func requiredLiteralPrefilter(
+        for pattern: String,
+        options: RipgrepOptions,
+        usesByteSemantics: Bool
+    ) -> String? {
+        guard !pattern.isEmpty,
+              topLevelAlternatives(in: pattern).count == 1,
+              !pattern.contains("("),
+              !pattern.contains(")"),
+              !pattern.contains(#"\x"#),
+              !pattern.contains(#"\u"#) else {
+            return nil
+        }
+
+        var runs: [String] = []
+        var current = ""
+        var escaped = false
+        var inClass = false
+        var index = pattern.startIndex
+
+        func flushRun(next: Character? = nil) {
+            var run = current
+            if let next, "?*{+".contains(next), !run.isEmpty {
+                run.removeLast()
+            }
+            if run.count >= 3 {
+                runs.append(run)
+            }
+            current.removeAll(keepingCapacity: true)
+        }
+
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            let nextIndex = pattern.index(after: index)
+            let next = nextIndex < pattern.endIndex ? pattern[nextIndex] : nil
+
+            if escaped {
+                flushRun(next: character)
+                escaped = false
+                index = nextIndex
+                continue
+            }
+
+            if inClass {
+                if character == "]" {
+                    inClass = false
+                }
+                index = nextIndex
+                continue
+            }
+
+            if character == "\\" {
+                flushRun(next: next)
+                escaped = true
+            } else if character == "[" {
+                flushRun(next: next)
+                inClass = true
+            } else if ".^$|()".contains(character) {
+                flushRun(next: next)
+            } else if "?*{+".contains(character) {
+                flushRun(next: character)
+            } else {
+                current.append(character)
+            }
+            index = nextIndex
+        }
+        flushRun()
+
+        guard let literal = runs.max(by: { lhs, rhs in
+            if lhs.count == rhs.count {
+                return lhs < rhs
+            }
+            return lhs.count < rhs.count
+        }) else {
+            return nil
+        }
+        let folded = options.effectiveIgnoreCase ? foldedCase(literal, options: options) : literal
+        return usesByteSemantics ? bytePattern(folded) : folded
     }
 
     private static func isPlainRegexLiteral(_ pattern: String) -> Bool {
