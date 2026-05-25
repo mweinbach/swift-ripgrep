@@ -57,4 +57,10 @@ rg_darwin_literal_file_result rg_darwin_write_literal_file_lines(
     size_t needle_len
 );
 
+rg_darwin_literal_file_result rg_darwin_write_literal_file_lines_no_mmap(
+    const char *path,
+    const uint8_t *needle,
+    size_t needle_len
+);
+
 #endif

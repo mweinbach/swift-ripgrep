@@ -42,14 +42,27 @@ struct RipgrepCommand {
 
     #if canImport(Darwin)
     private static func runDarwinLiteralPreflight(arguments: [String]) -> Int32? {
-        guard arguments.count == 2,
-              getenv("RIPGREP_CONFIG_PATH") == nil else {
+        guard getenv("RIPGREP_CONFIG_PATH") == nil else {
             return nil
         }
 
-        let pattern = arguments[0]
+        let useMmap: Bool
+        let pattern: String
+        let path: String
+        if arguments.count == 2 {
+            useMmap = true
+            pattern = arguments[0]
+            path = arguments[1]
+        } else if arguments.count == 3, arguments[0] == "--no-mmap" {
+            useMmap = false
+            pattern = arguments[1]
+            path = arguments[2]
+        } else {
+            return nil
+        }
+
         guard !pattern.hasPrefix("-"),
-              arguments[1] != "-",
+              path != "-",
               isPlainDarwinLiteral(pattern) else {
             return nil
         }
@@ -59,9 +72,16 @@ struct RipgrepCommand {
             return nil
         }
 
-        let result = arguments[1].withCString { pathPointer in
+        let result = path.withCString { pathPointer in
             literal.withUnsafeBufferPointer { needle in
-                rg_darwin_write_literal_file_lines(
+                if useMmap {
+                    return rg_darwin_write_literal_file_lines(
+                        pathPointer,
+                        needle.baseAddress,
+                        needle.count
+                    )
+                }
+                return rg_darwin_write_literal_file_lines_no_mmap(
                     pathPointer,
                     needle.baseAddress,
                     needle.count
