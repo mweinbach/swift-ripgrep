@@ -137,6 +137,73 @@ public struct RipgrepSearcher: @unchecked Sendable {
         try search(options: options, stdin: nil)
     }
 
+    public func streamPlainMatchingLines(
+        options: RipgrepOptions,
+        emit: (String) -> Void
+    ) throws -> SearchResults? {
+        #if !canImport(Darwin)
+        return nil
+        #else
+        guard canStreamPlainMatchingLines(options: options) else {
+            return nil
+        }
+
+        let matcher = try PatternMatcher(options: options)
+        guard !matcher.usesByteSemantics else {
+            return nil
+        }
+        let walkResults = try FileWalker(fileManager: fileManager)
+            .withEnvironment(environment)
+            .haystacksWithMessages(for: options)
+        guard walkResults.haystacks.count == 1,
+              let haystack = walkResults.haystacks.first,
+              haystack.isExplicit,
+              !isDirectory(haystack.url),
+              !shouldPreprocess(haystack, options: options),
+              decompressionCommand(for: haystack.url, options: options) == nil,
+              try canPreflightPlainStreamingText(haystack, options: options) else {
+            return nil
+        }
+
+        var streamOptions = options
+        streamOptions.mmapMode = .never
+        var matchedLines = 0
+        var totalBytes = 0
+        try HaystackReader.streamLines(haystack, options: streamOptions) { streamedLine, _ in
+            totalBytes = streamedLine.absoluteOffset + streamedLine.data.count + streamedLine.terminator.count
+            guard let line = String(data: streamedLine.data, encoding: .utf8),
+                  !matcher.canFastReject(line),
+                  matcher.hasPositiveMatch(in: line) else {
+                return
+            }
+            matchedLines += 1
+            emit(line)
+        }
+
+        let result = SearchFileResult(
+            fileURL: haystack.url,
+            matches: [],
+            bytesSearched: totalBytes,
+            searched: true,
+            supplementalMatchedLines: matchedLines,
+            supplementalMatches: matchedLines
+        )
+        return SearchResults(
+            files: [result],
+            summary: SearchSummary(
+                filesSearched: 1,
+                filesWithMatches: matchedLines > 0 ? 1 : 0,
+                matchedLines: matchedLines,
+                totalMatches: matchedLines
+            ),
+            messages: walkResults.messages,
+            warnings: walkResults.warnings,
+            diagnostics: walkResults.diagnostics,
+            filtered: walkResults.filtered
+        )
+        #endif
+    }
+
     public func search(options: RipgrepOptions, stdin: String?) throws -> SearchResults {
         let matcher = try PatternMatcher(options: options)
         let walkResults = options.useStdin && options.roots.isEmpty
@@ -235,6 +302,87 @@ public struct RipgrepSearcher: @unchecked Sendable {
         )
     }
 
+    private func canStreamPlainMatchingLines(options: RipgrepOptions) -> Bool {
+        guard options.mode == .search,
+              options.printMode == .matchingLines,
+              options.rootPathArguments.count == 1,
+              !options.useStdin,
+              !options.patternFileStdin,
+              options.sortMode == nil,
+              !options.quiet,
+              !options.json,
+              !options.stats,
+              !options.multiline,
+              !options.nullData,
+              !options.invertMatch,
+              !options.stopOnNonmatch,
+              !options.onlyMatching,
+              options.replacement == nil,
+              options.maxCount == nil,
+              options.maxColumns == nil,
+              options.beforeContext == 0,
+              options.afterContext == 0,
+              !options.passthru,
+              !options.wordRegexp,
+              !options.lineRegexp,
+              !options.noUnicode,
+              !options.wantsLineNumber,
+              !options.column,
+              !options.byteOffset,
+              options.heading != true,
+              !options.trim,
+              !options.vimgrep,
+              !options.crlf,
+              options.withFilename != true,
+              options.colorChanges.isEmpty,
+              !options.hyperlinkFormat.isEnabled,
+              options.binaryMode == .automatic else {
+            return false
+        }
+        guard case .automatic = options.encodingMode else {
+            return false
+        }
+        guard options.colorMode == .never
+                || (options.colorMode == .automatic && isatty(STDOUT_FILENO) == 0) else {
+            return false
+        }
+        return !options.effectivePatterns.contains { pattern in
+            pattern.contains("$")
+                || pattern.contains(#"\A"#)
+                || pattern.contains(#"\z"#)
+                || pattern.contains(#"\Z"#)
+        }
+    }
+
+    private func canPreflightPlainStreamingText(
+        _ haystack: Haystack,
+        options: RipgrepOptions
+    ) throws -> Bool {
+        var streamOptions = options
+        streamOptions.mmapMode = .never
+        var isFirstLine = true
+        var canStream = true
+        try HaystackReader.streamLines(haystack, options: streamOptions) { streamedLine, terminate in
+            var lineData = streamedLine.data
+            lineData.append(streamedLine.terminator)
+            if isFirstLine {
+                isFirstLine = false
+                if lineData.starts(with: [0xEF, 0xBB, 0xBF])
+                    || lineData.starts(with: [0xFF, 0xFE])
+                    || lineData.starts(with: [0xFE, 0xFF]) {
+                    canStream = false
+                    terminate = true
+                    return
+                }
+            }
+            if lineData.contains(0) || String(data: streamedLine.data, encoding: .utf8) == nil {
+                canStream = false
+                terminate = true
+            }
+        }
+        return canStream
+    }
+
     private func shouldPreserveZeroMultilineBinaryMatchCount(options: RipgrepOptions) -> Bool {
         options.multiline && options.effectivePatterns.allSatisfy(isBareMultilineLineEndPattern)
     }
@@ -290,6 +438,187 @@ public struct RipgrepSearcher: @unchecked Sendable {
             }
             return order == .orderedAscending
         }
+    }
+
+    func writeDarwinSimpleByteLiteralLines(
+        options: RipgrepOptions,
+        writeBytes: (UnsafeRawBufferPointer) -> Void
+    ) throws -> SearchResults? {
+        #if !canImport(Darwin)
+        return nil
+        #else
+        guard canWriteDarwinSimpleByteLiteralLines(options: options) else {
+            return nil
+        }
+
+        let matcher = try PatternMatcher(options: options)
+        guard let fastPath = matcher.byteLiteralFastPath(),
+              !fastPath.caseInsensitiveASCII,
+              !fastPath.wordASCII,
+              !fastPath.literals.isEmpty,
+              fastPath.literals.allSatisfy({ $0.count == 1 }),
+              let fileURL = options.roots.first?.standardizedFileURL else {
+            return nil
+        }
+
+        var isDirectory: ObjCBool = false
+        guard fileManager.fileExists(atPath: fileURL.path, isDirectory: &isDirectory),
+              !isDirectory.boolValue else {
+            return nil
+        }
+
+        let data = try HaystackReader.read(Haystack(url: fileURL, isExplicit: true), options: options)
+        guard !data.starts(with: [0xEF, 0xBB, 0xBF]),
+              !data.starts(with: [0xFF, 0xFE]),
+              !data.starts(with: [0xFE, 0xFF]) else {
+            return nil
+        }
+        if !options.disablesBinaryDetection,
+           shouldCheckBinary(data, options: options),
+           let binaryByteOffset = firstNulByteOffset(in: data),
+           binaryByteOffset < Self.binaryDetectionBufferSize {
+            return nil
+        }
+
+        let literalBytes = fastPath.literals.map { $0[0] }
+        let maxCount = options.maxCount ?? Int.max
+        var matchedLineCount = 0
+        var bytesSearched = data.count
+
+        data.withUnsafeBytes { rawBytes in
+            guard let rawBaseAddress = rawBytes.baseAddress else {
+                return
+            }
+            let baseAddress = rawBaseAddress.assumingMemoryBound(to: UInt8.self)
+            var lineStart = 0
+            while lineStart < data.count, matchedLineCount < maxCount {
+                let remaining = data.count - lineStart
+                let newlinePointer = memchr(baseAddress.advanced(by: lineStart), Int32(UInt8(ascii: "\n")), remaining)
+                let lineEnd: Int
+                let outputEnd: Int
+                if let newlinePointer {
+                    lineEnd = baseAddress.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self))
+                    outputEnd = lineEnd + 1
+                } else {
+                    lineEnd = data.count
+                    outputEnd = data.count
+                }
+
+                if lineContainsAnyByte(
+                    baseAddress.advanced(by: lineStart),
+                    count: lineEnd - lineStart,
+                    bytes: literalBytes
+                ) {
+                    matchedLineCount += 1
+                    writeBytes(UnsafeRawBufferPointer(
+                        start: rawBaseAddress.advanced(by: lineStart),
+                        count: outputEnd - lineStart
+                    ))
+                    if newlinePointer == nil {
+                        var newline = UInt8(ascii: "\n")
+                        withUnsafeBytes(of: &newline) { buffer in
+                            writeBytes(buffer)
+                        }
+                    }
+                    if matchedLineCount == maxCount {
+                        bytesSearched = outputEnd
+                        break
+                    }
+                }
+
+                lineStart = outputEnd
+            }
+        }
+
+        let fileResult = SearchFileResult(
+            fileURL: fileURL,
+            matches: [],
+            bytesSearched: bytesSearched,
+            searched: true,
+            supplementalMatchedLines: matchedLineCount,
+            supplementalMatches: matchedLineCount
+        )
+        return SearchResults(
+            files: [fileResult],
+            summary: SearchSummary(
+                filesSearched: 1,
+                filesWithMatches: matchedLineCount > 0 ? 1 : 0,
+                matchedLines: matchedLineCount,
+                totalMatches: matchedLineCount
+            )
+        )
+        #endif
+    }
+
+    private func canWriteDarwinSimpleByteLiteralLines(options: RipgrepOptions) -> Bool {
+        guard options.printMode == .matchingLines,
+              options.rootPathArguments.count == 1,
+              options.roots.count == 1,
+              !options.useStdin,
+              !options.patternFileStdin,
+              options.encodingMode == .automatic,
+              options.binaryMode == .automatic,
+              options.mmapMode != .always,
+              !options.fixedStrings,
+              options.engineMode == .default,
+              options.dfaSizeLimit == nil,
+              options.regexSizeLimit == nil,
+              !options.ignoreCase,
+              !options.smartCase,
+              !options.wordRegexp,
+              !options.lineRegexp,
+              !options.noUnicode,
+              !options.multiline,
+              !options.crlf,
+              !options.invertMatch,
+              !options.stopOnNonmatch,
+              !options.onlyMatching,
+              options.replacement == nil,
+              !options.json,
+              !options.stats,
+              !options.quiet,
+              options.maxColumns == nil,
+              !options.maxColumnsPreview,
+              options.sortMode == nil,
+              !options.wantsLineNumber,
+              !options.byteOffset,
+              !options.column,
+              options.heading != true,
+              !options.trim,
+              !options.vimgrep,
+              options.colorMode != .always,
+              options.colorMode != .ansi,
+              options.hyperlinkFormat.isEnabled == false,
+              !options.nullPathTerminator,
+              options.pathSeparator == nil,
+              options.withFilename != true,
+              options.globPatterns.isEmpty,
+              options.caseInsensitiveGlobPatterns.isEmpty,
+              options.preprocessor == nil,
+              options.preGlobPatterns.isEmpty,
+              !options.searchZip,
+              options.typeChanges.isEmpty,
+              !options.followSymlinks,
+              !options.oneFileSystem,
+              options.beforeContext == 0,
+              options.afterContext == 0,
+              !options.passthru,
+              !options.nullData else {
+            return false
+        }
+        return options.effectivePatterns.allSatisfy { !$0.isEmpty }
+    }
+
+    private func lineContainsAnyByte(_ line: UnsafePointer<UInt8>, count: Int, bytes: [UInt8]) -> Bool {
+        guard count > 0 else {
+            return false
+        }
+        for byte in bytes {
+            if memchr(line, Int32(byte), count) != nil {
+                return true
+            }
+        }
+        return false
     }
 
     private func stdinSearchResults(

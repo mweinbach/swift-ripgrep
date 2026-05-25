@@ -4,6 +4,50 @@ import Testing
 
 @Suite("Streaming haystack", .serialized)
 struct StreamingHaystackTests {
+    @Test("plain single-file matching lines can stream directly to output")
+    func plainSingleFileMatchingLinesCanStreamDirectlyToOutput() throws {
+        let root = try TemporaryDirectory()
+        let fileURL = URL(fileURLWithPath: root.path("large-direct-output.txt"))
+        let blockCount = 32 * 1024
+        try writeAlternatingBlocks(to: fileURL, blockCount: blockCount, blockSize: 1024)
+
+        var options = RipgrepOptions()
+        options.pattern = "A|B|C|D|E"
+        options.roots = [fileURL]
+        options.rootPathArguments = [fileURL.path]
+
+        var output: [String] = []
+        let results = try #require(RipgrepSearcher().streamPlainMatchingLines(options: options) { line in
+            output.append(line)
+        })
+
+        #expect(output.count == blockCount)
+        #expect(output.allSatisfy { $0.hasPrefix("A ") || $0.hasPrefix("z ") })
+        #expect(results.summary.filesSearched == 1)
+        #expect(results.summary.filesWithMatches == 1)
+        #expect(results.summary.matchedLines == blockCount)
+        #expect(results.files.first?.matches.isEmpty == true)
+        #expect(results.files.first?.supplementalMatchedLines == blockCount)
+    }
+
+    @Test("plain direct output declines formatted searches")
+    func plainDirectOutputDeclinesFormattedSearches() throws {
+        let root = try TemporaryDirectory()
+        try root.write("A one\nB two\n", to: "formatted.txt")
+        let fileURL = URL(fileURLWithPath: root.path("formatted.txt"))
+
+        var options = RipgrepOptions()
+        options.pattern = "A|B"
+        options.roots = [fileURL]
+        options.rootPathArguments = [fileURL.path]
+        options.lineNumber = true
+
+        let results = try RipgrepSearcher().streamPlainMatchingLines(options: options) { _ in
+            Issue.record("formatted searches should use the normal printer path")
+        }
+        #expect(results == nil)
+    }
+
     @Test("large --no-mmap search streams within the perf smoke budget")
     func largeNoMmapSearchStreamsWithinPerfSmokeBudget() throws {
         let root = try TemporaryDirectory()
@@ -74,6 +118,28 @@ struct StreamingHaystackTests {
         block.append(padding)
 
         for _ in 0..<blockCount {
+            try handle.write(contentsOf: block)
+        }
+    }
+
+    private func writeAlternatingBlocks(
+        to fileURL: URL,
+        blockCount: Int,
+        blockSize: Int
+    ) throws {
+        FileManager.default.createFile(atPath: fileURL.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: fileURL)
+        defer { try? handle.close() }
+
+        for index in 0..<blockCount {
+            let marker = index.isMultiple(of: 2) ? "A " : "z E "
+            let markerData = Data(marker.utf8)
+            let padding = Data(repeating: UInt8(ascii: "x"), count: blockSize - markerData.count - 1)
+            var block = Data()
+            block.reserveCapacity(blockSize)
+            block.append(markerData)
+            block.append(padding)
+            block.append(UInt8(ascii: "\n"))
             try handle.write(contentsOf: block)
         }
     }

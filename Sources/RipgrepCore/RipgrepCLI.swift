@@ -125,18 +125,31 @@ public enum RipgrepCLI {
                     return registry.definitions.isEmpty ? 1 : 0
                 }
 
-                let results = try searcher.search(options: options, stdin: searchStdin)
-                let outputEncodingMode = options.json ? nil : outputEncodingMode(for: options, results: results)
-                let outputLines = options.json
-                    ? JSONPrinter(options: options).lines(for: results)
-                    : printer.lines(for: results)
-                for line in outputLines {
-                    emitStdout(
-                        line,
-                        stdout: stdout,
-                        encodingMode: outputEncodingMode,
-                        suppressNewlineForTrailingNul: options.nullData || options.nullPathTerminator
-                    )
+                let results: SearchResults
+                if stdout == nil,
+                   let streamedResults = try searcher.writeDarwinSimpleByteLiteralLines(
+                    options: options,
+                    writeBytes: writeStdout
+                   ) {
+                    results = streamedResults
+                } else if let streamedResults = try searcher.streamPlainMatchingLines(options: options, emit: { line in
+                    emitStdout(line, stdout: stdout)
+                }) {
+                    results = streamedResults
+                } else {
+                    results = try searcher.search(options: options, stdin: searchStdin)
+                    let outputEncodingMode = options.json ? nil : outputEncodingMode(for: options, results: results)
+                    let outputLines = options.json
+                        ? JSONPrinter(options: options).lines(for: results)
+                        : printer.lines(for: results)
+                    for line in outputLines {
+                        emitStdout(
+                            line,
+                            stdout: stdout,
+                            encodingMode: outputEncodingMode,
+                            suppressNewlineForTrailingNul: options.nullData || options.nullPathTerminator
+                        )
+                    }
                 }
                 for diagnostic in results.diagnostics {
                     stderr("rg: \(diagnostic)")
@@ -225,11 +238,18 @@ public enum RipgrepCLI {
             return
         }
         data.withUnsafeBytes { buffer in
-            guard let baseAddress = buffer.baseAddress else {
-                return
-            }
-            fwrite(baseAddress, 1, buffer.count, Darwin.stdout)
+            writeStdout(buffer)
         }
+    }
+
+    private static func writeStdout(_ buffer: UnsafeRawBufferPointer) {
+        guard !buffer.isEmpty else {
+            return
+        }
+        guard let baseAddress = buffer.baseAddress else {
+            return
+        }
+        fwrite(baseAddress, 1, buffer.count, Darwin.stdout)
     }
 
     private static func outputEncodingMode(for options: RipgrepOptions, results: SearchResults) -> EncodingMode? {

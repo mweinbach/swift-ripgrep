@@ -23,6 +23,33 @@ struct MiscTests {
         ])
     }
 
+    @Test("streams simple Darwin byte literal lines")
+    func streamsSimpleDarwinByteLiteralLines() throws {
+        #if canImport(Darwin)
+        let root = try TemporaryDirectory()
+        let file = root.url.appendingPathComponent("letters.txt")
+        try root.write("alpha\nbravo\ncharlie\ndelta", to: "letters.txt")
+
+        var options = RipgrepOptions()
+        options.pattern = "v|d"
+        options.roots = [file]
+        options.rootPathArguments = [file.path]
+
+        var output = Data()
+        let results = try RipgrepSearcher().writeDarwinSimpleByteLiteralLines(options: options) { buffer in
+            let bytes = buffer.bindMemory(to: UInt8.self)
+            guard let baseAddress = bytes.baseAddress else {
+                return
+            }
+            output.append(baseAddress, count: bytes.count)
+        }
+
+        #expect(results?.summary.filesWithMatches == 1)
+        #expect(results?.summary.matchedLines == 2)
+        #expect(output == Data("bravo\ndelta\n".utf8))
+        #endif
+    }
+
     @Test("supports regex fixed string word and line matching")
     func supportsMatcherModes() throws {
         let root = try TemporaryDirectory()
