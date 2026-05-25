@@ -97,9 +97,66 @@ struct HaystackReader {
     }
 
     private static func readBuffered(fileURL: URL, maxBufferBytes: Int) throws -> Data {
+        #if canImport(Darwin)
+        if let data = try readBufferedRegularFile(fileURL: fileURL, maxBufferBytes: maxBufferBytes) {
+            return data
+        }
+        #endif
         let handle = try FileHandle(forReadingFrom: fileURL)
         return try readChunks(from: handle, closeWhenDone: true, maxBufferBytes: maxBufferBytes)
     }
+
+    #if canImport(Darwin)
+    private static func readBufferedRegularFile(fileURL: URL, maxBufferBytes: Int) throws -> Data? {
+        let fd = fileURL.path.withCString { path in
+            Darwin.open(path, O_RDONLY)
+        }
+        guard fd >= 0 else {
+            throw ReaderError.posix(path: fileURL.path, operation: "open", code: errno)
+        }
+        defer { Darwin.close(fd) }
+
+        var fileStat = stat()
+        guard Darwin.fstat(fd, &fileStat) == 0 else {
+            throw ReaderError.posix(path: fileURL.path, operation: "fstat", code: errno)
+        }
+        guard isRegular(fileStat.st_mode) else {
+            return nil
+        }
+        guard fileStat.st_size > 0 else {
+            return Data()
+        }
+        guard UInt64(fileStat.st_size) <= UInt64(Int.max) else {
+            throw ReaderError.tooLarge(path: fileURL.path, size: UInt64(fileStat.st_size))
+        }
+        let length = Int(fileStat.st_size)
+        guard length <= maxBufferBytes else {
+            throw ReaderError.bufferLimitExceeded(size: length, limit: maxBufferBytes)
+        }
+
+        let buffer = UnsafeMutableRawPointer.allocate(byteCount: length, alignment: MemoryLayout<UInt8>.alignment)
+        var bytesRead = 0
+        do {
+            while bytesRead < length {
+                let readCount = Darwin.read(fd, buffer.advanced(by: bytesRead), length - bytesRead)
+                if readCount < 0 {
+                    throw ReaderError.posix(path: fileURL.path, operation: "read", code: errno)
+                }
+                if readCount == 0 {
+                    break
+                }
+                bytesRead += readCount
+            }
+        } catch {
+            buffer.deallocate()
+            throw error
+        }
+
+        return Data(bytesNoCopy: buffer, count: bytesRead, deallocator: .custom { pointer, _ in
+            pointer.deallocate()
+        })
+    }
+    #endif
 
     private static func readChunks(
         from handle: FileHandle,
