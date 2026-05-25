@@ -2941,6 +2941,22 @@ struct FeatureTests {
             .sorted()
         #expect(executableRelativePaths == [".hidden-dir/nested.txt", ".hidden.txt", "café.txt", "visible.txt"])
 
+        let executableVisibleFileList = try runExecutableData([
+            "--no-ignore",
+            "--files",
+            executableRoot.url.path,
+        ]) {}
+        let executableVisibleRelativePaths = String(decoding: executableVisibleFileList, as: UTF8.self)
+            .split(separator: "\n")
+            .map(String.init)
+            .map { path in
+                path.hasPrefix(executableRootPrefix)
+                    ? String(path.dropFirst(executableRootPrefix.count))
+                    : path
+            }
+            .sorted()
+        #expect(executableVisibleRelativePaths == ["café.txt", "visible.txt"])
+
         let whitelisted = try TemporaryDirectory()
         try whitelisted.createDirectory("subdir")
         try whitelisted.write("text\n", to: "subdir/.foo.txt")
