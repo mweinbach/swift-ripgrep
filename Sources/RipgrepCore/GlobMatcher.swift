@@ -271,15 +271,20 @@ public struct GlobMatcher: Equatable {
     }
 
     private func matchesGlobAnywhere(_ rule: Rule, _ value: String) -> Bool {
-        if let fastMatcher = rule.fastMatcher, matchesFastAnywhere(fastMatcher, value) {
-            return true
-        } else if let fastMatcher = rule.fastMatcher,
-                  case .simpleGlob = fastMatcher,
-                  !value.utf8.allSatisfy({ $0 < 0x80 }) {
-            guard let regex = rule.anywhereRegex else {
+        if let fastMatcher = rule.fastMatcher {
+            if matchesFastAnywhere(fastMatcher, value) {
+                return true
+            }
+            if case .simpleGlob = fastMatcher {
+                if !value.utf8.allSatisfy({ $0 < 0x80 }) {
+                    guard let regex = rule.anywhereRegex else {
+                        return false
+                    }
+                    return matches(regex, value)
+                }
+            } else {
                 return false
             }
-            return matches(regex, value)
         }
         guard let regex = rule.anywhereRegex else {
             return false
