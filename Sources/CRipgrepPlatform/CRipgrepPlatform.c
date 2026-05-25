@@ -1,6 +1,9 @@
 #include "CRipgrepPlatform.h"
 
 #ifdef __APPLE__
+#if defined(__aarch64__)
+#include <arm_neon.h>
+#endif
 #include <fcntl.h>
 #include <stdlib.h>
 #include <sys/mman.h>
@@ -13,6 +16,10 @@
 
 static inline uint8_t rg_ascii_lower(uint8_t byte) {
     return byte >= 'A' && byte <= 'Z' ? (uint8_t)(byte + ('a' - 'A')) : byte;
+}
+
+static inline int rg_ascii_is_alpha(uint8_t byte) {
+    return (byte >= 'A' && byte <= 'Z') || (byte >= 'a' && byte <= 'z');
 }
 
 const uint8_t *rg_memmem_simple(
@@ -47,6 +54,85 @@ const uint8_t *rg_memmem_simple(
     }
     return NULL;
 }
+
+#if defined(__APPLE__) && defined(__aarch64__)
+static inline uint8x16_t rg_neon_fold_ascii_for_compare(uint8x16_t bytes, int is_alpha) {
+    return is_alpha ? vorrq_u8(bytes, vdupq_n_u8(0x20)) : bytes;
+}
+
+static const uint8_t *rg_memcasemem_ascii_neon_candidates(
+    const uint8_t *haystack,
+    size_t haystack_len,
+    const uint8_t *folded_needle,
+    size_t needle_len
+) {
+    if (needle_len == 0) {
+        return haystack;
+    }
+    if (haystack_len < needle_len) {
+        return NULL;
+    }
+
+    const uint8_t first = folded_needle[0];
+    const uint8_t tail = folded_needle[needle_len - 1];
+    const int first_is_alpha = rg_ascii_is_alpha(first);
+    const int tail_is_alpha = rg_ascii_is_alpha(tail);
+    const uint8x16_t first_vector = vdupq_n_u8(first);
+    const uint8x16_t tail_vector = vdupq_n_u8(tail);
+    uint8_t matching_lanes[16];
+
+    size_t cursor = 0;
+    const size_t vector_limit = haystack_len >= needle_len + 15
+        ? haystack_len - needle_len - 15 + 1
+        : 0;
+    while (cursor < vector_limit) {
+        const uint8x16_t first_bytes = rg_neon_fold_ascii_for_compare(vld1q_u8(haystack + cursor), first_is_alpha);
+        const uint8x16_t tail_bytes = rg_neon_fold_ascii_for_compare(vld1q_u8(haystack + cursor + needle_len - 1), tail_is_alpha);
+        const uint8x16_t candidate_lanes = vandq_u8(
+            vceqq_u8(first_bytes, first_vector),
+            vceqq_u8(tail_bytes, tail_vector)
+        );
+
+        if (vmaxvq_u8(candidate_lanes) != 0) {
+            vst1q_u8(matching_lanes, candidate_lanes);
+            for (int lane = 0; lane < 16; ++lane) {
+                if (matching_lanes[lane] == 0) {
+                    continue;
+                }
+                const uint8_t *candidate = haystack + cursor + (size_t)lane;
+                size_t offset = 1;
+                while (offset + 1 < needle_len
+                       && rg_ascii_lower(candidate[offset]) == folded_needle[offset]) {
+                    offset++;
+                }
+                if (offset + 1 == needle_len) {
+                    return candidate;
+                }
+            }
+        }
+
+        cursor += 16;
+    }
+
+    const size_t max_start = haystack_len - needle_len + 1;
+    while (cursor < max_start) {
+        if (rg_ascii_lower(haystack[cursor]) == first
+            && rg_ascii_lower(haystack[cursor + needle_len - 1]) == tail) {
+            size_t offset = 1;
+            while (offset + 1 < needle_len
+                   && rg_ascii_lower(haystack[cursor + offset]) == folded_needle[offset]) {
+                offset++;
+            }
+            if (offset + 1 == needle_len) {
+                return haystack + cursor;
+            }
+        }
+        cursor++;
+    }
+
+    return NULL;
+}
+#endif
 
 const uint8_t *rg_memcasemem_ascii(
     const uint8_t *haystack,
@@ -110,6 +196,11 @@ const uint8_t *rg_memcasemem_ascii_prepared(
     if (haystack_len < needle_len) {
         return NULL;
     }
+#if defined(__APPLE__) && defined(__aarch64__)
+    if (needle_len > 1) {
+        return rg_memcasemem_ascii_neon_candidates(haystack, haystack_len, folded_needle, needle_len);
+    }
+#endif
     if (needle_len == 1) {
         const uint8_t folded = folded_needle[0];
         for (size_t index = 0; index < haystack_len; ++index) {
