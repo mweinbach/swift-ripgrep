@@ -142,6 +142,12 @@ public struct FileWalker {
                 options: options
             )
             let rootVolume = options.oneFileSystem ? volumeIdentifier(for: root.standardizedFileURL) : nil
+            let rootBasePath = rootBase.standardizedFileURL.path
+            let rootBasePrefix = rootBasePath.hasSuffix("/") ? rootBasePath : "\(rootBasePath)/"
+            let cwdPath = URL(fileURLWithPath: fileManager.currentDirectoryPath, isDirectory: true)
+                .standardizedFileURL
+                .path
+            let cwdPrefix = cwdPath.hasSuffix("/") ? cwdPath : "\(cwdPath)/"
             let walked = try walk(
                 root.standardizedFileURL,
                 physicalURL: nil,
@@ -149,8 +155,10 @@ public struct FileWalker {
                 depth: 0,
                 ancestors: [],
                 rootBase: rootBase,
+                rootBasePrefix: rootBasePrefix,
                 rootDebugDisplayPath: rootDebugDisplayPath,
                 rootArgumentIsAbsolute: rootArgumentIsAbsolute,
+                cwdPrefix: cwdPrefix,
                 rootVolume: rootVolume,
                 messages: &messages,
                 warnings: &warnings,
@@ -195,8 +203,10 @@ public struct FileWalker {
         depth: Int,
         ancestors: [DirectoryVisit],
         rootBase: URL,
+        rootBasePrefix: String,
         rootDebugDisplayPath: String,
         rootArgumentIsAbsolute: Bool,
+        cwdPrefix: String,
         rootVolume: String?,
         messages: inout [String],
         warnings: inout [String],
@@ -217,8 +227,8 @@ public struct FileWalker {
             .volumeIdentifierKey,
         ])
         let isDirectory = values.isDirectory == true
-        let relativePath = relativePath(for: url, rootBase: rootBase)
-        let overridePath = overridePath(for: url, rootArgumentIsAbsolute: rootArgumentIsAbsolute)
+        let relativePath = relativePath(for: url, rootBase: rootBase, rootBasePrefix: rootBasePrefix)
+        let overridePath = overridePath(for: url, rootArgumentIsAbsolute: rootArgumentIsAbsolute, cwdPrefix: cwdPrefix)
 
         if !isExplicit {
             let overrideDecision = overrides.decision(relativePath: overridePath, isDirectory: isDirectory)
@@ -370,8 +380,10 @@ public struct FileWalker {
                 depth: depth + 1,
                 ancestors: childAncestors,
                 rootBase: rootBase,
+                rootBasePrefix: rootBasePrefix,
                 rootDebugDisplayPath: rootDebugDisplayPath,
                 rootArgumentIsAbsolute: rootArgumentIsAbsolute,
+                cwdPrefix: cwdPrefix,
                 rootVolume: rootVolume,
                 messages: &messages,
                 warnings: &warnings,
@@ -888,7 +900,16 @@ public struct FileWalker {
         }
     }
 
-    private func relativePath(for url: URL, rootBase: URL) -> String {
+    private func relativePath(for url: URL, rootBase: URL, rootBasePrefix: String? = nil) -> String {
+#if canImport(Darwin)
+        if let rootBasePrefix {
+            let path = url.path
+            if path.hasPrefix(rootBasePrefix) {
+                return String(path.dropFirst(rootBasePrefix.count))
+            }
+            return url.lastPathComponent
+        }
+#endif
         let path = url.standardizedFileURL.path
         let basePath = rootBase.standardizedFileURL.path
         let prefix = basePath.hasSuffix("/") ? basePath : "\(basePath)/"
@@ -898,7 +919,19 @@ public struct FileWalker {
         return url.lastPathComponent
     }
 
-    private func overridePath(for url: URL, rootArgumentIsAbsolute: Bool) -> String {
+    private func overridePath(for url: URL, rootArgumentIsAbsolute: Bool, cwdPrefix: String? = nil) -> String {
+#if canImport(Darwin)
+        if let cwdPrefix {
+            let path = url.path
+            guard !rootArgumentIsAbsolute else {
+                return path.hasPrefix("/") ? String(path.dropFirst()) : path
+            }
+            if path.hasPrefix(cwdPrefix) {
+                return String(path.dropFirst(cwdPrefix.count))
+            }
+            return path.hasPrefix("/") ? String(path.dropFirst()) : path
+        }
+#endif
         let path = url.standardizedFileURL.path
         guard !rootArgumentIsAbsolute else {
             return path.hasPrefix("/") ? String(path.dropFirst()) : path
