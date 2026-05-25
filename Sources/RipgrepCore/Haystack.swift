@@ -445,7 +445,10 @@ public struct FileWalker {
         guard !didStop else {
             return
         }
-        let contents = try fastDirectoryContents(atPath: directoryPath)
+        let contents = try fastDirectoryContents(
+            atPath: directoryPath,
+            collectIgnoreMarkers: !(options.noIgnore && options.hidden)
+        )
         let directoryVCSContext = vcsContext || (!options.noIgnoreVCS && contents.hasGitMarker)
         var directoryIgnoreStack = ignoreStack
         if !options.noIgnore && hasLoadableIgnoreFiles(
@@ -503,14 +506,16 @@ public struct FileWalker {
         }
 
         if options.noIgnore && options.hidden {
+            let directoryPathPrefix = directoryPath + "/"
+            let logicalDirectoryPathPrefix = logicalDirectoryPath + "/"
             for child in contents.children.reversed() {
                 if child.kind == .symbolicLink {
                     continue
                 }
                 if child.kind.isDirectory {
                     try walkFilePathsInOutputOrder(
-                        directoryPath: "\(directoryPath)/\(child.name)",
-                        logicalDirectoryPath: "\(logicalDirectoryPath)/\(child.name)",
+                        directoryPath: directoryPathPrefix + child.name,
+                        logicalDirectoryPath: logicalDirectoryPathPrefix + child.name,
                         logicalDirectoryPathIsASCII: logicalDirectoryPathIsASCII && child.isASCII,
                         relativePath: "",
                         rootBase: rootBase,
@@ -532,7 +537,7 @@ public struct FileWalker {
                     }
                 } else if child.kind.isFile {
                     emit(outputPath(
-                        logicalDirectoryPath: logicalDirectoryPath,
+                        logicalDirectoryPathPrefix: logicalDirectoryPathPrefix,
                         logicalDirectoryPathIsASCII: logicalDirectoryPathIsASCII,
                         child: child
                     ))
@@ -545,11 +550,14 @@ public struct FileWalker {
             return
         }
 
+        let directoryPathPrefix = directoryPath + "/"
+        let logicalDirectoryPathPrefix = logicalDirectoryPath + "/"
+        let relativePathPrefix = relativePath.isEmpty ? "" : relativePath + "/"
         for child in contents.children.reversed() {
             if child.kind == .symbolicLink {
                 continue
             }
-            let childRelativePath = relativePath.isEmpty ? child.name : "\(relativePath)/\(child.name)"
+            let childRelativePath = relativePathPrefix + child.name
             let isDirectory = child.kind.isDirectory
             if !options.hidden,
                isHiddenName(child.name),
@@ -573,7 +581,7 @@ public struct FileWalker {
                 continue
             }
             if !directoryIgnoreStack.allows(relativePath: childRelativePath, basename: child.name, isDirectory: isDirectory) {
-                let childPath = "\(logicalDirectoryPath)/\(child.name)"
+                let childPath = logicalDirectoryPathPrefix + child.name
                 debugIgnoreMatch(
                     path: childPath,
                     displayPath: debugDisplayPath(
@@ -594,8 +602,8 @@ public struct FileWalker {
             }
             if child.kind.isDirectory {
                 try walkFilePathsInOutputOrder(
-                    directoryPath: "\(directoryPath)/\(child.name)",
-                    logicalDirectoryPath: "\(logicalDirectoryPath)/\(child.name)",
+                    directoryPath: directoryPathPrefix + child.name,
+                    logicalDirectoryPath: logicalDirectoryPathPrefix + child.name,
                     logicalDirectoryPathIsASCII: logicalDirectoryPathIsASCII && child.isASCII,
                     relativePath: childRelativePath,
                     rootBase: rootBase,
@@ -617,7 +625,7 @@ public struct FileWalker {
                 }
             } else if child.kind.isFile {
                 emit(outputPath(
-                    logicalDirectoryPath: logicalDirectoryPath,
+                    logicalDirectoryPathPrefix: logicalDirectoryPathPrefix,
                     logicalDirectoryPathIsASCII: logicalDirectoryPathIsASCII,
                     child: child
                 ))
@@ -651,6 +659,9 @@ public struct FileWalker {
         guard !didStop else {
             return
         }
+        let directoryPathPrefix = directoryPath + "/"
+        let logicalDirectoryPathPrefix = logicalDirectoryPath + "/"
+        let relativePathPrefix = relativePath.isEmpty ? "" : relativePath + "/"
         if options.noIgnore && options.hidden {
             for child in contents.children.reversed() where child.kind.isFile {
                 emit("")
@@ -659,8 +670,8 @@ public struct FileWalker {
             }
             for child in contents.children.reversed() where child.kind.isDirectory {
                 try walkFilePathsInOutputOrder(
-                    directoryPath: "\(directoryPath)/\(child.name)",
-                    logicalDirectoryPath: "\(logicalDirectoryPath)/\(child.name)",
+                    directoryPath: directoryPathPrefix + child.name,
+                    logicalDirectoryPath: logicalDirectoryPathPrefix + child.name,
                     logicalDirectoryPathIsASCII: logicalDirectoryPathIsASCII && child.isASCII,
                     relativePath: "",
                     rootBase: rootBase,
@@ -685,7 +696,7 @@ public struct FileWalker {
         }
 
         for child in contents.children.reversed() where child.kind.isFile {
-            let childRelativePath = relativePath.isEmpty ? child.name : "\(relativePath)/\(child.name)"
+            let childRelativePath = relativePathPrefix + child.name
             guard shouldEmitFastFilePath(
                 child: child,
                 childRelativePath: childRelativePath,
@@ -702,7 +713,7 @@ public struct FileWalker {
         }
 
         for child in contents.children.reversed() where child.kind.isDirectory {
-            let childRelativePath = relativePath.isEmpty ? child.name : "\(relativePath)/\(child.name)"
+            let childRelativePath = relativePathPrefix + child.name
             guard shouldEmitFastFilePath(
                 child: child,
                 childRelativePath: childRelativePath,
@@ -714,8 +725,8 @@ public struct FileWalker {
                 continue
             }
             try walkFilePathsInOutputOrder(
-                directoryPath: "\(directoryPath)/\(child.name)",
-                logicalDirectoryPath: "\(logicalDirectoryPath)/\(child.name)",
+                directoryPath: directoryPathPrefix + child.name,
+                logicalDirectoryPath: logicalDirectoryPathPrefix + child.name,
                 logicalDirectoryPathIsASCII: logicalDirectoryPathIsASCII && child.isASCII,
                 relativePath: childRelativePath,
                 rootBase: rootBase,
@@ -763,7 +774,7 @@ public struct FileWalker {
         return true
     }
 
-    private func fastDirectoryContents(atPath path: String) throws -> FastDirectoryContents {
+    private func fastDirectoryContents(atPath path: String, collectIgnoreMarkers: Bool = true) throws -> FastDirectoryContents {
         guard let directory = opendir(path) else {
             throw NSError(
                 domain: NSPOSIXErrorDomain,
@@ -776,36 +787,36 @@ public struct FileWalker {
         }
 
         var children: [FastDirectoryChild] = []
+        children.reserveCapacity(64)
         var hasGitMarker = false
         var hasGitignore = false
         var hasIgnore = false
         var hasRgignore = false
         while let entryPointer = readdir(directory) {
             let entry = entryPointer.pointee
-            let name = withUnsafePointer(to: entry.d_name) { pointer in
-                pointer.withMemoryRebound(to: CChar.self, capacity: Int(entry.d_namlen) + 1) {
-                    String(cString: $0)
-                }
-            }
+            let entryName = fastDirectoryEntryNameAndASCII(entry)
+            let name = entryName.name
             if name == "." || name == ".." {
                 continue
             }
-            switch name {
-            case ".git":
-                hasGitMarker = true
-            case ".gitignore":
-                hasGitignore = true
-            case ".ignore":
-                hasIgnore = true
-            case ".rgignore":
-                hasRgignore = true
-            default:
-                break
+            if collectIgnoreMarkers {
+                switch name {
+                case ".git":
+                    hasGitMarker = true
+                case ".gitignore":
+                    hasGitignore = true
+                case ".ignore":
+                    hasIgnore = true
+                case ".rgignore":
+                    hasRgignore = true
+                default:
+                    break
+                }
             }
             let kind = try fastDirectoryEntryKind(entry.d_type, path: path, name: name)
             children.append(FastDirectoryChild(
                 name: name,
-                isASCII: name.utf8.allSatisfy { $0 < 0x80 },
+                isASCII: entryName.isASCII,
                 kind: kind
             ))
         }
@@ -858,12 +869,25 @@ public struct FileWalker {
     }
 
     private func outputPath(
-        logicalDirectoryPath: String,
+        logicalDirectoryPathPrefix: String,
         logicalDirectoryPathIsASCII: Bool,
         child: FastDirectoryChild
     ) -> String {
-        let path = "\(logicalDirectoryPath)/\(child.name)"
+        let path = logicalDirectoryPathPrefix + child.name
         return logicalDirectoryPathIsASCII && child.isASCII ? path : normalizedOutputPath(path)
+    }
+
+    private func fastDirectoryEntryNameAndASCII(_ entry: dirent) -> (name: String, isASCII: Bool) {
+        return withUnsafePointer(to: entry.d_name) { pointer in
+            pointer.withMemoryRebound(to: CChar.self, capacity: Int(entry.d_namlen) + 1) { bytes in
+                let name = fastDirectoryEntryName(bytes)
+                return (name, name.utf8.allSatisfy { $0 < 0x80 })
+            }
+        }
+    }
+
+    private func fastDirectoryEntryName(_ bytes: UnsafePointer<CChar>) -> String {
+        String(cString: bytes)
     }
 
     private func fastDirectoryEntryKind(_ type: UInt8, path: String, name: String) throws -> FastDirectoryEntryKind {

@@ -40,8 +40,8 @@ this environment for the default literal search. A fresh confirmation run used
 
 | Bench | Flags | rg | swift-rg | swift / rg |
 |---|---|---:|---:|---:|
-| Linux tree files | `--files` | 83.5 ms | 322.5 ms | **3.86x** |
-| Linux tree files, no ignore/hidden | `--no-ignore --hidden --files` | 70.3 ms | 180.7 ms | **2.57x** |
+| Linux tree files | `--files` | 82.5 ms | 303.7 ms | **3.68x** |
+| Linux tree files, no ignore/hidden | `--no-ignore --hidden --files` | 71.9 ms | 181.4 ms | **2.52x** |
 | Linux tree files, quiet | `--quiet --files` | 6.5 ms | 44.3 ms | **6.82x** |
 | Linux tree literal | `PM_RESUME` | 3.92 s | 2.37 s | **0.61x** |
 
@@ -50,8 +50,8 @@ the 79,353-path `--files` set, and the Swift `--files` natural output remains
 byte-identical to the previous Swift checkpoint. Natural output order still
 differs from Rust for this corpus because the Swift walker preserves its own
 deterministic traversal order under parallel search. The latest traversal
-slices reduced the Swift `--files` mean from 1.43 s to 322.5 ms, the
-`--no-ignore --hidden --files` mean to 180.7 ms, and the Swift `PM_RESUME`
+slices reduced the Swift `--files` mean from 1.43 s to 303.7 ms, the
+`--no-ignore --hidden --files` mean to 181.4 ms, and the Swift `PM_RESUME`
 median from 2.53 s to 2.37 s versus the previous 0ae4c30 checkpoint on the
 same corpus.
 
@@ -101,10 +101,12 @@ The key improvements since the 2026-05-24 baseline are:
   through a borrowed buffer while preserving last-match-wins semantics. The fast
   `--files` stdout path also appends string UTF-8 bytes directly into its block
   buffer. A 2026-05-25 7-run recheck measured Swift release `--files` at
-  322.5 ms versus Rust release at 83.5 ms on `/tmp/swift-rg-bench/linux`, down
+  303.7 ms versus Rust release at 82.5 ms on `/tmp/swift-rg-bench/linux`, down
   from the prior 462.0 ms Swift smoke with byte-identical sorted output. The
   same recheck includes direct UTF-8 matching for the remaining exact
-  path-component and ASCII contains ignore-glob fast paths.
+  path-component and ASCII contains ignore-glob fast paths, reuses directory
+  path prefixes in the Darwin walker, and avoids ignore-marker checks in the
+  no-ignore/hidden file-list branch.
 - `--quiet --files` has an early-exit walker for the plain single-root Darwin
   path that checks files before descending once ignore files for the current
   directory are loaded. A 2026-05-25 7-run recheck measured Swift release at
