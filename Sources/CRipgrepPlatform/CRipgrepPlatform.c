@@ -286,6 +286,21 @@ size_t rg_memcount_byte(
     size_t haystack_len,
     uint8_t byte
 ) {
+#if defined(__APPLE__) && defined(__aarch64__)
+    size_t index = 0;
+    uint64x2_t vector_count = vdupq_n_u64(0);
+    const uint8x16_t target = vdupq_n_u8(byte);
+    for (; index + 16 <= haystack_len; index += 16) {
+        const uint8x16_t matches = vceqq_u8(vld1q_u8(haystack + index), target);
+        vector_count = vaddq_u64(vector_count, vpaddlq_u32(vpaddlq_u16(vpaddlq_u8(matches))));
+    }
+
+    size_t count = (size_t)(vgetq_lane_u64(vector_count, 0) + vgetq_lane_u64(vector_count, 1)) / 255;
+    for (; index < haystack_len; index++) {
+        count += haystack[index] == byte;
+    }
+    return count;
+#else
     size_t count = 0;
     size_t index = 0;
     for (; index + 8 <= haystack_len; index += 8) {
@@ -302,6 +317,7 @@ size_t rg_memcount_byte(
         count += haystack[index] == byte;
     }
     return count;
+#endif
 }
 
 #ifdef __APPLE__
