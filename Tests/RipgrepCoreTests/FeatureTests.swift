@@ -404,6 +404,11 @@ struct FeatureTests {
             "second beta",
             "third alpha beta",
         ])
+        #expect(try run(["-m1280", "beta|alpha", root.path("alternation.txt")]) == [
+            "first alpha",
+            "second beta",
+            "third alpha beta",
+        ])
         #expect(try run(["-n", "-m1", "beta|alpha", root.path("alternation.txt")]) == ["1:first alpha"])
         #expect(try run(["-n", "-m2", "beta|alpha", root.path("alternation.txt")]) == [
             "1:first alpha",
