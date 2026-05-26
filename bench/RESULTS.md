@@ -186,6 +186,17 @@ PCRE2. On a 60 MiB reset-start fixture, `-P --count-matches 'foo\K'` measured
 116.7 ms versus 152.5 ms before, and ten-run `-P --count-matches '\Kfoo'`
 checks measured 127.5 ms versus 162.0 ms before.
 
+Bare PCRE2 reset-start `--count-matches '\K'` now counts direct executable
+output from the mapped byte size, while the formatted `-o` and whole-line
+paths keep their exact line-position scanner. Output and exit status for final
+newline, no-final-newline, empty-line, UTF-8, empty-file, and no-Unicode
+invalid-byte fixtures matched the previous Swift checkpoint and the sibling
+Rust oracle, as did neighboring `-o`, field-prefixed `-o`, and whole-line
+forms. On the 193 MiB subtitles corpus, 20-run checks measured `-P
+--count-matches '\K'` at 43.1 ms versus 158.4 ms before and 3.443 s for Rust
+PCRE2. On the 60 MiB reset-start fixture, the same search measured 42.3 ms
+versus 67.3 ms before and 1.079 s for Rust PCRE2.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Routing multi-literal full-line output through the existing line-by-line

@@ -663,7 +663,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 data,
                 fileURL: fileURL,
                 options: options,
-                writeBytes: writeBytes
+                writeBytes: writeBytes,
+                allowDirectStdout: allowDirectStdout
             )
         }
         if let fixedBackreferenceFastPath {
@@ -1855,7 +1856,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
         _ data: Data,
         fileURL: URL,
         options: RipgrepOptions,
-        writeBytes: (UnsafeRawBufferPointer) -> Void
+        writeBytes: (UnsafeRawBufferPointer) -> Void,
+        allowDirectStdout: Bool = false
     ) -> SearchResults? {
         let onlyMatching = !options.quiet && options.onlyMatching && options.printMode == .matchingLines
         let lineOutput = !options.quiet && !options.onlyMatching && options.printMode == .matchingLines
@@ -1880,6 +1882,34 @@ public struct RipgrepSearcher: @unchecked Sendable {
             && !options.wantsLineNumber
             && !options.byteOffset
             && !options.column
+
+        if countMatchesOnly && allowDirectStdout {
+            totalMatchCount = data.count
+            if totalMatchCount > 0 {
+                matchedLineCount = 1
+            }
+            if !options.quiet && totalMatchCount > 0 {
+                writeDarwinDecimalLine(totalMatchCount, writeBytes: writeBytes)
+            }
+            let fileResult = SearchFileResult(
+                fileURL: fileURL,
+                matches: [],
+                bytesSearched: bytesSearched,
+                searched: true,
+                supplementalMatchedLines: matchedLineCount,
+                supplementalMatches: totalMatchCount > 0 ? totalMatchCount : matchedLineCount
+            )
+            return SearchResults(
+                files: [fileResult],
+                summary: SearchSummary(
+                    filesSearched: 1,
+                    filesWithMatches: matchedLineCount > 0 ? 1 : 0,
+                    matchedLines: matchedLineCount,
+                    totalMatches: totalMatchCount > 0 ? totalMatchCount : matchedLineCount
+                )
+            )
+        }
+
         let newlineBuffer = [UInt8](repeating: UInt8(ascii: "\n"), count: 64 * 1024)
 
         func writeRepeatedNewlines(_ count: Int) {
