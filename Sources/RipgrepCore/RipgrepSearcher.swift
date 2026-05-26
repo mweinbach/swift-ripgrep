@@ -970,6 +970,67 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 }
             }
 
+            func nextIndependentLiteralMatch(
+                literalIndex: Int,
+                from offset: Int
+            ) -> (start: Int, length: Int)? {
+                let literal = literals[literalIndex]
+                guard offset < data.count, literal.count <= data.count - offset else {
+                    return nil
+                }
+                let foundPointer = literal.withUnsafeBufferPointer { needle in
+                    rg_memmem_simple(
+                        baseAddress.advanced(by: offset),
+                        data.count - offset,
+                        needle.baseAddress,
+                        needle.count
+                    )
+                }
+                guard let rawFoundPointer = foundPointer else {
+                    return nil
+                }
+                return (baseAddress.distance(to: rawFoundPointer), literal.count)
+            }
+
+            func initialIndependentLiteralCandidates()
+                -> [(start: Int, length: Int, literalIndex: Int)] {
+                literals.indices.map { index in
+                    if let match = nextIndependentLiteralMatch(literalIndex: index, from: 0) {
+                        return (match.start, match.length, index)
+                    }
+                    return (Int.max, 0, index)
+                }
+            }
+
+            func popNextIndependentLiteralMatch(
+                from candidates: inout [(start: Int, length: Int, literalIndex: Int)]
+            ) -> (start: Int, length: Int)? {
+                var selectedCandidateIndex: Int?
+                var selectedStart = Int.max
+                for candidateIndex in candidates.indices where candidates[candidateIndex].start < selectedStart {
+                    selectedStart = candidates[candidateIndex].start
+                    selectedCandidateIndex = candidateIndex
+                }
+                guard let selectedCandidateIndex, selectedStart != Int.max else {
+                    return nil
+                }
+
+                let selected = candidates[selectedCandidateIndex]
+                if let nextMatch = nextIndependentLiteralMatch(
+                    literalIndex: selected.literalIndex,
+                    from: selected.start + selected.length
+                ) {
+                    candidates[selectedCandidateIndex] = (
+                        nextMatch.start,
+                        nextMatch.length,
+                        selected.literalIndex
+                    )
+                } else {
+                    candidates[selectedCandidateIndex] = (Int.max, 0, selected.literalIndex)
+                }
+                return (selected.start, selected.length)
+            }
+
             if canDirectWriteLiteralReplacement,
                let replacementBytes = directLiteralReplacementBytes,
                let literal = literals.first {
@@ -1168,33 +1229,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     return
                 }
 
-                var searchOffset = 0
-                while searchOffset < data.count {
-                    var earliestMatchStart = Int.max
-                    var earliestLiteralLength = 0
-                    for literal in literals where literal.count <= data.count - searchOffset {
-                        let foundPointer = literal.withUnsafeBufferPointer { needle in
-                            rg_memmem_simple(
-                                baseAddress.advanced(by: searchOffset),
-                                data.count - searchOffset,
-                                needle.baseAddress,
-                                needle.count
-                            )
-                        }
-                        guard let rawFoundPointer = foundPointer else {
-                            continue
-                        }
-                        let matchStart = baseAddress.distance(to: rawFoundPointer)
-                        if matchStart < earliestMatchStart {
-                            earliestMatchStart = matchStart
-                            earliestLiteralLength = literal.count
-                        }
-                    }
-                    guard earliestMatchStart != Int.max else {
-                        break
-                    }
-                    writeVimgrepMatch(matchStart: earliestMatchStart, length: earliestLiteralLength)
-                    searchOffset = earliestMatchStart + earliestLiteralLength
+                var candidates = initialIndependentLiteralCandidates()
+                while let match = popNextIndependentLiteralMatch(from: &candidates) {
+                    writeVimgrepMatch(matchStart: match.start, length: match.length)
                 }
                 return
             }
@@ -1202,60 +1239,36 @@ public struct RipgrepSearcher: @unchecked Sendable {
             if literals.count > 1,
                fastPathByteSet == nil,
                canDirectWriteIndependentOnlyMatches {
-                var searchOffset = 0
                 var newline = UInt8(ascii: "\n")
-                while searchOffset < data.count {
-                    var earliestMatchStart = Int.max
-                    var earliestLiteralLength = 0
-                    for literal in literals where literal.count <= data.count - searchOffset {
-                        let foundPointer = literal.withUnsafeBufferPointer { needle in
-                            rg_memmem_simple(
-                                baseAddress.advanced(by: searchOffset),
-                                data.count - searchOffset,
-                                needle.baseAddress,
-                                needle.count
-                            )
-                        }
-                        guard let rawFoundPointer = foundPointer else {
-                            continue
-                        }
-                        let matchStart = baseAddress.distance(to: rawFoundPointer)
-                        if matchStart < earliestMatchStart {
-                            earliestMatchStart = matchStart
-                            earliestLiteralLength = literal.count
-                        }
-                    }
-                    guard earliestMatchStart != Int.max else {
-                        break
-                    }
+                var candidates = initialIndependentLiteralCandidates()
+                while let match = popNextIndependentLiteralMatch(from: &candidates) {
                     totalMatchCount += 1
                     matchedLineCount = 1
                     if wantsLineNumber || options.column || options.byteOffset {
-                        advanceLineNumber(to: earliestMatchStart)
+                        advanceLineNumber(to: match.start)
                         var column = 1
                         if options.column {
-                            var lineStart = earliestMatchStart
+                            var lineStart = match.start
                             while lineStart > 0, baseAddress[lineStart - 1] != UInt8(ascii: "\n") {
                                 lineStart -= 1
                             }
-                            column = earliestMatchStart - lineStart + 1
+                            column = match.start - lineStart + 1
                         }
                         writeDarwinOnlyMatchingPrefixes(
                             lineNumber: lineNumber,
                             column: column,
-                            byteOffset: earliestMatchStart,
+                            byteOffset: match.start,
                             options: options,
                             writeBytes: writeBytes
                         )
                     }
                     writeBytes(UnsafeRawBufferPointer(
-                        start: rawBaseAddress.advanced(by: earliestMatchStart),
-                        count: earliestLiteralLength
+                        start: rawBaseAddress.advanced(by: match.start),
+                        count: match.length
                     ))
                     withUnsafeBytes(of: &newline) { buffer in
                         writeBytes(buffer)
                     }
-                    searchOffset = earliestMatchStart + earliestLiteralLength
                 }
                 return
             }

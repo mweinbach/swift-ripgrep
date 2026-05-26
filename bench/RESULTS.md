@@ -218,6 +218,16 @@ matched the sibling Rust oracle on the 193 MiB subtitles corpus. Five-run
 checks measured `-r Holmes 'Sherlock Holmes'` at 64.1 ms versus 10.828 s
 before and 24.9 ms for Rust.
 
+Safe multi-literal only-match and vimgrep output now merge each literal's next
+match stream instead of re-scanning every literal from the current global
+offset. Interleaved same-line fixtures and representative subtitles cases
+matched both the previous Swift checkpoint and the sibling Rust oracle. Five-run
+A/B checks on the 193 MiB subtitles corpus measured `-o 'Sherlock|Watson'` at
+67.4 ms versus 184.4 ms before and 39.6 ms for Rust, `-n -o
+'Sherlock|Watson'` at 156.3 ms versus 266.5 ms before and 44.0 ms for Rust,
+and `--vimgrep 'Sherlock|Watson'` at 158.8 ms versus 263.1 ms before and
+43.6 ms for Rust.
+
 Direct executable byte-unit PCRE2 `--count-matches` now counts totals without
 matched-line bookkeeping while preserving the exact summary path for non-direct
 callers. Output for default Unicode `\C`, byte-mode `\C`, `\C+`, `\C{2}`, and

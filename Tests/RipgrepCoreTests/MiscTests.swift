@@ -413,6 +413,14 @@ struct MiscTests {
             "bravo|delta",
             root.path("letters.txt"),
         ], fixture: {})
+        try root.write("delta bravo delta\nbravo\n", to: "interleaved.txt")
+        let multiByteInterleavedOnlyMatchingOutput = try runExecutableData([
+            "-n",
+            "--column",
+            "-o",
+            "bravo|delta",
+            root.path("interleaved.txt"),
+        ], fixture: {})
         let multiByteVimgrepOutput = try runExecutableData([
             "--vimgrep",
             "bravo|delta",
@@ -442,6 +450,12 @@ struct MiscTests {
             "-o",
             "bravo|delta",
             root.path("letters.txt"),
+        ], fixture: {})
+        let multiByteInterleavedVimgrepOutput = try runExecutableData([
+            "--vimgrep",
+            "-o",
+            "bravo|delta",
+            root.path("interleaved.txt"),
         ], fixture: {})
         let multiByteByteOffsetOnlyMatchingVimgrepOutput = try runExecutableData([
             "--vimgrep",
@@ -521,11 +535,23 @@ struct MiscTests {
         #expect(multiByteByteOffsetOnlyMatchingOutput == Data("6:bravo\n20:delta\n".utf8))
         #expect(multiByteColumnOnlyMatchingOutput == Data("2:1:bravo\n4:1:delta\n".utf8))
         #expect(multiByteLineColumnByteOnlyMatchingOutput == Data("2:1:6:bravo\n4:1:20:delta\n".utf8))
+        #expect(multiByteInterleavedOnlyMatchingOutput == Data(
+            "1:1:delta\n1:7:bravo\n1:13:delta\n2:1:bravo\n".utf8
+        ))
         #expect(multiByteVimgrepOutput == Data("\(root.path("letters.txt")):2:1:bravo\n\(root.path("letters.txt")):4:1:delta\n".utf8))
         #expect(multiByteByteOffsetVimgrepOutput == Data("\(root.path("letters.txt")):2:1:6:bravo\n\(root.path("letters.txt")):4:1:20:delta\n".utf8))
         #expect(multiByteNoFilenameVimgrepOutput == Data("2:1:bravo\n4:1:delta\n".utf8))
         #expect(multiByteNoFieldsVimgrepOutput == Data("\(root.path("letters.txt")):bravo\n\(root.path("letters.txt")):delta\n".utf8))
         #expect(multiByteOnlyMatchingVimgrepOutput == Data("\(root.path("letters.txt")):2:1:bravo\n\(root.path("letters.txt")):4:1:delta\n".utf8))
+        #expect(multiByteInterleavedVimgrepOutput == Data(
+            """
+            \(root.path("interleaved.txt")):1:1:delta
+            \(root.path("interleaved.txt")):1:7:bravo
+            \(root.path("interleaved.txt")):1:13:delta
+            \(root.path("interleaved.txt")):2:1:bravo
+
+            """.utf8
+        ))
         #expect(multiByteByteOffsetOnlyMatchingVimgrepOutput == Data("\(root.path("letters.txt")):2:1:6:bravo\n\(root.path("letters.txt")):4:1:20:delta\n".utf8))
         #expect(multiByteNoFilenameOnlyMatchingVimgrepOutput == Data("2:1:bravo\n4:1:delta\n".utf8))
         #expect(singleByteRepeatedVimgrepOutput == Data("\(root.path("repeat.txt")):1:1:aba\n\(root.path("repeat.txt")):1:3:aba\n".utf8))
