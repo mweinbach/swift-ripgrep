@@ -747,8 +747,15 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let fastPathByteSet = singleByteLiteralSet(fastPath.literals)
         let countMatchesOnly = options.printMode == .countMatches
         let onlyMatching = options.onlyMatching
+        let canDirectCountIndependentLiterals = countMatchesOnly
+            && allowDirectStdout
+            && fastPathByteSet == nil
+            && canCountDarwinLiteralsIndependently(fastPath)
         guard (!onlyMatching || fastPath.literals.count == 1 || fastPathByteSet != nil),
-              (!countMatchesOnly || fastPath.literals.count == 1 || fastPathByteSet != nil),
+              (!countMatchesOnly
+                || fastPath.literals.count == 1
+                || fastPathByteSet != nil
+                || canDirectCountIndependentLiterals),
               (!options.byteOffset && !options.column
                 || (options.printMode == .matchingLines && fastPath.literals.count == 1)),
               canWriteDarwinSimpleByteLiteralFastPath(fastPath) else {
@@ -928,6 +935,37 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         count: buffer.count - cursor
                     ))
                 }
+            }
+
+            if literals.count > 1,
+               fastPathByteSet == nil,
+               canDirectCountIndependentLiterals {
+                for literal in literals where literal.count <= data.count {
+                    literal.withUnsafeBufferPointer { needle in
+                        guard let needleBaseAddress = needle.baseAddress else {
+                            return
+                        }
+                        var searchOffset = 0
+                        while searchOffset < data.count {
+                            let foundPointer = rg_memmem_simple(
+                                baseAddress.advanced(by: searchOffset),
+                                data.count - searchOffset,
+                                needleBaseAddress,
+                                needle.count
+                            )
+                            guard let rawFoundPointer = foundPointer else {
+                                break
+                            }
+                            let matchStart = baseAddress.distance(to: rawFoundPointer)
+                            totalMatchCount += 1
+                            searchOffset = matchStart + needle.count
+                        }
+                    }
+                }
+                if totalMatchCount > 0 {
+                    matchedLineCount = 1
+                }
+                return
             }
 
             if literals.count > 1,
@@ -3080,6 +3118,69 @@ public struct RipgrepSearcher: @unchecked Sendable {
             return fastPath.literals.count == 1 && fastPath.literals.allSatisfy { literal in
                 literal.allSatisfy { $0 < 0x80 }
             }
+        }
+        return true
+    }
+
+    private func canCountDarwinLiteralsIndependently(_ fastPath: ByteLiteralFastPath) -> Bool {
+        guard !fastPath.caseInsensitiveASCII,
+              !fastPath.wordASCII,
+              fastPath.literals.count > 1 else {
+            return false
+        }
+
+        for leftIndex in fastPath.literals.indices {
+            for rightIndex in fastPath.literals.indices where leftIndex != rightIndex {
+                if darwinLiteral(fastPath.literals[leftIndex], conflictsWith: fastPath.literals[rightIndex]) {
+                    return false
+                }
+            }
+        }
+        return true
+    }
+
+    private func darwinLiteral(_ left: [UInt8], conflictsWith right: [UInt8]) -> Bool {
+        if left.count >= right.count,
+           byteLiteral(left, contains: right) {
+            return true
+        }
+        if right.count >= left.count,
+           byteLiteral(right, contains: left) {
+            return true
+        }
+
+        let maxOverlap = min(left.count, right.count) - 1
+        guard maxOverlap > 0 else {
+            return false
+        }
+        for overlap in 1...maxOverlap
+            where byteLiteralSuffix(left, equalsPrefixOf: right, count: overlap) {
+            return true
+        }
+        return false
+    }
+
+    private func byteLiteral(_ haystack: [UInt8], contains needle: [UInt8]) -> Bool {
+        guard !needle.isEmpty,
+              needle.count <= haystack.count else {
+            return false
+        }
+        for offset in 0...(haystack.count - needle.count) {
+            var matches = true
+            for index in needle.indices where haystack[offset + index] != needle[index] {
+                matches = false
+                break
+            }
+            if matches {
+                return true
+            }
+        }
+        return false
+    }
+
+    private func byteLiteralSuffix(_ left: [UInt8], equalsPrefixOf right: [UInt8], count: Int) -> Bool {
+        for index in 0..<count where left[left.count - count + index] != right[index] {
+            return false
         }
         return true
     }

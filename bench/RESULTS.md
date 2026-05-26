@@ -156,6 +156,17 @@ fixtures matched the previous Swift checkpoint and sibling Rust oracle. On a
 system-noise-bound: current measured 74.8 ms versus 68.9 ms before with the
 same 23.3 ms user time in both runs.
 
+The direct total-only path now also covers multi-literal `--count-matches`
+when byte-level analysis proves the literals cannot overlap or contain one
+another, so independent literal totals are equivalent to regex non-overlapping
+counts. Safe alternation fixtures, neighboring `-c` and `-o` forms, and the
+unsafe overlapping `a|ab` fallback matched the previous Swift checkpoint; safe
+fixtures also matched the sibling Rust oracle. On the 193 MiB subtitles
+corpus, 20-run checks measured `--count-matches 'Sherlock|Watson'` at 74.6 ms
+versus 678.6 ms before and 39.4 ms for Rust. On the 67 MiB dense fixture,
+15-run checks measured `--count-matches 'needle|haystack'` at 104.2 ms versus
+1.933 s before and 249.0 ms for Rust.
+
 Direct executable byte-unit PCRE2 `--count-matches` now counts totals without
 matched-line bookkeeping while preserving the exact summary path for non-direct
 callers. Output for default Unicode `\C`, byte-mode `\C`, `\C+`, `\C{2}`, and
