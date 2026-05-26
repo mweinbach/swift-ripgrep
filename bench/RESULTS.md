@@ -63,6 +63,13 @@ status. Seven-run large-corpus checks measured `-i sherlock` at 217.4 ms versus
 233.5 ms before and 301.1 ms for Rust; the neighboring `PM_RESUME` no-match
 case stayed neutral at 198.2 ms versus 198.1 ms before. A 20-run 193 MiB smoke
 measured `-i sherlock` at 32.6 ms versus 34.7 ms before and 42.9 ms for Rust.
+The preflight writer now also unwraps its stdout buffer once after allocation
+instead of paying optional access on each emitted line. Against the previous
+Swift checkpoint on the same 1.5 GiB corpus, 7-run checks measured
+`-i sherlock` at 202.4 ms versus 216.6 ms before and 285.3 ms for Rust; the
+neighboring `PM_RESUME` no-match case stayed neutral at 184.3 ms versus
+183.2 ms before. Output for `-i sherlock` and no-match output/exit status
+matched both the previous Swift checkpoint and the sibling Rust oracle.
 
 Quiet file-listing probes also got a small traversal cleanup. The no-ignore
 existence walker now keeps recursive paths in byte buffers, and the

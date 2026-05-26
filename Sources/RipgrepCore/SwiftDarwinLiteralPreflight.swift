@@ -149,12 +149,11 @@ private func rgSwiftDarwinWriteLiteralBytes(
         return nil
     }
 
-    var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024)
-    guard output != nil else {
+    guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
         return nil
     }
     defer {
-        output?.deallocate()
+        output.deallocate()
     }
 
     var foldedLiteral: [UInt8] = []
@@ -185,11 +184,11 @@ private func rgSwiftDarwinWriteLiteralBytes(
             let outputEnd = newline.map {
                 base.distance(to: $0.assumingMemoryBound(to: UInt8.self)) + 1
             } ?? haystackLength
-            guard output?.write(base.advanced(by: lineStart), count: outputEnd - lineStart) == true else {
+            guard output.write(base.advanced(by: lineStart), count: outputEnd - lineStart) else {
                 writeFailed = true
                 return false
             }
-            if newline == nil, output?.writeByte(UInt8(ascii: "\n")) != true {
+            if newline == nil, !output.writeByte(UInt8(ascii: "\n")) {
                 writeFailed = true
                 return false
             }
@@ -241,7 +240,7 @@ private func rgSwiftDarwinWriteLiteralBytes(
     guard !writeFailed else {
         return nil
     }
-    guard output?.flush() == true else {
+    guard output.flush() else {
         return nil
     }
     return matchedLineCount
