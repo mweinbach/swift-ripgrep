@@ -10,7 +10,7 @@ in-tree Swift compatibility engine; it does not link libpcre2.
 **Functional 1:1 with Rust ripgrep 15.1.0, including the streaming I/O
 architecture.** Verified via:
 
-- **152 Swift Testing cases** across 12 suites covering search, output formats,
+- **153 Swift Testing cases** across 12 suites covering search, output formats,
   ignore rules, file types, stdin, encodings, binary handling, parser
   diagnostics, mmap/worker pool, PCRE2, streaming haystack reads, and
   generated-asset drift.
@@ -191,7 +191,9 @@ into a much smaller implementation:
    loop for line-numbered/byte-offset/column only-match output plus
    count/path/quiet modes; auto mode falls through to that compatibility path,
    while default/no-PCRE modes reject `\C` with the same diagnostic shape as
-   Rust. Common PCRE skip/fail alternations such as
+   Rust. Embedded byte-unit forms such as `a\Cb`, `a\C+`, `foo\C{3}bar`,
+   `.\C` and `\C\d` are translated to raw-byte Swift regexes for the general
+   compatibility path. Common PCRE skip/fail alternations such as
    `alpha(*SKIP)(*F)|beta` and `\[[^\]]+\](*SKIP)(*FAIL)|\w+` are handled
    in-tree by pairing skip and match regexes while preserving replacement
    capture numbering for skipped-branch groups.

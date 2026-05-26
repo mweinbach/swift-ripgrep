@@ -37,6 +37,7 @@ final class PCRE2CompiledPattern {
         case fixedResetStart(prefix: [UInt8], literal: [UInt8], caseInsensitiveASCII: Bool)
         case literalPrefixResetStartRegex(prefixUTF16Length: Int, regex: NSRegularExpression)
         case capturedPrefixResetStartRegex(NSRegularExpression)
+        case byteUnitRegex(NSRegularExpression, unicodeStartOnly: Bool)
         case skipFailAlternation(
             skipRegex: NSRegularExpression,
             matchRegex: NSRegularExpression,
@@ -254,7 +255,12 @@ final class PCRE2CompiledPattern {
             regexPattern = "(?:)"
         }
         do {
-            self.matcher = .regex(try NSRegularExpression(pattern: regexPattern, options: regexOptions))
+            let regex = try NSRegularExpression(pattern: regexPattern, options: regexOptions)
+            if Self.containsByteUnitEscape(pattern) {
+                self.matcher = .byteUnitRegex(regex, unicodeStartOnly: !options.noUnicode)
+            } else {
+                self.matcher = .regex(regex)
+            }
         } catch {
             throw RipgrepError.message(Self.compileErrorMessage(pattern: pattern, error: error))
         }
@@ -313,6 +319,12 @@ final class PCRE2CompiledPattern {
             )
         case .capturedPrefixResetStartRegex(let regex):
             return Self.capturedPrefixResetStartRegexMatches(regex: regex, in: text)
+        case .byteUnitRegex(let regex, let unicodeStartOnly):
+            return Self.byteUnitRegexMatches(
+                regex: regex,
+                unicodeStartOnly: unicodeStartOnly,
+                in: text
+            )
         case .skipFailAlternation(let skipRegex, let matchRegex, let skipCaptureCount):
             return Self.skipFailAlternationMatches(
                 skipRegex: skipRegex,
@@ -865,6 +877,29 @@ final class PCRE2CompiledPattern {
             return nil
         }
         return .fixed(count)
+    }
+
+    private static func containsByteUnitEscape(_ pattern: String) -> Bool {
+        var escaped = false
+        var inClass = false
+        var index = pattern.startIndex
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                if !inClass, character == "C" {
+                    return true
+                }
+                escaped = false
+            } else if character == "\\" {
+                escaped = true
+            } else if character == "[" {
+                inClass = true
+            } else if character == "]" {
+                inClass = false
+            }
+            index = pattern.index(after: index)
+        }
+        return false
     }
 
     private static func fixedLiteralCaptureGroup(
@@ -1499,6 +1534,56 @@ final class PCRE2CompiledPattern {
         }
     }
 
+    private static func byteUnitRegexMatches(
+        regex: NSRegularExpression,
+        unicodeStartOnly: Bool,
+        in text: String
+    ) -> [PCRE2Match] {
+        let bytes = text.unicodeScalars.compactMap { scalar -> UInt8? in
+            guard scalar.value <= UInt8.max else {
+                return nil
+            }
+            return UInt8(scalar.value)
+        }
+        guard bytes.count == text.unicodeScalars.count else {
+            return []
+        }
+
+        return regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { match in
+            let fullRange = match.range(at: 0)
+            guard fullRange.location != NSNotFound,
+                  let range = Range(fullRange, in: text) else {
+                return nil
+            }
+            let startOffset = scalarOffset(for: range.lowerBound, in: text)
+            if unicodeStartOnly,
+               startOffset < bytes.count,
+               isUTF8ContinuationByte(bytes[startOffset]) {
+                return nil
+            }
+
+            var captures: [Range<String.Index>?] = []
+            captures.reserveCapacity(match.numberOfRanges)
+            for index in 0..<match.numberOfRanges {
+                let captureRange = match.range(at: index)
+                guard captureRange.location != NSNotFound else {
+                    captures.append(nil)
+                    continue
+                }
+                guard let capture = Range(captureRange, in: text) else {
+                    return nil
+                }
+                captures.append(capture)
+            }
+
+            return PCRE2Match(
+                range: range,
+                byteRange: scalarOffset(for: range.lowerBound, in: text)..<scalarOffset(for: range.upperBound, in: text),
+                captures: captures
+            )
+        }
+    }
+
     private static func skipFailAlternationMatches(
         skipRegex: NSRegularExpression,
         matchRegex: NSRegularExpression,
@@ -1925,6 +2010,10 @@ final class PCRE2CompiledPattern {
         text[..<range.lowerBound].utf8.count..<text[..<range.upperBound].utf8.count
     }
 
+    private static func scalarOffset(for index: String.Index, in text: String) -> Int {
+        text[..<index].unicodeScalars.count
+    }
+
     private static func compileErrorMessage(pattern: String, error: Error) -> String {
         """
         PCRE2-compatible regex error: \(error.localizedDescription)
@@ -1971,6 +2060,12 @@ final class PCRE2CompiledPattern {
                         continue
                     }
                     if pattern[marker] == "E" {
+                        index = pattern.index(after: marker)
+                        continue
+                    }
+                    if !inClass,
+                       pattern[marker] == "C" {
+                        output += "[\\x{00}-\\x{FF}]"
                         index = pattern.index(after: marker)
                         continue
                     }

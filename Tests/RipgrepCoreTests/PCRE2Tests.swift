@@ -393,6 +393,44 @@ struct PCRE2Tests {
         #expect(quietErrors.isEmpty)
     }
 
+    @Test func pcre2EmbeddedByteUnitEscapesUseRawByteRegex() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write(Data([
+            0x61, 0x62, 0x63, 0x0A,
+            0x63, 0x61, 0x66, 0xC3, 0xA9, 0x0A,
+            0x61, 0x31, 0x62, 0x0A,
+            0x66, 0x6F, 0x6F, 0x31, 0x32, 0x33, 0x62, 0x61, 0x72, 0x0A,
+        ]), to: "pcre.txt")
+
+        let surrounded = try runExecutableData(["-P", "-n", "-o", #"a\Cb"#, temp.path("pcre.txt")]) {}
+        let greedy = try runExecutableData(["-P", "-n", "-o", #"a\C+"#, temp.path("pcre.txt")]) {}
+        let fixedCount = try runExecutableData(["-P", "-n", "-o", #"foo\C{3}bar"#, temp.path("pcre.txt")]) {}
+        let dotByte = try runExecutableData(["-P", "-n", "-o", #".\C"#, temp.path("pcre.txt")]) {}
+        let byteDigit = try runExecutableData(["-P", "-n", "-o", #"\C\d"#, temp.path("pcre.txt")]) {}
+        let replacement = try run(["-P", #"a(\C)b"#, "-r", "[$1]", temp.path("pcre.txt")])
+
+        #expect(surrounded == Data("3:a1b\n".utf8))
+        #expect(greedy == Data([
+            0x31, 0x3A, 0x61, 0x62, 0x63, 0x0A,
+            0x32, 0x3A, 0x61, 0x66, 0xC3, 0xA9, 0x0A,
+            0x33, 0x3A, 0x61, 0x31, 0x62, 0x0A,
+            0x34, 0x3A, 0x61, 0x72, 0x0A,
+        ]))
+        #expect(fixedCount == Data("4:foo123bar\n".utf8))
+        #expect(dotByte == Data([
+            0x31, 0x3A, 0x61, 0x62, 0x0A,
+            0x32, 0x3A, 0x63, 0x61, 0x0A,
+            0x32, 0x3A, 0x66, 0xC3, 0x0A,
+            0x33, 0x3A, 0x61, 0x31, 0x0A,
+            0x34, 0x3A, 0x66, 0x6F, 0x0A,
+            0x34, 0x3A, 0x6F, 0x31, 0x0A,
+            0x34, 0x3A, 0x32, 0x33, 0x0A,
+            0x34, 0x3A, 0x62, 0x61, 0x0A,
+        ]))
+        #expect(byteDigit == Data("3:a1\n4:o1\n4:23\n".utf8))
+        #expect(replacement == ["[1]"])
+    }
+
     @Test func pcre2AssertionConditionalsOnlyMatching() throws {
         let temp = try TemporaryDirectory()
         try temp.write("foofoo\nbar\nfoobar\n", to: "pcre.txt")
