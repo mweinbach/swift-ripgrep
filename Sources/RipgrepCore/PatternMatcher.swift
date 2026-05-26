@@ -560,6 +560,19 @@ public struct PatternMatcher {
         return regex.fixedLiteralBackreferenceFastPath
     }
 
+    func fixedAssertionConditionalFastPath() -> (
+        condition: PCRE2CompiledPattern.FixedAssertionCondition,
+        trueLiteral: [UInt8],
+        falseLiteral: [UInt8],
+        caseInsensitiveASCII: Bool
+    )? {
+        guard patterns.count == 1,
+              case .pcre2(let regex) = patterns[0] else {
+            return nil
+        }
+        return regex.fixedAssertionConditionalFastPath
+    }
+
     private static func makeByteLiteralFastPath(
         patterns: [CompiledPattern],
         options: RipgrepOptions,
@@ -1919,6 +1932,11 @@ public struct PatternMatcher {
             }
             if !inClass,
                character == "(",
+               let conditionalFlag = unsupportedPCREConditionalFlag(at: index, in: pattern) {
+                return conditionalFlag
+            }
+            if !inClass,
+               character == "(",
                let pcreFlag = unsupportedPCREGroupFlag(at: index, in: pattern) {
                 return pcreFlag
             }
@@ -2300,6 +2318,21 @@ public struct PatternMatcher {
             return 4
         }
         return nil
+    }
+
+    private static func unsupportedPCREConditionalFlag(
+        at index: String.Index,
+        in text: String
+    ) -> UnsupportedRegexFeature? {
+        guard text[index...].hasPrefix("(?(") else {
+            return nil
+        }
+        let conditionOpen = text.index(index, offsetBy: 2)
+        return UnsupportedRegexFeature(
+            byteOffset: text[..<conditionOpen].utf8.count,
+            caretLength: 1,
+            message: "unrecognized flag"
+        )
     }
 
     private static func unsupportedPCREGroupFlag(at index: String.Index, in text: String) -> UnsupportedRegexFeature? {

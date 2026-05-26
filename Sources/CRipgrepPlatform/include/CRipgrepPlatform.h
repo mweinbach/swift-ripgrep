@@ -76,6 +76,18 @@ rg_darwin_literal_file_result rg_darwin_write_surrounding_words_file_lines_with_
     size_t literal_len
 );
 
+rg_darwin_literal_file_result rg_darwin_write_fixed_conditional_pcre_o(
+    const uint8_t *base,
+    size_t haystack_len,
+    int condition_kind,
+    const uint8_t *condition,
+    size_t condition_len,
+    const uint8_t *true_literal,
+    size_t true_literal_len,
+    const uint8_t *false_literal,
+    size_t false_literal_len
+);
+
 rg_darwin_literal_file_result rg_darwin_write_word_literal_file_lines(
     const char *path,
     const uint8_t *literal,

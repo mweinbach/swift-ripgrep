@@ -13,6 +13,13 @@ struct PCRE2Backend {
 }
 
 final class PCRE2CompiledPattern {
+    enum FixedAssertionCondition {
+        case positiveLookahead([UInt8])
+        case negativeLookahead([UInt8])
+        case positiveLookbehind([UInt8])
+        case negativeLookbehind([UInt8])
+    }
+
     private enum Matcher {
         case regex(NSRegularExpression)
         case fixedPositiveLookbehind(prefix: [UInt8], literal: [UInt8], caseInsensitiveASCII: Bool)
@@ -20,6 +27,12 @@ final class PCRE2CompiledPattern {
         case fixedPositiveLookahead(literal: [UInt8], suffix: [UInt8], caseInsensitiveASCII: Bool)
         case fixedNegativeLookahead(literal: [UInt8], suffix: [UInt8], caseInsensitiveASCII: Bool)
         case fixedLiteralBackreference(literal: [UInt8], captureRanges: [Range<Int>], caseInsensitiveASCII: Bool)
+        case fixedAssertionConditional(
+            condition: FixedAssertionCondition,
+            trueLiteral: [UInt8],
+            falseLiteral: [UInt8],
+            caseInsensitiveASCII: Bool
+        )
     }
 
     let source: String
@@ -58,6 +71,19 @@ final class PCRE2CompiledPattern {
             return nil
         }
         return (literal, caseInsensitiveASCII)
+    }
+
+    var fixedAssertionConditionalFastPath:
+        (condition: FixedAssertionCondition, trueLiteral: [UInt8], falseLiteral: [UInt8], caseInsensitiveASCII: Bool)? {
+        guard case .fixedAssertionConditional(
+            let condition,
+            let trueLiteral,
+            let falseLiteral,
+            let caseInsensitiveASCII
+        ) = matcher else {
+            return nil
+        }
+        return (condition, trueLiteral, falseLiteral, caseInsensitiveASCII)
     }
 
     init(pattern: String, options: RipgrepOptions) throws {
@@ -115,6 +141,16 @@ final class PCRE2CompiledPattern {
             self.matcher = .fixedLiteralBackreference(
                 literal: Array(backreference.literal.utf8),
                 captureRanges: backreference.captureRanges,
+                caseInsensitiveASCII: caseInsensitiveASCII
+            )
+            return
+        }
+        if canUseFixedByteMatcher,
+           let conditional = Self.fixedAssertionConditional(pattern) {
+            self.matcher = .fixedAssertionConditional(
+                condition: conditional.condition,
+                trueLiteral: Array(conditional.trueLiteral.utf8),
+                falseLiteral: Array(conditional.falseLiteral.utf8),
                 caseInsensitiveASCII: caseInsensitiveASCII
             )
             return
@@ -181,6 +217,14 @@ final class PCRE2CompiledPattern {
             return Self.fixedLiteralBackreferenceMatches(
                 literal: literal,
                 captureRanges: captureRanges,
+                caseInsensitiveASCII: caseInsensitiveASCII,
+                in: text
+            )
+        case .fixedAssertionConditional(let condition, let trueLiteral, let falseLiteral, let caseInsensitiveASCII):
+            return Self.fixedAssertionConditionalMatches(
+                condition: condition,
+                trueLiteral: trueLiteral,
+                falseLiteral: falseLiteral,
                 caseInsensitiveASCII: caseInsensitiveASCII,
                 in: text
             )
@@ -398,6 +442,65 @@ final class PCRE2CompiledPattern {
         }
         literal += groups[reference.groupIndex - 1].literal
         return (literal, captureRanges)
+    }
+
+    private static func fixedAssertionConditional(
+        _ pattern: String
+    ) -> (condition: FixedAssertionCondition, trueLiteral: String, falseLiteral: String)? {
+        guard pattern.hasPrefix("(?(") else {
+            return nil
+        }
+        let assertionStart = pattern.index(pattern.startIndex, offsetBy: 2)
+        guard let assertion = pcreAssertionCondition(at: assertionStart, in: pattern),
+              let branches = pcreConditionalBranches(from: assertion.end, in: pattern),
+              pattern.index(after: branches.close) == pattern.endIndex else {
+            return nil
+        }
+        let rawTrueBranch = String(pattern[assertion.end..<branches.separator])
+        let rawFalseBranch = branches.falseBranchStart.map { String(pattern[$0..<branches.close]) } ?? ""
+        guard let conditionLiteral = RegexLiteralParser.literal(
+            fromPlainRegexPattern: assertion.body,
+            allowPCREQuotedLiterals: true
+        ),
+              let trueLiteral = RegexLiteralParser.literal(
+                fromPlainRegexPattern: rawTrueBranch,
+                allowPCREQuotedLiterals: true
+              ),
+              let falseLiteral = RegexLiteralParser.literal(
+                fromPlainRegexPattern: rawFalseBranch,
+                allowPCREQuotedLiterals: true
+              ) else {
+            return nil
+        }
+        guard !conditionLiteral.isEmpty,
+              !trueLiteral.isEmpty,
+              !falseLiteral.isEmpty,
+              conditionLiteral.utf8.allSatisfy({ $0 < 0x80 }),
+              trueLiteral.utf8.allSatisfy({ $0 < 0x80 }),
+              falseLiteral.utf8.allSatisfy({ $0 < 0x80 }),
+              !conditionLiteral.contains("\n"),
+              !conditionLiteral.contains("\r"),
+              !trueLiteral.contains("\n"),
+              !trueLiteral.contains("\r"),
+              !falseLiteral.contains("\n"),
+              !falseLiteral.contains("\r") else {
+            return nil
+        }
+        let conditionBytes = Array(conditionLiteral.utf8)
+        let condition: FixedAssertionCondition
+        switch assertion.truePrefix {
+        case "(?=":
+            condition = .positiveLookahead(conditionBytes)
+        case "(?!":
+            condition = .negativeLookahead(conditionBytes)
+        case "(?<=":
+            condition = .positiveLookbehind(conditionBytes)
+        case "(?<!":
+            condition = .negativeLookbehind(conditionBytes)
+        default:
+            return nil
+        }
+        return (condition, trueLiteral, falseLiteral)
     }
 
     private static func fixedLiteralCaptureGroup(
@@ -943,6 +1046,129 @@ final class PCRE2CompiledPattern {
         #endif
     }
 
+    private static func fixedAssertionConditionalMatches(
+        condition: FixedAssertionCondition,
+        trueLiteral: [UInt8],
+        falseLiteral: [UInt8],
+        caseInsensitiveASCII: Bool,
+        in text: String
+    ) -> [PCRE2Match] {
+        #if canImport(CRipgrepPlatform)
+        enum ConditionKind {
+            case positiveLookahead
+            case negativeLookahead
+            case positiveLookbehind
+            case negativeLookbehind
+        }
+
+        let conditionBytes: [UInt8]
+        let conditionKind: ConditionKind
+        switch condition {
+        case .positiveLookahead(let bytes):
+            conditionBytes = bytes
+            conditionKind = .positiveLookahead
+        case .negativeLookahead(let bytes):
+            conditionBytes = bytes
+            conditionKind = .negativeLookahead
+        case .positiveLookbehind(let bytes):
+            conditionBytes = bytes
+            conditionKind = .positiveLookbehind
+        case .negativeLookbehind(let bytes):
+            conditionBytes = bytes
+            conditionKind = .negativeLookbehind
+        }
+
+        var matches: [PCRE2Match] = []
+        let originalText = text
+        var utf8Text = text
+        utf8Text.withUTF8 { bytes in
+            guard let baseAddress = bytes.baseAddress else {
+                return
+            }
+            conditionBytes.withUnsafeBufferPointer { conditionBuffer in
+                trueLiteral.withUnsafeBufferPointer { trueBuffer in
+                    falseLiteral.withUnsafeBufferPointer { falseBuffer in
+                        guard let conditionBase = conditionBuffer.baseAddress,
+                              let trueBase = trueBuffer.baseAddress,
+                              let falseBase = falseBuffer.baseAddress,
+                              !conditionBuffer.isEmpty,
+                              !trueBuffer.isEmpty,
+                              !falseBuffer.isEmpty else {
+                            return
+                        }
+
+                        var offset = 0
+                        while offset < bytes.count {
+                            let conditionMatched: Bool
+                            switch conditionKind {
+                            case .positiveLookahead:
+                                conditionMatched = offset + conditionBuffer.count <= bytes.count
+                                    && bytesEqual(
+                                        baseAddress.advanced(by: offset),
+                                        conditionBase,
+                                        conditionBuffer.count,
+                                        caseInsensitiveASCII: caseInsensitiveASCII
+                                    )
+                            case .negativeLookahead:
+                                conditionMatched = !(offset + conditionBuffer.count <= bytes.count
+                                    && bytesEqual(
+                                        baseAddress.advanced(by: offset),
+                                        conditionBase,
+                                        conditionBuffer.count,
+                                        caseInsensitiveASCII: caseInsensitiveASCII
+                                    ))
+                            case .positiveLookbehind:
+                                conditionMatched = offset >= conditionBuffer.count
+                                    && bytesEqual(
+                                        baseAddress.advanced(by: offset - conditionBuffer.count),
+                                        conditionBase,
+                                        conditionBuffer.count,
+                                        caseInsensitiveASCII: caseInsensitiveASCII
+                                    )
+                            case .negativeLookbehind:
+                                conditionMatched = !(offset >= conditionBuffer.count
+                                    && bytesEqual(
+                                        baseAddress.advanced(by: offset - conditionBuffer.count),
+                                        conditionBase,
+                                        conditionBuffer.count,
+                                        caseInsensitiveASCII: caseInsensitiveASCII
+                                    ))
+                            }
+
+                            let literalBase = conditionMatched ? trueBase : falseBase
+                            let literalCount = conditionMatched ? trueBuffer.count : falseBuffer.count
+                            if offset + literalCount <= bytes.count,
+                               bytesEqual(
+                                baseAddress.advanced(by: offset),
+                                literalBase,
+                                literalCount,
+                                caseInsensitiveASCII: caseInsensitiveASCII
+                               ),
+                               let range = stringRange(
+                                startByte: offset,
+                                endByte: offset + literalCount,
+                                in: originalText
+                               ) {
+                                matches.append(PCRE2Match(
+                                    range: range,
+                                    byteRange: offset..<offset + literalCount,
+                                    captures: [range]
+                                ))
+                                offset += literalCount
+                            } else {
+                                offset += 1
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return matches
+        #else
+        return []
+        #endif
+    }
+
     #if canImport(CRipgrepPlatform)
     private static func findLiteral(
         _ haystack: UnsafePointer<UInt8>,
@@ -1089,12 +1315,17 @@ final class PCRE2CompiledPattern {
                     continue
                 }
             }
-            if !inClass,
-               character == "(",
-               let groupSyntax = pcrePythonGroupSyntax(at: index, in: pattern) {
-                output += groupSyntax.pattern
-                index = groupSyntax.end
-                continue
+            if !inClass, character == "(" {
+                if let conditional = try pcreConditionalAssertionSyntax(at: index, in: pattern) {
+                    output += conditional.pattern
+                    index = conditional.end
+                    continue
+                }
+                if let groupSyntax = pcrePythonGroupSyntax(at: index, in: pattern) {
+                    output += groupSyntax.pattern
+                    index = groupSyntax.end
+                    continue
+                }
             }
             output.append(character)
             if character == "[" {
@@ -1105,6 +1336,111 @@ final class PCRE2CompiledPattern {
             index = pattern.index(after: index)
         }
         return output
+    }
+
+    private static func pcreConditionalAssertionSyntax(
+        at index: String.Index,
+        in pattern: String
+    ) throws -> (pattern: String, end: String.Index)? {
+        guard pattern[index...].hasPrefix("(?(") else {
+            return nil
+        }
+        let assertionStart = pattern.index(index, offsetBy: 2)
+        guard let assertion = pcreAssertionCondition(at: assertionStart, in: pattern),
+              let branches = pcreConditionalBranches(from: assertion.end, in: pattern) else {
+            return nil
+        }
+        let rawTrueBranch = String(pattern[assertion.end..<branches.separator])
+        let rawFalseBranch = branches.falseBranchStart.map { String(pattern[$0..<branches.close]) } ?? ""
+        let condition = try regexPatternExpandingPCREQuotedLiterals(assertion.body)
+        let trueBranch = try regexPatternExpandingPCREQuotedLiterals(rawTrueBranch)
+        let falseBranch = try regexPatternExpandingPCREQuotedLiterals(rawFalseBranch)
+        return (
+            "(?:\(assertion.truePrefix)\(condition))\(trueBranch)|\(assertion.falsePrefix)\(condition))\(falseBranch))",
+            pattern.index(after: branches.close)
+        )
+    }
+
+    private static func pcreAssertionCondition(
+        at index: String.Index,
+        in pattern: String
+    ) -> (truePrefix: String, falsePrefix: String, body: String, end: String.Index)? {
+        let prefixes: [(marker: String, truePrefix: String, falsePrefix: String)] = [
+            ("(?=", "(?=", "(?!"),
+            ("(?!", "(?!", "(?="),
+            ("(?<=", "(?<=", "(?<!"),
+            ("(?<!", "(?<!", "(?<="),
+        ]
+        guard let prefix = prefixes.first(where: { pattern[index...].hasPrefix($0.marker) }) else {
+            return nil
+        }
+        let bodyStart = pattern.index(index, offsetBy: prefix.marker.count)
+        guard let close = firstUnescapedClosingParen(in: pattern[bodyStart...]) else {
+            return nil
+        }
+        return (
+            prefix.truePrefix,
+            prefix.falsePrefix,
+            String(pattern[bodyStart..<close]),
+            pattern.index(after: close)
+        )
+    }
+
+    private static func pcreConditionalBranches(
+        from start: String.Index,
+        in pattern: String
+    ) -> (separator: String.Index, falseBranchStart: String.Index?, close: String.Index)? {
+        var escaped = false
+        var inClass = false
+        var depth = 0
+        var separator: String.Index?
+        var index = start
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                if character == "Q" {
+                    var quotedIndex = pattern.index(after: index)
+                    var closedQuote = false
+                    while quotedIndex < pattern.endIndex {
+                        if pattern[quotedIndex] == "\\" {
+                            let quoteEscapeIndex = pattern.index(after: quotedIndex)
+                            if quoteEscapeIndex < pattern.endIndex,
+                               pattern[quoteEscapeIndex] == "E" {
+                                index = pattern.index(after: quoteEscapeIndex)
+                                closedQuote = true
+                                break
+                            }
+                        }
+                        quotedIndex = pattern.index(after: quotedIndex)
+                    }
+                    guard closedQuote else {
+                        return nil
+                    }
+                    escaped = false
+                    continue
+                }
+                escaped = false
+            } else if character == "\\" {
+                escaped = true
+            } else if character == "[" {
+                inClass = true
+            } else if character == "]" {
+                inClass = false
+            } else if !inClass, character == "(" {
+                depth += 1
+            } else if !inClass, character == ")" {
+                if depth == 0 {
+                    let split = separator ?? index
+                    let falseStart = separator.map { pattern.index(after: $0) }
+                    return (split, falseStart, index)
+                }
+                depth -= 1
+            } else if !inClass, character == "|", depth == 0, separator == nil {
+                separator = index
+            }
+            index = pattern.index(after: index)
+        }
+        return nil
     }
 
     private static func pcreGBackreference(

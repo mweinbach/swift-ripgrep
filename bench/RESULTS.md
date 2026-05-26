@@ -133,6 +133,15 @@ and measured Swift release at 396.1 ms versus Rust PCRE2 at 502.3 ms in
 10-run checks. Default and `--no-pcre2` modes still reject `\K` with
 Rust-identical diagnostics.
 
+PCRE assertion-conditionals with fixed literal lookaround conditions now avoid
+the Foundation regex path too. On a 14 MiB repeated `foofoo` / `bar` /
+`foobar` corpus, `-P -o '(?(?=foo)foo|bar)'` produced 14,000,000 bytes of
+output byte-identical to system Rust `rg` PCRE2 and measured Swift release at
+130.6 ms versus Rust PCRE2 at 215.1 ms in 7-run checks (**0.61x**). The plain
+executable `-P -o` form uses a narrow checked-in Darwin stdout writer, while
+default and `--no-pcre2` modes still reject assertion-conditionals with
+Rust-compatible `unrecognized flag` diagnostics.
+
 Line-numbered only-match output for the same fixed PCRE2 family now stays on
 the executable Darwin byte writer too. On the 193 MiB subtitles corpus,
 `-P -n -o '(?<=Sherlock )Holmes'` produced byte-identical output to the sibling
@@ -202,6 +211,10 @@ The key improvements since the 2026-05-24 baseline are:
   Darwin/arm scanner and a Swift sparse fallback for field/count variants,
   cutting `Sherlock|Watson` on the subtitles corpus from about 21.7 s to
   80.3 ms while preserving byte-identical Rust output;
+- literal PCRE assertion-conditionals now translate into the in-tree matcher
+  and use a narrow Darwin stdout writer for plain executable `-P -o`, measuring
+  130.6 ms versus Rust PCRE2 at 215.1 ms on the dense conditional corpus while
+  preserving byte-identical output;
 - NEON-backed literal, byte-counting, and byte-set scanning in
   `CRipgrepPlatform`;
 - suppressed optional ignore-file loads now check existence before attempting

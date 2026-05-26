@@ -264,6 +264,63 @@ struct PCRE2Tests {
         #expect(!pcreErrors.isEmpty)
     }
 
+    @Test func pcre2AssertionConditionalsOnlyMatching() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("foofoo\nbar\nfoobar\n", to: "pcre.txt")
+
+        let positiveLookahead = try run(["-P", "-o", #"(?(?=foo)foo|bar)"#, temp.path("pcre.txt")])
+        let falseLookahead = try run(["-P", "-o", #"(?(?=z)foo|bar)"#, temp.path("pcre.txt")])
+        let negativeLookahead = try run(["-P", "-o", #"(?(?!foo)bar|foo)"#, temp.path("pcre.txt")])
+        let positiveLookbehind = try run(["-P", "-o", #"(?(?<=foo)foo|bar)"#, temp.path("pcre.txt")])
+        let negativeLookbehind = try run(["-P", "-o", #"(?(?<!foo)bar|foo)"#, temp.path("pcre.txt")])
+        let autoOutput = try run(["--engine=auto", "-o", #"(?(?=foo)foo|bar)"#, temp.path("pcre.txt")])
+
+        #expect(positiveLookahead == ["foo", "foo", "bar", "foo", "bar"])
+        #expect(falseLookahead == ["bar", "bar"])
+        #expect(negativeLookahead == positiveLookahead)
+        #expect(positiveLookbehind == ["foo", "bar"])
+        #expect(negativeLookbehind == ["foo", "bar"])
+        #expect(autoOutput == positiveLookahead)
+    }
+
+    @Test func pcre2AssertionConditionalExecutableFastPathOnlyMatchingOutput() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("foofoo\nbar\nfoobar\n", to: "pcre.txt")
+
+        let output = try runExecutableData(["-P", "-o", #"(?(?=foo)foo|bar)"#, temp.path("pcre.txt")]) {}
+
+        #expect(output == Data("foo\nfoo\nbar\nfoo\nbar\n".utf8))
+    }
+
+    @Test func pcre2AssertionConditionalsRespectDefaultEngineSelection() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("foo\n", to: "pcre.txt")
+        let expected = """
+        rg: regex parse error:
+            (?:(?(?=foo)foo|bar))
+                 ^
+        error: unrecognized flag
+        """
+
+        for arguments in [
+            [#"(?(?=foo)foo|bar)"#, temp.path("pcre.txt")],
+            ["--engine=default", #"(?(?=foo)foo|bar)"#, temp.path("pcre.txt")],
+            ["--no-pcre2", #"(?(?=foo)foo|bar)"#, temp.path("pcre.txt")],
+        ] {
+            var output: [String] = []
+            var errors: [String] = []
+            let exitCode = RipgrepCLI.run(
+                arguments: arguments,
+                stdout: { output.append($0) },
+                stderr: { errors.append($0) }
+            )
+
+            #expect(exitCode == 2)
+            #expect(output.isEmpty)
+            #expect(errors == [expected])
+        }
+    }
+
     @Test func pcre2ResetStartLiteralOnlyMatching() throws {
         let temp = try TemporaryDirectory()
         try temp.write("foobar\nfooqux\nbar\n", to: "pcre.txt")

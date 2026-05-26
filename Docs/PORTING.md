@@ -10,7 +10,7 @@ in-tree Swift compatibility engine; it does not link libpcre2.
 **Functional 1:1 with Rust ripgrep 15.1.0, including the streaming I/O
 architecture.** Verified via:
 
-- **139 Swift Testing cases** across 12 suites covering search, output formats,
+- **142 Swift Testing cases** across 12 suites covering search, output formats,
   ignore rules, file types, stdin, encodings, binary handling, parser
   diagnostics, mmap/worker pool, PCRE2, streaming haystack reads, and
   generated-asset drift.
@@ -56,15 +56,18 @@ preflight before the compatibility engine is needed. That literal parser also
 understands safely escaped regex metacharacters such as `\.` and `\[` plus
 PCRE quote escapes (`\Q...\E`) when the selected engine permits them.
 PCRE2 syntax compatibility is implemented in Swift/Foundation for the covered
-non-literal `-P` surface, including translation of partial PCRE quoted regexes
-and bare non-newline escapes (`\N`) before Foundation compilation, with
-Swift-parsed fixed positive/negative lookaround literal, reset-start (`\K`)
-literal and literal-backreference specializations, including `\g` and
-Python-style named backreference spellings, that use the checked-in Darwin byte
-scanner for `-P -o`, line-numbered, byte-offset and byte-column only-match
-output, plus count/path/quiet modes. The Darwin arm hot paths live in the
-checked-in `CRipgrepPlatform` shim because they provide measurable NEON/mmap
-throughput that Swift cannot currently express directly.
+non-literal `-P` surface, including translation of partial PCRE quoted regexes,
+bare non-newline escapes (`\N`), and assertion-conditionals such as
+`(?(?=foo)foo|bar)` before Foundation compilation, with Swift-parsed fixed
+positive/negative lookaround literal, reset-start (`\K`) literal and
+literal-backreference specializations, including `\g` and Python-style named
+backreference spellings, that use the checked-in Darwin byte scanner for
+`-P -o`, line-numbered, byte-offset and byte-column only-match output, plus
+count/path/quiet modes. Literal assertion-conditionals also get a narrow
+Darwin stdout writer for the plain executable `-P -o` shape. The Darwin arm
+hot paths live in the checked-in
+`CRipgrepPlatform` shim because they provide measurable NEON/mmap throughput
+that Swift cannot currently express directly.
 
 File input flows through `HaystackReader` (mmap for regular files ≥ 16 KiB or
 when `--mmap` is forced, chunked 64 KiB buffered reads otherwise, stdin always
@@ -148,8 +151,13 @@ into a much smaller implementation:
    line-numbered/byte-offset/byte-column only-match output and count/path/quiet
    modes, including ASCII ignore-case forms when `--no-pcre2-unicode` selects
    byte semantics. Bare `\N` now matches any non-newline character in PCRE/auto
-   mode, while `\N{name}` stays a Rust-compatible PCRE2 error. They remain
-   byte-identical to Rust `rg`.
+   mode, while `\N{name}` stays a Rust-compatible PCRE2 error. Assertion
+   conditionals using lookahead/lookbehind conditions are translated in-tree for
+   PCRE/auto modes while default/no-PCRE modes retain Rust-compatible
+   `unrecognized flag` diagnostics. Literal condition/branch forms use a
+   Swift matcher plus a Darwin stdout writer for plain executable `-P -o`;
+   they remain byte-identical to Rust `rg` and benchmark faster than Rust PCRE2
+   on the dense conditional corpus in `bench/RESULTS.md`.
 
 2. **(Done 2026-05-24)** Enforced regex resource limits — see the size-budget
    guard in `Sources/RipgrepCore/PatternMatcher.swift`.

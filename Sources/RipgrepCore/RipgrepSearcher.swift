@@ -484,6 +484,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let fixedNegativeLookbehindFastPath = matcher.fixedNegativeLookbehindFastPath()
         let fixedNegativeLookaheadFastPath = matcher.fixedNegativeLookaheadFastPath()
         let fixedBackreferenceFastPath = matcher.fixedLiteralBackreferenceFastPath()
+        let fixedConditionalFastPath = matcher.fixedAssertionConditionalFastPath()
         let byteLiteralFastPath = matcher.byteLiteralFastPath()
         guard let fileURL = options.roots.first?.standardizedFileURL,
               fixedLookbehindFastPath != nil
@@ -491,6 +492,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 || fixedNegativeLookbehindFastPath != nil
                 || fixedNegativeLookaheadFastPath != nil
                 || fixedBackreferenceFastPath != nil
+                || fixedConditionalFastPath != nil
                 || byteLiteralFastPath != nil else {
             return nil
         }
@@ -498,7 +500,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
             || fixedLookaheadFastPath != nil
             || fixedNegativeLookbehindFastPath != nil
             || fixedNegativeLookaheadFastPath != nil
-            || fixedBackreferenceFastPath != nil),
+            || fixedBackreferenceFastPath != nil
+            || fixedConditionalFastPath != nil),
            !canWriteDarwinFixedPCREFastPath(options: options) {
             return nil
         }
@@ -589,6 +592,30 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 prefix: nil,
                 suffix: nil,
                 caseInsensitiveASCII: fixedBackreferenceFastPath.caseInsensitiveASCII,
+                options: options,
+                writeBytes: writeBytes
+            )
+        }
+        if let fixedConditionalFastPath {
+            if allowDirectStdout,
+               !fixedConditionalFastPath.caseInsensitiveASCII,
+               let directResults = try writeDarwinFixedAssertionConditionalStdout(
+                data,
+                fileURL: fileURL,
+                condition: fixedConditionalFastPath.condition,
+                trueLiteral: fixedConditionalFastPath.trueLiteral,
+                falseLiteral: fixedConditionalFastPath.falseLiteral,
+                options: options
+               ) {
+                return directResults
+            }
+            return writeDarwinFixedAssertionConditionalFastPath(
+                data,
+                fileURL: fileURL,
+                condition: fixedConditionalFastPath.condition,
+                trueLiteral: fixedConditionalFastPath.trueLiteral,
+                falseLiteral: fixedConditionalFastPath.falseLiteral,
+                caseInsensitiveASCII: fixedConditionalFastPath.caseInsensitiveASCII,
                 options: options,
                 writeBytes: writeBytes
             )
@@ -1346,6 +1373,348 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 totalMatches: reportedMatches
             )
         )
+    }
+
+    private func writeDarwinFixedAssertionConditionalFastPath(
+        _ data: Data,
+        fileURL: URL,
+        condition: PCRE2CompiledPattern.FixedAssertionCondition,
+        trueLiteral: [UInt8],
+        falseLiteral: [UInt8],
+        caseInsensitiveASCII: Bool = false,
+        options: RipgrepOptions,
+        writeBytes: (UnsafeRawBufferPointer) -> Void
+    ) -> SearchResults? {
+        var matchedLineCount = 0
+        var totalMatchCount = 0
+        var bytesSearched = data.count
+        let onlyMatching = options.onlyMatching && options.printMode == .matchingLines
+        let countOnly = options.printMode == .count
+        let countMatchesOnly = options.printMode == .countMatches
+        let filesWithMatches = options.printMode == .filesWithMatches
+        let filesWithoutMatch = options.printMode == .filesWithoutMatch
+        let stopAfterFirstMatch = options.quiet || filesWithMatches || filesWithoutMatch
+        let maxCount = options.maxCount ?? Int.max
+
+        data.withUnsafeBytes { rawBytes in
+            guard let rawBaseAddress = rawBytes.baseAddress else {
+                return
+            }
+            let baseAddress = rawBaseAddress.assumingMemoryBound(to: UInt8.self)
+            var currentLineStart = 0
+            var currentLineEnd = findNextDarwinNewline(
+                baseAddress: baseAddress,
+                dataCount: data.count,
+                from: currentLineStart
+            )
+            var currentLineNumber = 1
+            var lastMatchedLineStart: Int?
+
+            trueLiteral.withUnsafeBufferPointer { trueBytes in
+                falseLiteral.withUnsafeBufferPointer { falseBytes in
+                    guard let trueBaseAddress = trueBytes.baseAddress,
+                          let falseBaseAddress = falseBytes.baseAddress,
+                          !trueBytes.isEmpty,
+                          !falseBytes.isEmpty else {
+                        return
+                    }
+
+                    var searchOffset = 0
+                    var shouldStop = false
+                    while searchOffset < data.count, !shouldStop {
+                        let trueMatchStart = findDarwinLiteralOffset(
+                            baseAddress: baseAddress,
+                            dataCount: data.count,
+                            from: searchOffset,
+                            literalBaseAddress: trueBaseAddress,
+                            literalCount: trueBytes.count,
+                            caseInsensitiveASCII: caseInsensitiveASCII
+                        )
+                        let falseMatchStart = findDarwinLiteralOffset(
+                            baseAddress: baseAddress,
+                            dataCount: data.count,
+                            from: searchOffset,
+                            literalBaseAddress: falseBaseAddress,
+                            literalCount: falseBytes.count,
+                            caseInsensitiveASCII: caseInsensitiveASCII
+                        )
+                        guard let offset = earliestOffset(trueMatchStart, falseMatchStart) else {
+                            break
+                        }
+
+                        while offset > currentLineEnd {
+                            currentLineStart = min(currentLineEnd + 1, data.count)
+                            currentLineEnd = findNextDarwinNewline(
+                                baseAddress: baseAddress,
+                                dataCount: data.count,
+                                from: currentLineStart
+                            )
+                            currentLineNumber += 1
+                        }
+
+                        let conditionMatched = matchesFixedAssertionCondition(
+                            condition,
+                            baseAddress: baseAddress,
+                            dataCount: data.count,
+                            offset: offset,
+                            caseInsensitiveASCII: caseInsensitiveASCII
+                        )
+                        let literalBaseAddress = conditionMatched ? trueBaseAddress : falseBaseAddress
+                        let literalCount = conditionMatched ? trueBytes.count : falseBytes.count
+                        if offset + literalCount <= data.count,
+                           bytesEqual(
+                            baseAddress.advanced(by: offset),
+                            literalBaseAddress,
+                            count: literalCount,
+                            caseInsensitiveASCII: caseInsensitiveASCII
+                           ) {
+                            let matchEnd = offset + literalCount
+                            totalMatchCount += 1
+                            if lastMatchedLineStart != currentLineStart {
+                                matchedLineCount += 1
+                                lastMatchedLineStart = currentLineStart
+                            }
+                            if stopAfterFirstMatch || (countOnly && matchedLineCount == maxCount) {
+                                bytesSearched = matchEnd
+                                shouldStop = true
+                            } else if onlyMatching {
+                                writeDarwinOnlyMatchingPrefixes(
+                                    lineNumber: currentLineNumber,
+                                    column: offset - currentLineStart + 1,
+                                    byteOffset: offset,
+                                    options: options,
+                                    writeBytes: writeBytes
+                                )
+                                writeBytes(UnsafeRawBufferPointer(
+                                    start: rawBaseAddress.advanced(by: offset),
+                                    count: literalCount
+                                ))
+                                var newline = UInt8(ascii: "\n")
+                                withUnsafeBytes(of: &newline) { buffer in
+                                    writeBytes(buffer)
+                                }
+                            }
+                            searchOffset = matchEnd
+                        } else {
+                            searchOffset = offset + 1
+                        }
+                    }
+                }
+            }
+        }
+
+        if !options.quiet {
+            if countMatchesOnly && totalMatchCount > 0 {
+                writeDarwinDecimalLine(totalMatchCount, writeBytes: writeBytes)
+            } else if countOnly && matchedLineCount > 0 {
+                writeDarwinDecimalLine(matchedLineCount, writeBytes: writeBytes)
+            } else if (filesWithMatches && matchedLineCount > 0) || (filesWithoutMatch && matchedLineCount == 0) {
+                writeDarwinPathLine(fileURL.path, writeBytes: writeBytes)
+            }
+        }
+
+        let reportedMatches = totalMatchCount > 0 ? totalMatchCount : matchedLineCount
+        let fileResult = SearchFileResult(
+            fileURL: fileURL,
+            matches: [],
+            bytesSearched: bytesSearched,
+            searched: true,
+            supplementalMatchedLines: matchedLineCount,
+            supplementalMatches: reportedMatches
+        )
+        return SearchResults(
+            files: [fileResult],
+            summary: SearchSummary(
+                filesSearched: 1,
+                filesWithMatches: matchedLineCount > 0 ? 1 : 0,
+                matchedLines: matchedLineCount,
+                totalMatches: reportedMatches
+            )
+        )
+    }
+
+    private func writeDarwinFixedAssertionConditionalStdout(
+        _ data: Data,
+        fileURL: URL,
+        condition: PCRE2CompiledPattern.FixedAssertionCondition,
+        trueLiteral: [UInt8],
+        falseLiteral: [UInt8],
+        options: RipgrepOptions
+    ) throws -> SearchResults? {
+        guard options.onlyMatching,
+              options.printMode == .matchingLines,
+              options.maxCount == nil,
+              !options.quiet,
+              !options.wantsLineNumber,
+              !options.byteOffset,
+              !options.column,
+              !trueLiteral.isEmpty,
+              !falseLiteral.isEmpty else {
+            return nil
+        }
+
+        let conditionKind: Int32
+        let conditionBytes: [UInt8]
+        switch condition {
+        case .positiveLookahead(let bytes):
+            conditionKind = 0
+            conditionBytes = bytes
+        case .negativeLookahead(let bytes):
+            conditionKind = 1
+            conditionBytes = bytes
+        case .positiveLookbehind(let bytes):
+            conditionKind = 2
+            conditionBytes = bytes
+        case .negativeLookbehind(let bytes):
+            conditionKind = 3
+            conditionBytes = bytes
+        }
+        guard !conditionBytes.isEmpty else {
+            return nil
+        }
+
+        let result = data.withUnsafeBytes { rawBytes in
+            conditionBytes.withUnsafeBufferPointer { conditionBuffer in
+                trueLiteral.withUnsafeBufferPointer { trueBuffer in
+                    falseLiteral.withUnsafeBufferPointer { falseBuffer in
+                        rg_darwin_write_fixed_conditional_pcre_o(
+                            rawBytes.bindMemory(to: UInt8.self).baseAddress,
+                            data.count,
+                            conditionKind,
+                            conditionBuffer.baseAddress,
+                            conditionBuffer.count,
+                            trueBuffer.baseAddress,
+                            trueBuffer.count,
+                            falseBuffer.baseAddress,
+                            falseBuffer.count
+                        )
+                    }
+                }
+            }
+        }
+
+        if result.status == -2 {
+            return nil
+        }
+        if result.status == -1 {
+            throw RipgrepError.message("failed writing stdout")
+        }
+
+        let matchedLineCount = Int(result.matched_line_count)
+        let reportedMatches = result.total_match_count > 0 ? Int(result.total_match_count) : matchedLineCount
+        let fileResult = SearchFileResult(
+            fileURL: fileURL,
+            matches: [],
+            bytesSearched: Int(result.bytes_searched),
+            searched: true,
+            supplementalMatchedLines: matchedLineCount,
+            supplementalMatches: reportedMatches
+        )
+        return SearchResults(
+            files: [fileResult],
+            summary: SearchSummary(
+                filesSearched: 1,
+                filesWithMatches: matchedLineCount > 0 ? 1 : 0,
+                matchedLines: matchedLineCount,
+                totalMatches: reportedMatches
+            )
+        )
+    }
+
+    private func matchesFixedAssertionCondition(
+        _ condition: PCRE2CompiledPattern.FixedAssertionCondition,
+        baseAddress: UnsafePointer<UInt8>,
+        dataCount: Int,
+        offset: Int,
+        caseInsensitiveASCII: Bool
+    ) -> Bool {
+        switch condition {
+        case .positiveLookahead(let literal):
+            return literal.withUnsafeBufferPointer { literalBytes in
+                guard let literalBaseAddress = literalBytes.baseAddress else {
+                    return false
+                }
+                return offset + literalBytes.count <= dataCount
+                    && bytesEqual(
+                        baseAddress.advanced(by: offset),
+                        literalBaseAddress,
+                        count: literalBytes.count,
+                        caseInsensitiveASCII: caseInsensitiveASCII
+                    )
+            }
+        case .negativeLookahead(let literal):
+            return !matchesFixedAssertionCondition(
+                .positiveLookahead(literal),
+                baseAddress: baseAddress,
+                dataCount: dataCount,
+                offset: offset,
+                caseInsensitiveASCII: caseInsensitiveASCII
+            )
+        case .positiveLookbehind(let literal):
+            return literal.withUnsafeBufferPointer { literalBytes in
+                guard let literalBaseAddress = literalBytes.baseAddress,
+                      offset >= literalBytes.count else {
+                    return false
+                }
+                return bytesEqual(
+                    baseAddress.advanced(by: offset - literalBytes.count),
+                    literalBaseAddress,
+                    count: literalBytes.count,
+                    caseInsensitiveASCII: caseInsensitiveASCII
+                )
+            }
+        case .negativeLookbehind(let literal):
+            return !matchesFixedAssertionCondition(
+                .positiveLookbehind(literal),
+                baseAddress: baseAddress,
+                dataCount: dataCount,
+                offset: offset,
+                caseInsensitiveASCII: caseInsensitiveASCII
+            )
+        }
+    }
+
+    private func findDarwinLiteralOffset(
+        baseAddress: UnsafePointer<UInt8>,
+        dataCount: Int,
+        from searchOffset: Int,
+        literalBaseAddress: UnsafePointer<UInt8>,
+        literalCount: Int,
+        caseInsensitiveASCII: Bool
+    ) -> Int? {
+        guard searchOffset <= dataCount - literalCount else {
+            return nil
+        }
+        let found = caseInsensitiveASCII
+            ? rg_memcasemem_ascii(
+                baseAddress.advanced(by: searchOffset),
+                dataCount - searchOffset,
+                literalBaseAddress,
+                literalCount
+            )
+            : rg_memmem_simple(
+                baseAddress.advanced(by: searchOffset),
+                dataCount - searchOffset,
+                literalBaseAddress,
+                literalCount
+            )
+        guard let found else {
+            return nil
+        }
+        return baseAddress.distance(to: found)
+    }
+
+    private func earliestOffset(_ lhs: Int?, _ rhs: Int?) -> Int? {
+        switch (lhs, rhs) {
+        case (.some(let lhs), .some(let rhs)):
+            return min(lhs, rhs)
+        case (.some(let lhs), .none):
+            return lhs
+        case (.none, .some(let rhs)):
+            return rhs
+        case (.none, .none):
+            return nil
+        }
     }
 
     private func matchesFixedLookaround(

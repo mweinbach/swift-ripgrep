@@ -860,6 +860,118 @@ static int rg_output_buffer_write(rg_output_buffer *buffer, const uint8_t *bytes
     return 0;
 }
 
+static int rg_bytes_equal(const uint8_t *lhs, const uint8_t *rhs, size_t count) {
+    return memcmp(lhs, rhs, count) == 0;
+}
+
+static int rg_fixed_condition_matches(
+    int condition_kind,
+    const uint8_t *base,
+    size_t haystack_len,
+    size_t offset,
+    const uint8_t *condition,
+    size_t condition_len
+) {
+    switch (condition_kind) {
+    case 0:
+        return offset + condition_len <= haystack_len
+            && rg_bytes_equal(base + offset, condition, condition_len);
+    case 1:
+        return !(offset + condition_len <= haystack_len
+            && rg_bytes_equal(base + offset, condition, condition_len));
+    case 2:
+        return offset >= condition_len
+            && rg_bytes_equal(base + offset - condition_len, condition, condition_len);
+    case 3:
+        return !(offset >= condition_len
+            && rg_bytes_equal(base + offset - condition_len, condition, condition_len));
+    default:
+        return 0;
+    }
+}
+
+rg_darwin_literal_file_result rg_darwin_write_fixed_conditional_pcre_o(
+    const uint8_t *base,
+    size_t haystack_len,
+    int condition_kind,
+    const uint8_t *condition,
+    size_t condition_len,
+    const uint8_t *true_literal,
+    size_t true_literal_len,
+    const uint8_t *false_literal,
+    size_t false_literal_len
+) {
+    rg_darwin_literal_file_result result = { .status = -2, .matched_line_count = 0, .total_match_count = 0, .bytes_searched = 0 };
+
+    if (base == NULL
+        || condition == NULL
+        || true_literal == NULL
+        || false_literal == NULL
+        || condition_len == 0
+        || true_literal_len == 0
+        || false_literal_len == 0) {
+        return result;
+    }
+
+    rg_output_buffer output = { .bytes = malloc(1024 * 1024), .length = 0, .capacity = 1024 * 1024 };
+    if (output.bytes == NULL) {
+        result.status = -1;
+        return result;
+    }
+
+    size_t current_line_start = 0;
+    size_t last_matched_line_start = (size_t)-1;
+    size_t offset = 0;
+    while (offset < haystack_len) {
+        if (offset > 0 && base[offset - 1] == '\n') {
+            current_line_start = offset;
+        }
+
+        const int condition_matched = rg_fixed_condition_matches(
+            condition_kind,
+            base,
+            haystack_len,
+            offset,
+            condition,
+            condition_len
+        );
+        const uint8_t *literal = condition_matched ? true_literal : false_literal;
+        const size_t literal_len = condition_matched ? true_literal_len : false_literal_len;
+        if (offset + literal_len <= haystack_len
+            && rg_bytes_equal(base + offset, literal, literal_len)) {
+            if (rg_output_buffer_write(&output, base + offset, literal_len) != 0) {
+                free(output.bytes);
+                result.status = -1;
+                return result;
+            }
+            uint8_t terminator = '\n';
+            if (rg_output_buffer_write(&output, &terminator, 1) != 0) {
+                free(output.bytes);
+                result.status = -1;
+                return result;
+            }
+            result.total_match_count++;
+            if (current_line_start != last_matched_line_start) {
+                result.matched_line_count++;
+                last_matched_line_start = current_line_start;
+            }
+            offset += literal_len;
+        } else {
+            offset++;
+        }
+    }
+
+    if (rg_output_buffer_flush(&output) != 0) {
+        free(output.bytes);
+        result.status = -1;
+        return result;
+    }
+    free(output.bytes);
+    result.status = result.total_match_count > 0 ? 1 : 0;
+    result.bytes_searched = haystack_len;
+    return result;
+}
+
 static int rg_output_buffer_write_decimal_colon(rg_output_buffer *output, size_t value) {
     uint8_t buffer[32];
     size_t cursor = sizeof(buffer);
