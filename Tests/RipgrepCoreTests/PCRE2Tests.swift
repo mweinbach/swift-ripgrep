@@ -599,12 +599,19 @@ struct PCRE2Tests {
             #"foo\K"#,
             temp.path("pcre.txt"),
         ]) {}
+        let emptyPrefixCountMatchesOutput = try runExecutableData([
+            "-P",
+            "--count-matches",
+            #"\Kfoo"#,
+            temp.path("pcre.txt"),
+        ]) {}
 
         #expect(emptyPrefixOutput == Data("foo\nfoo\nfoo\nfoo\n".utf8))
         #expect(emptyLiteralOutput == Data("\n\n\n".utf8))
         #expect(fieldOutput == Data("1:4:3:\n2:7:10:\n3:4:14:\n".utf8))
         #expect(countOutput == Data("3\n".utf8))
         #expect(countMatchesOutput == Data("3\n".utf8))
+        #expect(emptyPrefixCountMatchesOutput == Data("4\n".utf8))
     }
 
     @Test func pcre2BareResetStartMatchesEveryLineBytePosition() throws {

@@ -654,7 +654,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 literal: fixedResetStartFastPath.literal,
                 caseInsensitiveASCII: fixedResetStartFastPath.caseInsensitiveASCII,
                 options: options,
-                writeBytes: writeBytes
+                writeBytes: writeBytes,
+                allowDirectStdout: allowDirectStdout
             )
         }
         if bareResetStartFastPath {
@@ -1667,7 +1668,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
         literal: [UInt8],
         caseInsensitiveASCII: Bool = false,
         options: RipgrepOptions,
-        writeBytes: (UnsafeRawBufferPointer) -> Void
+        writeBytes: (UnsafeRawBufferPointer) -> Void,
+        allowDirectStdout: Bool = false
     ) -> SearchResults? {
         let needle = prefix + literal
         guard !needle.isEmpty,
@@ -1719,6 +1721,39 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 var currentLineNumber = 1
                 var lastMatchedLineStart: Int?
                 var searchOffset = 0
+                if countMatchesOnly && allowDirectStdout {
+                    while searchOffset <= data.count - needleBytes.count {
+                        let foundPointer = caseInsensitiveASCII
+                            ? caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
+                                rg_memcasemem_ascii_prepared(
+                                    baseAddress.advanced(by: searchOffset),
+                                    data.count - searchOffset,
+                                    needleBase,
+                                    needleBytes.count,
+                                    shifts.baseAddress
+                                )
+                            }
+                            : rg_memmem_simple(
+                                baseAddress.advanced(by: searchOffset),
+                                data.count - searchOffset,
+                                needleBase,
+                                needleBytes.count
+                            )
+                        guard let foundPointer else {
+                            break
+                        }
+
+                        let overallStart = baseAddress.distance(to: foundPointer)
+                        let matchEnd = overallStart + prefix.count + literal.count
+                        totalMatchCount += 1
+                        if matchedLineCount == 0 {
+                            matchedLineCount = 1
+                        }
+                        searchOffset = literal.isEmpty ? matchEnd + 1 : matchEnd
+                    }
+                    return
+                }
+
                 var shouldStop = false
 
                 while searchOffset <= data.count - needleBytes.count, !shouldStop {

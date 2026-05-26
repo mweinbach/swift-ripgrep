@@ -176,6 +176,16 @@ the 193 MiB subtitles corpus, 20-run checks measured `-P --count-matches
 Rust PCRE2. The equivalent lookahead `-P --count-matches
 'Sherlock(?= Holmes)'` measured 64.2 ms versus 138.5 ms before.
 
+Fixed PCRE2 reset-start literal `--count-matches` now uses the same direct
+total-only shape. Output for a subtitles `Sherlock\K Holmes` case, dense
+`foo\K`, empty-prefix `\Kfoo`, neighboring `-c`, and only-matching reset-start
+forms matched the previous Swift checkpoint and the sibling Rust oracle. On the
+193 MiB subtitles corpus, 20-run checks measured `-P --count-matches
+'Sherlock\K Holmes'` at 66.8 ms versus 140.5 ms before and 215.1 ms for Rust
+PCRE2. On a 60 MiB reset-start fixture, `-P --count-matches 'foo\K'` measured
+116.7 ms versus 152.5 ms before, and ten-run `-P --count-matches '\Kfoo'`
+checks measured 127.5 ms versus 162.0 ms before.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Routing multi-literal full-line output through the existing line-by-line
