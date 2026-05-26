@@ -924,36 +924,93 @@ public struct RipgrepSearcher: @unchecked Sendable {
                fastPathByteSet == nil,
                !countMatchesOnly,
                !onlyMatching {
-                var seenLineStarts = Set<Int>()
+                if maxCount == 1 {
+                    var earliestMatchStart = Int.max
+                    for literal in literals where literal.count <= data.count {
+                        let foundPointer = literal.withUnsafeBufferPointer { needle in
+                            rg_memmem_simple(
+                                baseAddress,
+                                data.count,
+                                needle.baseAddress,
+                                needle.count
+                            )
+                        }
+                        guard let rawFoundPointer = foundPointer else {
+                            continue
+                        }
+                        earliestMatchStart = min(earliestMatchStart, baseAddress.distance(to: rawFoundPointer))
+                    }
+
+                    if earliestMatchStart != Int.max {
+                        var lineStart = earliestMatchStart
+                        while lineStart > 0, baseAddress[lineStart - 1] != UInt8(ascii: "\n") {
+                            lineStart -= 1
+                        }
+                        let newlinePointer = memchr(
+                            baseAddress.advanced(by: earliestMatchStart),
+                            Int32(UInt8(ascii: "\n")),
+                            data.count - earliestMatchStart
+                        )
+                        let outputEnd: Int
+                        if let newlinePointer {
+                            outputEnd = baseAddress.distance(
+                                to: newlinePointer.assumingMemoryBound(to: UInt8.self)
+                            ) + 1
+                        } else {
+                            outputEnd = data.count
+                        }
+                        matchedLineCount = 1
+                        bytesSearched = outputEnd
+                        if !countOnly {
+                            writeLineNumberPrefix(for: lineStart)
+                            writeBytes(UnsafeRawBufferPointer(
+                                start: rawBaseAddress.advanced(by: lineStart),
+                                count: outputEnd - lineStart
+                            ))
+                            if newlinePointer == nil {
+                                var newline = UInt8(ascii: "\n")
+                                withUnsafeBytes(of: &newline) { buffer in
+                                    writeBytes(buffer)
+                                }
+                            }
+                        }
+                    }
+                    return
+                }
+
+                var seenLineEndsByStart: [Int: Int] = [:]
                 var matchedLineBounds: [(start: Int, outputEnd: Int, hasNewline: Bool)] = []
-                func recordMatchLine(containing matchStart: Int) {
+                func recordMatchLine(containing matchStart: Int) -> Int {
                     var lineStart = matchStart
                     while lineStart > 0, baseAddress[lineStart - 1] != UInt8(ascii: "\n") {
                         lineStart -= 1
                     }
-                    guard seenLineStarts.insert(lineStart).inserted else {
-                        return
+                    if let outputEnd = seenLineEndsByStart[lineStart] {
+                        return outputEnd
                     }
                     let newlinePointer = memchr(
                         baseAddress.advanced(by: matchStart),
                         Int32(UInt8(ascii: "\n")),
                         data.count - matchStart
                     )
+                    let outputEnd: Int
+                    let hasNewline: Bool
                     if let newlinePointer {
-                        matchedLineBounds.append((
-                            start: lineStart,
-                            outputEnd: baseAddress.distance(
-                                to: newlinePointer.assumingMemoryBound(to: UInt8.self)
-                            ) + 1,
-                            hasNewline: true
-                        ))
+                        outputEnd = baseAddress.distance(
+                            to: newlinePointer.assumingMemoryBound(to: UInt8.self)
+                        ) + 1
+                        hasNewline = true
                     } else {
-                        matchedLineBounds.append((
-                            start: lineStart,
-                            outputEnd: data.count,
-                            hasNewline: false
-                        ))
+                        outputEnd = data.count
+                        hasNewline = false
                     }
+                    seenLineEndsByStart[lineStart] = outputEnd
+                    matchedLineBounds.append((
+                        start: lineStart,
+                        outputEnd: outputEnd,
+                        hasNewline: hasNewline
+                    ))
+                    return outputEnd
                 }
 
                 for literal in literals where literal.count <= data.count {
@@ -973,8 +1030,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                                 break
                             }
                             let matchStart = baseAddress.distance(to: rawFoundPointer)
-                            recordMatchLine(containing: matchStart)
-                            searchOffset = max(matchStart + 1, searchOffset + 1)
+                            searchOffset = recordMatchLine(containing: matchStart)
                         }
                     }
                 }

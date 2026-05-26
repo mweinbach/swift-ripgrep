@@ -72,6 +72,20 @@ parallel walk, marker-name checks only run for hidden directory entries, and
 / 143.6 ms median; the same run measured the sibling Rust release at 93.3 ms
 mean / 90.0 ms median.
 
+The Swift multi-literal full-line writer now skips to a matched line's output
+end after recording it, caching line ends so later literals do not rescan
+duplicate lines for newline boundaries. It also special-cases `-m 1` by finding
+the earliest first literal match and emitting only that line, avoiding the
+previous all-file collect/sort/prefix path. Output for `Sherlock|Watson` was
+byte-identical to both the previous Swift checkpoint and the sibling Rust
+oracle on the dense synthetic corpus and the 1.5 GiB subtitles corpus. A 20-run
+A/B measured the dense duplicated-line corpus at 148.0 ms versus 161.7 ms for
+the previous Swift checkpoint and 26.1 ms for Rust; the full subtitles corpus
+stayed effectively neutral at 316.4 ms versus 320.5 ms before and 290.3 ms for
+Rust. For `-m 1 'Sherlock|Watson'` on the subtitles corpus, a 30-run A/B
+measured Swift at 49.7 ms versus 319.4 ms before and 6.0 ms for Rust; the
+line-numbered `-n -m 1` form measured the same 49.7 ms versus 320.6 ms before.
+
 ## Status — 2026-05-25 fast-path checkpoint
 
 After the Darwin C fast-path work, the hot single-file ASCII cases are now

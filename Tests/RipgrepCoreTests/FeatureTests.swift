@@ -396,6 +396,11 @@ struct FeatureTests {
         #expect(try run(["--max-count", "2", "needle", root.path("many.txt")]) == ["needle one", "needle two"])
         #expect(try run(["-m1", "-c", "needle", root.path("many.txt")]) == ["1"])
 
+        try root.write("first alpha\nsecond beta\nthird alpha beta\n", to: "alternation.txt")
+        #expect(try run(["-m1", "beta|alpha", root.path("alternation.txt")]) == ["first alpha"])
+        #expect(try run(["-n", "-m1", "beta|alpha", root.path("alternation.txt")]) == ["1:first alpha"])
+        #expect(try run(["-c", "-m1", "beta|alpha", root.path("alternation.txt")]) == ["1"])
+
         var output: [String] = []
         var errors: [String] = []
         var exitCode = RipgrepCLI.run(
