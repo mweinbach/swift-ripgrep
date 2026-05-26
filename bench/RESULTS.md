@@ -247,6 +247,14 @@ The key improvements since the 2026-05-24 baseline are:
   81.4 ms. The hidden-inclusive form measured 126.1 ms versus 171.4 ms, with
   Rust at 81.0 ms. Exact Swift output order matched the pre-change writer, and
   sorted output remained byte-identical to Rust.
+- Default ignore-aware Darwin file listing now parallelizes independent
+  top-level directory subtrees after loading root-local ignore files, then
+  emits each ordered chunk through the existing output path. A same-machine
+  10-run A/B against checkpoint `be6552c` measured Swift release `--files` at
+  210.0 ms versus 291.6 ms on `/tmp/swift-rg-bench/linux`, with Rust at
+  169.0 ms. The hidden-inclusive form measured 194.2 ms versus 284.8 ms, with
+  Rust at 162.1 ms. Exact Swift output order matched the pre-change writer,
+  and sorted output remained byte-identical to Rust.
 - `--quiet --files` has an early-exit walker for the plain single-root Darwin
   path that checks files before descending once ignore files for the current
   directory are loaded. A 2026-05-25 7-run recheck measured Swift release at

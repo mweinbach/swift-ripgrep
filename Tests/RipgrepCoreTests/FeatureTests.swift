@@ -2988,6 +2988,36 @@ struct FeatureTests {
             .map(String.init)
         #expect(directResults?.count == streamedResults?.count)
         #expect(directLines == streamedLines)
+
+        let ignoreParallelRoot = try TemporaryDirectory()
+        try ignoreParallelRoot.write("a\n", to: "a/keep.txt")
+        try ignoreParallelRoot.write("skip\n", to: "a/skip.txt")
+        try ignoreParallelRoot.write("skip.txt\n", to: "a/.ignore")
+        try ignoreParallelRoot.write("b\n", to: "b/keep.txt")
+        guard case .run(let parallelOptions) = RipgrepArgumentParser.parse([
+            "--files",
+            ignoreParallelRoot.url.path,
+        ]),
+              case .run(let sequentialOptions) = RipgrepArgumentParser.parse([
+                "--debug",
+                "--files",
+                ignoreParallelRoot.url.path,
+              ]) else {
+            Issue.record("expected ignore-aware file-list arguments to parse")
+            return
+        }
+        var parallelLines: [String] = []
+        let parallelResults = try FileWalker().streamFilePathsWithMessages(
+            for: parallelOptions,
+            emit: { parallelLines.append($0) }
+        )
+        var sequentialLines: [String] = []
+        let sequentialResults = try FileWalker().streamFilePathsWithMessages(
+            for: sequentialOptions,
+            emit: { sequentialLines.append($0) }
+        )
+        #expect(parallelResults?.count == sequentialResults?.count)
+        #expect(parallelLines == sequentialLines)
         #endif
 
         let whitelisted = try TemporaryDirectory()

@@ -1012,7 +1012,7 @@ public struct GlobMatcher: Equatable {
     }
 }
 
-public struct IgnoreStack {
+public struct IgnoreStack: @unchecked Sendable {
     private var matchers: [GlobMatcher] = []
 
     public init() {}
