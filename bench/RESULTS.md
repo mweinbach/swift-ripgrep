@@ -244,6 +244,17 @@ before and 28.7 ms for Rust; the case-insensitive form measured 69.5 ms versus
 24.293 s before and 43.8 ms for Rust. A 15-run plain replacement control stayed
 neutral at 64.6 ms versus 63.7 ms before.
 
+The same direct path now also covers column and byte-offset prefixes for
+single-literal replacement output. Output for column-only, byte-offset-only,
+combined column+byte-offset, and matching ignore-case field forms on the
+193 MiB subtitles corpus matched both the previous Swift checkpoint and the
+sibling Rust oracle. Five-run A/B checks measured `--column -r Holmes
+'Sherlock Holmes'` at 73.1 ms versus 10.838 s before and 28.6 ms for Rust;
+`--byte-offset -r Holmes 'Sherlock Holmes'` at 110.6 ms versus 10.749 s before
+and 24.4 ms for Rust; `--column --byte-offset -r Holmes 'Sherlock Holmes'` at
+79.3 ms versus 10.897 s before and 30.0 ms for Rust; and `--byte-offset -i -r
+Holmes sherlock` at 60.3 ms versus 24.281 s before and 41.3 ms for Rust.
+
 Safe multi-literal only-match and vimgrep output now merge each literal's next
 match stream instead of re-scanning every literal from the current global
 offset. Interleaved same-line fixtures and representative subtitles cases

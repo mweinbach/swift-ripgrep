@@ -771,8 +771,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
             && fastPath.literals.count == 1
             && fastPathByteSet == nil
             && !fastPath.wordASCII
-            && !options.column
-            && !options.byteOffset
             && options.withFilename != true
         guard (!onlyMatching
                 || fastPath.literals.count == 1
@@ -1092,7 +1090,16 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     var cursor = lineStart
                     var lineSearchOffset = lineStart
                     var lineMatchCount = 0
-                    writeLineNumberPrefix(for: lineStart)
+                    if wantsLineNumber || options.column || options.byteOffset {
+                        advanceLineNumber(to: lineStart)
+                        writeDarwinOnlyMatchingPrefixes(
+                            lineNumber: lineNumber,
+                            column: matchStart - lineStart + 1,
+                            byteOffset: lineStart,
+                            options: options,
+                            writeBytes: writeBytes
+                        )
+                    }
                     while lineSearchOffset < lineEnd {
                         let lineFoundPointer = findReplacementLiteral(
                             from: lineSearchOffset,
