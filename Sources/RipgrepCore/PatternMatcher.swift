@@ -560,6 +560,14 @@ public struct PatternMatcher {
         return regex.fixedResetStartFastPath
     }
 
+    func bareResetStartFastPath() -> Bool {
+        guard patterns.count == 1,
+              case .pcre2(let regex) = patterns[0] else {
+            return false
+        }
+        return regex.bareResetStartFastPath
+    }
+
     func fixedLiteralBackreferenceFastPath() -> (literal: [UInt8], caseInsensitiveASCII: Bool)? {
         guard patterns.count == 1,
               case .pcre2(let regex) = patterns[0] else {

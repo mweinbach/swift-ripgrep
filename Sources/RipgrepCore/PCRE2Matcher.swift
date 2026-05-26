@@ -29,6 +29,7 @@ final class PCRE2CompiledPattern {
     private enum Matcher {
         case regex(NSRegularExpression)
         case byteUnit(ByteUnitPattern, unicodeStartOnly: Bool)
+        case bareResetStart
         case fixedPositiveLookbehind(prefix: [UInt8], literal: [UInt8], caseInsensitiveASCII: Bool)
         case fixedNegativeLookbehind(prefix: [UInt8], literal: [UInt8], caseInsensitiveASCII: Bool)
         case fixedPositiveLookahead(literal: [UInt8], suffix: [UInt8], caseInsensitiveASCII: Bool)
@@ -108,10 +109,21 @@ final class PCRE2CompiledPattern {
         return (pattern, unicodeStartOnly)
     }
 
+    var bareResetStartFastPath: Bool {
+        guard case .bareResetStart = matcher else {
+            return false
+        }
+        return true
+    }
+
     init(pattern: String, options: RipgrepOptions) throws {
         self.source = pattern
         if let byteUnit = Self.byteUnitPattern(pattern) {
             self.matcher = .byteUnit(byteUnit, unicodeStartOnly: !options.noUnicode)
+            return
+        }
+        if pattern == #"\K"# {
+            self.matcher = .bareResetStart
             return
         }
 
@@ -217,6 +229,8 @@ final class PCRE2CompiledPattern {
             }
         case .byteUnit(let pattern, let unicodeStartOnly):
             return Self.byteUnitMatches(pattern: pattern, unicodeStartOnly: unicodeStartOnly, in: text)
+        case .bareResetStart:
+            return Self.bareResetStartMatches(in: text)
         case .fixedPositiveLookbehind(let prefix, let literal, let caseInsensitiveASCII):
             return Self.fixedPositiveLookbehindMatches(
                 prefix: prefix,
@@ -1340,6 +1354,21 @@ final class PCRE2CompiledPattern {
                 appendByteUnitMatch(start: offset, end: offset + count, in: text, to: &matches)
                 offset += count
             }
+        }
+        return matches
+    }
+
+    private static func bareResetStartMatches(in text: String) -> [PCRE2Match] {
+        var matches: [PCRE2Match] = []
+        var index = text.startIndex
+        while index < text.endIndex {
+            let range = index..<index
+            matches.append(PCRE2Match(
+                range: range,
+                byteRange: byteRange(for: range, in: text),
+                captures: [range]
+            ))
+            index = text.index(after: index)
         }
         return matches
     }

@@ -143,6 +143,14 @@ byte-identical output and measured Swift at 155.7 ms versus Rust PCRE2 at
 `-P -n --column --byte-offset -o 'foo\K'` produced 110,391,211 bytes identical
 to Rust on the same corpus.
 
+Bare reset-start `\K` now has a pure Swift matcher and a Darwin raw-byte fast
+path for line, only-match, count, path and quiet modes. On a 33.6 MiB repeated
+`foo bar baz` corpus, `-P --count-matches '\K'` produced byte-identical output
+to system Rust `rg` PCRE2 and measured Swift release at 71.9 ms versus Rust at
+660.0 ms in 5-run checks (**0.11x**). The same oracle sweep covered final
+newline, unterminated final line, empty line, UTF-8 byte positions,
+`--no-pcre2-unicode` invalid-byte input, path modes and quiet statuses.
+
 PCRE assertion-conditionals with fixed literal lookaround conditions now avoid
 the Foundation regex path too. On a 14 MiB repeated `foofoo` / `bar` /
 `foobar` corpus, `-P -o '(?(?=foo)foo|bar)'` produced 14,000,000 bytes of

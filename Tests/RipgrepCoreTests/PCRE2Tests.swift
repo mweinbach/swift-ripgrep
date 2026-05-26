@@ -511,6 +511,83 @@ struct PCRE2Tests {
         #expect(countMatchesOutput == Data("3\n".utf8))
     }
 
+    @Test func pcre2BareResetStartMatchesEveryLineBytePosition() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write(Data("foo\n".utf8), to: "with-final-newline.txt")
+        try temp.write(Data("foo".utf8), to: "without-final-newline.txt")
+        try temp.write(Data("\n".utf8), to: "empty-line.txt")
+        try temp.write(Data("café\n".utf8), to: "utf8.txt")
+        try temp.write(Data([0xA9, UInt8(ascii: "a"), UInt8(ascii: "\n")]), to: "invalid-prefix.txt")
+
+        let finalNewlineFields = try runExecutableData([
+            "-P",
+            "-n",
+            "--column",
+            "--byte-offset",
+            "-o",
+            #"\K"#,
+            temp.path("with-final-newline.txt"),
+        ]) {}
+        let noFinalNewlineFields = try runExecutableData([
+            "-P",
+            "-n",
+            "--column",
+            "--byte-offset",
+            "-o",
+            #"\K"#,
+            temp.path("without-final-newline.txt"),
+        ]) {}
+        let emptyLineFields = try runExecutableData([
+            "-P",
+            "-n",
+            "--column",
+            "--byte-offset",
+            "-o",
+            #"\K"#,
+            temp.path("empty-line.txt"),
+        ]) {}
+        let plainOnlyMatching = try runExecutableData([
+            "-P",
+            "-o",
+            #"\K"#,
+            temp.path("without-final-newline.txt"),
+        ]) {}
+        let wholeLineFinalNewline = try runExecutableData([
+            "-P",
+            #"\K"#,
+            temp.path("with-final-newline.txt"),
+        ]) {}
+        let wholeLineNoFinalNewline = try runExecutableData([
+            "-P",
+            #"\K"#,
+            temp.path("without-final-newline.txt"),
+        ]) {}
+        let utf8CountMatches = try runExecutableData([
+            "-P",
+            "--count-matches",
+            #"\K"#,
+            temp.path("utf8.txt"),
+        ]) {}
+        let invalidNoUnicodeCountMatches = try runExecutableData([
+            "-P",
+            "--no-pcre2-unicode",
+            "--count-matches",
+            #"\K"#,
+            temp.path("invalid-prefix.txt"),
+        ]) {}
+        let decodedFallbackOutput = try run(["-P", "-o", #"\K"#, temp.path("with-final-newline.txt")])
+
+        #expect(finalNewlineFields == Data("1:1:0:\n1:2:1:\n1:3:2:\n1:4:3:\n".utf8))
+        #expect(noFinalNewlineFields == Data("1:1:0:\n1:2:1:\n1:3:2:\n".utf8))
+        #expect(emptyLineFields == Data("1:1:0:\n".utf8))
+        #expect(plainOnlyMatching == Data(repeating: UInt8(ascii: "\n"), count: 3))
+        #expect(wholeLineFinalNewline == Data("foo\n".utf8))
+        #expect(wholeLineNoFinalNewline == Data("foo\n".utf8))
+        #expect(utf8CountMatches == Data("6\n".utf8))
+        #expect(invalidNoUnicodeCountMatches == Data("3\n".utf8))
+        #expect(decodedFallbackOutput == ["", "", "", ""])
+    }
+
     @Test func pcre2ResetStartRespectsDefaultEngineSelection() throws {
         let temp = try TemporaryDirectory()
         try temp.write("foobar\n", to: "pcre.txt")
