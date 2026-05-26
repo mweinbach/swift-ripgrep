@@ -636,6 +636,73 @@ struct PCRE2Tests {
         #expect(emptyLookaheadOutput == Data("1:\n".utf8))
     }
 
+    @Test func pcre2ResetStartSupportsRegexPrefix() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("foobar foo123 barfoo foobaz\nabc123 abc abc456\nfoo123\n", to: "pcre.txt")
+
+        let alternationDigitOutput = try runExecutableData([
+            "-P",
+            "-n",
+            "-o",
+            #"(foo|abc)\K[0-9]+"#,
+            temp.path("pcre.txt"),
+        ]) {}
+        let alternationWordOutput = try runExecutableData([
+            "-P",
+            "-n",
+            "-o",
+            #"(foo|abc)\K\w+"#,
+            temp.path("pcre.txt"),
+        ]) {}
+        let greedyPrefixOutput = try runExecutableData([
+            "-P",
+            "-n",
+            "-o",
+            #"\w+\K[0-9]+"#,
+            temp.path("pcre.txt"),
+        ]) {}
+        let dotStarOutput = try runExecutableData([
+            "-P",
+            "-n",
+            "-o",
+            #"foo.*\Kbar"#,
+            temp.path("pcre.txt"),
+        ]) {}
+        let emptyLookaheadOutput = try runExecutableData([
+            "-P",
+            "-n",
+            "-o",
+            #"foo(?=bar)\K"#,
+            temp.path("pcre.txt"),
+        ]) {}
+        let lookbehindOutput = try runExecutableData([
+            "-P",
+            "-n",
+            "-o",
+            #"(?<=foo)\Kbar"#,
+            temp.path("pcre.txt"),
+        ]) {}
+        let replacementOutput = try run([
+            "-P",
+            #"(foo|abc)\K([0-9]+)"#,
+            "-r",
+            "[$1:$2]",
+            temp.path("pcre.txt"),
+        ])
+
+        #expect(alternationDigitOutput == Data("1:123\n2:123\n2:456\n3:123\n".utf8))
+        #expect(alternationWordOutput == Data("1:bar\n1:123\n1:baz\n2:123\n2:456\n3:123\n".utf8))
+        #expect(greedyPrefixOutput == Data("1:3\n2:3\n2:6\n3:3\n".utf8))
+        #expect(dotStarOutput == Data("1:bar\n".utf8))
+        #expect(emptyLookaheadOutput == Data("1:\n".utf8))
+        #expect(lookbehindOutput == Data("1:bar\n".utf8))
+        #expect(replacementOutput == [
+            "foobar foo[foo:123] barfoo foobaz",
+            "abc[abc:123] abc abc[abc:456]",
+            "foo[foo:123]",
+        ])
+    }
+
     @Test func pcre2ResetStartRespectsDefaultEngineSelection() throws {
         let temp = try TemporaryDirectory()
         try temp.write("foobar\n", to: "pcre.txt")

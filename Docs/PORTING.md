@@ -10,7 +10,7 @@ in-tree Swift compatibility engine; it does not link libpcre2.
 **Functional 1:1 with Rust ripgrep 15.1.0, including the streaming I/O
 architecture.** Verified via:
 
-- **149 Swift Testing cases** across 12 suites covering search, output formats,
+- **150 Swift Testing cases** across 12 suites covering search, output formats,
   ignore rules, file types, stdin, encodings, binary handling, parser
   diagnostics, mmap/worker pool, PCRE2, streaming haystack reads, and
   generated-asset drift.
@@ -64,12 +64,16 @@ positive/negative lookaround literal, reset-start (`\K`) literal and
 literal-backreference specializations, including bare `\K`, empty-prefix or
 empty-literal reset-start forms such as `\Kfoo` and `foo\K`, and fixed literal
 prefix plus regex suffix forms such as `foo\K\w+`, `foo\K[0-9]+` and
-`foo\K(?:bar|baz)`. The fixed byte cases use the checked-in Darwin byte scanner
+`foo\K(?:bar|baz)`, plus regex-prefix reset-start forms such as
+`(foo|abc)\K[0-9]+`, `\w+\K[0-9]+`, `foo.*\Kbar`, `foo(?=bar)\K` and
+`(?<=foo)\Kbar`. The fixed byte cases use the checked-in Darwin byte scanner
 for `-P -o`, line-numbered, byte-offset and byte-column only-match output, plus
-count/path/quiet modes. Backreference spellings such as `\g` and Python-style
-named backreferences are translated in-tree. Fixed PCRE byte-unit escapes
-(`\C`, `\C+` and `\C{n}`) are matched in-tree as raw bytes, preserving Rust's
-UTF-mode behavior of starting matches only at UTF-8 scalar boundaries unless
+count/path/quiet modes. Broader reset-start forms are rewritten through the
+Swift/Foundation compatibility matcher and preserve post-reset replacements.
+Backreference spellings such as `\g` and Python-style named backreferences are
+translated in-tree. Fixed PCRE byte-unit escapes (`\C`, `\C+` and `\C{n}`) are
+matched in-tree as raw bytes, preserving Rust's UTF-mode behavior of starting
+matches only at UTF-8 scalar boundaries unless
 `--no-pcre2-unicode` is selected. Literal assertion-conditionals and plain
 byte-unit only-match output also get narrow Darwin stdout writers for the
 plain executable `-P -o` shape, with a Swift byte-loop fast path covering
@@ -163,7 +167,11 @@ into a much smaller implementation:
    `--no-pcre2-unicode` selects byte semantics. Literal-prefix reset-start
    regex suffixes such as `foo\K\w+`, `foo\K[0-9]+` and `foo\K(?:bar|baz)`
    are rewritten through the Swift/Foundation compatibility matcher so they no
-   longer need PCRE2. Bare `\N` now matches any
+   longer need PCRE2. Regex-prefix reset-start forms such as
+   `(foo|abc)\K[0-9]+`, `\w+\K[0-9]+`, `foo.*\Kbar`, `foo(?=bar)\K` and
+   `(?<=foo)\Kbar` now use the same in-tree reset-range adjustment and preserve
+   capture numbering for replacements when numeric backreferences are not part
+   of the reset-start pattern. Bare `\N` now matches any
    non-newline character in PCRE/auto
    mode, while `\N{name}` stays a Rust-compatible PCRE2 error. Under
    `--no-pcre2-unicode`, shorthand classes such as `\w` and `\d` are translated
