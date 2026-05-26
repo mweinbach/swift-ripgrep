@@ -758,7 +758,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let canDirectWriteVimgrep = options.vimgrep
             && allowDirectStdout
             && options.printMode == .matchingLines
-            && !onlyMatching
             && options.maxCount == nil
             && (fastPath.literals.count == 1
                 || (fastPathByteSet == nil && canScanDarwinLiteralsIndependently(fastPath)))
@@ -979,7 +978,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     return (lineStart, lineEnd)
                 }
 
-                func writeVimgrepMatch(matchStart: Int) {
+                func writeVimgrepMatch(matchStart: Int, length: Int) {
                     let bounds = vimgrepLineBounds(containing: matchStart)
                     advanceLineNumber(to: bounds.lineStart)
                     if lastMatchedLineStart != bounds.lineStart {
@@ -1004,9 +1003,11 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     if options.byteOffset {
                         writeDarwinLineNumberPrefix(matchStart, writeBytes: writeBytes)
                     }
+                    let outputStart = onlyMatching ? matchStart : bounds.lineStart
+                    let outputEnd = onlyMatching ? matchStart + length : bounds.lineEnd
                     writeBytes(UnsafeRawBufferPointer(
-                        start: rawBaseAddress.advanced(by: bounds.lineStart),
-                        count: bounds.lineEnd - bounds.lineStart
+                        start: rawBaseAddress.advanced(by: outputStart),
+                        count: outputEnd - outputStart
                     ))
                     withUnsafeBytes(of: &newline) { buffer in
                         writeBytes(buffer)
@@ -1073,7 +1074,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                                 return
                             }
                         }
-                        writeVimgrepMatch(matchStart: matchStart)
+                        writeVimgrepMatch(matchStart: matchStart, length: literal.count)
                         searchOffset = matchStart + literal.count
                     }
                     return
@@ -1104,7 +1105,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     guard earliestMatchStart != Int.max else {
                         break
                     }
-                    writeVimgrepMatch(matchStart: earliestMatchStart)
+                    writeVimgrepMatch(matchStart: earliestMatchStart, length: earliestLiteralLength)
                     searchOffset = earliestMatchStart + earliestLiteralLength
                 }
                 return
@@ -3320,7 +3321,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !options.trim,
               (!options.vimgrep
                 || (options.printMode == .matchingLines
-                    && !options.onlyMatching
                     && options.maxCount == nil)),
               options.colorMode != .always,
               options.colorMode != .ansi,

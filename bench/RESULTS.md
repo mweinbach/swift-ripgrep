@@ -198,6 +198,16 @@ Five-run checks measured `--vimgrep 'Sherlock Holmes'` at 139.3 ms versus
 `--vimgrep 'Sherlock|Watson'` form measured 269.9 ms versus 16.119 s before
 and 44.3 ms for Rust.
 
+Only-matching `--vimgrep -o` output now reuses that direct vimgrep writer,
+emitting matched bytes instead of the containing line while preserving path,
+line, column, byte-offset and no-filename field combinations. Output for
+literal, safe multi-literal, byte-offset and no-filename `--vimgrep -o` forms
+matched the previous Swift checkpoint and the sibling Rust oracle on the same
+corpus. Five-run checks measured `--vimgrep -o 'Sherlock Holmes'` at
+133.1 ms versus 10.746 s before and 31.2 ms for Rust. The safe multi-literal
+`--vimgrep -o 'Sherlock|Watson'` form measured 261.9 ms versus 16.342 s before
+and 43.8 ms for Rust.
+
 Direct executable byte-unit PCRE2 `--count-matches` now counts totals without
 matched-line bookkeeping while preserving the exact summary path for non-direct
 callers. Output for default Unicode `\C`, byte-mode `\C`, `\C+`, `\C{2}`, and
