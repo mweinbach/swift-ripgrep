@@ -71,6 +71,7 @@ final class PCRE2CompiledPattern {
             falseLiteral: [UInt8],
             caseInsensitiveASCII: Bool
         )
+        case balancedParenthesesRecursion(name: String)
     }
 
     let source: String
@@ -156,6 +157,10 @@ final class PCRE2CompiledPattern {
         }
         if pattern == #"\K"# {
             self.matcher = .bareResetStart
+            return
+        }
+        if let recursionName = Self.balancedParenthesesRecursion(pattern) {
+            self.matcher = .balancedParenthesesRecursion(name: recursionName)
             return
         }
 
@@ -428,6 +433,8 @@ final class PCRE2CompiledPattern {
                 caseInsensitiveASCII: caseInsensitiveASCII,
                 in: text
             )
+        case .balancedParenthesesRecursion(let name):
+            return Self.balancedParenthesesRecursionMatches(name: name, in: text)
         }
     }
 
@@ -911,6 +918,43 @@ final class PCRE2CompiledPattern {
             index = pattern.index(after: index)
         }
         return names
+    }
+
+    private static func balancedParenthesesRecursion(_ pattern: String) -> String? {
+        let contentStart: String.Index
+        let name: String
+        if pattern.hasPrefix("(?P<") {
+            let nameStart = pattern.index(pattern.startIndex, offsetBy: 4)
+            guard let nameEnd = pattern[nameStart...].firstIndex(of: ">") else {
+                return nil
+            }
+            name = String(pattern[nameStart..<nameEnd])
+            contentStart = pattern.index(after: nameEnd)
+        } else if pattern.hasPrefix("(?<") {
+            let nameStart = pattern.index(pattern.startIndex, offsetBy: 3)
+            guard nameStart < pattern.endIndex,
+                  pattern[nameStart] != "=",
+                  pattern[nameStart] != "!",
+                  let nameEnd = pattern[nameStart...].firstIndex(of: ">") else {
+                return nil
+            }
+            name = String(pattern[nameStart..<nameEnd])
+            contentStart = pattern.index(after: nameEnd)
+        } else {
+            return nil
+        }
+        guard isPCREGroupName(name),
+              let close = matchingClosingParen(forOpeningParenAt: pattern.startIndex, in: pattern),
+              pattern.index(after: close) == pattern.endIndex else {
+            return nil
+        }
+        let content = String(pattern[contentStart..<close])
+        let possessivePattern = #"\((?:[^()]++|(?&\#(name)))*\)"#
+        let greedyPattern = #"\((?:[^()]+|(?&\#(name)))*\)"#
+        guard content == possessivePattern || content == greedyPattern else {
+            return nil
+        }
+        return name
     }
 
     private static func branchResetAlternation(
@@ -2374,6 +2418,50 @@ final class PCRE2CompiledPattern {
         return matches
     }
 
+    private static func balancedParenthesesRecursionMatches(name: String, in text: String) -> [PCRE2Match] {
+        var matches: [PCRE2Match] = []
+        var index = text.startIndex
+        while index < text.endIndex {
+            guard text[index] == "(" else {
+                index = text.index(after: index)
+                continue
+            }
+            guard let end = balancedParenthesesEnd(startingAt: index, in: text) else {
+                index = text.index(after: index)
+                continue
+            }
+            let range = index..<end
+            matches.append(PCRE2Match(
+                range: range,
+                byteRange: byteRange(for: range, in: text),
+                captures: [range, range],
+                namedCaptures: [name: range]
+            ))
+            index = end
+        }
+        return matches
+    }
+
+    private static func balancedParenthesesEnd(startingAt start: String.Index, in text: String) -> String.Index? {
+        var depth = 0
+        var index = start
+        while index < text.endIndex {
+            if text[index] == "(" {
+                depth += 1
+            } else if text[index] == ")" {
+                depth -= 1
+                if depth == 0 {
+                    return text.index(after: index)
+                }
+                if depth < 0 {
+                    return nil
+                }
+            }
+            index = text.index(after: index)
+        }
+        return nil
+    }
+
     private static func appendByteUnitMatch(
         start: Int,
         end: Int,
@@ -2531,7 +2619,9 @@ final class PCRE2CompiledPattern {
         captureCountBase: Int = 0,
         totalCaptureCountOverride: Int? = nil
     ) throws -> String {
-        var pattern = patternExpandingSimpleGroupStateConditional(pattern) ?? pattern
+        var pattern = patternExpandingSimpleSubroutineCall(pattern)
+            ?? patternExpandingSimpleGroupStateConditional(pattern)
+            ?? pattern
         pattern = patternExpandingLeadingUngreedyMode(pattern)
         var output = ""
         var inClass = false
@@ -2699,6 +2789,93 @@ final class PCRE2CompiledPattern {
     private enum PCREGroupStateCondition {
         case numbered(Int)
         case named(String)
+    }
+
+    private enum PCRESubroutineCall {
+        case numbered(Int)
+        case named(String)
+    }
+
+    private static func patternExpandingSimpleSubroutineCall(_ pattern: String) -> String? {
+        guard let group = fixedLiteralCaptureGroup(at: pattern.startIndex, in: pattern) else {
+            return nil
+        }
+        let callStart = pattern.index(after: group.close)
+        guard callStart < pattern.endIndex,
+              let call = pcreSubroutineCall(at: callStart, in: pattern),
+              call.end == pattern.endIndex else {
+            return nil
+        }
+        switch call.group {
+        case .numbered(let groupIndex):
+            guard groupIndex == 1 else {
+                return nil
+            }
+        case .named(let name):
+            guard group.name == name else {
+                return nil
+            }
+        }
+
+        let rawGroup = String(pattern[pattern.startIndex...group.close])
+        return "\(rawGroup)(?:\(NSRegularExpression.escapedPattern(for: group.literal)))"
+    }
+
+    private static func pcreSubroutineCall(
+        at index: String.Index,
+        in pattern: String
+    ) -> (group: PCRESubroutineCall, end: String.Index)? {
+        guard pattern[index...].hasPrefix("(?") else {
+            return nil
+        }
+        let payloadStart = pattern.index(index, offsetBy: 2)
+        guard payloadStart < pattern.endIndex else {
+            return nil
+        }
+        if pattern[payloadStart].isNumber {
+            var payloadEnd = payloadStart
+            var digits = ""
+            while payloadEnd < pattern.endIndex,
+                  pattern[payloadEnd].isNumber {
+                digits.append(pattern[payloadEnd])
+                payloadEnd = pattern.index(after: payloadEnd)
+            }
+            guard payloadEnd < pattern.endIndex,
+                  pattern[payloadEnd] == ")",
+                  let groupIndex = Int(digits) else {
+                return nil
+            }
+            return (.numbered(groupIndex), pattern.index(after: payloadEnd))
+        }
+        if pattern[payloadStart] == "&" {
+            let nameStart = pattern.index(after: payloadStart)
+            guard let nameEnd = pattern[nameStart...].firstIndex(of: ")") else {
+                return nil
+            }
+            let name = String(pattern[nameStart..<nameEnd])
+            guard isPCREGroupName(name) else {
+                return nil
+            }
+            return (.named(name), pattern.index(after: nameEnd))
+        }
+        if pattern[payloadStart] == "P" {
+            let nameStart = pattern.index(after: payloadStart)
+            guard nameStart < pattern.endIndex,
+                  pattern[nameStart] == ">",
+                  pattern.index(after: nameStart) < pattern.endIndex else {
+                return nil
+            }
+            let nameBodyStart = pattern.index(after: nameStart)
+            guard let nameEnd = pattern[nameBodyStart...].firstIndex(of: ")") else {
+                return nil
+            }
+            let name = String(pattern[nameBodyStart..<nameEnd])
+            guard isPCREGroupName(name) else {
+                return nil
+            }
+            return (.named(name), pattern.index(after: nameEnd))
+        }
+        return nil
     }
 
     private static func patternExpandingSimpleGroupStateConditional(_ pattern: String) -> String? {

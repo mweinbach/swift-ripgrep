@@ -1268,6 +1268,50 @@ struct PCRE2Tests {
         #expect(suffixedBackreference == ["foofoo", "barbar"])
     }
 
+    @Test func pcre2FixedLiteralSubroutinesExpandInTree() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("ab\nabab\nababab\nxxabab\n", to: "pcre.txt")
+        let expectedOnlyMatching = ["2:abab", "3:abab", "4:abab"]
+
+        let numericOutput = try run(["-P", "-n", "-o", #"(ab)(?1)"#, temp.path("pcre.txt")])
+        let namedOutput = try run(["-P", "-n", "-o", #"(?<pair>ab)(?&pair)"#, temp.path("pcre.txt")])
+        let pythonNamedOutput = try run(["-P", "-n", "-o", #"(?P<pair>ab)(?&pair)"#, temp.path("pcre.txt")])
+        let pythonCallOutput = try run(["-P", "-n", "-o", #"(?<pair>ab)(?P>pair)"#, temp.path("pcre.txt")])
+        let autoOutput = try run(["--engine=auto", "-n", "-o", #"(?<pair>ab)(?&pair)"#, temp.path("pcre.txt")])
+        let replacement = try run(["-P", #"(?<pair>ab)(?&pair)"#, "-r", "[$pair][$1]", temp.path("pcre.txt")])
+
+        #expect(numericOutput == expectedOnlyMatching)
+        #expect(namedOutput == expectedOnlyMatching)
+        #expect(pythonNamedOutput == expectedOnlyMatching)
+        #expect(pythonCallOutput == expectedOnlyMatching)
+        #expect(autoOutput == expectedOnlyMatching)
+        #expect(replacement == ["[ab][ab]", "[ab][ab]ab", "xx[ab][ab]"])
+    }
+
+    @Test func pcre2BalancedParenthesesRecursionMatchesInTree() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("(a)\n(ab)\n((a))\n(a)(b)\n(()\nplain\n", to: "pcre.txt")
+        let pattern = #"(?<par>\((?:[^()]++|(?&par))*\))"#
+        let pythonPattern = #"(?P<par>\((?:[^()]++|(?&par))*\))"#
+        let expectedOnlyMatching = ["1:(a)", "2:(ab)", "3:((a))", "4:(a)", "4:(b)", "5:()"]
+
+        let onlyMatching = try run(["-P", "-n", "-o", pattern, temp.path("pcre.txt")])
+        let pythonOnlyMatching = try run(["-P", "-n", "-o", pythonPattern, temp.path("pcre.txt")])
+        let autoOnlyMatching = try run(["--engine=auto", "-n", "-o", pattern, temp.path("pcre.txt")])
+        let replacement = try run(["-P", pattern, "-r", "[$par][$1]", temp.path("pcre.txt")])
+
+        #expect(onlyMatching == expectedOnlyMatching)
+        #expect(pythonOnlyMatching == expectedOnlyMatching)
+        #expect(autoOnlyMatching == expectedOnlyMatching)
+        #expect(replacement == [
+            "[(a)][(a)]",
+            "[(ab)][(ab)]",
+            "[((a))][((a))]",
+            "[(a)][(a)][(b)][(b)]",
+            "([()][()]",
+        ])
+    }
+
     @Test func pcre2NumericKBackreferencesUsePCREDiagnostic() throws {
         let temp = try TemporaryDirectory()
         try temp.write("foofoo\n", to: "pcre.txt")
