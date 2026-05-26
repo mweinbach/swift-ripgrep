@@ -501,6 +501,11 @@ struct MiscTests {
             "b|d",
             root.path("letters.txt"),
         ], fixture: {})
+        let multiByteSetCountMatchesOutput = try runExecutableData([
+            "--count-matches",
+            "a|b|c|d|e",
+            root.path("letters.txt"),
+        ], fixture: {})
         let singleByteCountMatchesOutput = try runExecutableData([
             "--count-matches",
             "a",
@@ -559,6 +564,7 @@ struct MiscTests {
         #expect(literalReplacementOutput == Data("delta delta\ndelta\n".utf8))
         #expect(emptyLiteralReplacementOutput == Data(" \n\n".utf8))
         #expect(countMatchesOutput == Data("2\n".utf8))
+        #expect(multiByteSetCountMatchesOutput == Data("10\n".utf8))
         #expect(singleByteCountMatchesOutput == Data("5\n".utf8))
         #expect(singleByteIgnoreCaseCountMatchesOutput == Data("5\n".utf8))
         #expect(multiByteCountMatchesOutput == Data("1\n".utf8))

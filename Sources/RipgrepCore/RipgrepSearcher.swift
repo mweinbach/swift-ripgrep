@@ -1677,9 +1677,11 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 var searchOffset = 0
                 var lastMatchedLineStart: Int?
                 if countMatchesOnly && allowDirectStdout {
-                    totalMatchCount = byteSet.reduce(0) { count, byte in
-                        count + Int(rg_memcount_byte(baseAddress, data.count, byte))
-                    }
+                    totalMatchCount = byteSet.count >= 3
+                        ? countDarwinAnyByte(baseAddress, count: data.count, needles: byteSet)
+                        : byteSet.reduce(0) { count, byte in
+                            count + Int(rg_memcount_byte(baseAddress, data.count, byte))
+                        }
                     if totalMatchCount > 0 {
                         matchedLineCount = 1
                     }
@@ -3362,6 +3364,42 @@ public struct RipgrepSearcher: @unchecked Sendable {
             }
         }
         return bytes.isEmpty ? nil : bytes
+    }
+
+    private func countDarwinAnyByte(
+        _ haystack: UnsafePointer<UInt8>,
+        count haystackCount: Int,
+        needles: [UInt8]
+    ) -> Int {
+        guard haystackCount > 0, let firstNeedle = needles.first else {
+            return 0
+        }
+        if needles.count == 1 {
+            return Int(rg_memcount_byte(haystack, haystackCount, firstNeedle))
+        }
+
+        var total = 0
+        var cursor = 0
+        if haystackCount >= 16 {
+            let vectorLimit = haystackCount - 15
+            while cursor < vectorLimit {
+                let bytes = UnsafeRawPointer(haystack.advanced(by: cursor))
+                    .loadUnaligned(as: SIMD16<UInt8>.self)
+                var matches = bytes .== SIMD16<UInt8>(repeating: firstNeedle)
+                for needle in needles.dropFirst() {
+                    matches = matches .| (bytes .== SIMD16<UInt8>(repeating: needle))
+                }
+                total -= Int(matches._storage.wrappedSum())
+                cursor += 16
+            }
+        }
+        while cursor < haystackCount {
+            if needles.contains(haystack[cursor]) {
+                total += 1
+            }
+            cursor += 1
+        }
+        return total
     }
 
     private func writeDarwinDecimalLine(_ value: Int, writeBytes: (UnsafeRawBufferPointer) -> Void) {

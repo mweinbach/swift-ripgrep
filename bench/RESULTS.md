@@ -240,6 +240,15 @@ for Rust, `-n -o 'Sherlock|Watson'` at 82.5 ms versus 156.3 ms before and
 43.5 ms for Rust, and `--count-matches -i 'a'` at 66.3 ms versus 198.7 ms
 before and 509.0 ms for Rust.
 
+Byte-set `--count-matches` now counts sets of three or more bytes in one Swift
+SIMD pass instead of scanning the haystack once per byte. Two-byte sets stay on
+the previous counter after sparse checks came back neutral. Output for two-byte,
+five-byte, alphabet and ignore-case control cases matched both the previous
+Swift checkpoint and the sibling Rust oracle. Seven-run checks measured
+`--count-matches 'A|B|C|D|E'` at 78.5 ms versus 99.4 ms before and 174.5 ms
+for Rust, and the alphabet set at 159.8 ms versus 280.1 ms before and 892.1 ms
+for Rust.
+
 Direct executable byte-unit PCRE2 `--count-matches` now counts totals without
 matched-line bookkeeping while preserving the exact summary path for non-direct
 callers. Output for default Unicode `\C`, byte-mode `\C`, `\C+`, `\C{2}`, and
