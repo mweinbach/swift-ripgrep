@@ -393,6 +393,42 @@ struct MiscTests {
         #endif
     }
 
+    @Test("Darwin executable literal preflight emits dense matching lines once")
+    func darwinExecutableLiteralPreflightDenseLines() throws {
+        #if canImport(Darwin)
+        let root = try TemporaryDirectory()
+        try root.write("""
+        needle needle needle
+        quiet line
+        NEEDLE needle Needle
+        tail needle
+        """, to: "dense.txt")
+
+        let output = try runExecutableData([
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(output == Data("""
+        needle needle needle
+        NEEDLE needle Needle
+        tail needle
+
+        """.utf8))
+
+        let ignoreCaseOutput = try runExecutableData([
+            "-i",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(ignoreCaseOutput == Data("""
+        needle needle needle
+        NEEDLE needle Needle
+        tail needle
+
+        """.utf8))
+        #endif
+    }
+
     @Test("supports regex fixed string word and line matching")
     func supportsMatcherModes() throws {
         let root = try TemporaryDirectory()

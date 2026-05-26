@@ -218,6 +218,8 @@ private func rgSwiftDarwinWriteLiteralBytes(
             }
             matchedLineCount += 1
             lastEmittedLineStart = lineStart
+            searchOffset = outputEnd
+            continue
         }
 
         searchOffset = matchStart + literal.count
