@@ -22,14 +22,15 @@ brew install ripgrep             # installs the Rust `rg` baseline
 swift build -c release           # builds the Swift port at .build/release/ripgrep
 ```
 
-To benchmark the Swift fallback path without the in-tree C shim, build with:
+The default Swift build is the Swift-only path. To benchmark the old in-tree C
+shim path for A/B comparison, build with:
 
 ```sh
-SWIFT_RIPGREP_NO_C_SHIM=1 swift build -c release --build-path .build/no-c-shim
+SWIFT_RIPGREP_USE_C_SHIM=1 swift build -c release --build-path .build/c-shim
 ```
 
-Use that build to compare the Swift SIMD fallback scanners and no-shim Darwin
-literal preflight against the default C-shim release binary.
+Use that build to compare the optional C helper against the default Swift SIMD
+fallback scanners and Swift-only Darwin literal preflight.
 
 You also need the upstream `ripgrep` checkout (for its `benchsuite/benchsuite`
 script) and the upstream corpora:

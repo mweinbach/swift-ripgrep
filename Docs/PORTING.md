@@ -46,20 +46,20 @@ controls runtime behaviour is wired to the corresponding subsystem.
 ## Current shape
 
 The Swift port is a SwiftPM package with one library target, one executable
-target, one tiny Darwin arm performance shim (`CRipgrepPlatform`) and one test
-target. It maps most of ripgrep's public CLI flags into
+target, one optional Darwin arm performance shim (`CRipgrepPlatform`) and one
+test target. It maps most of ripgrep's public CLI flags into
 `RipgrepOptions`, carries generated help/man/completion resources, and uses a
 test suite that mirrors the Rust upstream split (`BinaryTests`, `FeatureTests`,
 `JSONTests`, `MiscTests`, `MultilineTests`, `RegressionTests`, plus
 `HaystackReaderTests`, `ParityHarnessTests` and `RipgrepTestSupport`).
 
-For portability and performance investigation, `SWIFT_RIPGREP_NO_C_SHIM=1`
-omits the `CRipgrepPlatform` target from the package graph. That no-shim build
-keeps the in-tree Swift PCRE2 compatibility engine available, replaces the
-shim's hottest byte scanners with Swift SIMD fallbacks, and includes a
-Swift-only Darwin mmap preflight for simple literal and case-insensitive
-literal searches. The C-shim build remains the default macOS configuration
-until the remaining scanner CPU gap is closed.
+The default build omits `CRipgrepPlatform`. It keeps the in-tree Swift PCRE2
+compatibility engine available, uses Swift SIMD fallbacks for the hottest byte
+scanners, and includes a Swift-only Darwin mmap preflight for simple literal
+and case-insensitive literal searches. Set `SWIFT_RIPGREP_USE_C_SHIM=1` to
+include the old Darwin C helper target for A/B performance comparison; if both
+that flag and `SWIFT_RIPGREP_NO_C_SHIM=1` are present, the Swift-only build
+wins.
 
 The normal build has no package-manager or system-library dependency. Plain
 literals selected through PCRE-compatible flags (`-P`, `--pcre2`, `--engine`,
@@ -97,9 +97,9 @@ plain executable `-P -o` shape. Fixed literal PCRE lookaround/backreference
 only-match output now has the same narrow Darwin writer for the plain
 executable shape, while Swift byte-loop fast paths cover
 line-numbered/byte-offset/column only-match output plus count/path/quiet modes.
-The Darwin arm hot paths live in the checked-in
-`CRipgrepPlatform` shim because they provide measurable NEON/mmap throughput
-that Swift cannot currently express directly.
+The old Darwin arm C hot paths remain checked in behind
+`SWIFT_RIPGREP_USE_C_SHIM=1` for benchmarking, but the Swift SIMD scanners and
+Swift-only mmap preflight are now the normal build path.
 
 File input flows through `HaystackReader` (mmap for regular files ≥ 16 KiB or
 when `--mmap` is forced, chunked 64 KiB buffered reads otherwise, stdin always
@@ -116,8 +116,9 @@ into a much smaller implementation:
 
 - Rust: `grep`, `regex`, `searcher`, `ignore`, `globset`, `printer`, `cli`,
   `matcher`, `pcre2` and the `rg` core binary.
-- Swift: `RipgrepCore`, the Darwin arm `CRipgrepPlatform` shim and the
-  `ripgrep` executable.
+- Swift default: `RipgrepCore` and the `ripgrep` executable.
+- Swift C-shim comparison build: `RipgrepCore`, the Darwin arm
+  `CRipgrepPlatform` shim and the `ripgrep` executable.
 
 ## Verified working areas
 

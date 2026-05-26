@@ -4,7 +4,9 @@
 import Foundation
 import PackageDescription
 
-let useCShim = ProcessInfo.processInfo.environment["SWIFT_RIPGREP_NO_C_SHIM"] != "1"
+let environment = ProcessInfo.processInfo.environment
+let useCShim = environment["SWIFT_RIPGREP_USE_C_SHIM"] == "1"
+    && environment["SWIFT_RIPGREP_NO_C_SHIM"] != "1"
 
 var targets: [Target] = []
 if useCShim {

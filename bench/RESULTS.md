@@ -8,22 +8,23 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
-## No-C-shim checkpoint — 2026-05-26
+## Swift-only default checkpoint — 2026-05-26
 
-The package now supports a no-`CRipgrepPlatform` build with
-`SWIFT_RIPGREP_NO_C_SHIM=1 swift build -c release`. The no-shim build keeps
-the Swift byte-search fast paths active through Swift fallbacks for the shim's
-byte-scanning entrypoints, and returns `-2` from unavailable whole-output
-Darwin C entrypoints so the existing Swift path can take over. Both normal and
-no-shim test suites pass 163 tests, with the Rust parity harness skipped unless
-`SWIFT_RIPGREP_PARITY=1` is set.
+The package now omits `CRipgrepPlatform` by default. The Swift-only build keeps
+the byte-search fast paths active through Swift SIMD fallbacks for the old
+shim's byte-scanning entrypoints, and returns `-2` from unavailable
+whole-output Darwin C entrypoints so the existing Swift path can take over.
+Set `SWIFT_RIPGREP_USE_C_SHIM=1` to build the old C helper path for A/B
+comparison. Both default Swift-only and C-shim comparison test suites pass 163
+tests, with the Rust parity harness skipped unless `SWIFT_RIPGREP_PARITY=1` is
+set.
 
 Same-machine release checks used separate build directories:
 `.build/c-shim/release/ripgrep` and `.build/no-c-shim/release/ripgrep`.
 Sorted `--files` output and the checked subtitles outputs were byte-identical
-between the C-shim and no-shim binaries.
+between the C-shim and Swift-only binaries.
 
-| Bench | Flags / corpus | rg | C-shim Swift | no-shim Swift | no-shim / C-shim |
+| Bench | Flags / corpus | rg | C-shim Swift | Swift-only | Swift-only / C-shim |
 |---|---|---:|---:|---:|---:|
 | file listing | `--files /tmp/swift-rg-bench/linux` | 91.0 ms | 149.4 ms | 154.5 ms | **1.03x** |
 | no-match literal | `PM_RESUME` on 1.5 GiB subtitles | 171.0 ms | 159.8 ms | 182.0 ms | **1.14x** |
@@ -32,12 +33,12 @@ between the C-shim and no-shim binaries.
 
 Bottom line: traversal/file-listing performance can effectively match the
 current build without the C shim, and the matcher path is now close enough to
-be plausible. The no-shim build uses Swift SIMD16 first/tail candidate
+be plausible. The Swift-only build uses Swift SIMD16 first/tail candidate
 scanners for case-sensitive and ASCII case-insensitive literals, plus a
 Swift-only Darwin mmap preflight for simple `literal file` and `-i literal
 file` invocations. That cuts the original no-shim `-i sherlock` result from
-1.338 s to 202.4 ms. The
-remaining gap is scanner CPU: system time is effectively tied with the C-shim
+1.338 s to 202.4 ms. The remaining gap is scanner CPU: system time is
+effectively tied with the C-shim
 preflight, while user time remains about 27 ms higher on this corpus.
 
 ## Status — 2026-05-25 fast-path checkpoint
