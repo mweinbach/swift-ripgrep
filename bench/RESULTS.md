@@ -133,6 +133,16 @@ and measured Swift release at 396.1 ms versus Rust PCRE2 at 502.3 ms in
 10-run checks. Default and `--no-pcre2` modes still reject `\K` with
 Rust-identical diagnostics.
 
+Reset-start forms with an empty prefix or empty returned literal now use their
+own in-tree byte scanner too. On a 32 MiB repeated `foo barfoo foofoo` corpus,
+`-P --count-matches 'foo\K'` produced byte-identical output to system Rust
+`rg` PCRE2 and measured Swift release at 99.9 ms versus Rust at 226.0 ms in
+5-run checks. The non-empty returned slice `-P -o 'bar\Kfoo'` also produced
+byte-identical output and measured Swift at 155.7 ms versus Rust PCRE2 at
+179.1 ms. A dense field-output spot check for
+`-P -n --column --byte-offset -o 'foo\K'` produced 110,391,211 bytes identical
+to Rust on the same corpus.
+
 PCRE assertion-conditionals with fixed literal lookaround conditions now avoid
 the Foundation regex path too. On a 14 MiB repeated `foofoo` / `bar` /
 `foobar` corpus, `-P -o '(?(?=foo)foo|bar)'` produced 14,000,000 bytes of

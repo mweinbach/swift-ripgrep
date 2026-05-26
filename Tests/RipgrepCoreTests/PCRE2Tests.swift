@@ -481,6 +481,36 @@ struct PCRE2Tests {
         #expect(output == Data("bar\n".utf8))
     }
 
+    @Test func pcre2ResetStartAllowsEmptyPrefixOrLiteral() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("foo\nbarfoo\nfoofoo\n", to: "pcre.txt")
+
+        let emptyPrefixOutput = try runExecutableData(["-P", "-o", #"\Kfoo"#, temp.path("pcre.txt")]) {}
+        let emptyLiteralOutput = try runExecutableData(["-P", "-o", #"foo\K"#, temp.path("pcre.txt")]) {}
+        let fieldOutput = try runExecutableData([
+            "-P",
+            "-n",
+            "--column",
+            "--byte-offset",
+            "-o",
+            #"foo\K"#,
+            temp.path("pcre.txt"),
+        ]) {}
+        let countOutput = try runExecutableData(["-P", "-c", #"\Kfoo"#, temp.path("pcre.txt")]) {}
+        let countMatchesOutput = try runExecutableData([
+            "-P",
+            "--count-matches",
+            #"foo\K"#,
+            temp.path("pcre.txt"),
+        ]) {}
+
+        #expect(emptyPrefixOutput == Data("foo\nfoo\nfoo\nfoo\n".utf8))
+        #expect(emptyLiteralOutput == Data("\n\n\n".utf8))
+        #expect(fieldOutput == Data("1:4:3:\n2:7:10:\n3:4:14:\n".utf8))
+        #expect(countOutput == Data("3\n".utf8))
+        #expect(countMatchesOutput == Data("3\n".utf8))
+    }
+
     @Test func pcre2ResetStartRespectsDefaultEngineSelection() throws {
         let temp = try TemporaryDirectory()
         try temp.write("foobar\n", to: "pcre.txt")

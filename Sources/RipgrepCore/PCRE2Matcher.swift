@@ -33,6 +33,7 @@ final class PCRE2CompiledPattern {
         case fixedNegativeLookbehind(prefix: [UInt8], literal: [UInt8], caseInsensitiveASCII: Bool)
         case fixedPositiveLookahead(literal: [UInt8], suffix: [UInt8], caseInsensitiveASCII: Bool)
         case fixedNegativeLookahead(literal: [UInt8], suffix: [UInt8], caseInsensitiveASCII: Bool)
+        case fixedResetStart(prefix: [UInt8], literal: [UInt8], caseInsensitiveASCII: Bool)
         case fixedLiteralBackreference(literal: [UInt8], captureRanges: [Range<Int>], caseInsensitiveASCII: Bool)
         case fixedAssertionConditional(
             condition: FixedAssertionCondition,
@@ -71,6 +72,13 @@ final class PCRE2CompiledPattern {
             return nil
         }
         return (literal, suffix, caseInsensitiveASCII)
+    }
+
+    var fixedResetStartFastPath: (prefix: [UInt8], literal: [UInt8], caseInsensitiveASCII: Bool)? {
+        guard case .fixedResetStart(let prefix, let literal, let caseInsensitiveASCII) = matcher else {
+            return nil
+        }
+        return (prefix, literal, caseInsensitiveASCII)
     }
 
     var fixedLiteralBackreferenceFastPath: (literal: [UInt8], caseInsensitiveASCII: Bool)? {
@@ -148,7 +156,7 @@ final class PCRE2CompiledPattern {
         }
         if canUseFixedByteMatcher,
            let resetStart = Self.fixedLiteralResetStart(pattern) {
-            self.matcher = .fixedPositiveLookbehind(
+            self.matcher = .fixedResetStart(
                 prefix: Array(resetStart.prefix.utf8),
                 literal: Array(resetStart.literal.utf8),
                 caseInsensitiveASCII: caseInsensitiveASCII
@@ -234,6 +242,13 @@ final class PCRE2CompiledPattern {
             return Self.fixedNegativeLookaheadMatches(
                 literal: literal,
                 suffix: suffix,
+                caseInsensitiveASCII: caseInsensitiveASCII,
+                in: text
+            )
+        case .fixedResetStart(let prefix, let literal, let caseInsensitiveASCII):
+            return Self.fixedResetStartMatches(
+                prefix: prefix,
+                literal: literal,
                 caseInsensitiveASCII: caseInsensitiveASCII,
                 in: text
             )
@@ -407,18 +422,11 @@ final class PCRE2CompiledPattern {
         }
         let rawPrefix = String(pattern[..<resetRange.lowerBound])
         let rawLiteral = String(pattern[resetRange.upperBound...])
-        guard let prefix = RegexLiteralParser.literal(
-            fromPlainRegexPattern: rawPrefix,
-            allowPCREQuotedLiterals: true
-        ),
-              let literal = RegexLiteralParser.literal(
-                fromPlainRegexPattern: rawLiteral,
-                allowPCREQuotedLiterals: true
-              ) else {
+        guard let prefix = plainLiteralOrEmpty(rawPrefix),
+              let literal = plainLiteralOrEmpty(rawLiteral) else {
             return nil
         }
-        guard !prefix.isEmpty,
-              !literal.isEmpty,
+        guard (!prefix.isEmpty || !literal.isEmpty),
               !prefix.contains("\n"),
               !prefix.contains("\r"),
               !literal.contains("\n"),
@@ -428,6 +436,12 @@ final class PCRE2CompiledPattern {
             return nil
         }
         return (prefix, literal)
+    }
+
+    private static func plainLiteralOrEmpty(_ pattern: String) -> String? {
+        pattern.isEmpty
+            ? ""
+            : RegexLiteralParser.literal(fromPlainRegexPattern: pattern, allowPCREQuotedLiterals: true)
     }
 
     private static func fixedLiteralBackreference(_ pattern: String) -> (literal: String, captureRanges: [Range<Int>])? {
@@ -1035,6 +1049,60 @@ final class PCRE2CompiledPattern {
                         }
                         searchOffset = matchOffset + max(literalBytes.count, 1)
                     }
+                }
+            }
+        }
+        return matches
+        #else
+        return []
+        #endif
+    }
+
+    private static func fixedResetStartMatches(
+        prefix: [UInt8],
+        literal: [UInt8],
+        caseInsensitiveASCII: Bool,
+        in text: String
+    ) -> [PCRE2Match] {
+        #if canImport(CRipgrepPlatform)
+        let needle = prefix + literal
+        guard !needle.isEmpty else {
+            return []
+        }
+
+        var matches: [PCRE2Match] = []
+        let originalText = text
+        var utf8Text = text
+        utf8Text.withUTF8 { bytes in
+            guard let baseAddress = bytes.baseAddress else {
+                return
+            }
+            needle.withUnsafeBufferPointer { needleBytes in
+                guard let needleBase = needleBytes.baseAddress,
+                      needleBytes.count <= bytes.count else {
+                    return
+                }
+                var searchOffset = 0
+                while searchOffset <= bytes.count - needleBytes.count,
+                      let found = findLiteral(
+                        baseAddress.advanced(by: searchOffset),
+                        bytes.count - searchOffset,
+                        needleBase,
+                        needleBytes.count,
+                        caseInsensitiveASCII: caseInsensitiveASCII
+                      ) {
+                    let overallStart = baseAddress.distance(to: found)
+                    let matchStart = overallStart + prefix.count
+                    let matchEnd = matchStart + literal.count
+                    if let range = stringRange(startByte: matchStart, endByte: matchEnd, in: originalText) {
+                        matches.append(PCRE2Match(
+                            range: range,
+                            byteRange: matchStart..<matchEnd,
+                            captures: [range]
+                        ))
+                    }
+                    let overallEnd = overallStart + needleBytes.count
+                    searchOffset = literal.isEmpty ? overallEnd + 1 : overallEnd
                 }
             }
         }

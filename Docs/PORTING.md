@@ -10,7 +10,7 @@ in-tree Swift compatibility engine; it does not link libpcre2.
 **Functional 1:1 with Rust ripgrep 15.1.0, including the streaming I/O
 architecture.** Verified via:
 
-- **146 Swift Testing cases** across 12 suites covering search, output formats,
+- **147 Swift Testing cases** across 12 suites covering search, output formats,
   ignore rules, file types, stdin, encodings, binary handling, parser
   diagnostics, mmap/worker pool, PCRE2, streaming haystack reads, and
   generated-asset drift.
@@ -61,7 +61,8 @@ bare non-newline escapes (`\N`), ASCII shorthand class semantics under
 `--no-pcre2-unicode`, and assertion-conditionals such as
 `(?(?=foo)foo|bar)` before Foundation compilation, with Swift-parsed fixed
 positive/negative lookaround literal, reset-start (`\K`) literal and
-literal-backreference specializations, including `\g` and Python-style named
+literal-backreference specializations, including empty-prefix or empty-literal
+reset-start forms such as `\Kfoo` and `foo\K`, `\g` and Python-style named
 backreference spellings, that use the checked-in Darwin byte scanner for
 `-P -o`, line-numbered, byte-offset and byte-column only-match output, plus
 count/path/quiet modes. Fixed PCRE byte-unit escapes (`\C`, `\C+` and
@@ -151,12 +152,13 @@ into a much smaller implementation:
    compilation, while default/no-PCRE modes retain Rust-compatible rejection
    diagnostics for `\Q`, `\E`, `\K`, `\N`, `\g`, `\k`, and Python-style PCRE
    backreference flags. Fixed positive/negative lookaround literals, fixed
-   reset-start literals such as `foo\Kbar`, and literal-group backreferences
-   including `(foo)\g1`, `(foo)\g{1}`, and `(?P<w>foo)(?P=w)` now avoid the
-   Foundation regex path for single-file `-P -o` output,
-   line-numbered/byte-offset/byte-column only-match output and count/path/quiet
-   modes, including ASCII ignore-case forms when `--no-pcre2-unicode` selects
-   byte semantics. Bare `\N` now matches any non-newline character in PCRE/auto
+   reset-start literals such as `foo\Kbar`, `\Kfoo` and `foo\K`, and
+   literal-group backreferences including `(foo)\g1`, `(foo)\g{1}`, and
+   `(?P<w>foo)(?P=w)` now avoid the Foundation regex path for single-file
+   `-P -o` output, line-numbered/byte-offset/byte-column only-match output and
+   count/path/quiet modes, including ASCII ignore-case forms when
+   `--no-pcre2-unicode` selects byte semantics. Bare `\N` now matches any
+   non-newline character in PCRE/auto
    mode, while `\N{name}` stays a Rust-compatible PCRE2 error. Under
    `--no-pcre2-unicode`, shorthand classes such as `\w` and `\d` are translated
    to ASCII ranges before Foundation compilation. Assertion conditionals using
