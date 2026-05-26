@@ -141,6 +141,7 @@ public struct GlobMatcher: Equatable {
     private let hasBasenameOnlyRules: Bool
     private let slashPatternsMatchAnywhere: Bool
     private let stripBasePath: String?
+    private let stripBasePathPrefix: String?
     private let pathPrefix: String
     private let overrideSemantics: Bool
     #if canImport(Darwin)
@@ -205,6 +206,7 @@ public struct GlobMatcher: Equatable {
         self.overrideSemantics = overrideSemantics
         self.slashPatternsMatchAnywhere = slashPatternsMatchAnywhere ?? !overrideSemantics
         self.stripBasePath = stripBasePath?.isEmpty == true ? nil : stripBasePath
+        self.stripBasePathPrefix = self.stripBasePath.map { "\($0)/" }
         self.pathPrefix = pathPrefix
         #if canImport(Darwin)
         if rules.count >= 8 {
@@ -544,11 +546,11 @@ public struct GlobMatcher: Equatable {
             if path == stripBasePath {
                 path = ""
             } else {
-                let prefix = "\(stripBasePath)/"
-                guard path.hasPrefix(prefix) else {
+                guard let stripBasePathPrefix,
+                      path.hasPrefix(stripBasePathPrefix) else {
                     return nil
                 }
-                path = String(path.dropFirst(prefix.count))
+                path = String(path.dropFirst(stripBasePathPrefix.count))
             }
         }
         if !pathPrefix.isEmpty {

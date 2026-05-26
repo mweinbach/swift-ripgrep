@@ -667,6 +667,7 @@ public struct FileWalker: @unchecked Sendable {
 
         let directoryPathPrefix = rootURL.path + "/"
         let logicalDirectoryPathPrefix = rootURL.path + "/"
+        let rootPathIsASCII = rootURL.path.utf8.allSatisfy { $0 < 0x80 }
         var orderedChildren: [FastDirectoryChild] = []
         orderedChildren.reserveCapacity(contents.children.count)
         var directoryCount = 0
@@ -715,7 +716,7 @@ public struct FileWalker: @unchecked Sendable {
             if child.kind.isFile {
                 let line = outputPath(
                     logicalDirectoryPathPrefix: logicalDirectoryPathPrefix,
-                    logicalDirectoryPathIsASCII: rootURL.path.utf8.allSatisfy { $0 < 0x80 },
+                    logicalDirectoryPathIsASCII: rootPathIsASCII,
                     child: child
                 )
                 store.store(
@@ -748,7 +749,7 @@ public struct FileWalker: @unchecked Sendable {
                     try walkFilePathsInOutputOrder(
                         directoryPath: directoryPathPrefix + childName,
                         logicalDirectoryPath: logicalDirectoryPathPrefix + childName,
-                        logicalDirectoryPathIsASCII: rootURL.path.utf8.allSatisfy { $0 < 0x80 } && childIsASCII,
+                        logicalDirectoryPathIsASCII: rootPathIsASCII && childIsASCII,
                         relativePath: childName,
                         rootBase: rootBase,
                         rootDebugDisplayPath: rootDebugDisplayPath,
@@ -1457,12 +1458,11 @@ public struct FileWalker: @unchecked Sendable {
         var hasRgignore = false
         while let entryPointer = readdir(directory) {
             let entry = entryPointer.pointee
-            let entryName = fastDirectoryEntryNameAndFlags(entry)
-            let name = entryName.name
-            if name == "." || name == ".." {
+            guard let entryName = fastDirectoryEntryNameAndFlags(entry) else {
                 continue
             }
-            if collectIgnoreMarkers {
+            let name = entryName.name
+            if collectIgnoreMarkers, entryName.isHidden {
                 switch name {
                 case ".git":
                     hasGitMarker = true
@@ -1655,11 +1655,14 @@ public struct FileWalker: @unchecked Sendable {
         return logicalDirectoryPathIsASCII && child.isASCII ? path : normalizedOutputPath(path)
     }
 
-    private func fastDirectoryEntryNameAndFlags(_ entry: dirent) -> (name: String, isASCII: Bool, isHidden: Bool) {
+    private func fastDirectoryEntryNameAndFlags(_ entry: dirent) -> (name: String, isASCII: Bool, isHidden: Bool)? {
         return withUnsafePointer(to: entry.d_name) { pointer in
             let nameLength = Int(entry.d_namlen)
             return pointer.withMemoryRebound(to: UInt8.self, capacity: nameLength + 1) { bytes in
                 let buffer = UnsafeBufferPointer(start: bytes, count: nameLength)
+                guard !isCurrentOrParentDirectoryName(buffer) else {
+                    return nil
+                }
                 return (
                     String(decoding: buffer, as: UTF8.self),
                     buffer.allSatisfy { $0 < 0x80 },
@@ -2388,6 +2391,10 @@ public struct FileWalker: @unchecked Sendable {
     }
 
     private func isCurrentOrParentDirectoryName(_ nameBytes: [UInt8]) -> Bool {
+        nameBytes.withUnsafeBufferPointer(isCurrentOrParentDirectoryName)
+    }
+
+    private func isCurrentOrParentDirectoryName(_ nameBytes: UnsafeBufferPointer<UInt8>) -> Bool {
         nameBytes.count == 1 && nameBytes[0] == UInt8(ascii: ".")
             || nameBytes.count == 2 && nameBytes[0] == UInt8(ascii: ".") && nameBytes[1] == UInt8(ascii: ".")
     }

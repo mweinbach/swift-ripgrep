@@ -62,6 +62,16 @@ of doing a marker-only scan before reading entries again. A 50-run recheck on
 versus 11.7 ms for the previous Swift-only checkpoint; `--no-ignore --hidden
 --quiet --files` stayed effectively tied at 9.1 ms.
 
+The default ignore-aware `--files` path now avoids a few small repeated
+allocations while walking the Linux tree: scoped ignore matchers cache their
+`stripBasePath + "/"` prefix, the root ASCII-path check is computed once per
+parallel walk, marker-name checks only run for hidden directory entries, and
+`.`/`..` entries are skipped before Swift string decoding. A 60-run A/B on
+`/tmp/swift-rg-bench/linux` preserved exact Swift output and measured Swift at
+145.6 ms mean / 144.2 ms median versus the previous checkpoint at 146.3 ms mean
+/ 143.6 ms median; the same run measured the sibling Rust release at 93.3 ms
+mean / 90.0 ms median.
+
 ## Status — 2026-05-25 fast-path checkpoint
 
 After the Darwin C fast-path work, the hot single-file ASCII cases are now
