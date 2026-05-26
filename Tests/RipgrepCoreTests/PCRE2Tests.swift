@@ -834,6 +834,13 @@ struct PCRE2Tests {
             #"[$1]/[$2]"#,
             temp.path("pcre.txt"),
         ])
+        let pruneOutput = try run([
+            "-P",
+            "-n",
+            "-o",
+            #"foo(*PRUNE)|foobar"#,
+            temp.path("pcre.txt"),
+        ])
 
         #expect(literalSkipOutput == Data("1:beta\n".utf8))
         #expect(regexSkipOutput == [
@@ -854,6 +861,7 @@ struct PCRE2Tests {
             "foo []/[bar] baz",
             "qux foo []/[bar]",
         ])
+        #expect(pruneOutput == ["3:foo", "4:foo"])
     }
 
     @Test func pcre2ResetStartRespectsDefaultEngineSelection() throws {

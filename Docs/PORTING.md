@@ -26,11 +26,11 @@ including the streaming I/O architecture.** Verified via:
 - **Ad-hoc parity sweep:** 36/36 probes byte-identical to `rg` across PCRE2,
   encoding labels, mmap selection, threaded search, every output mode,
   glob/ignore handling, and JSON output.
-- **PCRE long-tail stress sweep:** 29/36 probes byte-identical to the sibling
+- **PCRE long-tail stress sweep:** 30/36 probes byte-identical to the sibling
   Rust PCRE2 oracle after the 2026-05-26 named-replacement, branch-reset
-  suffix and leading-`(?U)` fixes. The remaining 7 are tracked under the
-  regex-engine-fidelity backlog below, rather than hidden behind an external
-  libpcre2 dependency.
+  suffix, leading-`(?U)` and `(*PRUNE)` fixes. The remaining 6 are tracked
+  under the regex-engine-fidelity backlog below, rather than hidden behind an
+  external libpcre2 dependency.
 - **Asset drift suite:** stored help/man/completion files are pinned to the
   current binary's `--generate`/`--help` output via 7 dedicated tests.
   `scripts/refresh-generated-assets.sh` regenerates them when needed.
@@ -205,11 +205,14 @@ into a much smaller implementation:
    compatibility path. Common PCRE skip/fail alternations such as
    `alpha(*SKIP)(*F)|beta` and `\[[^\]]+\](*SKIP)(*FAIL)|\w+` are handled
    in-tree by pairing skip and match regexes while preserving replacement
-   capture numbering for skipped-branch groups. Top-level PCRE branch-reset
-   alternations such as `(?|a(b)|c(d))` are split into Swift regex branches and
-   preserve the reset capture numbering for replacements; no-new-capture
-   suffixes such as `(?|(foo)|(bar))\1` are split the same way so branch-reset
-   backreferences after the group remain Rust-compatible. PCRE named captures
+   capture numbering for skipped-branch groups, and `(*PRUNE)` verbs in
+   leftmost alternation patterns are erased before Foundation compilation so
+   forms like `foo(*PRUNE)|foobar` keep Rust's observed only-match output.
+   Top-level PCRE branch-reset alternations such as `(?|a(b)|c(d))` are split
+   into Swift regex branches and preserve the reset capture numbering for
+   replacements; no-new-capture suffixes such as `(?|(foo)|(bar))\1` are split
+   the same way so branch-reset backreferences after the group remain
+   Rust-compatible. PCRE named captures
    now flow through both Swift-regex compatibility matches and fixed named
    backreference fast paths so `$name` and `${name}` replacements match Rust
    for `(?<name>...)`, `(?'name'...)` and `(?P<name>...)` spellings. Numeric
@@ -251,10 +254,10 @@ into a much smaller implementation:
    still more likely to drift on regex syntax and pathological edge cases. The
    auto-hybrid fallback (item 1) reduces the impact in practice because patterns
    the default engine cannot handle now degrade gracefully to the compatibility
-   engine. The 2026-05-26 PCRE stress sweep leaves seven known long-tail gaps:
+   engine. The 2026-05-26 PCRE stress sweep leaves six known long-tail gaps:
    group-state conditionals such as `(a)?(?(1)b|c)`, named group-state
-   conditionals, `(*PRUNE)`, PCRE subroutines, recursion, and Rust's unusual
-   line-mode `-P -o '\Afoo'` whole-line output.
+   conditionals, PCRE subroutines, recursion, and Rust's unusual line-mode
+   `-P -o '\Afoo'` whole-line output.
    This is best driven by running upstream regex fixture suites against the
    Swift binary and folding the diffs back into `PatternMatcher.swift` — an
    ongoing quality effort rather than a finite porting slice.

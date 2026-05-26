@@ -2665,6 +2665,10 @@ final class PCRE2CompiledPattern {
                 }
             }
             if !inClass, character == "(" {
+                if pattern[index...].hasPrefix("(*PRUNE)") {
+                    index = pattern.index(index, offsetBy: "(*PRUNE)".count)
+                    continue
+                }
                 if let conditional = try pcreConditionalAssertionSyntax(
                     at: index,
                     in: pattern,
