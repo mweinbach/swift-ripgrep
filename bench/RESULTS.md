@@ -367,6 +367,22 @@ Rejected Swift-only probes from the same checkpoint:
   `SIMD32` preserved output but badly regressed representative literal scans:
   no-match `PM_RESUME` measured 120.8 ms versus 28.0 ms before, and
   `'Sherlock Holmes'` measured 117.2 ms versus 28.3 ms before.
+- Extending the one-pass byte-set `--count-matches` counter down to two-byte
+  sets preserved the focused byte-alternation test, but remained too noisy and
+  regressed the sparse two-byte control. A 25-run check against checkpoint
+  `8be9fe9` measured `--count-matches 'A|B'` at 65.3 ms versus 75.8 ms before,
+  while sparse `--count-matches 'Q|Z'` measured 88.3 ms versus 74.6 ms before.
+- Routing one-byte case-insensitive searches through the two-byte SIMD
+  `memchr-any` scanner helped sparse output but regressed dense vowels. The best
+  hybrid probe measured `-i -o 'q'` at 63.6 ms versus 173.1 ms before, while
+  dense `-i -o 'e'` regressed to 1.350 s versus 1.220 s before.
+- Caching vimgrep line bounds across same-line matches and forcing
+  `rg_memchr_any_bytes` to inline both preserved focused tests, but slowed
+  representative subtitles checks. The vimgrep cache measured
+  `--vimgrep -o 'A'` at 240.4 ms versus 233.0 ms before and
+  `--vimgrep 'Sherlock|Watson'` at 99.4 ms versus 85.4 ms before; forced
+  `memchr-any` inlining measured sparse `-o 'Q|Z'` at 69.5 ms versus 61.7 ms
+  before and five-byte `--count-matches` at 72.9 ms versus 68.2 ms before.
 
 ## Status — 2026-05-25 fast-path checkpoint
 
