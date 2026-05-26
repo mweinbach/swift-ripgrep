@@ -888,10 +888,11 @@ public struct PatternMatcher {
             return nil
         }
         let alternatives = topLevelAlternatives(in: pattern)
-        guard alternatives.allSatisfy(isPlainRegexLiteral) else {
+        let literals = alternatives.compactMap(RegexLiteralParser.literal(fromPlainRegexPattern:))
+        guard literals.count == alternatives.count else {
             return nil
         }
-        return alternatives.map {
+        return literals.map {
             options.effectiveIgnoreCase ? foldedCase($0, options: options) : $0
         }
     }
@@ -997,15 +998,6 @@ public struct PatternMatcher {
         }
         let folded = options.effectiveIgnoreCase ? foldedCase(literal, options: options) : literal
         return usesByteSemantics ? bytePattern(folded) : folded
-    }
-
-    private static func isPlainRegexLiteral(_ pattern: String) -> Bool {
-        guard !pattern.isEmpty else {
-            return false
-        }
-        return !pattern.contains { character in
-            "\\.[]{}()+*?^$|".contains(character)
-        }
     }
 
     private static func enforceRegexSizeLimit(source: String, options: RipgrepOptions) throws {

@@ -174,11 +174,11 @@ struct RipgrepCommand {
 
         guard !pattern.hasPrefix("-"),
               path != "-",
-              isPlainDarwinLiteral(pattern) else {
+              let literalPattern = RegexLiteralParser.literal(fromPlainRegexPattern: pattern) else {
             return nil
         }
 
-        let literal = Array(pattern.utf8)
+        let literal = Array(literalPattern.utf8)
         guard !literal.isEmpty,
               mode != .asciiCaseInsensitive || literal.allSatisfy({ $0 < 0x80 }) else {
             return nil
@@ -274,14 +274,6 @@ struct RipgrepCommand {
         }
     }
 
-    private static func isPlainDarwinLiteral(_ pattern: String) -> Bool {
-        guard !pattern.isEmpty, !pattern.utf8.contains(UInt8(ascii: "\n")) else {
-            return false
-        }
-        let regexSyntax = "\\.^$*+?()[]{}|"
-        return !pattern.contains { regexSyntax.contains($0) }
-    }
-
     private static func surroundingWordsLiteral(_ pattern: String) -> String? {
         let prefix = #"\w+\s+"#
         let suffix = #"\s+\w+"#
@@ -290,11 +282,7 @@ struct RipgrepCommand {
         }
         let literalStart = pattern.index(pattern.startIndex, offsetBy: prefix.count)
         let literalEnd = pattern.index(pattern.endIndex, offsetBy: -suffix.count)
-        let literal = String(pattern[literalStart..<literalEnd])
-        guard isPlainDarwinLiteral(literal) else {
-            return nil
-        }
-        return literal
+        return RegexLiteralParser.literal(fromPlainRegexPattern: String(pattern[literalStart..<literalEnd]))
     }
 
     private static func singleByteAlternation(_ pattern: String) -> [UInt8]? {
@@ -306,37 +294,15 @@ struct RipgrepCommand {
         var bytes: [UInt8] = []
         bytes.reserveCapacity(parts.count)
         for part in parts {
-            guard part.utf8.count == 1,
-                  let byte = part.utf8.first,
-                  byte < 0x80,
-                  !isRegexSyntaxByte(byte) else {
+            guard let literal = RegexLiteralParser.literal(fromPlainRegexPattern: String(part)),
+                  literal.utf8.count == 1,
+                  let byte = literal.utf8.first,
+                  byte < 0x80 else {
                 return nil
             }
             bytes.append(byte)
         }
         return bytes
-    }
-
-    private static func isRegexSyntaxByte(_ byte: UInt8) -> Bool {
-        switch byte {
-        case UInt8(ascii: "\\"),
-             UInt8(ascii: "."),
-             UInt8(ascii: "^"),
-             UInt8(ascii: "$"),
-             UInt8(ascii: "*"),
-             UInt8(ascii: "+"),
-             UInt8(ascii: "?"),
-             UInt8(ascii: "("),
-             UInt8(ascii: ")"),
-             UInt8(ascii: "["),
-             UInt8(ascii: "]"),
-             UInt8(ascii: "{"),
-             UInt8(ascii: "}"),
-             UInt8(ascii: "|"):
-            return true
-        default:
-            return false
-        }
     }
     #endif
 }

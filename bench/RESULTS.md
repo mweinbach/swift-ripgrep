@@ -83,6 +83,14 @@ byte-identical output and measured Swift release at 26.7 ms versus system Rust
 holmes'` literal form measured Swift release at 35.3 ms versus Rust PCRE2 at
 371.8 ms in a separate 7-run check.
 
+Escaped fixed PCRE literals now share the same Swift literal parser and Darwin
+preflight. On a 119 MiB repeated `[Sherlock].Holmes` corpus,
+`-P '\[Sherlock\]\.Holmes'` produced byte-identical output and measured Swift
+release at 58.6 ms versus system Rust `rg` PCRE2 at 219.0 ms in 7-run checks.
+The first escaped-literal version exposed the old per-line writer cost at
+1.463 s on the same corpus, so the plain Darwin literal writer now batches
+stdout through the shared 1 MiB output buffer.
+
 Fixed negative lookaround literals also avoid the Foundation regex path for
 single-file `-P -o`. On a 54 MiB repeated
 `Sherlock Holmes` / `Mycroft Holmes` / `Sherlock Watson` corpus,
@@ -200,6 +208,9 @@ The key improvements since the 2026-05-24 baseline are:
   compatibility matcher entirely, reuse the default literal fast path, and hit
   the executable Darwin literal preflight for direct invocations while keeping
   the Rust-compatible PCRE2 CLI surface;
+- safely escaped fixed PCRE literals such as `foo\.bar` now use the same
+  parser and executable preflight, and the plain Darwin literal writer batches
+  dense output through the shared 1 MiB buffer instead of writing per line;
 - PCRE2 fixed negative-lookaround literal shapes now use the same in-tree
   parser and Darwin byte scanner for `-P -o`, preserving Rust output while
   reducing representative negative lookbehind/lookahead cases by about two

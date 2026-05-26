@@ -429,6 +429,17 @@ size_t rg_memcount_byte(
 }
 
 #ifdef __APPLE__
+static int rg_write_all_stdout(const uint8_t *bytes, size_t length);
+
+typedef struct {
+    uint8_t *bytes;
+    size_t length;
+    size_t capacity;
+} rg_output_buffer;
+
+static int rg_output_buffer_flush(rg_output_buffer *buffer);
+static int rg_output_buffer_write(rg_output_buffer *buffer, const uint8_t *bytes, size_t length);
+
 static rg_darwin_literal_file_result rg_darwin_write_literal_bytes(
     const uint8_t *base,
     size_t haystack_len,
@@ -449,6 +460,12 @@ static rg_darwin_literal_file_result rg_darwin_write_literal_bytes(
 
     const size_t binary_check_len = haystack_len < (64 * 1024) ? haystack_len : (64 * 1024);
     if (memchr(base, 0, binary_check_len) != NULL) {
+        return result;
+    }
+
+    rg_output_buffer output = { .bytes = malloc(1024 * 1024), .length = 0, .capacity = 1024 * 1024 };
+    if (output.bytes == NULL) {
+        result.status = -1;
         return result;
     }
 
@@ -476,29 +493,17 @@ static rg_darwin_literal_file_result rg_darwin_write_literal_bytes(
                 ? haystack_len
                 : (size_t)(((const uint8_t *)newline - base) + 1);
             const size_t output_len = output_end - line_start;
-            size_t bytes_written = 0;
-            while (bytes_written < output_len) {
-                ssize_t written = write(STDOUT_FILENO, base + line_start + bytes_written, output_len - bytes_written);
-                if (written < 0) {
-                    if (errno == EINTR) {
-                        continue;
-                    }
-                    result.status = -1;
-                    return result;
-                }
-                if (written == 0) {
-                    result.status = -1;
-                    return result;
-                }
-                bytes_written += (size_t)written;
+            if (rg_output_buffer_write(&output, base + line_start, output_len) != 0) {
+                free(output.bytes);
+                result.status = -1;
+                return result;
             }
             if (newline == NULL) {
                 uint8_t terminator = '\n';
-                while (write(STDOUT_FILENO, &terminator, 1) < 0) {
-                    if (errno != EINTR) {
-                        result.status = -1;
-                        return result;
-                    }
+                if (rg_output_buffer_write(&output, &terminator, 1) != 0) {
+                    free(output.bytes);
+                    result.status = -1;
+                    return result;
                 }
             }
             result.matched_line_count++;
@@ -508,6 +513,12 @@ static rg_darwin_literal_file_result rg_darwin_write_literal_bytes(
         search_offset = match_start + needle_len;
     }
 
+    if (rg_output_buffer_flush(&output) != 0) {
+        free(output.bytes);
+        result.status = -1;
+        return result;
+    }
+    free(output.bytes);
     result.status = result.matched_line_count > 0 ? 1 : 0;
     result.bytes_searched = haystack_len;
     return result;
@@ -521,8 +532,6 @@ static rg_darwin_literal_file_result rg_darwin_write_literal_bytes_case_sensitiv
 ) {
     return rg_darwin_write_literal_bytes(base, haystack_len, needle, needle_len, NULL, 0);
 }
-
-static int rg_write_all_stdout(const uint8_t *bytes, size_t length);
 
 static rg_darwin_literal_file_result rg_darwin_read_literal_fd_full(
     int fd,
@@ -813,12 +822,6 @@ static int rg_write_decimal_colon(size_t value) {
     } while (value > 0);
     return rg_write_all_stdout(buffer + cursor, sizeof(buffer) - cursor);
 }
-
-typedef struct {
-    uint8_t *bytes;
-    size_t length;
-    size_t capacity;
-} rg_output_buffer;
 
 static int rg_output_buffer_flush(rg_output_buffer *buffer) {
     if (buffer->length == 0) {

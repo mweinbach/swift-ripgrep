@@ -10,7 +10,7 @@ in-tree Swift compatibility engine; it does not link libpcre2.
 **Functional 1:1 with Rust ripgrep 15.1.0, including the streaming I/O
 architecture.** Verified via:
 
-- **119 Swift Testing cases** across 12 suites covering search, output formats,
+- **122 Swift Testing cases** across 12 suites covering search, output formats,
   ignore rules, file types, stdin, encodings, binary handling, parser
   diagnostics, mmap/worker pool, PCRE2, streaming haystack reads, and
   generated-asset drift.
@@ -52,14 +52,15 @@ The normal build has no package-manager or system-library dependency. Plain
 literals selected through PCRE-compatible flags (`-P`, `--pcre2`, `--engine`,
 `--auto-hybrid-regex` and their disabling/default forms) reuse the default
 literal matcher and, for single-file executable searches, the Darwin literal
-preflight before the compatibility engine is needed. PCRE2 syntax
-compatibility is implemented in Swift/Foundation for the covered non-literal
-`-P` surface, with Swift-parsed fixed positive/negative lookaround literal and
-literal-backreference specializations that use the checked-in Darwin byte
-scanner for `-P -o`, line-numbered, byte-offset and byte-column only-match
-output, plus count/path/quiet modes. The Darwin arm hot paths live in the
-checked-in `CRipgrepPlatform` shim because they provide measurable NEON/mmap
-throughput that Swift cannot currently express directly.
+preflight before the compatibility engine is needed. That literal parser also
+understands safely escaped regex metacharacters such as `\.` and `\[`.
+PCRE2 syntax compatibility is implemented in Swift/Foundation for the covered
+non-literal `-P` surface, with Swift-parsed fixed positive/negative
+lookaround literal and literal-backreference specializations that use the
+checked-in Darwin byte scanner for `-P -o`, line-numbered, byte-offset and
+byte-column only-match output, plus count/path/quiet modes. The Darwin arm hot
+paths live in the checked-in `CRipgrepPlatform` shim because they provide
+measurable NEON/mmap throughput that Swift cannot currently express directly.
 
 File input flows through `HaystackReader` (mmap for regular files ≥ 16 KiB or
 when `--mmap` is forced, chunked 64 KiB buffered reads otherwise, stdin always
@@ -100,7 +101,8 @@ into a much smaller implementation:
   `--engine=auto` (auto-hybrid fallback), and the
   `--pcre2-unicode`/`--no-pcre2-unicode` compatibility toggles without linking
   libpcre2. Plain literals selected through those engine flags bypass the
-  compatibility matcher and stay on the default literal/Darwin byte path.
+  compatibility matcher and stay on the default literal/Darwin byte path,
+  including safely escaped fixed literals.
 - Default-engine size accounting honours `--regex-size-limit` and emits the
   Rust-compatible `compiled regex exceeds size limit of <N>` diagnostic when
   the budget is exceeded. `--dfa-size-limit` is plumbed in for the same
@@ -128,7 +130,7 @@ into a much smaller implementation:
    compatibility integration in `Sources/RipgrepCore/PatternMatcher.swift`.
    Plain literals selected through PCRE/auto/default engine flags bypass the
    compatibility matcher entirely and use the same literal fast paths as the
-   default engine.
+   default engine, including safely escaped fixed literals such as `foo\.bar`.
    Fixed positive/negative lookaround literals and simple literal-group
    backreferences now avoid the Foundation regex path for single-file `-P -o`
    output, line-numbered/byte-offset/byte-column only-match output and

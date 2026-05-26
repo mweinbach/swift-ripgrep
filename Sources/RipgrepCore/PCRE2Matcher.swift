@@ -193,13 +193,17 @@ final class PCRE2CompiledPattern {
     private static func fixedPositiveLookbehind(_ pattern: String) -> (prefix: String, literal: String)? {
         let marker = "(?<="
         guard pattern.hasPrefix(marker),
-              let close = pattern.dropFirst(marker.count).firstIndex(of: ")") else {
+              let close = firstUnescapedClosingParen(in: pattern.dropFirst(marker.count)) else {
             return nil
         }
         let prefixStart = pattern.index(pattern.startIndex, offsetBy: marker.count)
-        let prefix = String(pattern[prefixStart..<close])
+        let rawPrefix = String(pattern[prefixStart..<close])
         let literalStart = pattern.index(after: close)
-        let literal = String(pattern[literalStart...])
+        let rawLiteral = String(pattern[literalStart...])
+        guard let prefix = RegexLiteralParser.literal(fromPlainRegexPattern: rawPrefix),
+              let literal = RegexLiteralParser.literal(fromPlainRegexPattern: rawLiteral) else {
+            return nil
+        }
         guard !prefix.isEmpty,
               !literal.isEmpty,
               !prefix.contains("\n"),
@@ -207,9 +211,7 @@ final class PCRE2CompiledPattern {
               !literal.contains("\n"),
               !literal.contains("\r"),
               prefix.utf8.allSatisfy({ $0 < 0x80 }),
-              literal.utf8.allSatisfy({ $0 < 0x80 }),
-              isPlainPCRELiteral(prefix),
-              isPlainPCRELiteral(literal) else {
+              literal.utf8.allSatisfy({ $0 < 0x80 }) else {
             return nil
         }
         return (prefix, literal)
@@ -221,9 +223,13 @@ final class PCRE2CompiledPattern {
               let markerRange = pattern.range(of: marker) else {
             return nil
         }
-        let literal = String(pattern[..<markerRange.lowerBound])
+        let rawLiteral = String(pattern[..<markerRange.lowerBound])
         let suffixEnd = pattern.index(before: pattern.endIndex)
-        let suffix = String(pattern[markerRange.upperBound..<suffixEnd])
+        let rawSuffix = String(pattern[markerRange.upperBound..<suffixEnd])
+        guard let literal = RegexLiteralParser.literal(fromPlainRegexPattern: rawLiteral),
+              let suffix = RegexLiteralParser.literal(fromPlainRegexPattern: rawSuffix) else {
+            return nil
+        }
         guard !literal.isEmpty,
               !suffix.isEmpty,
               !literal.contains("\n"),
@@ -231,9 +237,7 @@ final class PCRE2CompiledPattern {
               !suffix.contains("\n"),
               !suffix.contains("\r"),
               literal.utf8.allSatisfy({ $0 < 0x80 }),
-              suffix.utf8.allSatisfy({ $0 < 0x80 }),
-              isPlainPCRELiteral(literal),
-              isPlainPCRELiteral(suffix) else {
+              suffix.utf8.allSatisfy({ $0 < 0x80 }) else {
             return nil
         }
         return (literal, suffix)
@@ -242,13 +246,17 @@ final class PCRE2CompiledPattern {
     private static func fixedNegativeLookbehind(_ pattern: String) -> (prefix: String, literal: String)? {
         let marker = "(?<!"
         guard pattern.hasPrefix(marker),
-              let close = pattern.dropFirst(marker.count).firstIndex(of: ")") else {
+              let close = firstUnescapedClosingParen(in: pattern.dropFirst(marker.count)) else {
             return nil
         }
         let prefixStart = pattern.index(pattern.startIndex, offsetBy: marker.count)
-        let prefix = String(pattern[prefixStart..<close])
+        let rawPrefix = String(pattern[prefixStart..<close])
         let literalStart = pattern.index(after: close)
-        let literal = String(pattern[literalStart...])
+        let rawLiteral = String(pattern[literalStart...])
+        guard let prefix = RegexLiteralParser.literal(fromPlainRegexPattern: rawPrefix),
+              let literal = RegexLiteralParser.literal(fromPlainRegexPattern: rawLiteral) else {
+            return nil
+        }
         guard !prefix.isEmpty,
               !literal.isEmpty,
               !prefix.contains("\n"),
@@ -256,9 +264,7 @@ final class PCRE2CompiledPattern {
               !literal.contains("\n"),
               !literal.contains("\r"),
               prefix.utf8.allSatisfy({ $0 < 0x80 }),
-              literal.utf8.allSatisfy({ $0 < 0x80 }),
-              isPlainPCRELiteral(prefix),
-              isPlainPCRELiteral(literal) else {
+              literal.utf8.allSatisfy({ $0 < 0x80 }) else {
             return nil
         }
         return (prefix, literal)
@@ -270,9 +276,13 @@ final class PCRE2CompiledPattern {
               let markerRange = pattern.range(of: marker) else {
             return nil
         }
-        let literal = String(pattern[..<markerRange.lowerBound])
+        let rawLiteral = String(pattern[..<markerRange.lowerBound])
         let suffixEnd = pattern.index(before: pattern.endIndex)
-        let suffix = String(pattern[markerRange.upperBound..<suffixEnd])
+        let rawSuffix = String(pattern[markerRange.upperBound..<suffixEnd])
+        guard let literal = RegexLiteralParser.literal(fromPlainRegexPattern: rawLiteral),
+              let suffix = RegexLiteralParser.literal(fromPlainRegexPattern: rawSuffix) else {
+            return nil
+        }
         guard !literal.isEmpty,
               !suffix.isEmpty,
               !literal.contains("\n"),
@@ -280,18 +290,10 @@ final class PCRE2CompiledPattern {
               !suffix.contains("\n"),
               !suffix.contains("\r"),
               literal.utf8.allSatisfy({ $0 < 0x80 }),
-              suffix.utf8.allSatisfy({ $0 < 0x80 }),
-              isPlainPCRELiteral(literal),
-              isPlainPCRELiteral(suffix) else {
+              suffix.utf8.allSatisfy({ $0 < 0x80 }) else {
             return nil
         }
         return (literal, suffix)
-    }
-
-    private static func isPlainPCRELiteral(_ text: String) -> Bool {
-        !text.contains { character in
-            #"\\.[]{}()+*?^$|"#.contains(character)
-        }
     }
 
     private static func fixedLiteralBackreference(_ pattern: String) -> (literal: String, captureRanges: [Range<Int>])? {
@@ -303,15 +305,17 @@ final class PCRE2CompiledPattern {
 
         while index < pattern.endIndex, pattern[index] == "(" {
             let groupStart = pattern.index(after: index)
-            guard let close = pattern[groupStart...].firstIndex(of: ")") else {
+            guard let close = firstUnescapedClosingParen(in: pattern[groupStart...]) else {
                 return nil
             }
-            let group = String(pattern[groupStart..<close])
+            let rawGroup = String(pattern[groupStart..<close])
+            guard let group = RegexLiteralParser.literal(fromPlainRegexPattern: rawGroup) else {
+                return nil
+            }
             guard !group.isEmpty,
                   !group.contains("\n"),
                   !group.contains("\r"),
-                  group.utf8.allSatisfy({ $0 < 0x80 }),
-                  isPlainPCRELiteral(group) else {
+                  group.utf8.allSatisfy({ $0 < 0x80 }) else {
                 return nil
             }
             let groupByteCount = group.utf8.count
@@ -337,6 +341,23 @@ final class PCRE2CompiledPattern {
         }
         literal += groups[reference - 1]
         return (literal, captureRanges)
+    }
+
+    private static func firstUnescapedClosingParen(in text: Substring) -> String.Index? {
+        var escaped = false
+        var index = text.startIndex
+        while index < text.endIndex {
+            let character = text[index]
+            if escaped {
+                escaped = false
+            } else if character == "\\" {
+                escaped = true
+            } else if character == ")" {
+                return index
+            }
+            index = text.index(after: index)
+        }
+        return nil
     }
 
     private static func fixedPositiveLookbehindMatches(

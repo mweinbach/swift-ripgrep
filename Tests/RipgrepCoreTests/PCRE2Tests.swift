@@ -58,6 +58,44 @@ struct PCRE2Tests {
         #expect(noMmapOutput == Data("Sherlock Holmes\n".utf8))
     }
 
+    @Test func pcre2EscapedLiteralUsesDefaultLiteralFastPath() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("[Sherlock].Holmes\nSherlockxHolmes\n", to: "pcre.txt")
+        guard case .run(let options) = RipgrepArgumentParser.parse([
+            "-P",
+            "-o",
+            #"\[Sherlock\]\.Holmes"#,
+            temp.path("pcre.txt"),
+        ], environment: [:]) else {
+            Issue.record("expected -P escaped literal arguments to parse")
+            return
+        }
+
+        let matcher = try PatternMatcher(options: options)
+        let output = try run(["-P", "-o", #"\[Sherlock\]\.Holmes"#, temp.path("pcre.txt")])
+
+        #expect(matcher.byteLiteralFastPath() != nil)
+        #expect(output == ["[Sherlock].Holmes"])
+    }
+
+    @Test func pcre2EscapedLiteralExecutablePreflightOutput() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("[Sherlock].Holmes\nSherlockxHolmes\n", to: "pcre.txt")
+
+        let output = try runExecutableData(["-P", #"\[Sherlock\]\.Holmes"#, temp.path("pcre.txt")]) {}
+
+        #expect(output == Data("[Sherlock].Holmes\n".utf8))
+    }
+
+    @Test func pcre2EscapedLookbehindExecutableFastPathOnlyMatchingOutput() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("Sherlock.Holmes\nSherlockxHolmes\n", to: "pcre.txt")
+
+        let output = try runExecutableData(["-P", "-o", #"(?<=Sherlock\.)Holmes"#, temp.path("pcre.txt")]) {}
+
+        #expect(output == Data("Holmes\n".utf8))
+    }
+
     @Test func pcre2FixedLookbehindLiteralOnlyMatchesAfterPrefix() throws {
         let temp = try TemporaryDirectory()
         try temp.write("Sherlock Holmes\nMycroft Holmes\nSherlock Holmes\n", to: "pcre.txt")
