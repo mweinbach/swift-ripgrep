@@ -113,14 +113,16 @@ Rust oracle. On the 193 MiB subtitles corpus, 15-run checks measured
 205.6 ms for Rust; and `-m 20 'A|B|C|D|E'` at 46.9 ms versus 53.5 ms before.
 
 The one-byte only-matching writer now emits the matched byte and trailing
-newline through a single raw output call. Output for `-o`, `-n -o`, and the
-unchanged multi-byte literal form matched the previous Swift checkpoint and
-the sibling Rust oracle. On the same 193 MiB subtitles corpus, 20-run checks
-measured `-o 'A'` at 98.5 ms versus 113.8 ms before and 75.5 ms for Rust;
-`-n -o 'A'` at 223.6 ms versus 242.2 ms before and 113.0 ms for Rust. A
-15-run byte-set recheck measured `-o 'A|B|C|D|E'` at 225.7 ms versus
-264.2 ms before and 212.8 ms for Rust; `-n -o 'A|B|C|D|E'` at 411.8 ms
-versus 446.2 ms before and 312.8 ms for Rust.
+newline through a single raw output call, and the line-number-only form emits
+`line:byte\n` as one raw output chunk. Output for `-o`, `-n -o`, field-prefixed
+variants, and the unchanged multi-byte literal form matched the previous Swift
+checkpoint and the sibling Rust oracle. On the same 193 MiB subtitles corpus,
+20-run checks measured `-o 'A'` at 98.5 ms versus 113.8 ms before and
+75.5 ms for Rust. A 15-run cumulative recheck measured `-n -o 'A'` at
+210.6 ms versus 229.9 ms before and 110.6 ms for Rust. A 15-run byte-set
+recheck measured `-o 'A|B|C|D|E'` at 225.7 ms versus 264.2 ms before and
+212.8 ms for Rust; the final line-numbered byte-set path measured
+`-n -o 'A|B|C|D|E'` at 349.4 ms versus 447.9 ms before.
 
 Rejected Swift-only probes from the same checkpoint:
 

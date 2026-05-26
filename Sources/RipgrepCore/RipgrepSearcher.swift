@@ -1163,19 +1163,34 @@ public struct RipgrepSearcher: @unchecked Sendable {
                             }
                             if onlyMatching {
                                 advanceLineNumber(to: lineStart)
-                                writeDarwinOnlyMatchingPrefixes(
-                                    lineNumber: lineNumber,
-                                    column: matchStart - lineStart + 1,
-                                    byteOffset: matchStart,
-                                    options: options,
-                                    writeBytes: writeBytes
-                                )
                                 if literal.count == 1 {
-                                    var matchWithNewline = (baseAddress[matchStart], UInt8(ascii: "\n"))
-                                    withUnsafeBytes(of: &matchWithNewline) { buffer in
-                                        writeBytes(buffer)
+                                    if options.wantsLineNumber && !options.column && !options.byteOffset {
+                                        writeDarwinLineNumberedOneByteOnlyMatchingOutput(
+                                            lineNumber: lineNumber,
+                                            byte: baseAddress[matchStart],
+                                            writeBytes: writeBytes
+                                        )
+                                    } else {
+                                        writeDarwinOnlyMatchingPrefixes(
+                                            lineNumber: lineNumber,
+                                            column: matchStart - lineStart + 1,
+                                            byteOffset: matchStart,
+                                            options: options,
+                                            writeBytes: writeBytes
+                                        )
+                                        var matchWithNewline = (baseAddress[matchStart], UInt8(ascii: "\n"))
+                                        withUnsafeBytes(of: &matchWithNewline) { buffer in
+                                            writeBytes(buffer)
+                                        }
                                     }
                                 } else {
+                                    writeDarwinOnlyMatchingPrefixes(
+                                        lineNumber: lineNumber,
+                                        column: matchStart - lineStart + 1,
+                                        byteOffset: matchStart,
+                                        options: options,
+                                        writeBytes: writeBytes
+                                    )
                                     writeBytes(UnsafeRawBufferPointer(
                                         start: rawBaseAddress.advanced(by: matchStart),
                                         count: literal.count
@@ -1252,16 +1267,24 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         }
                         if onlyMatching {
                             advanceLineNumber(to: lineStart)
-                            writeDarwinOnlyMatchingPrefixes(
-                                lineNumber: lineNumber,
-                                column: matchStart - lineStart + 1,
-                                byteOffset: matchStart,
-                                options: options,
-                                writeBytes: writeBytes
-                            )
-                            var matchWithNewline = (baseAddress[matchStart], UInt8(ascii: "\n"))
-                            withUnsafeBytes(of: &matchWithNewline) { buffer in
-                                writeBytes(buffer)
+                            if options.wantsLineNumber && !options.column && !options.byteOffset {
+                                writeDarwinLineNumberedOneByteOnlyMatchingOutput(
+                                    lineNumber: lineNumber,
+                                    byte: baseAddress[matchStart],
+                                    writeBytes: writeBytes
+                                )
+                            } else {
+                                writeDarwinOnlyMatchingPrefixes(
+                                    lineNumber: lineNumber,
+                                    column: matchStart - lineStart + 1,
+                                    byteOffset: matchStart,
+                                    options: options,
+                                    writeBytes: writeBytes
+                                )
+                                var matchWithNewline = (baseAddress[matchStart], UInt8(ascii: "\n"))
+                                withUnsafeBytes(of: &matchWithNewline) { buffer in
+                                    writeBytes(buffer)
+                                }
                             }
                         }
                         searchOffset = matchStart + 1
@@ -2569,6 +2592,31 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
         if options.byteOffset {
             writeDarwinLineNumberPrefix(byteOffset, writeBytes: writeBytes)
+        }
+    }
+
+    private func writeDarwinLineNumberedOneByteOnlyMatchingOutput(
+        lineNumber: Int,
+        byte: UInt8,
+        writeBytes: (UnsafeRawBufferPointer) -> Void
+    ) {
+        withUnsafeTemporaryAllocation(of: UInt8.self, capacity: 64) { buffer in
+            var cursor = buffer.count - 1
+            buffer[cursor] = UInt8(ascii: "\n")
+            cursor -= 1
+            buffer[cursor] = byte
+            cursor -= 1
+            buffer[cursor] = UInt8(ascii: ":")
+            var number = lineNumber
+            repeat {
+                cursor -= 1
+                buffer[cursor] = UInt8(number % 10) + UInt8(ascii: "0")
+                number /= 10
+            } while number > 0
+            writeBytes(UnsafeRawBufferPointer(
+                start: buffer.baseAddress?.advanced(by: cursor),
+                count: buffer.count - cursor
+            ))
         }
     }
 
