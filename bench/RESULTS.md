@@ -54,6 +54,16 @@ from 128.4 ms to about 10 ms in manual `/usr/bin/time` checks. The normal 1.5
 GiB subtitles literal/no-match/case-insensitive/multi-literal smoke cases
 remained neutral.
 
+The same Swift-only literal preflight now keeps prepared case-insensitive
+literal and shift-table buffers borrowed across the search loop instead of
+rebinding them for each next-match probe. Output for 1.5 GiB `-i sherlock`,
+193 MiB `Sherlock Holmes`, and no-match `PM_RESUME` checks matched both the
+previous Swift checkpoint and the sibling Rust oracle, including no-match exit
+status. Seven-run large-corpus checks measured `-i sherlock` at 217.4 ms versus
+233.5 ms before and 301.1 ms for Rust; the neighboring `PM_RESUME` no-match
+case stayed neutral at 198.2 ms versus 198.1 ms before. A 20-run 193 MiB smoke
+measured `-i sherlock` at 32.6 ms versus 34.7 ms before and 42.9 ms for Rust.
+
 Quiet file-listing probes also got a small traversal cleanup. The no-ignore
 existence walker now keeps recursive paths in byte buffers, and the
 ignore-aware existence probe reuses the fast directory contents scan instead

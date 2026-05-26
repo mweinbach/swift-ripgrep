@@ -171,34 +171,9 @@ private func rgSwiftDarwinWriteLiteralBytes(
     var matchedLineCount = 0
     var searchOffset = 0
     var lastEmittedLineStart = -1
+    var writeFailed = false
 
-    func findNextMatch(from offset: Int) -> UnsafePointer<UInt8>? {
-        if asciiCaseInsensitive {
-            return foldedLiteral.withUnsafeBufferPointer { foldedNeedle in
-                caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
-                    rg_memcasemem_ascii_prepared(
-                        base.advanced(by: offset),
-                        haystackLength - offset,
-                        foldedNeedle.baseAddress,
-                        foldedNeedle.count,
-                        shifts.baseAddress
-                    )
-                }
-            }
-        }
-        return rg_memmem_simple(
-            base.advanced(by: offset),
-            haystackLength - offset,
-            literalBase,
-            literal.count
-        )
-    }
-
-    while searchOffset < haystackLength {
-        guard let found = findNextMatch(from: searchOffset) else {
-            break
-        }
-
+    func emitMatchedLine(found: UnsafePointer<UInt8>) -> Bool {
         let matchStart = base.distance(to: found)
         var lineStart = matchStart
         while lineStart > 0, base[lineStart - 1] != UInt8(ascii: "\n") {
@@ -211,20 +186,61 @@ private func rgSwiftDarwinWriteLiteralBytes(
                 base.distance(to: $0.assumingMemoryBound(to: UInt8.self)) + 1
             } ?? haystackLength
             guard output?.write(base.advanced(by: lineStart), count: outputEnd - lineStart) == true else {
-                return nil
+                writeFailed = true
+                return false
             }
             if newline == nil, output?.writeByte(UInt8(ascii: "\n")) != true {
-                return nil
+                writeFailed = true
+                return false
             }
             matchedLineCount += 1
             lastEmittedLineStart = lineStart
             searchOffset = outputEnd
-            continue
+            return true
         }
 
         searchOffset = matchStart + literal.count
+        return true
     }
 
+    if asciiCaseInsensitive {
+        foldedLiteral.withUnsafeBufferPointer { foldedNeedle in
+            caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
+                while searchOffset < haystackLength {
+                    guard let found = rg_memcasemem_ascii_prepared(
+                        base.advanced(by: searchOffset),
+                        haystackLength - searchOffset,
+                        foldedNeedle.baseAddress,
+                        foldedNeedle.count,
+                        shifts.baseAddress
+                    ) else {
+                        break
+                    }
+                    guard emitMatchedLine(found: found) else {
+                        break
+                    }
+                }
+            }
+        }
+    } else {
+        while searchOffset < haystackLength {
+            guard let found = rg_memmem_simple(
+                base.advanced(by: searchOffset),
+                haystackLength - searchOffset,
+                literalBase,
+                literal.count
+            ) else {
+                break
+            }
+            guard emitMatchedLine(found: found) else {
+                break
+            }
+        }
+    }
+
+    guard !writeFailed else {
+        return nil
+    }
     guard output?.flush() == true else {
         return nil
     }
