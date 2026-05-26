@@ -1065,6 +1065,18 @@ final class PCRE2CompiledPattern {
                         continue
                     }
                     if !inClass,
+                       pattern[marker] == "N" {
+                        let end = pattern.index(after: marker)
+                        if end == pattern.endIndex || pattern[end] != "{" {
+                            output += "[^\\n]"
+                            index = end
+                            continue
+                        }
+                        throw RipgrepError.message(
+                            "PCRE2: error compiling pattern at offset \(pattern[..<end].utf8.count + 4): PCRE2 does not support \\F, \\L, \\l, \\N{name}, \\U, or \\u"
+                        )
+                    }
+                    if !inClass,
                        pattern[marker] == "g",
                        let backreference = pcreGBackreference(after: marker, in: pattern) {
                         output += backreference.pattern

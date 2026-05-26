@@ -210,6 +210,60 @@ struct PCRE2Tests {
         #expect(output == ["[Sherlock].Holmes", "[Sherlock].123"])
     }
 
+    @Test func pcre2NonNewlineEscapeOnlyMatching() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("ab\nc d\n\n", to: "pcre.txt")
+
+        let pcreOutput = try run(["-P", "-o", #"\N"#, temp.path("pcre.txt")])
+        let autoOutput = try run(["--engine=auto", "-o", #"\N"#, temp.path("pcre.txt")])
+        let composedOutput = try run(["-P", "-o", #"\Nfoo"#, temp.path("pcre.txt")])
+
+        #expect(pcreOutput == ["a", "b", "c", " ", "d"])
+        #expect(autoOutput == ["a", "b", "c", " ", "d"])
+        #expect(composedOutput.isEmpty)
+    }
+
+    @Test func pcre2NonNewlineEscapeRespectsDefaultEngineSelection() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("ab\n", to: "pcre.txt")
+        let expected = """
+        rg: regex parse error:
+            (?:\\N)
+               ^^
+        error: unrecognized escape sequence
+        """
+
+        for arguments in [
+            [#"\N"#, temp.path("pcre.txt")],
+            ["--engine=default", #"\N"#, temp.path("pcre.txt")],
+            ["--no-pcre2", #"\N"#, temp.path("pcre.txt")],
+        ] {
+            var output: [String] = []
+            var errors: [String] = []
+            let exitCode = RipgrepCLI.run(
+                arguments: arguments,
+                stdout: { output.append($0) },
+                stderr: { errors.append($0) }
+            )
+
+            #expect(exitCode == 2)
+            #expect(output.isEmpty)
+            #expect(errors == [expected])
+        }
+
+        var pcreOutput: [String] = []
+        var pcreErrors: [String] = []
+        let pcreExitCode = RipgrepCLI.run(
+            arguments: ["-P", #"\N{LATIN CAPITAL LETTER A}"#, temp.path("pcre.txt")],
+            stdout: { pcreOutput.append($0) },
+            stderr: { pcreErrors.append($0) }
+        )
+
+        #expect(pcreExitCode == 2)
+        #expect(pcreOutput.isEmpty)
+        #expect(!pcreErrors.isEmpty)
+    }
+
     @Test func pcre2ResetStartLiteralOnlyMatching() throws {
         let temp = try TemporaryDirectory()
         try temp.write("foobar\nfooqux\nbar\n", to: "pcre.txt")

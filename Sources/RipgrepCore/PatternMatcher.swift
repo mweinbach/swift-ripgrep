@@ -1886,7 +1886,12 @@ public struct PatternMatcher {
                         message: "backreferences are not supported"
                     )
                 }
-                if character == "g" || character == "k" || character == "K" || character == "Q" || character == "E" {
+                if character == "g"
+                    || character == "k"
+                    || character == "K"
+                    || character == "N"
+                    || character == "Q"
+                    || character == "E" {
                     return UnsupportedRegexFeature(
                         byteOffset: pattern[..<pattern.index(before: index)].utf8.count,
                         caretLength: 2,
