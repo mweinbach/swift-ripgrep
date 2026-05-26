@@ -87,6 +87,129 @@ struct PCRE2Tests {
         #expect(output == Data("[Sherlock].Holmes\n".utf8))
     }
 
+    @Test func pcre2QuotedLiteralUsesDefaultLiteralFastPath() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("[Sherlock].Holmes\nSherlockxHolmes\n", to: "pcre.txt")
+        guard case .run(let options) = RipgrepArgumentParser.parse([
+            "-P",
+            "-o",
+            #"\Q[Sherlock].Holmes\E"#,
+            temp.path("pcre.txt"),
+        ], environment: [:]) else {
+            Issue.record("expected -P quoted literal arguments to parse")
+            return
+        }
+
+        let matcher = try PatternMatcher(options: options)
+        let output = try run(["-P", "-o", #"\Q[Sherlock].Holmes\E"#, temp.path("pcre.txt")])
+
+        #expect(matcher.byteLiteralFastPath() != nil)
+        #expect(output == ["[Sherlock].Holmes"])
+    }
+
+    @Test func pcre2QuotedLiteralExecutablePreflightOutput() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("[Sherlock].Holmes\nSherlockxHolmes\n", to: "pcre.txt")
+
+        let pcreOutput = try runExecutableData(["-P", #"\Q[Sherlock].Holmes\E"#, temp.path("pcre.txt")]) {}
+        let autoOutput = try runExecutableData([
+            "--engine=auto",
+            #"\Q[Sherlock].Holmes\E"#,
+            temp.path("pcre.txt"),
+        ]) {}
+        let autoHybridOutput = try runExecutableData([
+            "--auto-hybrid-regex",
+            #"\Q[Sherlock].Holmes\E"#,
+            temp.path("pcre.txt"),
+        ]) {}
+
+        #expect(pcreOutput == Data("[Sherlock].Holmes\n".utf8))
+        #expect(autoOutput == Data("[Sherlock].Holmes\n".utf8))
+        #expect(autoHybridOutput == Data("[Sherlock].Holmes\n".utf8))
+    }
+
+    @Test func pcre2QuotedLiteralsRespectDefaultEngineSelection() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("[Sherlock].Holmes\n", to: "pcre.txt")
+        let expectedQuotedStartError = """
+        rg: regex parse error:
+            (?:\\Q[Sherlock].Holmes\\E)
+               ^^
+        error: unrecognized escape sequence
+        """
+        let expectedQuotedEndError = """
+        rg: regex parse error:
+            (?:\\E)
+               ^^
+        error: unrecognized escape sequence
+        """
+
+        for arguments in [
+            [#"\Q[Sherlock].Holmes\E"#, temp.path("pcre.txt")],
+            ["--engine=default", #"\Q[Sherlock].Holmes\E"#, temp.path("pcre.txt")],
+            ["--no-pcre2", #"\Q[Sherlock].Holmes\E"#, temp.path("pcre.txt")],
+        ] {
+            var output: [String] = []
+            var errors: [String] = []
+            let exitCode = RipgrepCLI.run(
+                arguments: arguments,
+                stdout: { output.append($0) },
+                stderr: { errors.append($0) }
+            )
+
+            #expect(exitCode == 2)
+            #expect(output.isEmpty)
+            #expect(errors == [expectedQuotedStartError])
+        }
+
+        for arguments in [
+            [#"\E"#, temp.path("pcre.txt")],
+            ["--engine=default", #"\E"#, temp.path("pcre.txt")],
+            ["--no-pcre2", #"\E"#, temp.path("pcre.txt")],
+        ] {
+            var output: [String] = []
+            var errors: [String] = []
+            let exitCode = RipgrepCLI.run(
+                arguments: arguments,
+                stdout: { output.append($0) },
+                stderr: { errors.append($0) }
+            )
+
+            #expect(exitCode == 2)
+            #expect(output.isEmpty)
+            #expect(errors == [expectedQuotedEndError])
+        }
+    }
+
+    @Test func pcre2StandaloneQuoteEndMatchesEveryLine() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("Sherlock\nMycroft\n", to: "pcre.txt")
+
+        let pcreOutput = try run(["-P", #"\E"#, temp.path("pcre.txt")])
+        let autoOutput = try run(["--engine=auto", #"\E"#, temp.path("pcre.txt")])
+
+        #expect(pcreOutput == ["Sherlock", "Mycroft"])
+        #expect(autoOutput == ["Sherlock", "Mycroft"])
+    }
+
+    @Test func pcre2QuotedLookbehindExecutableFastPathOnlyMatchingOutput() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("Sherlock.Holmes\nSherlockxHolmes\n", to: "pcre.txt")
+
+        let output = try runExecutableData(["-P", "-o", #"(?<=\QSherlock.\E)Holmes"#, temp.path("pcre.txt")]) {}
+
+        #expect(output == Data("Holmes\n".utf8))
+    }
+
+    @Test func pcre2QuotedPartialRegexFallsBackThroughSwiftRegex() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("[Sherlock].Holmes\n[Sherlock].123\nSherlockxHolmes\n", to: "pcre.txt")
+
+        let output = try run(["-P", "-o", #"\Q[Sherlock].\E\w+"#, temp.path("pcre.txt")])
+
+        #expect(output == ["[Sherlock].Holmes", "[Sherlock].123"])
+    }
+
     @Test func pcre2EscapedLookbehindExecutableFastPathOnlyMatchingOutput() throws {
         let temp = try TemporaryDirectory()
         try temp.write("Sherlock.Holmes\nSherlockxHolmes\n", to: "pcre.txt")

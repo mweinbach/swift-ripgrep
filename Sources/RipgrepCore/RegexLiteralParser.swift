@@ -1,5 +1,8 @@
 package enum RegexLiteralParser {
-    package static func literal(fromPlainRegexPattern pattern: String) -> String? {
+    package static func literal(
+        fromPlainRegexPattern pattern: String,
+        allowPCREQuotedLiterals: Bool = false
+    ) -> String? {
         guard !pattern.isEmpty else {
             return nil
         }
@@ -14,6 +17,28 @@ package enum RegexLiteralParser {
                     return nil
                 }
                 let escaped = pattern[escapedIndex]
+                if allowPCREQuotedLiterals, escaped == "Q" {
+                    var quotedIndex = pattern.index(after: escapedIndex)
+                    var closedQuote = false
+                    while quotedIndex < pattern.endIndex {
+                        let quotedCharacter = pattern[quotedIndex]
+                        if quotedCharacter == "\\" {
+                            let quoteEscapeIndex = pattern.index(after: quotedIndex)
+                            if quoteEscapeIndex < pattern.endIndex,
+                               pattern[quoteEscapeIndex] == "E" {
+                                index = pattern.index(after: quoteEscapeIndex)
+                                closedQuote = true
+                                break
+                            }
+                        }
+                        literal.append(quotedCharacter)
+                        quotedIndex = pattern.index(after: quotedIndex)
+                    }
+                    guard closedQuote else {
+                        return nil
+                    }
+                    continue
+                }
                 guard escapableLiteralCharacters.contains(escaped) else {
                     return nil
                 }

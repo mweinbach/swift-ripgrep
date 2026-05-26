@@ -91,6 +91,14 @@ The first escaped-literal version exposed the old per-line writer cost at
 1.463 s on the same corpus, so the plain Darwin literal writer now batches
 stdout through the shared 1 MiB output buffer.
 
+PCRE quoted literals now use the same in-tree parser and Darwin preflight
+without linking libpcre2. On the same 119 MiB escaped-literal corpus,
+`-P '\Q[Sherlock].Holmes\E'` produced byte-identical output and measured Swift
+release at 60.5 ms versus system Rust `rg` PCRE2 at 218.7 ms in 10-run checks
+(3.62x faster in this environment). The default and `--no-pcre2` modes still
+reject `\Q`/`\E` with Rust-identical diagnostics, while `--engine=auto` follows
+Rust by using the PCRE-compatible path.
+
 The remaining literal-style Darwin writers now use the same buffered output
 path for dense line output. On the escaped-literal corpus,
 `--no-mmap -P '\[Sherlock\]\.Holmes'` measured Swift release at 180.7 ms
@@ -218,6 +226,11 @@ The key improvements since the 2026-05-24 baseline are:
 - safely escaped fixed PCRE literals such as `foo\.bar` now use the same
   parser and executable preflight, and the plain Darwin literal writer batches
   dense output through the shared 1 MiB buffer instead of writing per line;
+- PCRE quote escapes (`\Q...\E`, plus standalone `\E`) are handled in-tree for
+  `-P` and auto-hybrid modes; fully quoted literals take the Darwin literal
+  preflight, partial quoted regexes are translated before Foundation regex
+  compilation, and default/no-PCRE modes keep Rust-compatible rejection
+  diagnostics;
 - streaming no-mmap literals, surrounding-word regex output, and line-numbered
   word literal output now use that same buffered writer so dense-match cases
   avoid per-line syscalls;

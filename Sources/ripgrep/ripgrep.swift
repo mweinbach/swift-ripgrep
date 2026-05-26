@@ -55,7 +55,11 @@ struct RipgrepCommand {
             case wordWithLineNumbers
         }
 
-        let arguments = darwinLiteralPreflightArguments(afterStrippingLeadingEngineSelectorFrom: arguments)
+        let preflightArguments = darwinLiteralPreflightArguments(
+            afterStrippingLeadingEngineSelectorFrom: arguments
+        )
+        let arguments = preflightArguments.arguments
+        let allowPCREQuotedLiterals = preflightArguments.allowPCREQuotedLiterals
         let mode: DarwinLiteralPreflightMode
         let pattern: String
         let path: String
@@ -84,7 +88,10 @@ struct RipgrepCommand {
             path = arguments[2]
         } else if arguments.count == 3,
                   arguments[0] == "-n" || arguments[0] == "--line-number",
-                  surroundingWordsLiteral(arguments[1]) != nil {
+                  surroundingWordsLiteral(
+                    arguments[1],
+                    allowPCREQuotedLiterals: allowPCREQuotedLiterals
+                  ) != nil {
             mode = .surroundingWordsWithLineNumbers
             pattern = arguments[1]
             path = arguments[2]
@@ -109,7 +116,10 @@ struct RipgrepCommand {
         }
 
         if mode == .mmap,
-           let literal = surroundingWordsLiteral(pattern),
+           let literal = surroundingWordsLiteral(
+            pattern,
+            allowPCREQuotedLiterals: allowPCREQuotedLiterals
+           ),
            path != "-" {
             let literalBytes = Array(literal.utf8)
             guard !literalBytes.isEmpty,
@@ -132,7 +142,10 @@ struct RipgrepCommand {
         }
 
         if mode == .surroundingWordsWithLineNumbers,
-           let literal = surroundingWordsLiteral(pattern),
+           let literal = surroundingWordsLiteral(
+            pattern,
+            allowPCREQuotedLiterals: allowPCREQuotedLiterals
+           ),
            path != "-" {
             let literalBytes = Array(literal.utf8)
             guard !literalBytes.isEmpty,
@@ -155,7 +168,10 @@ struct RipgrepCommand {
         }
 
         if mode == .mmap,
-           let byteSet = singleByteAlternation(pattern),
+           let byteSet = singleByteAlternation(
+            pattern,
+            allowPCREQuotedLiterals: allowPCREQuotedLiterals
+           ),
            path != "-" {
             let result = path.withCString { pathPointer in
                 byteSet.withUnsafeBufferPointer { needles in
@@ -174,7 +190,10 @@ struct RipgrepCommand {
 
         guard !pattern.hasPrefix("-"),
               path != "-",
-              let literalPattern = RegexLiteralParser.literal(fromPlainRegexPattern: pattern) else {
+              let literalPattern = RegexLiteralParser.literal(
+                fromPlainRegexPattern: pattern,
+                allowPCREQuotedLiterals: allowPCREQuotedLiterals
+              ) else {
             return nil
         }
 
@@ -234,19 +253,25 @@ struct RipgrepCommand {
 
     private static func darwinLiteralPreflightArguments(
         afterStrippingLeadingEngineSelectorFrom arguments: [String]
-    ) -> [String] {
+    ) -> (arguments: [String], allowPCREQuotedLiterals: Bool) {
         guard let first = arguments.first else {
-            return arguments
+            return (arguments, false)
         }
         if isSingleArgumentEngineSelector(first) {
-            return Array(arguments.dropFirst())
+            return (
+                Array(arguments.dropFirst()),
+                singleArgumentEngineSelectorAllowsPCREQuotedLiterals(first)
+            )
         }
         if arguments.count >= 2,
            first == "--engine",
            isEngineSelectorValue(arguments[1]) {
-            return Array(arguments.dropFirst(2))
+            return (
+                Array(arguments.dropFirst(2)),
+                engineSelectorValueAllowsPCREQuotedLiterals(arguments[1])
+            )
         }
-        return arguments
+        return (arguments, false)
     }
 
     private static func isSingleArgumentEngineSelector(_ argument: String) -> Bool {
@@ -274,7 +299,27 @@ struct RipgrepCommand {
         }
     }
 
-    private static func surroundingWordsLiteral(_ pattern: String) -> String? {
+    private static func singleArgumentEngineSelectorAllowsPCREQuotedLiterals(_ argument: String) -> Bool {
+        switch argument {
+        case "-P",
+             "--pcre2",
+             "--auto-hybrid-regex",
+             "--engine=pcre2",
+             "--engine=auto":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func engineSelectorValueAllowsPCREQuotedLiterals(_ value: String) -> Bool {
+        value == "pcre2" || value == "auto"
+    }
+
+    private static func surroundingWordsLiteral(
+        _ pattern: String,
+        allowPCREQuotedLiterals: Bool
+    ) -> String? {
         let prefix = #"\w+\s+"#
         let suffix = #"\s+\w+"#
         guard pattern.hasPrefix(prefix), pattern.hasSuffix(suffix) else {
@@ -282,10 +327,16 @@ struct RipgrepCommand {
         }
         let literalStart = pattern.index(pattern.startIndex, offsetBy: prefix.count)
         let literalEnd = pattern.index(pattern.endIndex, offsetBy: -suffix.count)
-        return RegexLiteralParser.literal(fromPlainRegexPattern: String(pattern[literalStart..<literalEnd]))
+        return RegexLiteralParser.literal(
+            fromPlainRegexPattern: String(pattern[literalStart..<literalEnd]),
+            allowPCREQuotedLiterals: allowPCREQuotedLiterals
+        )
     }
 
-    private static func singleByteAlternation(_ pattern: String) -> [UInt8]? {
+    private static func singleByteAlternation(
+        _ pattern: String,
+        allowPCREQuotedLiterals: Bool
+    ) -> [UInt8]? {
         let parts = pattern.split(separator: "|", omittingEmptySubsequences: false)
         guard parts.count > 1 else {
             return nil
@@ -294,7 +345,10 @@ struct RipgrepCommand {
         var bytes: [UInt8] = []
         bytes.reserveCapacity(parts.count)
         for part in parts {
-            guard let literal = RegexLiteralParser.literal(fromPlainRegexPattern: String(part)),
+            guard let literal = RegexLiteralParser.literal(
+                fromPlainRegexPattern: String(part),
+                allowPCREQuotedLiterals: allowPCREQuotedLiterals
+            ),
                   literal.utf8.count == 1,
                   let byte = literal.utf8.first,
                   byte < 0x80 else {

@@ -50,7 +50,11 @@ public struct PatternMatcher {
                     throw RipgrepError.message(Self.lineTerminatorPatternError(terminator: "\\n"))
                 }
                 if options.engineMode == .pcre2 {
-                    if let literals = Self.defaultLiteralPatterns(for: pattern, options: options),
+                    if let literals = Self.defaultLiteralPatterns(
+                        for: pattern,
+                        options: options,
+                        allowPCREQuotedLiterals: true
+                    ),
                        literals.count == 1 {
                         return literals.map { literal in
                             .literal(usesByteSemantics ? Self.bytePattern(literal) : literal)
@@ -61,6 +65,15 @@ public struct PatternMatcher {
                 if let unsupported = Self.defaultEngineUnsupportedFeature(in: pattern) {
                     if options.engineMode == .default {
                         throw RipgrepError.message(Self.defaultRegexParseError(pattern: pattern, feature: unsupported))
+                    }
+                    if let literals = Self.defaultLiteralPatterns(
+                        for: pattern,
+                        options: options,
+                        allowPCREQuotedLiterals: true
+                    ) {
+                        return literals.map { literal in
+                            .literal(usesByteSemantics ? Self.bytePattern(literal) : literal)
+                        }
                     }
                     do {
                         return [.pcre2(try PCRE2CompiledPattern(pattern: pattern, options: options))]
@@ -878,7 +891,11 @@ public struct PatternMatcher {
         }
     }
 
-    private static func defaultLiteralPatterns(for pattern: String, options: RipgrepOptions) -> [String]? {
+    private static func defaultLiteralPatterns(
+        for pattern: String,
+        options: RipgrepOptions,
+        allowPCREQuotedLiterals: Bool = false
+    ) -> [String]? {
         guard !pattern.isEmpty,
               !options.multiline,
               !options.nullData,
@@ -887,8 +904,19 @@ public struct PatternMatcher {
               options.dfaSizeLimit == nil else {
             return nil
         }
+        if let literal = RegexLiteralParser.literal(
+            fromPlainRegexPattern: pattern,
+            allowPCREQuotedLiterals: allowPCREQuotedLiterals
+        ) {
+            return [options.effectiveIgnoreCase ? foldedCase(literal, options: options) : literal]
+        }
         let alternatives = topLevelAlternatives(in: pattern)
-        let literals = alternatives.compactMap(RegexLiteralParser.literal(fromPlainRegexPattern:))
+        let literals = alternatives.compactMap {
+            RegexLiteralParser.literal(
+                fromPlainRegexPattern: $0,
+                allowPCREQuotedLiterals: allowPCREQuotedLiterals
+            )
+        }
         guard literals.count == alternatives.count else {
             return nil
         }
@@ -1856,6 +1884,13 @@ public struct PatternMatcher {
                         byteOffset: pattern[..<pattern.index(before: index)].utf8.count,
                         caretLength: 2,
                         message: "backreferences are not supported"
+                    )
+                }
+                if character == "Q" || character == "E" {
+                    return UnsupportedRegexFeature(
+                        byteOffset: pattern[..<pattern.index(before: index)].utf8.count,
+                        caretLength: 2,
+                        message: "unrecognized escape sequence"
                     )
                 }
                 escaped = false

@@ -10,7 +10,7 @@ in-tree Swift compatibility engine; it does not link libpcre2.
 **Functional 1:1 with Rust ripgrep 15.1.0, including the streaming I/O
 architecture.** Verified via:
 
-- **122 Swift Testing cases** across 12 suites covering search, output formats,
+- **128 Swift Testing cases** across 12 suites covering search, output formats,
   ignore rules, file types, stdin, encodings, binary handling, parser
   diagnostics, mmap/worker pool, PCRE2, streaming haystack reads, and
   generated-asset drift.
@@ -53,9 +53,11 @@ literals selected through PCRE-compatible flags (`-P`, `--pcre2`, `--engine`,
 `--auto-hybrid-regex` and their disabling/default forms) reuse the default
 literal matcher and, for single-file executable searches, the Darwin literal
 preflight before the compatibility engine is needed. That literal parser also
-understands safely escaped regex metacharacters such as `\.` and `\[`.
+understands safely escaped regex metacharacters such as `\.` and `\[` plus
+PCRE quote escapes (`\Q...\E`) when the selected engine permits them.
 PCRE2 syntax compatibility is implemented in Swift/Foundation for the covered
-non-literal `-P` surface, with Swift-parsed fixed positive/negative
+non-literal `-P` surface, including translation of partial PCRE quoted regexes
+before Foundation compilation, with Swift-parsed fixed positive/negative
 lookaround literal and literal-backreference specializations that use the
 checked-in Darwin byte scanner for `-P -o`, line-numbered, byte-offset and
 byte-column only-match output, plus count/path/quiet modes. The Darwin arm hot
@@ -102,7 +104,9 @@ into a much smaller implementation:
   `--pcre2-unicode`/`--no-pcre2-unicode` compatibility toggles without linking
   libpcre2. Plain literals selected through those engine flags bypass the
   compatibility matcher and stay on the default literal/Darwin byte path,
-  including safely escaped fixed literals.
+  including safely escaped fixed literals and PCRE quoted literals. Default and
+  `--no-pcre2` modes still reject PCRE-only quote escapes with Rust-compatible
+  diagnostics.
 - Default-engine size accounting honours `--regex-size-limit` and emits the
   Rust-compatible `compiled regex exceeds size limit of <N>` diagnostic when
   the budget is exceeded. `--dfa-size-limit` is plumbed in for the same
@@ -130,13 +134,16 @@ into a much smaller implementation:
    compatibility integration in `Sources/RipgrepCore/PatternMatcher.swift`.
    Plain literals selected through PCRE/auto/default engine flags bypass the
    compatibility matcher entirely and use the same literal fast paths as the
-   default engine, including safely escaped fixed literals such as `foo\.bar`.
-   Fixed positive/negative lookaround literals and simple literal-group
-   backreferences now avoid the Foundation regex path for single-file `-P -o`
-   output, line-numbered/byte-offset/byte-column only-match output and
-   count/path/quiet modes, including ASCII ignore-case forms when
-   `--no-pcre2-unicode` selects byte semantics. They remain byte-identical to
-   Rust `rg`.
+   default engine, including safely escaped fixed literals such as `foo\.bar`
+   and PCRE quoted literals such as `\Qfoo.bar\E` when PCRE or auto mode is
+   selected. Partial quoted regexes are translated in-tree before Foundation
+   compilation, while default/no-PCRE modes retain Rust-compatible rejection
+   diagnostics for `\Q` and `\E`. Fixed positive/negative lookaround literals
+   and simple literal-group backreferences now avoid the Foundation regex path
+   for single-file `-P -o` output, line-numbered/byte-offset/byte-column
+   only-match output and count/path/quiet modes, including ASCII ignore-case
+   forms when `--no-pcre2-unicode` selects byte semantics. They remain
+   byte-identical to Rust `rg`.
 
 2. **(Done 2026-05-24)** Enforced regex resource limits — see the size-budget
    guard in `Sources/RipgrepCore/PatternMatcher.swift`.

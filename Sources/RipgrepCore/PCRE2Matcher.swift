@@ -123,8 +123,12 @@ final class PCRE2CompiledPattern {
             regexOptions.insert(.dotMatchesLineSeparators)
         }
 
+        var regexPattern = try Self.regexPatternExpandingPCREQuotedLiterals(pattern)
+        if regexPattern.isEmpty {
+            regexPattern = "(?:)"
+        }
         do {
-            self.matcher = .regex(try NSRegularExpression(pattern: pattern, options: regexOptions))
+            self.matcher = .regex(try NSRegularExpression(pattern: regexPattern, options: regexOptions))
         } catch {
             throw RipgrepError.message(Self.compileErrorMessage(pattern: pattern, error: error))
         }
@@ -200,8 +204,14 @@ final class PCRE2CompiledPattern {
         let rawPrefix = String(pattern[prefixStart..<close])
         let literalStart = pattern.index(after: close)
         let rawLiteral = String(pattern[literalStart...])
-        guard let prefix = RegexLiteralParser.literal(fromPlainRegexPattern: rawPrefix),
-              let literal = RegexLiteralParser.literal(fromPlainRegexPattern: rawLiteral) else {
+        guard let prefix = RegexLiteralParser.literal(
+            fromPlainRegexPattern: rawPrefix,
+            allowPCREQuotedLiterals: true
+        ),
+              let literal = RegexLiteralParser.literal(
+                fromPlainRegexPattern: rawLiteral,
+                allowPCREQuotedLiterals: true
+              ) else {
             return nil
         }
         guard !prefix.isEmpty,
@@ -226,8 +236,14 @@ final class PCRE2CompiledPattern {
         let rawLiteral = String(pattern[..<markerRange.lowerBound])
         let suffixEnd = pattern.index(before: pattern.endIndex)
         let rawSuffix = String(pattern[markerRange.upperBound..<suffixEnd])
-        guard let literal = RegexLiteralParser.literal(fromPlainRegexPattern: rawLiteral),
-              let suffix = RegexLiteralParser.literal(fromPlainRegexPattern: rawSuffix) else {
+        guard let literal = RegexLiteralParser.literal(
+            fromPlainRegexPattern: rawLiteral,
+            allowPCREQuotedLiterals: true
+        ),
+              let suffix = RegexLiteralParser.literal(
+                fromPlainRegexPattern: rawSuffix,
+                allowPCREQuotedLiterals: true
+              ) else {
             return nil
         }
         guard !literal.isEmpty,
@@ -253,8 +269,14 @@ final class PCRE2CompiledPattern {
         let rawPrefix = String(pattern[prefixStart..<close])
         let literalStart = pattern.index(after: close)
         let rawLiteral = String(pattern[literalStart...])
-        guard let prefix = RegexLiteralParser.literal(fromPlainRegexPattern: rawPrefix),
-              let literal = RegexLiteralParser.literal(fromPlainRegexPattern: rawLiteral) else {
+        guard let prefix = RegexLiteralParser.literal(
+            fromPlainRegexPattern: rawPrefix,
+            allowPCREQuotedLiterals: true
+        ),
+              let literal = RegexLiteralParser.literal(
+                fromPlainRegexPattern: rawLiteral,
+                allowPCREQuotedLiterals: true
+              ) else {
             return nil
         }
         guard !prefix.isEmpty,
@@ -279,8 +301,14 @@ final class PCRE2CompiledPattern {
         let rawLiteral = String(pattern[..<markerRange.lowerBound])
         let suffixEnd = pattern.index(before: pattern.endIndex)
         let rawSuffix = String(pattern[markerRange.upperBound..<suffixEnd])
-        guard let literal = RegexLiteralParser.literal(fromPlainRegexPattern: rawLiteral),
-              let suffix = RegexLiteralParser.literal(fromPlainRegexPattern: rawSuffix) else {
+        guard let literal = RegexLiteralParser.literal(
+            fromPlainRegexPattern: rawLiteral,
+            allowPCREQuotedLiterals: true
+        ),
+              let suffix = RegexLiteralParser.literal(
+                fromPlainRegexPattern: rawSuffix,
+                allowPCREQuotedLiterals: true
+              ) else {
             return nil
         }
         guard !literal.isEmpty,
@@ -309,7 +337,10 @@ final class PCRE2CompiledPattern {
                 return nil
             }
             let rawGroup = String(pattern[groupStart..<close])
-            guard let group = RegexLiteralParser.literal(fromPlainRegexPattern: rawGroup) else {
+            guard let group = RegexLiteralParser.literal(
+                fromPlainRegexPattern: rawGroup,
+                allowPCREQuotedLiterals: true
+            ) else {
                 return nil
             }
             guard !group.isEmpty,
@@ -349,6 +380,27 @@ final class PCRE2CompiledPattern {
         while index < text.endIndex {
             let character = text[index]
             if escaped {
+                if character == "Q" {
+                    var quotedIndex = text.index(after: index)
+                    var closedQuote = false
+                    while quotedIndex < text.endIndex {
+                        if text[quotedIndex] == "\\" {
+                            let quoteEscapeIndex = text.index(after: quotedIndex)
+                            if quoteEscapeIndex < text.endIndex,
+                               text[quoteEscapeIndex] == "E" {
+                                index = text.index(after: quoteEscapeIndex)
+                                closedQuote = true
+                                break
+                            }
+                        }
+                        quotedIndex = text.index(after: quotedIndex)
+                    }
+                    guard closedQuote else {
+                        return nil
+                    }
+                    escaped = false
+                    continue
+                }
                 escaped = false
             } else if character == "\\" {
                 escaped = true
@@ -736,6 +788,51 @@ final class PCRE2CompiledPattern {
         PCRE2-compatible regex error: \(error.localizedDescription)
         \(pattern)
         """
+    }
+
+    private static func regexPatternExpandingPCREQuotedLiterals(_ pattern: String) throws -> String {
+        var output = ""
+        var index = pattern.startIndex
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if character == "\\" {
+                let marker = pattern.index(after: index)
+                if marker < pattern.endIndex {
+                    if pattern[marker] == "Q" {
+                        var literal = ""
+                        var quotedIndex = pattern.index(after: marker)
+                        var closedQuote = false
+                        while quotedIndex < pattern.endIndex {
+                            if pattern[quotedIndex] == "\\" {
+                                let quoteEscapeIndex = pattern.index(after: quotedIndex)
+                                if quoteEscapeIndex < pattern.endIndex,
+                                   pattern[quoteEscapeIndex] == "E" {
+                                    index = pattern.index(after: quoteEscapeIndex)
+                                    closedQuote = true
+                                    break
+                                }
+                            }
+                            literal.append(pattern[quotedIndex])
+                            quotedIndex = pattern.index(after: quotedIndex)
+                        }
+                        guard closedQuote else {
+                            throw RipgrepError.message(
+                                "PCRE2: error compiling pattern at offset \(pattern.utf8.count + 4): missing closing parenthesis"
+                            )
+                        }
+                        output += NSRegularExpression.escapedPattern(for: literal)
+                        continue
+                    }
+                    if pattern[marker] == "E" {
+                        index = pattern.index(after: marker)
+                        continue
+                    }
+                }
+            }
+            output.append(character)
+            index = pattern.index(after: index)
+        }
+        return output
     }
 }
 
