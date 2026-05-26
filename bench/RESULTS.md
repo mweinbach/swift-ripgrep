@@ -120,6 +120,11 @@ for single-file `-P -o`. On a 74 MiB repeated `abba abca Sherlock Holmes`
 corpus, `-P -o '(a)(b)\2'` produced byte-identical output to Rust and measured
 Swift release at 229.3 ms versus 19.239 s for the previous Swift Foundation
 regex path and 2.912 s for the sibling Rust PCRE2 oracle in 10-run checks.
+Equivalent PCRE/Python spellings now use that same parser and byte path: on a
+60 MiB repeated `foofoo` / `foobar` / `foo` corpus, `-P -o '(foo)\g1'`
+measured Swift release at 354.4 ms versus system Rust PCRE2 at 503.9 ms, and
+`-P -o '(?P<w>foo)(?P=w)'` measured Swift release at 350.9 ms versus Rust PCRE2
+at 506.9 ms in 10-run checks. Both outputs were byte-identical to Rust.
 
 Fixed PCRE reset-start literals now reuse the same in-tree fixed-lookbehind
 byte path. On a 60 MiB repeated `foobar` / `fooqux` / `bar` corpus,
@@ -249,6 +254,10 @@ The key improvements since the 2026-05-24 baseline are:
   in-tree parser and Darwin byte-output path for single-file `-P -o`, while
   still preserving capture replacement semantics through the non-executable
   matcher path;
+- equivalent PCRE/Python backreference spellings such as `(foo)\g1`,
+  `(foo)\g{1}`, `(?<w>foo)\g{w}`, `(?<w>foo)\g<w>`, and
+  `(?P<w>foo)(?P=w)` now translate in-tree and use that same fixed
+  backreference path when the capture bodies are literals;
 - PCRE2 reset-start literals such as `foo\Kbar` now parse into the same
   in-tree fixed-lookbehind representation, preserving line output,
   only-matching output, replacement ranges, auto-hybrid fallback, and

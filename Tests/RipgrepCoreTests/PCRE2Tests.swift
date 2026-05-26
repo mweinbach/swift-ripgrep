@@ -474,6 +474,106 @@ struct PCRE2Tests {
         #expect(output == ["abb"])
     }
 
+    @Test func pcre2GBackreferenceSyntaxOnlyMatching() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("foofoo\nfoobar\nfoo\n", to: "pcre.txt")
+
+        let numericOutput = try run(["-P", "-o", #"(foo)\g1"#, temp.path("pcre.txt")])
+        let bracedNumericOutput = try run(["-P", "-o", #"(foo)\g{1}"#, temp.path("pcre.txt")])
+        let autoOutput = try run(["--engine=auto", "-o", #"(foo)\g1"#, temp.path("pcre.txt")])
+
+        #expect(numericOutput == ["foofoo"])
+        #expect(bracedNumericOutput == ["foofoo"])
+        #expect(autoOutput == ["foofoo"])
+    }
+
+    @Test func pcre2PythonNamedBackreferenceSyntaxOnlyMatching() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("foofoo\nfoobar\nfoo\n", to: "pcre.txt")
+
+        let pythonOutput = try run(["-P", "-o", #"(?P<w>foo)(?P=w)"#, temp.path("pcre.txt")])
+        let pythonCaptureOutput = try run(["-P", "-o", #"(?P<w>foo)\k<w>"#, temp.path("pcre.txt")])
+        let bracedNamedOutput = try run(["-P", "-o", #"(?<w>foo)\g{w}"#, temp.path("pcre.txt")])
+        let angledNamedOutput = try run(["-P", "-o", #"(?<w>foo)\g<w>"#, temp.path("pcre.txt")])
+        let autoOutput = try run(["--engine=auto", "-o", #"(?P<w>foo)(?P=w)"#, temp.path("pcre.txt")])
+
+        #expect(pythonOutput == ["foofoo"])
+        #expect(pythonCaptureOutput == ["foofoo"])
+        #expect(bracedNamedOutput == ["foofoo"])
+        #expect(angledNamedOutput == ["foofoo"])
+        #expect(autoOutput == ["foofoo"])
+    }
+
+    @Test func pcre2TranslatedBackreferenceExecutableFastPathOnlyMatchingOutput() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("foofoo\nfoobar\nfoofoo\n", to: "pcre.txt")
+
+        let numericOutput = try runExecutableData(["-P", "-o", #"(foo)\g1"#, temp.path("pcre.txt")]) {}
+        let namedOutput = try runExecutableData(["-P", "-o", #"(?P<w>foo)(?P=w)"#, temp.path("pcre.txt")]) {}
+
+        #expect(numericOutput == Data("foofoo\nfoofoo\n".utf8))
+        #expect(namedOutput == Data("foofoo\nfoofoo\n".utf8))
+    }
+
+    @Test func pcre2TranslatedBackreferenceSyntaxPreservesCapturesForReplacement() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("foofoo\nfoobar\n", to: "pcre.txt")
+
+        let numericOutput = try run(["-P", #"(foo)\g1"#, "-r", "$1", temp.path("pcre.txt")])
+        let namedOutput = try run(["-P", #"(?P<w>foo)(?P=w)"#, "-r", "$1", temp.path("pcre.txt")])
+
+        #expect(numericOutput == ["foo"])
+        #expect(namedOutput == ["foo"])
+    }
+
+    @Test func pcre2BackreferenceSyntaxRespectsDefaultEngineSelection() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("foofoo\n", to: "pcre.txt")
+        let expectedGError = """
+        rg: regex parse error:
+            (?:(foo)\\g1)
+                    ^^
+        error: unrecognized escape sequence
+        """
+        let expectedKError = """
+        rg: regex parse error:
+            (?:(?<w>foo)\\k<w>)
+                        ^^
+        error: unrecognized escape sequence
+        """
+        let expectedPythonBackreferenceError = """
+        rg: regex parse error:
+            (?:(?P<w>foo)(?P=w))
+                           ^
+        error: unrecognized flag
+        """
+
+        let cases = [
+            (#"(foo)\g1"#, expectedGError),
+            (#"(?<w>foo)\k<w>"#, expectedKError),
+            (#"(?P<w>foo)(?P=w)"#, expectedPythonBackreferenceError),
+        ]
+        for (pattern, expected) in cases {
+            for arguments in [
+                [pattern, temp.path("pcre.txt")],
+                ["--engine=default", pattern, temp.path("pcre.txt")],
+                ["--no-pcre2", pattern, temp.path("pcre.txt")],
+            ] {
+                var output: [String] = []
+                var errors: [String] = []
+                let exitCode = RipgrepCLI.run(
+                    arguments: arguments,
+                    stdout: { output.append($0) },
+                    stderr: { errors.append($0) }
+                )
+
+                #expect(exitCode == 2)
+                #expect(output.isEmpty)
+                #expect(errors == [expected])
+            }
+        }
+    }
+
     @Test func pcre2LiteralBackreferenceExecutableFastPathOnlyMatchingOutput() throws {
         let temp = try TemporaryDirectory()
         try temp.write("abba\nabca\nabba\n", to: "pcre.txt")

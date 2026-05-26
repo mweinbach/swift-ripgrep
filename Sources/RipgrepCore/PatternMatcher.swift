@@ -1886,7 +1886,7 @@ public struct PatternMatcher {
                         message: "backreferences are not supported"
                     )
                 }
-                if character == "K" || character == "Q" || character == "E" {
+                if character == "g" || character == "k" || character == "K" || character == "Q" || character == "E" {
                     return UnsupportedRegexFeature(
                         byteOffset: pattern[..<pattern.index(before: index)].utf8.count,
                         caretLength: 2,
@@ -1911,6 +1911,11 @@ public struct PatternMatcher {
                 inClass = false
                 index = pattern.index(after: index)
                 continue
+            }
+            if !inClass,
+               character == "(",
+               let pcreFlag = unsupportedPCREGroupFlag(at: index, in: pattern) {
+                return pcreFlag
             }
             if !inClass,
                character == "(",
@@ -2290,6 +2295,26 @@ public struct PatternMatcher {
             return 4
         }
         return nil
+    }
+
+    private static func unsupportedPCREGroupFlag(at index: String.Index, in text: String) -> UnsupportedRegexFeature? {
+        let question = text.index(after: index)
+        guard question < text.endIndex, text[question] == "?" else {
+            return nil
+        }
+        let flag = text.index(after: question)
+        guard flag < text.endIndex, text[flag] == "P" else {
+            return nil
+        }
+        let next = text.index(after: flag)
+        guard next < text.endIndex, text[next] != "<" else {
+            return nil
+        }
+        return UnsupportedRegexFeature(
+            byteOffset: text[..<flag].utf8.count,
+            caretLength: 1,
+            message: "unrecognized flag"
+        )
     }
 
     private static func hasClosingBracket(after open: String.Index, in pattern: String) -> Bool {

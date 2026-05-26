@@ -363,53 +363,209 @@ final class PCRE2CompiledPattern {
     }
 
     private static func fixedLiteralBackreference(_ pattern: String) -> (literal: String, captureRanges: [Range<Int>])? {
-        var groups: [String] = []
+        var groups: [(name: String?, literal: String)] = []
+        var namedGroups: [String: Int] = [:]
         var captureRanges: [Range<Int>] = []
         var literal = ""
         var byteOffset = 0
         var index = pattern.startIndex
 
-        while index < pattern.endIndex, pattern[index] == "(" {
-            let groupStart = pattern.index(after: index)
-            guard let close = firstUnescapedClosingParen(in: pattern[groupStart...]) else {
-                return nil
+        while index < pattern.endIndex,
+              let group = fixedLiteralCaptureGroup(at: index, in: pattern) {
+            let groupByteCount = group.literal.utf8.count
+            let groupNumber = groups.count + 1
+            if let name = group.name {
+                namedGroups[name] = groupNumber
             }
-            let rawGroup = String(pattern[groupStart..<close])
-            guard let group = RegexLiteralParser.literal(
-                fromPlainRegexPattern: rawGroup,
-                allowPCREQuotedLiterals: true
-            ) else {
-                return nil
-            }
-            guard !group.isEmpty,
-                  !group.contains("\n"),
-                  !group.contains("\r"),
-                  group.utf8.allSatisfy({ $0 < 0x80 }) else {
-                return nil
-            }
-            let groupByteCount = group.utf8.count
-            groups.append(group)
+            groups.append((group.name, group.literal))
             captureRanges.append(byteOffset..<byteOffset + groupByteCount)
-            literal += group
+            literal += group.literal
             byteOffset += groupByteCount
-            index = pattern.index(after: close)
+            index = pattern.index(after: group.close)
         }
 
         guard !groups.isEmpty,
               index < pattern.endIndex,
-              pattern[index] == "\\" else {
+              let reference = fixedBackreferenceIndex(
+                at: index,
+                in: pattern,
+                namedGroups: namedGroups
+              ),
+              reference.end == pattern.endIndex,
+              reference.groupIndex > 0,
+              reference.groupIndex <= groups.count else {
             return nil
         }
-        let referenceIndex = pattern.index(after: index)
-        guard referenceIndex < pattern.endIndex,
-              let reference = pattern[referenceIndex].wholeNumberValue,
-              reference > 0,
-              reference <= groups.count,
-              pattern.index(after: referenceIndex) == pattern.endIndex else {
-            return nil
-        }
-        literal += groups[reference - 1]
+        literal += groups[reference.groupIndex - 1].literal
         return (literal, captureRanges)
+    }
+
+    private static func fixedLiteralCaptureGroup(
+        at index: String.Index,
+        in pattern: String
+    ) -> (name: String?, literal: String, close: String.Index)? {
+        guard pattern[index] == "(" else {
+            return nil
+        }
+        var name: String?
+        var contentStart = pattern.index(after: index)
+        if pattern[index...].hasPrefix("(?P<") {
+            let nameStart = pattern.index(index, offsetBy: 4)
+            guard let nameEnd = pattern[nameStart...].firstIndex(of: ">") else {
+                return nil
+            }
+            let parsedName = String(pattern[nameStart..<nameEnd])
+            guard isPCREGroupName(parsedName) else {
+                return nil
+            }
+            name = parsedName
+            contentStart = pattern.index(after: nameEnd)
+        } else if pattern[index...].hasPrefix("(?<") {
+            let nameStart = pattern.index(index, offsetBy: 3)
+            guard nameStart < pattern.endIndex,
+                  pattern[nameStart] != "=",
+                  pattern[nameStart] != "!",
+                  let nameEnd = pattern[nameStart...].firstIndex(of: ">") else {
+                return nil
+            }
+            let parsedName = String(pattern[nameStart..<nameEnd])
+            guard isPCREGroupName(parsedName) else {
+                return nil
+            }
+            name = parsedName
+            contentStart = pattern.index(after: nameEnd)
+        }
+        guard let close = firstUnescapedClosingParen(in: pattern[contentStart...]) else {
+            return nil
+        }
+        let rawGroup = String(pattern[contentStart..<close])
+        guard let literal = RegexLiteralParser.literal(
+            fromPlainRegexPattern: rawGroup,
+            allowPCREQuotedLiterals: true
+        ) else {
+            return nil
+        }
+        guard !literal.isEmpty,
+              !literal.contains("\n"),
+              !literal.contains("\r"),
+              literal.utf8.allSatisfy({ $0 < 0x80 }) else {
+            return nil
+        }
+        return (name, literal, close)
+    }
+
+    private static func fixedBackreferenceIndex(
+        at index: String.Index,
+        in pattern: String,
+        namedGroups: [String: Int]
+    ) -> (groupIndex: Int, end: String.Index)? {
+        if pattern[index] == "\\" {
+            let marker = pattern.index(after: index)
+            guard marker < pattern.endIndex else {
+                return nil
+            }
+            if let reference = pattern[marker].wholeNumberValue {
+                return (reference, pattern.index(after: marker))
+            }
+            if pattern[marker] == "g" {
+                return fixedGBackreferenceIndex(after: marker, in: pattern, namedGroups: namedGroups)
+            }
+            if pattern[marker] == "k" {
+                return fixedDelimitedBackreferenceIndex(
+                    after: marker,
+                    in: pattern,
+                    namedGroups: namedGroups
+                )
+            }
+            return nil
+        }
+
+        guard pattern[index...].hasPrefix("(?P=") else {
+            return nil
+        }
+        let nameStart = pattern.index(index, offsetBy: 4)
+        guard let close = pattern[nameStart...].firstIndex(of: ")") else {
+            return nil
+        }
+        let name = String(pattern[nameStart..<close])
+        guard let groupIndex = namedGroups[name] else {
+            return nil
+        }
+        return (groupIndex, pattern.index(after: close))
+    }
+
+    private static func fixedGBackreferenceIndex(
+        after marker: String.Index,
+        in pattern: String,
+        namedGroups: [String: Int]
+    ) -> (groupIndex: Int, end: String.Index)? {
+        let payloadStart = pattern.index(after: marker)
+        guard payloadStart < pattern.endIndex else {
+            return nil
+        }
+        if pattern[payloadStart].isNumber {
+            var digits = ""
+            var index = payloadStart
+            while index < pattern.endIndex, pattern[index].isNumber {
+                digits.append(pattern[index])
+                index = pattern.index(after: index)
+            }
+            guard let groupIndex = Int(digits) else {
+                return nil
+            }
+            return (groupIndex, index)
+        }
+        return fixedDelimitedBackreferenceIndex(after: marker, in: pattern, namedGroups: namedGroups)
+    }
+
+    private static func fixedDelimitedBackreferenceIndex(
+        after marker: String.Index,
+        in pattern: String,
+        namedGroups: [String: Int]
+    ) -> (groupIndex: Int, end: String.Index)? {
+        let payloadStart = pattern.index(after: marker)
+        guard let identifier = delimitedPCREBackreferenceIdentifier(at: payloadStart, in: pattern) else {
+            return nil
+        }
+        if identifier.name.allSatisfy(\.isNumber),
+           let groupIndex = Int(identifier.name) {
+            return (groupIndex, identifier.end)
+        }
+        guard let groupIndex = namedGroups[identifier.name] else {
+            return nil
+        }
+        return (groupIndex, identifier.end)
+    }
+
+    private static func delimitedPCREBackreferenceIdentifier(
+        at payloadStart: String.Index,
+        in pattern: String
+    ) -> (name: String, end: String.Index)? {
+        guard payloadStart < pattern.endIndex else {
+            return nil
+        }
+        let opener = pattern[payloadStart]
+        let closer: Character
+        switch opener {
+        case "{":
+            closer = "}"
+        case "<":
+            closer = ">"
+        case "'":
+            closer = "'"
+        default:
+            return nil
+        }
+        let nameStart = pattern.index(after: payloadStart)
+        guard nameStart < pattern.endIndex,
+              let close = pattern[nameStart...].firstIndex(of: closer) else {
+            return nil
+        }
+        let name = String(pattern[nameStart..<close])
+        guard !name.isEmpty else {
+            return nil
+        }
+        return (name, pattern.index(after: close))
     }
 
     private static func firstUnescapedResetStart(in pattern: String) -> Range<String.Index>? {
@@ -872,6 +1028,7 @@ final class PCRE2CompiledPattern {
 
     private static func regexPatternExpandingPCREQuotedLiterals(_ pattern: String) throws -> String {
         var output = ""
+        var inClass = false
         var index = pattern.startIndex
         while index < pattern.endIndex {
             let character = pattern[index]
@@ -907,12 +1064,136 @@ final class PCRE2CompiledPattern {
                         index = pattern.index(after: marker)
                         continue
                     }
+                    if !inClass,
+                       pattern[marker] == "g",
+                       let backreference = pcreGBackreference(after: marker, in: pattern) {
+                        output += backreference.pattern
+                        index = backreference.end
+                        continue
+                    }
+                    output.append(character)
+                    output.append(pattern[marker])
+                    index = pattern.index(after: marker)
+                    continue
                 }
             }
+            if !inClass,
+               character == "(",
+               let groupSyntax = pcrePythonGroupSyntax(at: index, in: pattern) {
+                output += groupSyntax.pattern
+                index = groupSyntax.end
+                continue
+            }
             output.append(character)
+            if character == "[" {
+                inClass = true
+            } else if character == "]" {
+                inClass = false
+            }
             index = pattern.index(after: index)
         }
         return output
+    }
+
+    private static func pcreGBackreference(
+        after marker: String.Index,
+        in pattern: String
+    ) -> (pattern: String, end: String.Index)? {
+        let payloadStart = pattern.index(after: marker)
+        guard payloadStart < pattern.endIndex else {
+            return nil
+        }
+        let opener = pattern[payloadStart]
+        if opener == "{" || opener == "<" || opener == "'" {
+            let closer: Character = opener == "{" ? "}" : opener == "<" ? ">" : "'"
+            let nameStart = pattern.index(after: payloadStart)
+            guard nameStart < pattern.endIndex,
+                  let close = pattern[nameStart...].firstIndex(of: closer) else {
+                return nil
+            }
+            let name = String(pattern[nameStart..<close])
+            guard let replacement = pcreBackreferenceReplacement(for: name) else {
+                return nil
+            }
+            return (replacement, pattern.index(after: close))
+        }
+
+        guard opener.isNumber else {
+            return nil
+        }
+        var digits = ""
+        var index = payloadStart
+        while index < pattern.endIndex, pattern[index].isNumber {
+            digits.append(pattern[index])
+            index = pattern.index(after: index)
+        }
+        return ("\\\(digits)", index)
+    }
+
+    private static func pcrePythonGroupSyntax(
+        at index: String.Index,
+        in pattern: String
+    ) -> (pattern: String, end: String.Index)? {
+        let question = pattern.index(after: index)
+        guard question < pattern.endIndex, pattern[question] == "?" else {
+            return nil
+        }
+        let marker = pattern.index(after: question)
+        guard marker < pattern.endIndex, pattern[marker] == "P" else {
+            return nil
+        }
+        let payloadStart = pattern.index(after: marker)
+        guard payloadStart < pattern.endIndex else {
+            return nil
+        }
+        if pattern[payloadStart] == "<" {
+            let nameStart = pattern.index(after: payloadStart)
+            guard nameStart < pattern.endIndex,
+                  let close = pattern[nameStart...].firstIndex(of: ">") else {
+                return nil
+            }
+            let name = String(pattern[nameStart..<close])
+            guard isPCREGroupName(name) else {
+                return nil
+            }
+            return ("(?<\(name)>", pattern.index(after: close))
+        }
+        if pattern[payloadStart] == "=" {
+            let nameStart = pattern.index(after: payloadStart)
+            guard nameStart < pattern.endIndex,
+                  let close = pattern[nameStart...].firstIndex(of: ")") else {
+                return nil
+            }
+            let name = String(pattern[nameStart..<close])
+            guard isPCREGroupName(name) else {
+                return nil
+            }
+            return ("\\k<\(name)>", pattern.index(after: close))
+        }
+        return nil
+    }
+
+    private static func pcreBackreferenceReplacement(for name: String) -> String? {
+        guard !name.isEmpty else {
+            return nil
+        }
+        if name.allSatisfy(\.isNumber) {
+            return "\\\(name)"
+        }
+        guard isPCREGroupName(name) else {
+            return nil
+        }
+        return "\\k<\(name)>"
+    }
+
+    private static func isPCREGroupName(_ name: String) -> Bool {
+        guard let first = name.first,
+              first == "_" || first.isASCII && first.isLetter else {
+            return false
+        }
+        return name.dropFirst().allSatisfy { character in
+            character == "_" || character.isASCII && (character.isLetter || character.isNumber)
+        }
     }
 }
 
