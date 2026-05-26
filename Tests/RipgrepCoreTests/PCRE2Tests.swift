@@ -1148,6 +1148,39 @@ struct PCRE2Tests {
         #expect(namedOutput == ["foo"])
     }
 
+    @Test func pcre2BranchResetAlternationPreservesCaptureNumbering() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("ab\ncd\nac\n", to: "pcre.txt")
+
+        let onlyMatching = try run(["-P", "-n", "-o", #"(?|a(b)|c(d))"#, temp.path("pcre.txt")])
+        let autoOnlyMatching = try run(["--engine=auto", "-n", "-o", #"(?|a(b)|c(d))"#, temp.path("pcre.txt")])
+        let replacement = try run(["-P", #"(?|a(b)|c(d))"#, "-r", "[$1]", temp.path("pcre.txt")])
+
+        #expect(onlyMatching == ["1:ab", "2:cd"])
+        #expect(autoOnlyMatching == onlyMatching)
+        #expect(replacement == ["[b]", "[d]"])
+    }
+
+    @Test func pcre2NumericKBackreferencesUsePCREDiagnostic() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("foofoo\n", to: "pcre.txt")
+        let expected = "rg: PCRE2: error compiling pattern at offset 16: subpattern name must start with a non-digit"
+
+        for pattern in [#"(?<w>foo)\k'1'"#, #"(?<w>foo)\k<1>"#, #"(?<w>foo)\k{1}"#] {
+            var output: [String] = []
+            var errors: [String] = []
+            let exitCode = RipgrepCLI.run(
+                arguments: ["-P", pattern, temp.path("pcre.txt")],
+                stdout: { output.append($0) },
+                stderr: { errors.append($0) }
+            )
+
+            #expect(exitCode == 2)
+            #expect(output.isEmpty)
+            #expect(errors == [expected])
+        }
+    }
+
     @Test func pcre2BackreferenceSyntaxRespectsDefaultEngineSelection() throws {
         let temp = try TemporaryDirectory()
         try temp.write("foofoo\n", to: "pcre.txt")

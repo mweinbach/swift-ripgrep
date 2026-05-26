@@ -13,6 +13,11 @@ struct PCRE2Backend {
 }
 
 final class PCRE2CompiledPattern {
+    struct BranchResetAlternative {
+        let regex: NSRegularExpression
+        let captureCount: Int
+    }
+
     enum FixedAssertionCondition {
         case positiveLookahead([UInt8])
         case negativeLookahead([UInt8])
@@ -38,6 +43,10 @@ final class PCRE2CompiledPattern {
         case literalPrefixResetStartRegex(prefixUTF16Length: Int, regex: NSRegularExpression)
         case capturedPrefixResetStartRegex(NSRegularExpression)
         case byteUnitRegex(NSRegularExpression, unicodeStartOnly: Bool)
+        case branchResetAlternation(
+            alternatives: [BranchResetAlternative],
+            maxCaptureCount: Int
+        )
         case skipFailAlternation(
             skipRegex: NSRegularExpression,
             matchRegex: NSRegularExpression,
@@ -246,6 +255,17 @@ final class PCRE2CompiledPattern {
             )
             return
         }
+        if let branchResetAlternation = try Self.branchResetAlternation(
+            pattern,
+            options: options,
+            regexOptions: regexOptions
+        ) {
+            self.matcher = .branchResetAlternation(
+                alternatives: branchResetAlternation.alternatives,
+                maxCaptureCount: branchResetAlternation.maxCaptureCount
+            )
+            return
+        }
 
         var regexPattern = try Self.regexPatternExpandingPCREQuotedLiterals(
             pattern,
@@ -323,6 +343,12 @@ final class PCRE2CompiledPattern {
             return Self.byteUnitRegexMatches(
                 regex: regex,
                 unicodeStartOnly: unicodeStartOnly,
+                in: text
+            )
+        case .branchResetAlternation(let alternatives, let maxCaptureCount):
+            return Self.branchResetAlternationMatches(
+                alternatives: alternatives,
+                maxCaptureCount: maxCaptureCount,
                 in: text
             )
         case .skipFailAlternation(let skipRegex, let matchRegex, let skipCaptureCount):
@@ -753,6 +779,104 @@ final class PCRE2CompiledPattern {
         return count
     }
 
+    private static func branchResetAlternation(
+        _ pattern: String,
+        options: RipgrepOptions,
+        regexOptions: NSRegularExpression.Options
+    ) throws -> (alternatives: [BranchResetAlternative], maxCaptureCount: Int)? {
+        guard pattern.hasPrefix("(?|"),
+              pattern.hasSuffix(")") else {
+            return nil
+        }
+        let bodyStart = pattern.index(pattern.startIndex, offsetBy: 3)
+        let bodyEnd = pattern.index(before: pattern.endIndex)
+        let body = String(pattern[bodyStart..<bodyEnd])
+        guard let branches = topLevelAlternatives(in: body),
+              branches.count > 1,
+              branches.allSatisfy({ !$0.isEmpty }) else {
+            return nil
+        }
+
+        var alternatives: [BranchResetAlternative] = []
+        alternatives.reserveCapacity(branches.count)
+        var maxCaptureCount = 0
+        do {
+            for branch in branches {
+                let pattern = try regexPatternExpandingPCREQuotedLiterals(
+                    branch,
+                    asciiShorthandEscapes: options.noUnicode
+                )
+                let captureCount = captureGroupCount(in: branch)
+                maxCaptureCount = max(maxCaptureCount, captureCount)
+                alternatives.append(BranchResetAlternative(
+                    regex: try NSRegularExpression(pattern: pattern, options: regexOptions),
+                    captureCount: captureCount
+                ))
+            }
+            return (alternatives, maxCaptureCount)
+        } catch {
+            throw RipgrepError.message(Self.compileErrorMessage(pattern: pattern, error: error))
+        }
+    }
+
+    private static func topLevelAlternatives(in pattern: String) -> [String]? {
+        var alternatives: [String] = []
+        var escaped = false
+        var inClass = false
+        var depth = 0
+        var start = pattern.startIndex
+        var index = pattern.startIndex
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                if character == "Q" {
+                    var quotedIndex = pattern.index(after: index)
+                    var closedQuote = false
+                    while quotedIndex < pattern.endIndex {
+                        if pattern[quotedIndex] == "\\" {
+                            let quoteEscapeIndex = pattern.index(after: quotedIndex)
+                            if quoteEscapeIndex < pattern.endIndex,
+                               pattern[quoteEscapeIndex] == "E" {
+                                index = pattern.index(after: quoteEscapeIndex)
+                                closedQuote = true
+                                break
+                            }
+                        }
+                        quotedIndex = pattern.index(after: quotedIndex)
+                    }
+                    guard closedQuote else {
+                        return nil
+                    }
+                    escaped = false
+                    continue
+                }
+                escaped = false
+            } else if character == "\\" {
+                escaped = true
+            } else if character == "[" {
+                inClass = true
+            } else if character == "]" {
+                inClass = false
+            } else if !inClass, character == "(" {
+                depth += 1
+            } else if !inClass, character == ")" {
+                guard depth > 0 else {
+                    return nil
+                }
+                depth -= 1
+            } else if !inClass, character == "|", depth == 0 {
+                alternatives.append(String(pattern[start..<index]))
+                start = pattern.index(after: index)
+            }
+            index = pattern.index(after: index)
+        }
+        guard depth == 0, !escaped else {
+            return nil
+        }
+        alternatives.append(String(pattern[start...]))
+        return alternatives
+    }
+
     private static func fixedLiteralBackreference(_ pattern: String) -> (literal: String, captureRanges: [Range<Int>])? {
         var groups: [(name: String?, literal: String)] = []
         var namedGroups: [String: Int] = [:]
@@ -976,7 +1100,8 @@ final class PCRE2CompiledPattern {
                 return fixedDelimitedBackreferenceIndex(
                     after: marker,
                     in: pattern,
-                    namedGroups: namedGroups
+                    namedGroups: namedGroups,
+                    allowsNumeric: false
                 )
             }
             return nil
@@ -1023,7 +1148,8 @@ final class PCRE2CompiledPattern {
     private static func fixedDelimitedBackreferenceIndex(
         after marker: String.Index,
         in pattern: String,
-        namedGroups: [String: Int]
+        namedGroups: [String: Int],
+        allowsNumeric: Bool = true
     ) -> (groupIndex: Int, end: String.Index)? {
         let payloadStart = pattern.index(after: marker)
         guard let identifier = delimitedPCREBackreferenceIdentifier(at: payloadStart, in: pattern) else {
@@ -1031,6 +1157,9 @@ final class PCRE2CompiledPattern {
         }
         if identifier.name.allSatisfy(\.isNumber),
            let groupIndex = Int(identifier.name) {
+            guard allowsNumeric else {
+                return nil
+            }
             return (groupIndex, identifier.end)
         }
         guard let groupIndex = namedGroups[identifier.name] else {
@@ -1584,6 +1713,79 @@ final class PCRE2CompiledPattern {
         }
     }
 
+    private static func branchResetAlternationMatches(
+        alternatives: [BranchResetAlternative],
+        maxCaptureCount: Int,
+        in text: String
+    ) -> [PCRE2Match] {
+        struct Candidate {
+            let branchIndex: Int
+            let alternative: BranchResetAlternative
+            let match: NSTextCheckingResult
+            let range: NSRange
+        }
+
+        let fullSearchRange = NSRange(text.startIndex..., in: text)
+        var candidates: [Candidate] = []
+        for (branchIndex, alternative) in alternatives.enumerated() {
+            let matches = alternative.regex.matches(in: text, range: fullSearchRange)
+            candidates.append(contentsOf: matches.compactMap { match in
+                let range = match.range(at: 0)
+                guard range.location != NSNotFound else {
+                    return nil
+                }
+                return Candidate(
+                    branchIndex: branchIndex,
+                    alternative: alternative,
+                    match: match,
+                    range: range
+                )
+            })
+        }
+        candidates.sort {
+            if $0.range.location == $1.range.location {
+                return $0.branchIndex < $1.branchIndex
+            }
+            return $0.range.location < $1.range.location
+        }
+
+        var matches: [PCRE2Match] = []
+        var nextSearchLocation = fullSearchRange.location
+        for candidate in candidates {
+            guard candidate.range.location >= nextSearchLocation,
+                  let range = Range(candidate.range, in: text) else {
+                continue
+            }
+
+            var captures: [Range<String.Index>?] = [range]
+            captures.reserveCapacity(maxCaptureCount + 1)
+            if candidate.match.numberOfRanges > 1 {
+                for index in 1..<candidate.match.numberOfRanges {
+                    let captureRange = candidate.match.range(at: index)
+                    guard captureRange.location != NSNotFound else {
+                        captures.append(nil)
+                        continue
+                    }
+                    guard let capture = Range(captureRange, in: text) else {
+                        return matches
+                    }
+                    captures.append(capture)
+                }
+            }
+            if captures.count < maxCaptureCount + 1 {
+                captures.append(contentsOf: repeatElement(nil, count: maxCaptureCount + 1 - captures.count))
+            }
+
+            matches.append(PCRE2Match(
+                range: range,
+                byteRange: byteRange(for: range, in: text),
+                captures: captures
+            ))
+            nextSearchLocation = candidate.range.location + max(candidate.range.length, 1)
+        }
+        return matches
+    }
+
     private static func skipFailAlternationMatches(
         skipRegex: NSRegularExpression,
         matchRegex: NSRegularExpression,
@@ -2107,6 +2309,18 @@ final class PCRE2CompiledPattern {
                         output += backreference.pattern
                         index = backreference.end
                         continue
+                    }
+                    if !inClass,
+                       pattern[marker] == "k",
+                       let identifier = delimitedPCREBackreferenceIdentifier(
+                        at: pattern.index(after: marker),
+                        in: pattern
+                       ),
+                       identifier.name.allSatisfy(\.isNumber) {
+                        let nameStart = pattern.index(pattern.index(after: marker), offsetBy: 1)
+                        throw RipgrepError.message(
+                            "PCRE2: error compiling pattern at offset \(pattern[..<nameStart].utf8.count + 4): subpattern name must start with a non-digit"
+                        )
                     }
                     if !inClass,
                        pattern[marker] == "k",
