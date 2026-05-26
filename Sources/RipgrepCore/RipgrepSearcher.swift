@@ -713,7 +713,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 falseLiteral: fixedConditionalFastPath.falseLiteral,
                 caseInsensitiveASCII: fixedConditionalFastPath.caseInsensitiveASCII,
                 options: options,
-                writeBytes: writeBytes
+                writeBytes: writeBytes,
+                allowDirectStdout: allowDirectStdout
             )
         }
         if let byteUnitFastPath {
@@ -2037,7 +2038,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
         falseLiteral: [UInt8],
         caseInsensitiveASCII: Bool = false,
         options: RipgrepOptions,
-        writeBytes: (UnsafeRawBufferPointer) -> Void
+        writeBytes: (UnsafeRawBufferPointer) -> Void,
+        allowDirectStdout: Bool = false
     ) -> SearchResults? {
         var matchedLineCount = 0
         var totalMatchCount = 0
@@ -2074,6 +2076,56 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     }
 
                     var searchOffset = 0
+                    if countMatchesOnly && allowDirectStdout {
+                        while searchOffset < data.count {
+                            let trueMatchStart = findDarwinLiteralOffset(
+                                baseAddress: baseAddress,
+                                dataCount: data.count,
+                                from: searchOffset,
+                                literalBaseAddress: trueBaseAddress,
+                                literalCount: trueBytes.count,
+                                caseInsensitiveASCII: caseInsensitiveASCII
+                            )
+                            let falseMatchStart = findDarwinLiteralOffset(
+                                baseAddress: baseAddress,
+                                dataCount: data.count,
+                                from: searchOffset,
+                                literalBaseAddress: falseBaseAddress,
+                                literalCount: falseBytes.count,
+                                caseInsensitiveASCII: caseInsensitiveASCII
+                            )
+                            guard let offset = earliestOffset(trueMatchStart, falseMatchStart) else {
+                                break
+                            }
+
+                            let conditionMatched = matchesFixedAssertionCondition(
+                                condition,
+                                baseAddress: baseAddress,
+                                dataCount: data.count,
+                                offset: offset,
+                                caseInsensitiveASCII: caseInsensitiveASCII
+                            )
+                            let literalBaseAddress = conditionMatched ? trueBaseAddress : falseBaseAddress
+                            let literalCount = conditionMatched ? trueBytes.count : falseBytes.count
+                            if offset + literalCount <= data.count,
+                               bytesEqual(
+                                baseAddress.advanced(by: offset),
+                                literalBaseAddress,
+                                count: literalCount,
+                                caseInsensitiveASCII: caseInsensitiveASCII
+                               ) {
+                                totalMatchCount += 1
+                                searchOffset = offset + literalCount
+                            } else {
+                                searchOffset = offset + 1
+                            }
+                        }
+                        if totalMatchCount > 0 {
+                            matchedLineCount = 1
+                        }
+                        return
+                    }
+
                     var shouldStop = false
                     while searchOffset < data.count, !shouldStop {
                         let trueMatchStart = findDarwinLiteralOffset(

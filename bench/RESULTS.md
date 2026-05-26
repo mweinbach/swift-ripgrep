@@ -197,6 +197,15 @@ forms. On the 193 MiB subtitles corpus, 20-run checks measured `-P
 PCRE2. On the 60 MiB reset-start fixture, the same search measured 42.3 ms
 versus 67.3 ms before and 1.079 s for Rust PCRE2.
 
+Fixed PCRE2 assertion conditional `--count-matches` now skips matched-line
+tracking for direct executable output while preserving the formatted `-o` and
+whole-line count paths. Output and exit status for positive, false, negative,
+lookbehind, ignore-case, and empty-file conditional count fixtures matched the
+previous Swift checkpoint and sibling Rust oracle, as did neighboring `-c` and
+`-o` forms. On the 193 MiB subtitles corpus, 20-run checks measured `-P
+--count-matches '(?(?=Sherlock)Sherlock|Holmes)'` at 156.3 ms versus
+247.3 ms before and 468.1 ms for Rust PCRE2.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Routing multi-literal full-line output through the existing line-by-line

@@ -495,8 +495,15 @@ struct PCRE2Tests {
         try temp.write("foofoo\nbar\nfoobar\n", to: "pcre.txt")
 
         let output = try runExecutableData(["-P", "-o", #"(?(?=foo)foo|bar)"#, temp.path("pcre.txt")]) {}
+        let countMatchesOutput = try runExecutableData([
+            "-P",
+            "--count-matches",
+            #"(?(?=foo)foo|bar)"#,
+            temp.path("pcre.txt"),
+        ]) {}
 
         #expect(output == Data("foo\nfoo\nbar\nfoo\nbar\n".utf8))
+        #expect(countMatchesOutput == Data("5\n".utf8))
     }
 
     @Test func pcre2AssertionConditionalsRespectDefaultEngineSelection() throws {
