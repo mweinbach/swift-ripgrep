@@ -1177,23 +1177,40 @@ struct PCRE2Tests {
         let numericOutput = try run(["-P", #"(foo)\g1"#, "-r", "$1", temp.path("pcre.txt")])
         let relativeOutput = try run(["-P", #"(foo)\g{-1}"#, "-r", "$1", temp.path("pcre.txt")])
         let namedOutput = try run(["-P", #"(?P<w>foo)(?P=w)"#, "-r", "$1", temp.path("pcre.txt")])
+        let namedReplacementOutput = try run(["-P", #"(?P<w>foo)(?P=w)"#, "-r", "[$w]", temp.path("pcre.txt")])
 
         #expect(numericOutput == ["foo"])
         #expect(relativeOutput == ["foo"])
         #expect(namedOutput == ["foo"])
+        #expect(namedReplacementOutput == ["[foo]"])
+    }
+
+    @Test func pcre2NamedCapturesRenderNamedReplacements() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("foo\nfoobar\nfoofoo\n", to: "pcre.txt")
+
+        let angleOutput = try run(["-P", #"(?<word>foo)"#, "-r", "[$word]", temp.path("pcre.txt")])
+        let bracedOutput = try run(["-P", #"(?<word>foo)"#, "-r", "${word}", temp.path("pcre.txt")])
+        let pythonOutput = try run(["-P", #"(?P<word>foo)"#, "-r", "[$word]", temp.path("pcre.txt")])
+
+        #expect(angleOutput == ["[foo]", "[foo]bar", "[foo][foo]"])
+        #expect(bracedOutput == ["foo", "foobar", "foofoo"])
+        #expect(pythonOutput == angleOutput)
     }
 
     @Test func pcre2BranchResetAlternationPreservesCaptureNumbering() throws {
         let temp = try TemporaryDirectory()
-        try temp.write("ab\ncd\nac\n", to: "pcre.txt")
+        try temp.write("ab\ncd\nac\nfoofoo\nfoobar\nbarbar\n", to: "pcre.txt")
 
         let onlyMatching = try run(["-P", "-n", "-o", #"(?|a(b)|c(d))"#, temp.path("pcre.txt")])
         let autoOnlyMatching = try run(["--engine=auto", "-n", "-o", #"(?|a(b)|c(d))"#, temp.path("pcre.txt")])
         let replacement = try run(["-P", #"(?|a(b)|c(d))"#, "-r", "[$1]", temp.path("pcre.txt")])
+        let suffixedBackreference = try run(["-P", "-o", #"(?|(foo)|(bar))\1"#, temp.path("pcre.txt")])
 
         #expect(onlyMatching == ["1:ab", "2:cd"])
         #expect(autoOnlyMatching == onlyMatching)
         #expect(replacement == ["[b]", "[d]"])
+        #expect(suffixedBackreference == ["foofoo", "barbar"])
     }
 
     @Test func pcre2NumericKBackreferencesUsePCREDiagnostic() throws {

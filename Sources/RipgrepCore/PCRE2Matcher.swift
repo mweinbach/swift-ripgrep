@@ -16,6 +16,7 @@ final class PCRE2CompiledPattern {
     struct BranchResetAlternative {
         let regex: NSRegularExpression
         let captureCount: Int
+        let namedCaptureNames: [String]
     }
 
     enum FixedAssertionCondition {
@@ -32,7 +33,7 @@ final class PCRE2CompiledPattern {
     }
 
     private enum Matcher {
-        case regex(NSRegularExpression)
+        case regex(NSRegularExpression, namedCaptureNames: [String])
         case byteUnit(ByteUnitPattern, unicodeStartOnly: Bool)
         case bareResetStart
         case fixedPositiveLookbehind(prefix: [UInt8], literal: [UInt8], caseInsensitiveASCII: Bool)
@@ -40,9 +41,13 @@ final class PCRE2CompiledPattern {
         case fixedPositiveLookahead(literal: [UInt8], suffix: [UInt8], caseInsensitiveASCII: Bool)
         case fixedNegativeLookahead(literal: [UInt8], suffix: [UInt8], caseInsensitiveASCII: Bool)
         case fixedResetStart(prefix: [UInt8], literal: [UInt8], caseInsensitiveASCII: Bool)
-        case literalPrefixResetStartRegex(prefixUTF16Length: Int, regex: NSRegularExpression)
-        case capturedPrefixResetStartRegex(NSRegularExpression)
-        case byteUnitRegex(NSRegularExpression, unicodeStartOnly: Bool)
+        case literalPrefixResetStartRegex(
+            prefixUTF16Length: Int,
+            regex: NSRegularExpression,
+            namedCaptureNames: [String]
+        )
+        case capturedPrefixResetStartRegex(NSRegularExpression, namedCaptureNames: [String])
+        case byteUnitRegex(NSRegularExpression, unicodeStartOnly: Bool, namedCaptureNames: [String])
         case branchResetAlternation(
             alternatives: [BranchResetAlternative],
             maxCaptureCount: Int
@@ -50,9 +55,16 @@ final class PCRE2CompiledPattern {
         case skipFailAlternation(
             skipRegex: NSRegularExpression,
             matchRegex: NSRegularExpression,
-            skipCaptureCount: Int
+            skipCaptureCount: Int,
+            matchNamedCaptureNames: [String]
         )
         case fixedLiteralBackreference(literal: [UInt8], captureRanges: [Range<Int>], caseInsensitiveASCII: Bool)
+        case fixedNamedLiteralBackreference(
+            literal: [UInt8],
+            captureRanges: [Range<Int>],
+            namedCaptureRanges: [String: Range<Int>],
+            caseInsensitiveASCII: Bool
+        )
         case fixedAssertionConditional(
             condition: FixedAssertionCondition,
             trueLiteral: [UInt8],
@@ -100,10 +112,13 @@ final class PCRE2CompiledPattern {
     }
 
     var fixedLiteralBackreferenceFastPath: (literal: [UInt8], caseInsensitiveASCII: Bool)? {
-        guard case .fixedLiteralBackreference(let literal, _, let caseInsensitiveASCII) = matcher else {
+        switch matcher {
+        case .fixedLiteralBackreference(let literal, _, let caseInsensitiveASCII),
+             .fixedNamedLiteralBackreference(let literal, _, _, let caseInsensitiveASCII):
+            return (literal, caseInsensitiveASCII)
+        default:
             return nil
         }
-        return (literal, caseInsensitiveASCII)
     }
 
     var fixedAssertionConditionalFastPath:
@@ -194,11 +209,20 @@ final class PCRE2CompiledPattern {
         }
         if canUseFixedByteMatcher,
            let backreference = Self.fixedLiteralBackreference(pattern) {
-            self.matcher = .fixedLiteralBackreference(
-                literal: Array(backreference.literal.utf8),
-                captureRanges: backreference.captureRanges,
-                caseInsensitiveASCII: caseInsensitiveASCII
-            )
+            if backreference.namedCaptureRanges.isEmpty {
+                self.matcher = .fixedLiteralBackreference(
+                    literal: Array(backreference.literal.utf8),
+                    captureRanges: backreference.captureRanges,
+                    caseInsensitiveASCII: caseInsensitiveASCII
+                )
+            } else {
+                self.matcher = .fixedNamedLiteralBackreference(
+                    literal: Array(backreference.literal.utf8),
+                    captureRanges: backreference.captureRanges,
+                    namedCaptureRanges: backreference.namedCaptureRanges,
+                    caseInsensitiveASCII: caseInsensitiveASCII
+                )
+            }
             return
         }
         if canUseFixedByteMatcher,
@@ -231,7 +255,8 @@ final class PCRE2CompiledPattern {
         ) {
             self.matcher = .literalPrefixResetStartRegex(
                 prefixUTF16Length: resetStartRegex.prefixUTF16Length,
-                regex: resetStartRegex.regex
+                regex: resetStartRegex.regex,
+                namedCaptureNames: Self.namedCaptureNames(in: pattern)
             )
             return
         }
@@ -240,7 +265,10 @@ final class PCRE2CompiledPattern {
             options: options,
             regexOptions: regexOptions
         ) {
-            self.matcher = .capturedPrefixResetStartRegex(resetStartRegex)
+            self.matcher = .capturedPrefixResetStartRegex(
+                resetStartRegex,
+                namedCaptureNames: Self.namedCaptureNames(in: pattern)
+            )
             return
         }
         if let skipFailAlternation = try Self.skipFailAlternation(
@@ -251,7 +279,8 @@ final class PCRE2CompiledPattern {
             self.matcher = .skipFailAlternation(
                 skipRegex: skipFailAlternation.skipRegex,
                 matchRegex: skipFailAlternation.matchRegex,
-                skipCaptureCount: skipFailAlternation.skipCaptureCount
+                skipCaptureCount: skipFailAlternation.skipCaptureCount,
+                matchNamedCaptureNames: skipFailAlternation.matchNamedCaptureNames
             )
             return
         }
@@ -276,10 +305,15 @@ final class PCRE2CompiledPattern {
         }
         do {
             let regex = try NSRegularExpression(pattern: regexPattern, options: regexOptions)
+            let namedCaptureNames = Self.namedCaptureNames(in: pattern)
             if Self.containsByteUnitEscape(pattern) {
-                self.matcher = .byteUnitRegex(regex, unicodeStartOnly: !options.noUnicode)
+                self.matcher = .byteUnitRegex(
+                    regex,
+                    unicodeStartOnly: !options.noUnicode,
+                    namedCaptureNames: namedCaptureNames
+                )
             } else {
-                self.matcher = .regex(regex)
+                self.matcher = .regex(regex, namedCaptureNames: namedCaptureNames)
             }
         } catch {
             throw RipgrepError.message(Self.compileErrorMessage(pattern: pattern, error: error))
@@ -288,9 +322,9 @@ final class PCRE2CompiledPattern {
 
     func matches(in text: String) -> [PCRE2Match] {
         switch matcher {
-        case .regex(let regex):
+        case .regex(let regex, let namedCaptureNames):
             return regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { match in
-                Self.match(from: match, in: text)
+                Self.match(from: match, namedCaptureNames: namedCaptureNames, in: text)
             }
         case .byteUnit(let pattern, let unicodeStartOnly):
             return Self.byteUnitMatches(pattern: pattern, unicodeStartOnly: unicodeStartOnly, in: text)
@@ -331,18 +365,24 @@ final class PCRE2CompiledPattern {
                 caseInsensitiveASCII: caseInsensitiveASCII,
                 in: text
             )
-        case .literalPrefixResetStartRegex(let prefixUTF16Length, let regex):
+        case .literalPrefixResetStartRegex(let prefixUTF16Length, let regex, let namedCaptureNames):
             return Self.literalPrefixResetStartRegexMatches(
                 prefixUTF16Length: prefixUTF16Length,
                 regex: regex,
+                namedCaptureNames: namedCaptureNames,
                 in: text
             )
-        case .capturedPrefixResetStartRegex(let regex):
-            return Self.capturedPrefixResetStartRegexMatches(regex: regex, in: text)
-        case .byteUnitRegex(let regex, let unicodeStartOnly):
+        case .capturedPrefixResetStartRegex(let regex, let namedCaptureNames):
+            return Self.capturedPrefixResetStartRegexMatches(
+                regex: regex,
+                namedCaptureNames: namedCaptureNames,
+                in: text
+            )
+        case .byteUnitRegex(let regex, let unicodeStartOnly, let namedCaptureNames):
             return Self.byteUnitRegexMatches(
                 regex: regex,
                 unicodeStartOnly: unicodeStartOnly,
+                namedCaptureNames: namedCaptureNames,
                 in: text
             )
         case .branchResetAlternation(let alternatives, let maxCaptureCount):
@@ -351,17 +391,32 @@ final class PCRE2CompiledPattern {
                 maxCaptureCount: maxCaptureCount,
                 in: text
             )
-        case .skipFailAlternation(let skipRegex, let matchRegex, let skipCaptureCount):
+        case .skipFailAlternation(let skipRegex, let matchRegex, let skipCaptureCount, let matchNamedCaptureNames):
             return Self.skipFailAlternationMatches(
                 skipRegex: skipRegex,
                 matchRegex: matchRegex,
                 skipCaptureCount: skipCaptureCount,
+                matchNamedCaptureNames: matchNamedCaptureNames,
                 in: text
             )
         case .fixedLiteralBackreference(let literal, let captureRanges, let caseInsensitiveASCII):
             return Self.fixedLiteralBackreferenceMatches(
                 literal: literal,
                 captureRanges: captureRanges,
+                namedCaptureRanges: [:],
+                caseInsensitiveASCII: caseInsensitiveASCII,
+                in: text
+            )
+        case .fixedNamedLiteralBackreference(
+            let literal,
+            let captureRanges,
+            let namedCaptureRanges,
+            let caseInsensitiveASCII
+        ):
+            return Self.fixedLiteralBackreferenceMatches(
+                literal: literal,
+                captureRanges: captureRanges,
+                namedCaptureRanges: namedCaptureRanges,
                 caseInsensitiveASCII: caseInsensitiveASCII,
                 in: text
             )
@@ -633,7 +688,12 @@ final class PCRE2CompiledPattern {
         _ pattern: String,
         options: RipgrepOptions,
         regexOptions: NSRegularExpression.Options
-    ) throws -> (skipRegex: NSRegularExpression, matchRegex: NSRegularExpression, skipCaptureCount: Int)? {
+    ) throws -> (
+        skipRegex: NSRegularExpression,
+        matchRegex: NSRegularExpression,
+        skipCaptureCount: Int,
+        matchNamedCaptureNames: [String]
+    )? {
         guard let split = skipFailAlternationSplit(in: pattern) else {
             return nil
         }
@@ -655,7 +715,8 @@ final class PCRE2CompiledPattern {
             return (
                 try NSRegularExpression(pattern: skipPattern, options: regexOptions),
                 try NSRegularExpression(pattern: matchPattern, options: regexOptions),
-                captureGroupCount(in: rawSkip)
+                captureGroupCount(in: rawSkip),
+                namedCaptureNames(in: rawMatch)
             )
         } catch {
             throw RipgrepError.message(Self.compileErrorMessage(pattern: pattern, error: error))
@@ -784,21 +845,91 @@ final class PCRE2CompiledPattern {
         return count
     }
 
+    private static func namedCaptureNames(in pattern: String) -> [String] {
+        var names: [String] = []
+        var escaped = false
+        var inClass = false
+        var index = pattern.startIndex
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                if character == "Q" {
+                    var quotedIndex = pattern.index(after: index)
+                    var closedQuote = false
+                    while quotedIndex < pattern.endIndex {
+                        if pattern[quotedIndex] == "\\" {
+                            let quoteEscapeIndex = pattern.index(after: quotedIndex)
+                            if quoteEscapeIndex < pattern.endIndex,
+                               pattern[quoteEscapeIndex] == "E" {
+                                index = pattern.index(after: quoteEscapeIndex)
+                                closedQuote = true
+                                break
+                            }
+                        }
+                        quotedIndex = pattern.index(after: quotedIndex)
+                    }
+                    guard closedQuote else {
+                        return names
+                    }
+                    escaped = false
+                    continue
+                }
+                escaped = false
+            } else if character == "\\" {
+                escaped = true
+            } else if character == "[" {
+                inClass = true
+            } else if character == "]" {
+                inClass = false
+            } else if !inClass, character == "(" {
+                if pattern[index...].hasPrefix("(?P<") {
+                    let nameStart = pattern.index(index, offsetBy: 4)
+                    if let close = pattern[nameStart...].firstIndex(of: ">") {
+                        let name = String(pattern[nameStart..<close])
+                        if isPCREGroupName(name), !names.contains(name) {
+                            names.append(name)
+                        }
+                    }
+                } else if pattern[index...].hasPrefix("(?<") {
+                    let nameStart = pattern.index(index, offsetBy: 3)
+                    if let close = pattern[nameStart...].firstIndex(of: ">") {
+                        let name = String(pattern[nameStart..<close])
+                        if isPCREGroupName(name), !names.contains(name) {
+                            names.append(name)
+                        }
+                    }
+                } else if pattern[index...].hasPrefix("(?'") {
+                    let nameStart = pattern.index(index, offsetBy: 3)
+                    if let close = pattern[nameStart...].firstIndex(of: "'") {
+                        let name = String(pattern[nameStart..<close])
+                        if isPCREGroupName(name), !names.contains(name) {
+                            names.append(name)
+                        }
+                    }
+                }
+            }
+            index = pattern.index(after: index)
+        }
+        return names
+    }
+
     private static func branchResetAlternation(
         _ pattern: String,
         options: RipgrepOptions,
         regexOptions: NSRegularExpression.Options
     ) throws -> (alternatives: [BranchResetAlternative], maxCaptureCount: Int)? {
         guard pattern.hasPrefix("(?|"),
-              pattern.hasSuffix(")") else {
+              let close = matchingClosingParen(forOpeningParenAt: pattern.startIndex, in: pattern) else {
             return nil
         }
         let bodyStart = pattern.index(pattern.startIndex, offsetBy: 3)
-        let bodyEnd = pattern.index(before: pattern.endIndex)
-        let body = String(pattern[bodyStart..<bodyEnd])
+        let body = String(pattern[bodyStart..<close])
+        let suffixStart = pattern.index(after: close)
+        let suffix = String(pattern[suffixStart...])
         guard let branches = topLevelAlternatives(in: body),
               branches.count > 1,
-              branches.allSatisfy({ !$0.isEmpty }) else {
+              branches.allSatisfy({ !$0.isEmpty }),
+              captureGroupCount(in: suffix) == 0 else {
             return nil
         }
 
@@ -807,15 +938,17 @@ final class PCRE2CompiledPattern {
         var maxCaptureCount = 0
         do {
             for branch in branches {
+                let branchPattern = branch + suffix
                 let pattern = try regexPatternExpandingPCREQuotedLiterals(
-                    branch,
+                    branchPattern,
                     asciiShorthandEscapes: options.noUnicode
                 )
                 let captureCount = captureGroupCount(in: branch)
                 maxCaptureCount = max(maxCaptureCount, captureCount)
                 alternatives.append(BranchResetAlternative(
                     regex: try NSRegularExpression(pattern: pattern, options: regexOptions),
-                    captureCount: captureCount
+                    captureCount: captureCount,
+                    namedCaptureNames: namedCaptureNames(in: branchPattern)
                 ))
             }
             return (alternatives, maxCaptureCount)
@@ -882,10 +1015,13 @@ final class PCRE2CompiledPattern {
         return alternatives
     }
 
-    private static func fixedLiteralBackreference(_ pattern: String) -> (literal: String, captureRanges: [Range<Int>])? {
+    private static func fixedLiteralBackreference(
+        _ pattern: String
+    ) -> (literal: String, captureRanges: [Range<Int>], namedCaptureRanges: [String: Range<Int>])? {
         var groups: [(name: String?, literal: String)] = []
         var namedGroups: [String: Int] = [:]
         var captureRanges: [Range<Int>] = []
+        var namedCaptureRanges: [String: Range<Int>] = [:]
         var literal = ""
         var byteOffset = 0
         var index = pattern.startIndex
@@ -894,11 +1030,13 @@ final class PCRE2CompiledPattern {
               let group = fixedLiteralCaptureGroup(at: index, in: pattern) {
             let groupByteCount = group.literal.utf8.count
             let groupNumber = groups.count + 1
+            let captureRange = byteOffset..<byteOffset + groupByteCount
             if let name = group.name {
                 namedGroups[name] = groupNumber
+                namedCaptureRanges[name] = captureRange
             }
             groups.append((group.name, group.literal))
-            captureRanges.append(byteOffset..<byteOffset + groupByteCount)
+            captureRanges.append(captureRange)
             literal += group.literal
             byteOffset += groupByteCount
             index = pattern.index(after: group.close)
@@ -918,7 +1056,7 @@ final class PCRE2CompiledPattern {
             return nil
         }
         literal += groups[reference.groupIndex - 1].literal
-        return (literal, captureRanges)
+        return (literal, captureRanges, namedCaptureRanges)
     }
 
     private static func fixedAssertionConditional(
@@ -1327,6 +1465,61 @@ final class PCRE2CompiledPattern {
         return nil
     }
 
+    private static func matchingClosingParen(
+        forOpeningParenAt open: String.Index,
+        in pattern: String
+    ) -> String.Index? {
+        guard pattern[open] == "(" else {
+            return nil
+        }
+        var escaped = false
+        var inClass = false
+        var depth = 0
+        var index = pattern.index(after: open)
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                if character == "Q" {
+                    var quotedIndex = pattern.index(after: index)
+                    var closedQuote = false
+                    while quotedIndex < pattern.endIndex {
+                        if pattern[quotedIndex] == "\\" {
+                            let quoteEscapeIndex = pattern.index(after: quotedIndex)
+                            if quoteEscapeIndex < pattern.endIndex,
+                               pattern[quoteEscapeIndex] == "E" {
+                                index = pattern.index(after: quoteEscapeIndex)
+                                closedQuote = true
+                                break
+                            }
+                        }
+                        quotedIndex = pattern.index(after: quotedIndex)
+                    }
+                    guard closedQuote else {
+                        return nil
+                    }
+                    escaped = false
+                    continue
+                }
+                escaped = false
+            } else if character == "\\" {
+                escaped = true
+            } else if character == "[" {
+                inClass = true
+            } else if character == "]" {
+                inClass = false
+            } else if !inClass, character == "(" {
+                depth += 1
+            } else if !inClass, character == ")" {
+                if depth == 0 {
+                    return index
+                }
+                depth -= 1
+            }
+            index = pattern.index(after: index)
+        }
+        return nil
+    }
+
     private static func fixedPositiveLookbehindMatches(
         prefix: [UInt8],
         literal: [UInt8],
@@ -1624,6 +1817,7 @@ final class PCRE2CompiledPattern {
     private static func literalPrefixResetStartRegexMatches(
         prefixUTF16Length: Int,
         regex: NSRegularExpression,
+        namedCaptureNames: [String],
         in text: String
     ) -> [PCRE2Match] {
         regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { match in
@@ -1660,13 +1854,19 @@ final class PCRE2CompiledPattern {
             return PCRE2Match(
                 range: range,
                 byteRange: byteRange(for: range, in: text),
-                captures: captures
+                captures: captures,
+                namedCaptures: namedCaptures(
+                    from: match,
+                    names: namedCaptureNames,
+                    in: text
+                )
             )
         }
     }
 
     private static func capturedPrefixResetStartRegexMatches(
         regex: NSRegularExpression,
+        namedCaptureNames: [String],
         in text: String
     ) -> [PCRE2Match] {
         regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { match in
@@ -1706,7 +1906,12 @@ final class PCRE2CompiledPattern {
             return PCRE2Match(
                 range: range,
                 byteRange: byteRange(for: range, in: text),
-                captures: captures
+                captures: captures,
+                namedCaptures: namedCaptures(
+                    from: match,
+                    names: namedCaptureNames,
+                    in: text
+                )
             )
         }
     }
@@ -1714,6 +1919,7 @@ final class PCRE2CompiledPattern {
     private static func byteUnitRegexMatches(
         regex: NSRegularExpression,
         unicodeStartOnly: Bool,
+        namedCaptureNames: [String],
         in text: String
     ) -> [PCRE2Match] {
         let bytes = text.unicodeScalars.compactMap { scalar -> UInt8? in
@@ -1756,7 +1962,12 @@ final class PCRE2CompiledPattern {
             return PCRE2Match(
                 range: range,
                 byteRange: scalarOffset(for: range.lowerBound, in: text)..<scalarOffset(for: range.upperBound, in: text),
-                captures: captures
+                captures: captures,
+                namedCaptures: namedCaptures(
+                    from: match,
+                    names: namedCaptureNames,
+                    in: text
+                )
             )
         }
     }
@@ -1827,7 +2038,12 @@ final class PCRE2CompiledPattern {
             matches.append(PCRE2Match(
                 range: range,
                 byteRange: byteRange(for: range, in: text),
-                captures: captures
+                captures: captures,
+                namedCaptures: namedCaptures(
+                    from: candidate.match,
+                    names: candidate.alternative.namedCaptureNames,
+                    in: text
+                )
             ))
             nextSearchLocation = candidate.range.location + max(candidate.range.length, 1)
         }
@@ -1838,6 +2054,7 @@ final class PCRE2CompiledPattern {
         skipRegex: NSRegularExpression,
         matchRegex: NSRegularExpression,
         skipCaptureCount: Int,
+        matchNamedCaptureNames: [String],
         in text: String
     ) -> [PCRE2Match] {
         let fullSearchRange = NSRange(text.startIndex..., in: text)
@@ -1891,7 +2108,12 @@ final class PCRE2CompiledPattern {
             matches.append(PCRE2Match(
                 range: range,
                 byteRange: byteRange(for: range, in: text),
-                captures: captures
+                captures: captures,
+                namedCaptures: namedCaptures(
+                    from: match,
+                    names: matchNamedCaptureNames,
+                    in: text
+                )
             ))
         }
         return matches
@@ -1900,6 +2122,7 @@ final class PCRE2CompiledPattern {
     private static func fixedLiteralBackreferenceMatches(
         literal: [UInt8],
         captureRanges: [Range<Int>],
+        namedCaptureRanges: [String: Range<Int>],
         caseInsensitiveASCII: Bool,
         in text: String
     ) -> [PCRE2Match] {
@@ -1939,7 +2162,14 @@ final class PCRE2CompiledPattern {
                         matches.append(PCRE2Match(
                             range: range,
                             byteRange: matchOffset..<matchEnd,
-                            captures: captures
+                            captures: captures,
+                            namedCaptures: namedCaptureRanges.compactMapValues { captureRange in
+                                stringRange(
+                                    startByte: matchOffset + captureRange.lowerBound,
+                                    endByte: matchOffset + captureRange.upperBound,
+                                    in: originalText
+                                )
+                            }
                         ))
                     }
                     searchOffset = matchOffset + literalBytes.count
@@ -2230,7 +2460,11 @@ final class PCRE2CompiledPattern {
         return lower..<upper
     }
 
-    private static func match(from match: NSTextCheckingResult, in text: String) -> PCRE2Match? {
+    private static func match(
+        from match: NSTextCheckingResult,
+        namedCaptureNames: [String],
+        in text: String
+    ) -> PCRE2Match? {
         var captures: [Range<String.Index>?] = []
         captures.reserveCapacity(match.numberOfRanges)
 
@@ -2252,8 +2486,27 @@ final class PCRE2CompiledPattern {
         return PCRE2Match(
             range: range,
             byteRange: byteRange(for: range, in: text),
-            captures: captures
+            captures: captures,
+            namedCaptures: namedCaptures(from: match, names: namedCaptureNames, in: text)
         )
+    }
+
+    private static func namedCaptures(
+        from match: NSTextCheckingResult,
+        names: [String],
+        in text: String
+    ) -> [String: Range<String.Index>] {
+        var captures: [String: Range<String.Index>] = [:]
+        captures.reserveCapacity(names.count)
+        for name in names {
+            let range = match.range(withName: name)
+            guard range.location != NSNotFound,
+                  let stringRange = Range(range, in: text) else {
+                continue
+            }
+            captures[name] = stringRange
+        }
+        return captures
     }
 
     private static func byteRange(for range: Range<String.Index>, in text: String) -> Range<Int> {
@@ -2806,4 +3059,17 @@ struct PCRE2Match {
     let range: Range<String.Index>
     let byteRange: Range<Int>
     let captures: [Range<String.Index>?]
+    let namedCaptures: [String: Range<String.Index>]
+
+    init(
+        range: Range<String.Index>,
+        byteRange: Range<Int>,
+        captures: [Range<String.Index>?],
+        namedCaptures: [String: Range<String.Index>] = [:]
+    ) {
+        self.range = range
+        self.byteRange = byteRange
+        self.captures = captures
+        self.namedCaptures = namedCaptures
+    }
 }

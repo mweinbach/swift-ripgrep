@@ -3479,7 +3479,12 @@ public struct PatternMatcher {
             }
             return NSRange(capture, in: line)
         }
-        return renderReplacement(replacement, line: line, ranges: ranges)
+        return renderReplacement(replacement, line: line, ranges: ranges) { name in
+            guard let range = match.namedCaptures[name] else {
+                return NSRange(location: NSNotFound, length: 0)
+            }
+            return NSRange(range, in: line)
+        }
     }
 
     private func renderReplacement(
