@@ -834,17 +834,6 @@ static int rg_write_all_stdout(const uint8_t *bytes, size_t length) {
     return 0;
 }
 
-static int rg_write_decimal_colon(size_t value) {
-    uint8_t buffer[32];
-    size_t cursor = sizeof(buffer);
-    buffer[--cursor] = ':';
-    do {
-        buffer[--cursor] = (uint8_t)('0' + (value % 10));
-        value /= 10;
-    } while (value > 0);
-    return rg_write_all_stdout(buffer + cursor, sizeof(buffer) - cursor);
-}
-
 static int rg_output_buffer_flush(rg_output_buffer *buffer) {
     if (buffer->length == 0) {
         return 0;
