@@ -124,6 +124,15 @@ recheck measured `-o 'A|B|C|D|E'` at 225.7 ms versus 264.2 ms before and
 212.8 ms for Rust; the final line-numbered byte-set path measured
 `-n -o 'A|B|C|D|E'` at 349.4 ms versus 447.9 ms before.
 
+The executable direct-output byte-set count-matches path now skips matched-line
+boundary accounting, while the non-direct testable path keeps exact summary
+counts. Output for `--count-matches`, `-c`, `-o`, `-n -o`, and bounded
+full-line byte-set searches matched the previous Swift checkpoint and the
+sibling Rust oracle. On the 193 MiB subtitles corpus, 25-run checks measured
+`--count-matches 'A|B|C|D|E'` at 122.4 ms versus 155.3 ms before and
+171.6 ms for Rust. The neighboring `-c 'A|B|C|D|E'` mode remains on the exact
+matched-line counter and measured effectively neutral on the same run.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Routing multi-literal full-line output through the existing line-by-line
@@ -162,6 +171,11 @@ Rejected Swift-only probes from the same checkpoint:
   preserved output on spot checks, but was slow enough on the large subtitles
   corpus that the 60-run benchmark was terminated after the mmap baseline
   completed at 50.1 ms.
+- Tracking the current line in the byte-set scanner preserved output, but
+  regressed dense byte-set count and only-matching output: `--count-matches
+  'A|B|C|D|E'` measured 254.3 ms versus 155.6 ms before, `-o` measured
+  312.6 ms versus 220.5 ms before, and `-n -o` measured 435.3 ms versus
+  348.3 ms before, so the local backward/newline scans remain on those paths.
 
 ## Status — 2026-05-25 fast-path checkpoint
 

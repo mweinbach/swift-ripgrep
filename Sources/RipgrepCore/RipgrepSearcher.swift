@@ -1247,6 +1247,15 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         break
                     }
                     let matchStart = baseAddress.distance(to: rawFoundPointer)
+                    if countMatchesOnly && allowDirectStdout {
+                        // Direct stdout count-matches cannot print stats/JSON, so only the total is observable here.
+                        totalMatchCount += 1
+                        if matchedLineCount == 0 {
+                            matchedLineCount = 1
+                        }
+                        searchOffset = matchStart + 1
+                        continue
+                    }
                     var lineStart = matchStart
                     while lineStart > 0, baseAddress[lineStart - 1] != UInt8(ascii: "\n") {
                         lineStart -= 1
@@ -1259,7 +1268,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     } else {
                         outputEnd = data.count
                     }
-                    if countMatchesOnly || onlyMatching {
+                    if onlyMatching {
                         totalMatchCount += 1
                         if lastMatchedLineStart != lineStart {
                             matchedLineCount += 1
