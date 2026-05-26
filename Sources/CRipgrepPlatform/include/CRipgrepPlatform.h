@@ -88,6 +88,22 @@ rg_darwin_literal_file_result rg_darwin_write_fixed_conditional_pcre_o(
     size_t false_literal_len
 );
 
+rg_darwin_literal_file_result rg_darwin_write_fixed_literal_pcre_o(
+    const uint8_t *base,
+    size_t haystack_len,
+    const uint8_t *literal,
+    size_t literal_len,
+    const uint8_t *prefix,
+    size_t prefix_len,
+    int has_prefix,
+    int prefix_should_match,
+    const uint8_t *suffix,
+    size_t suffix_len,
+    int has_suffix,
+    int suffix_should_match,
+    int ascii_case_insensitive
+);
+
 rg_darwin_literal_file_result rg_darwin_write_byte_unit_pcre_o(
     const uint8_t *base,
     size_t haystack_len,

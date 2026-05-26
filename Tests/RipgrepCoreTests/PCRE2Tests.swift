@@ -766,6 +766,13 @@ struct PCRE2Tests {
             #"(foo)\K\g{1}"#,
             temp.path("pcre.txt"),
         ]) {}
+        let relativeGOutput = try runExecutableData([
+            "-P",
+            "-n",
+            "-o",
+            #"(foo)\K\g{-1}"#,
+            temp.path("pcre.txt"),
+        ]) {}
         let namedOutput = try runExecutableData([
             "-P",
             "-n",
@@ -791,6 +798,7 @@ struct PCRE2Tests {
         #expect(numericOutput == Data("1:foo\n1:foo\n".utf8))
         #expect(gOutput == numericOutput)
         #expect(bracedGOutput == numericOutput)
+        #expect(relativeGOutput == numericOutput)
         #expect(namedOutput == numericOutput)
         #expect(alternationOutput == Data("1:foo\n1:foo\n1:abc\n".utf8))
         #expect(replacementOutput == ["foo[foo] foo[foo]bar barfoo abcabc abc123"])
@@ -1109,6 +1117,29 @@ struct PCRE2Tests {
         #expect(autoOutput == ["foofoo"])
     }
 
+    @Test func pcre2RelativeGBackreferenceSyntaxOnlyMatching() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("foofoo\nfoobar\nabb\naba\nabc\naaa\n", to: "pcre.txt")
+
+        let previousOutput = try run(["-P", "-n", "-o", #"(foo)\g{-1}"#, temp.path("pcre.txt")])
+        let barePreviousOutput = try run(["-P", "-n", "-o", #"(a)\g-1"#, temp.path("pcre.txt")])
+        let angledPreviousOutput = try run(["-P", "-n", "-o", #"(a)\g<-1>"#, temp.path("pcre.txt")])
+        let quotedPreviousOutput = try run(["-P", "-n", "-o", #"(a)\g'-1'"#, temp.path("pcre.txt")])
+        let secondPreviousOutput = try run(["-P", "-n", "-o", #"(a)(b)\g{-2}"#, temp.path("pcre.txt")])
+        let adjacentPreviousOutput = try run(["-P", "-n", "-o", #"(a)\g{-1}\g{-1}"#, temp.path("pcre.txt")])
+        let forwardNoMatchOutput = try run(["-P", "-n", "-o", #"(a)\g{+1}(b)"#, temp.path("pcre.txt")])
+        let autoOutput = try run(["--engine=auto", "-n", "-o", #"(foo)\g{-1}"#, temp.path("pcre.txt")])
+
+        #expect(previousOutput == ["1:foofoo"])
+        #expect(barePreviousOutput == ["6:aa"])
+        #expect(angledPreviousOutput == ["6:aa"])
+        #expect(quotedPreviousOutput == ["6:aa"])
+        #expect(secondPreviousOutput == ["4:aba"])
+        #expect(adjacentPreviousOutput == ["6:aaa"])
+        #expect(forwardNoMatchOutput.isEmpty)
+        #expect(autoOutput == ["1:foofoo"])
+    }
+
     @Test func pcre2PythonNamedBackreferenceSyntaxOnlyMatching() throws {
         let temp = try TemporaryDirectory()
         try temp.write("foofoo\nfoobar\nfoo\n", to: "pcre.txt")
@@ -1131,9 +1162,11 @@ struct PCRE2Tests {
         try temp.write("foofoo\nfoobar\nfoofoo\n", to: "pcre.txt")
 
         let numericOutput = try runExecutableData(["-P", "-o", #"(foo)\g1"#, temp.path("pcre.txt")]) {}
+        let relativeOutput = try runExecutableData(["-P", "-o", #"(foo)\g{-1}"#, temp.path("pcre.txt")]) {}
         let namedOutput = try runExecutableData(["-P", "-o", #"(?P<w>foo)(?P=w)"#, temp.path("pcre.txt")]) {}
 
         #expect(numericOutput == Data("foofoo\nfoofoo\n".utf8))
+        #expect(relativeOutput == Data("foofoo\nfoofoo\n".utf8))
         #expect(namedOutput == Data("foofoo\nfoofoo\n".utf8))
     }
 
@@ -1142,9 +1175,11 @@ struct PCRE2Tests {
         try temp.write("foofoo\nfoobar\n", to: "pcre.txt")
 
         let numericOutput = try run(["-P", #"(foo)\g1"#, "-r", "$1", temp.path("pcre.txt")])
+        let relativeOutput = try run(["-P", #"(foo)\g{-1}"#, "-r", "$1", temp.path("pcre.txt")])
         let namedOutput = try run(["-P", #"(?P<w>foo)(?P=w)"#, "-r", "$1", temp.path("pcre.txt")])
 
         #expect(numericOutput == ["foo"])
+        #expect(relativeOutput == ["foo"])
         #expect(namedOutput == ["foo"])
     }
 
@@ -1167,6 +1202,32 @@ struct PCRE2Tests {
         let expected = "rg: PCRE2: error compiling pattern at offset 16: subpattern name must start with a non-digit"
 
         for pattern in [#"(?<w>foo)\k'1'"#, #"(?<w>foo)\k<1>"#, #"(?<w>foo)\k{1}"#] {
+            var output: [String] = []
+            var errors: [String] = []
+            let exitCode = RipgrepCLI.run(
+                arguments: ["-P", pattern, temp.path("pcre.txt")],
+                stdout: { output.append($0) },
+                stderr: { errors.append($0) }
+            )
+
+            #expect(exitCode == 2)
+            #expect(output.isEmpty)
+            #expect(errors == [expected])
+        }
+    }
+
+    @Test func pcre2InvalidGBackreferencesUsePCREDiagnostic() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("aa\n", to: "pcre.txt")
+        let cases = [
+            (#"(a)\g{0}"#, "rg: PCRE2: error compiling pattern at offset 11: reference to non-existent subpattern"),
+            (#"(a)\g{-0}"#, "rg: PCRE2: error compiling pattern at offset 8: a relative value of zero is not allowed"),
+            (#"(a)\g+0"#, "rg: PCRE2: error compiling pattern at offset 10: a relative value of zero is not allowed"),
+            (#"(a)\g{-2}"#, "rg: PCRE2: error compiling pattern at offset 8: reference to non-existent subpattern"),
+            (#"(a)\g{+1}"#, "rg: PCRE2: error compiling pattern at offset 12: reference to non-existent subpattern"),
+        ]
+
+        for (pattern, expected) in cases {
             var output: [String] = []
             var errors: [String] = []
             let exitCode = RipgrepCLI.run(

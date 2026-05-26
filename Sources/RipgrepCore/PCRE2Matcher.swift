@@ -600,19 +600,24 @@ final class PCRE2CompiledPattern {
             return nil
         }
 
+        let rawPrefixCaptureCount = captureGroupCount(in: rawPrefix)
+        let rawTotalCaptureCount = rawPrefixCaptureCount + captureGroupCount(in: rawSuffix)
         let prefixPattern = rawPrefix.isEmpty
             ? ""
             : try regexPatternExpandingPCREQuotedLiterals(
                 rawPrefix,
                 asciiShorthandEscapes: options.noUnicode,
-                numericCaptureOffset: 1
+                numericCaptureOffset: 1,
+                totalCaptureCountOverride: rawTotalCaptureCount
             )
         let suffixPattern = rawSuffix.isEmpty
             ? ""
             : try regexPatternExpandingPCREQuotedLiterals(
                 rawSuffix,
                 asciiShorthandEscapes: options.noUnicode,
-                numericCaptureOffset: 1
+                numericCaptureOffset: 1,
+                captureCountBase: rawPrefixCaptureCount,
+                totalCaptureCountOverride: rawTotalCaptureCount
             )
         do {
             return try NSRegularExpression(
@@ -904,7 +909,8 @@ final class PCRE2CompiledPattern {
               let reference = fixedBackreferenceIndex(
                 at: index,
                 in: pattern,
-                namedGroups: namedGroups
+                namedGroups: namedGroups,
+                precedingCaptureCount: groups.count
               ),
               reference.end == pattern.endIndex,
               reference.groupIndex > 0,
@@ -1083,7 +1089,8 @@ final class PCRE2CompiledPattern {
     private static func fixedBackreferenceIndex(
         at index: String.Index,
         in pattern: String,
-        namedGroups: [String: Int]
+        namedGroups: [String: Int],
+        precedingCaptureCount: Int
     ) -> (groupIndex: Int, end: String.Index)? {
         if pattern[index] == "\\" {
             let marker = pattern.index(after: index)
@@ -1094,7 +1101,12 @@ final class PCRE2CompiledPattern {
                 return (reference, pattern.index(after: marker))
             }
             if pattern[marker] == "g" {
-                return fixedGBackreferenceIndex(after: marker, in: pattern, namedGroups: namedGroups)
+                return fixedGBackreferenceIndex(
+                    after: marker,
+                    in: pattern,
+                    namedGroups: namedGroups,
+                    precedingCaptureCount: precedingCaptureCount
+                )
             }
             if pattern[marker] == "k" {
                 return fixedDelimitedBackreferenceIndex(
@@ -1124,7 +1136,8 @@ final class PCRE2CompiledPattern {
     private static func fixedGBackreferenceIndex(
         after marker: String.Index,
         in pattern: String,
-        namedGroups: [String: Int]
+        namedGroups: [String: Int],
+        precedingCaptureCount: Int
     ) -> (groupIndex: Int, end: String.Index)? {
         let payloadStart = pattern.index(after: marker)
         guard payloadStart < pattern.endIndex else {
@@ -1142,18 +1155,53 @@ final class PCRE2CompiledPattern {
             }
             return (groupIndex, index)
         }
-        return fixedDelimitedBackreferenceIndex(after: marker, in: pattern, namedGroups: namedGroups)
+        if pattern[payloadStart] == "+" || pattern[payloadStart] == "-" {
+            var index = pattern.index(after: payloadStart)
+            while index < pattern.endIndex, pattern[index].isNumber {
+                index = pattern.index(after: index)
+            }
+            guard index > pattern.index(after: payloadStart),
+                  let signed = signedIntegerPayload(String(pattern[payloadStart..<index])),
+                  signed.hasExplicitSign,
+                  let groupIndex = relativeBackreferenceGroupIndex(
+                    relative: signed.value,
+                    precedingCaptureCount: precedingCaptureCount,
+                    totalCaptureCount: precedingCaptureCount
+                  ) else {
+                return nil
+            }
+            return (groupIndex, index)
+        }
+        return fixedDelimitedBackreferenceIndex(
+            after: marker,
+            in: pattern,
+            namedGroups: namedGroups,
+            precedingCaptureCount: precedingCaptureCount
+        )
     }
 
     private static func fixedDelimitedBackreferenceIndex(
         after marker: String.Index,
         in pattern: String,
         namedGroups: [String: Int],
-        allowsNumeric: Bool = true
+        allowsNumeric: Bool = true,
+        precedingCaptureCount: Int? = nil
     ) -> (groupIndex: Int, end: String.Index)? {
         let payloadStart = pattern.index(after: marker)
         guard let identifier = delimitedPCREBackreferenceIdentifier(at: payloadStart, in: pattern) else {
             return nil
+        }
+        if let precedingCaptureCount,
+           let signed = signedIntegerPayload(identifier.name),
+           signed.hasExplicitSign {
+            guard let groupIndex = relativeBackreferenceGroupIndex(
+                relative: signed.value,
+                precedingCaptureCount: precedingCaptureCount,
+                totalCaptureCount: precedingCaptureCount
+            ) else {
+                return nil
+            }
+            return (groupIndex, identifier.end)
         }
         if identifier.name.allSatisfy(\.isNumber),
            let groupIndex = Int(identifier.name) {
@@ -2226,11 +2274,14 @@ final class PCRE2CompiledPattern {
     private static func regexPatternExpandingPCREQuotedLiterals(
         _ pattern: String,
         asciiShorthandEscapes: Bool = false,
-        numericCaptureOffset: Int = 0
+        numericCaptureOffset: Int = 0,
+        captureCountBase: Int = 0,
+        totalCaptureCountOverride: Int? = nil
     ) throws -> String {
         var output = ""
         var inClass = false
         var index = pattern.startIndex
+        var totalCaptureCountCache: Int?
         while index < pattern.endIndex {
             let character = pattern[index]
             if character == "\\" {
@@ -2300,15 +2351,28 @@ final class PCRE2CompiledPattern {
                         }
                     }
                     if !inClass,
-                       pattern[marker] == "g",
-                       let backreference = pcreGBackreference(
-                        after: marker,
-                        in: pattern,
-                        numericCaptureOffset: numericCaptureOffset
-                       ) {
-                        output += backreference.pattern
-                        index = backreference.end
-                        continue
+                       pattern[marker] == "g" {
+                        let precedingCaptureCount = captureCountBase + captureGroupCount(in: String(pattern[..<index]))
+                        let totalCaptureCount: Int
+                        if let cached = totalCaptureCountCache {
+                            totalCaptureCount = cached
+                        } else {
+                            let computed = totalCaptureCountOverride
+                                ?? captureCountBase + captureGroupCount(in: pattern)
+                            totalCaptureCountCache = computed
+                            totalCaptureCount = computed
+                        }
+                        if let backreference = try pcreGBackreference(
+                            after: marker,
+                            in: pattern,
+                            numericCaptureOffset: numericCaptureOffset,
+                            precedingCaptureCount: precedingCaptureCount,
+                            totalCaptureCount: totalCaptureCount
+                        ) {
+                            output += backreference.pattern
+                            index = backreference.end
+                            continue
+                        }
                     }
                     if !inClass,
                        pattern[marker] == "k",
@@ -2510,8 +2574,10 @@ final class PCRE2CompiledPattern {
     private static func pcreGBackreference(
         after marker: String.Index,
         in pattern: String,
-        numericCaptureOffset: Int = 0
-    ) -> (pattern: String, end: String.Index)? {
+        numericCaptureOffset: Int = 0,
+        precedingCaptureCount: Int,
+        totalCaptureCount: Int
+    ) throws -> (pattern: String, end: String.Index)? {
         let payloadStart = pattern.index(after: marker)
         guard payloadStart < pattern.endIndex else {
             return nil
@@ -2525,6 +2591,24 @@ final class PCRE2CompiledPattern {
                 return nil
             }
             let name = String(pattern[nameStart..<close])
+            if let signed = signedIntegerPayload(name), signed.hasExplicitSign {
+                let end = pattern.index(after: close)
+                let groupIndex = try pcreRelativeBackreferenceGroupIndex(
+                    relative: signed.value,
+                    precedingCaptureCount: precedingCaptureCount,
+                    totalCaptureCount: totalCaptureCount,
+                    nameStart: nameStart,
+                    end: end,
+                    isBare: false,
+                    in: pattern
+                )
+                return ("\\\(groupIndex + numericCaptureOffset)", end)
+            }
+            if opener == "{",
+               name.allSatisfy(\.isNumber),
+               Int(name) == 0 {
+                throw pcreNonexistentBackreferenceError(end: pattern.index(after: close), in: pattern)
+            }
             guard let replacement = pcreBackreferenceReplacement(
                 for: name,
                 numericCaptureOffset: numericCaptureOffset
@@ -2535,7 +2619,28 @@ final class PCRE2CompiledPattern {
         }
 
         guard opener.isNumber else {
-            return nil
+            if opener != "+", opener != "-" {
+                return nil
+            }
+            var index = pattern.index(after: payloadStart)
+            while index < pattern.endIndex, pattern[index].isNumber {
+                index = pattern.index(after: index)
+            }
+            guard index > pattern.index(after: payloadStart),
+                  let signed = signedIntegerPayload(String(pattern[payloadStart..<index])),
+                  signed.hasExplicitSign else {
+                return nil
+            }
+            let groupIndex = try pcreRelativeBackreferenceGroupIndex(
+                relative: signed.value,
+                precedingCaptureCount: precedingCaptureCount,
+                totalCaptureCount: totalCaptureCount,
+                nameStart: payloadStart,
+                end: index,
+                isBare: true,
+                in: pattern
+            )
+            return ("\\\(groupIndex + numericCaptureOffset)", index)
         }
         var digits = ""
         var index = payloadStart
@@ -2546,7 +2651,82 @@ final class PCRE2CompiledPattern {
         guard let groupIndex = Int(digits) else {
             return nil
         }
+        guard groupIndex > 0 else {
+            throw pcreNonexistentBackreferenceError(end: index, in: pattern)
+        }
         return ("\\\(groupIndex + numericCaptureOffset)", index)
+    }
+
+    private static func signedIntegerPayload(_ text: String) -> (value: Int, hasExplicitSign: Bool)? {
+        guard let first = text.first else {
+            return nil
+        }
+        let hasExplicitSign = first == "+" || first == "-"
+        let digitStart = hasExplicitSign ? text.index(after: text.startIndex) : text.startIndex
+        guard digitStart < text.endIndex,
+              text[digitStart...].allSatisfy(\.isNumber),
+              let value = Int(text) else {
+            return nil
+        }
+        return (value, hasExplicitSign)
+    }
+
+    private static func relativeBackreferenceGroupIndex(
+        relative: Int,
+        precedingCaptureCount: Int,
+        totalCaptureCount: Int
+    ) -> Int? {
+        guard relative != 0 else {
+            return nil
+        }
+        let groupIndex = relative < 0
+            ? precedingCaptureCount + relative + 1
+            : precedingCaptureCount + relative
+        guard groupIndex > 0, groupIndex <= totalCaptureCount else {
+            return nil
+        }
+        return groupIndex
+    }
+
+    private static func pcreRelativeBackreferenceGroupIndex(
+        relative: Int,
+        precedingCaptureCount: Int,
+        totalCaptureCount: Int,
+        nameStart: String.Index,
+        end: String.Index,
+        isBare: Bool,
+        in pattern: String
+    ) throws -> Int {
+        guard relative != 0 else {
+            let offset = isBare
+                ? pattern[..<end].utf8.count + 3
+                : pattern[..<nameStart].utf8.count + 2
+            throw RipgrepError.message(
+                "PCRE2: error compiling pattern at offset \(offset): a relative value of zero is not allowed"
+            )
+        }
+        guard let groupIndex = relativeBackreferenceGroupIndex(
+            relative: relative,
+            precedingCaptureCount: precedingCaptureCount,
+            totalCaptureCount: totalCaptureCount
+        ) else {
+            if isBare || relative > 0 {
+                throw pcreNonexistentBackreferenceError(end: end, in: pattern)
+            }
+            throw RipgrepError.message(
+                "PCRE2: error compiling pattern at offset \(pattern[..<nameStart].utf8.count + 2): reference to non-existent subpattern"
+            )
+        }
+        return groupIndex
+    }
+
+    private static func pcreNonexistentBackreferenceError(
+        end: String.Index,
+        in pattern: String
+    ) -> RipgrepError {
+        RipgrepError.message(
+            "PCRE2: error compiling pattern at offset \(pattern[..<end].utf8.count + 3): reference to non-existent subpattern"
+        )
     }
 
     private static func pcrePythonGroupSyntax(

@@ -10,7 +10,7 @@ in-tree Swift compatibility engine; it does not link libpcre2.
 **Functional 1:1 with Rust ripgrep 15.1.0, including the streaming I/O
 architecture.** Verified via:
 
-- **155 Swift Testing cases** across 12 suites covering search, output formats,
+- **157 Swift Testing cases** across 12 suites covering search, output formats,
   ignore rules, file types, stdin, encodings, binary handling, parser
   diagnostics, mmap/worker pool, PCRE2, streaming haystack reads, and
   generated-asset drift.
@@ -73,12 +73,16 @@ Swift/Foundation compatibility matcher and preserve post-reset replacements,
 including reset-start backreference shapes such as `(foo)\K\1`, `(foo)\K\g1`,
 `(foo)\K\g{1}`, `(?P<w>foo)\K(?P=w)` and `(foo|abc)\K\1`.
 Backreference spellings such as `\g` and Python-style named backreferences are
-translated in-tree. Fixed PCRE byte-unit escapes (`\C`, `\C+` and `\C{n}`) are
+translated in-tree, including relative `\g{-1}`, `\g<-1>`, `\g'-1'` and bare
+`\g-1` forms plus their PCRE2 compile diagnostics for invalid relative or zero
+targets. Fixed PCRE byte-unit escapes (`\C`, `\C+` and `\C{n}`) are
 matched in-tree as raw bytes, preserving Rust's UTF-mode behavior of starting
 matches only at UTF-8 scalar boundaries unless
 `--no-pcre2-unicode` is selected. Literal assertion-conditionals and plain
 byte-unit only-match output also get narrow Darwin stdout writers for the
-plain executable `-P -o` shape, with a Swift byte-loop fast path covering
+plain executable `-P -o` shape. Fixed literal PCRE lookaround/backreference
+only-match output now has the same narrow Darwin writer for the plain
+executable shape, while Swift byte-loop fast paths cover
 line-numbered/byte-offset/column only-match output plus count/path/quiet modes.
 The Darwin arm hot paths live in the checked-in
 `CRipgrepPlatform` shim because they provide measurable NEON/mmap throughput
@@ -200,7 +204,12 @@ into a much smaller implementation:
    alternations such as `(?|a(b)|c(d))` are split into Swift regex branches and
    preserve the reset capture numbering for replacements; numeric `\k` names
    now keep PCRE2's compile-time diagnostic instead of being treated as numeric
-   backreferences.
+   backreferences, and relative `\g` backreferences are resolved in-tree for
+   brace, angle, quoted and bare signed spellings without libpcre2. Plain
+   fixed literal PCRE lookaround/backreference `-P -o` output uses a narrow
+   Darwin stdout writer; the 2026-05-26 release smoke measured relative
+   `\g{-1}` at 57.6 ms versus Rust PCRE2 release at 73.0 ms on a 900k-line
+   synthetic `foofoo` corpus.
 
 2. **(Done 2026-05-24)** Enforced regex resource limits — see the size-budget
    guard in `Sources/RipgrepCore/PatternMatcher.swift`.

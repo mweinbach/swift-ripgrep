@@ -541,6 +541,19 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
 
         if let fixedLookbehindFastPath {
+            if allowDirectStdout,
+               let directResults = try writeDarwinFixedLiteralPCREStdout(
+                data,
+                fileURL: fileURL,
+                literal: fixedLookbehindFastPath.literal,
+                prefix: fixedLookbehindFastPath.prefix,
+                prefixShouldMatch: true,
+                suffix: nil,
+                caseInsensitiveASCII: fixedLookbehindFastPath.caseInsensitiveASCII,
+                options: options
+               ) {
+                return directResults
+            }
             return writeDarwinFixedPCREFastPath(
                 data,
                 fileURL: fileURL,
@@ -553,6 +566,19 @@ public struct RipgrepSearcher: @unchecked Sendable {
             )
         }
         if let fixedLookaheadFastPath {
+            if allowDirectStdout,
+               let directResults = try writeDarwinFixedLiteralPCREStdout(
+                data,
+                fileURL: fileURL,
+                literal: fixedLookaheadFastPath.literal,
+                prefix: nil,
+                suffix: fixedLookaheadFastPath.suffix,
+                suffixShouldMatch: true,
+                caseInsensitiveASCII: fixedLookaheadFastPath.caseInsensitiveASCII,
+                options: options
+               ) {
+                return directResults
+            }
             return writeDarwinFixedPCREFastPath(
                 data,
                 fileURL: fileURL,
@@ -565,6 +591,19 @@ public struct RipgrepSearcher: @unchecked Sendable {
             )
         }
         if let fixedNegativeLookbehindFastPath {
+            if allowDirectStdout,
+               let directResults = try writeDarwinFixedLiteralPCREStdout(
+                data,
+                fileURL: fileURL,
+                literal: fixedNegativeLookbehindFastPath.literal,
+                prefix: fixedNegativeLookbehindFastPath.prefix,
+                prefixShouldMatch: false,
+                suffix: nil,
+                caseInsensitiveASCII: fixedNegativeLookbehindFastPath.caseInsensitiveASCII,
+                options: options
+               ) {
+                return directResults
+            }
             return writeDarwinFixedPCREFastPath(
                 data,
                 fileURL: fileURL,
@@ -578,6 +617,19 @@ public struct RipgrepSearcher: @unchecked Sendable {
             )
         }
         if let fixedNegativeLookaheadFastPath {
+            if allowDirectStdout,
+               let directResults = try writeDarwinFixedLiteralPCREStdout(
+                data,
+                fileURL: fileURL,
+                literal: fixedNegativeLookaheadFastPath.literal,
+                prefix: nil,
+                suffix: fixedNegativeLookaheadFastPath.suffix,
+                suffixShouldMatch: false,
+                caseInsensitiveASCII: fixedNegativeLookaheadFastPath.caseInsensitiveASCII,
+                options: options
+               ) {
+                return directResults
+            }
             return writeDarwinFixedPCREFastPath(
                 data,
                 fileURL: fileURL,
@@ -610,6 +662,18 @@ public struct RipgrepSearcher: @unchecked Sendable {
             )
         }
         if let fixedBackreferenceFastPath {
+            if allowDirectStdout,
+               let directResults = try writeDarwinFixedLiteralPCREStdout(
+                data,
+                fileURL: fileURL,
+                literal: fixedBackreferenceFastPath.literal,
+                prefix: nil,
+                suffix: nil,
+                caseInsensitiveASCII: fixedBackreferenceFastPath.caseInsensitiveASCII,
+                options: options
+               ) {
+                return directResults
+            }
             return writeDarwinFixedPCREFastPath(
                 data,
                 fileURL: fileURL,
@@ -1867,6 +1931,85 @@ public struct RipgrepSearcher: @unchecked Sendable {
             fileURL: fileURL,
             matches: [],
             bytesSearched: bytesSearched,
+            searched: true,
+            supplementalMatchedLines: matchedLineCount,
+            supplementalMatches: reportedMatches
+        )
+        return SearchResults(
+            files: [fileResult],
+            summary: SearchSummary(
+                filesSearched: 1,
+                filesWithMatches: matchedLineCount > 0 ? 1 : 0,
+                matchedLines: matchedLineCount,
+                totalMatches: reportedMatches
+            )
+        )
+    }
+
+    private func writeDarwinFixedLiteralPCREStdout(
+        _ data: Data,
+        fileURL: URL,
+        literal: [UInt8],
+        prefix: [UInt8]?,
+        prefixShouldMatch: Bool = true,
+        suffix: [UInt8]?,
+        suffixShouldMatch: Bool = true,
+        caseInsensitiveASCII: Bool,
+        options: RipgrepOptions
+    ) throws -> SearchResults? {
+        guard options.onlyMatching,
+              options.printMode == .matchingLines,
+              options.maxCount == nil,
+              !options.quiet,
+              !options.wantsLineNumber,
+              !options.byteOffset,
+              !options.column,
+              options.withFilename != true,
+              !literal.isEmpty,
+              prefix?.isEmpty != true,
+              suffix?.isEmpty != true else {
+            return nil
+        }
+
+        let prefixBytes = prefix ?? []
+        let suffixBytes = suffix ?? []
+        let result = data.withUnsafeBytes { rawBytes in
+            literal.withUnsafeBufferPointer { literalBuffer in
+                prefixBytes.withUnsafeBufferPointer { prefixBuffer in
+                    suffixBytes.withUnsafeBufferPointer { suffixBuffer in
+                        rg_darwin_write_fixed_literal_pcre_o(
+                            rawBytes.bindMemory(to: UInt8.self).baseAddress,
+                            data.count,
+                            literalBuffer.baseAddress,
+                            literalBuffer.count,
+                            prefixBuffer.baseAddress,
+                            prefixBuffer.count,
+                            prefix == nil ? 0 : 1,
+                            prefixShouldMatch ? 1 : 0,
+                            suffixBuffer.baseAddress,
+                            suffixBuffer.count,
+                            suffix == nil ? 0 : 1,
+                            suffixShouldMatch ? 1 : 0,
+                            caseInsensitiveASCII ? 1 : 0
+                        )
+                    }
+                }
+            }
+        }
+
+        if result.status == -2 {
+            return nil
+        }
+        if result.status == -1 {
+            throw RipgrepError.message("failed writing stdout")
+        }
+
+        let matchedLineCount = Int(result.matched_line_count)
+        let reportedMatches = result.total_match_count > 0 ? Int(result.total_match_count) : matchedLineCount
+        let fileResult = SearchFileResult(
+            fileURL: fileURL,
+            matches: [],
+            bytesSearched: Int(result.bytes_searched),
             searched: true,
             supplementalMatchedLines: matchedLineCount,
             supplementalMatches: reportedMatches

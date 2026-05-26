@@ -864,6 +864,23 @@ static int rg_bytes_equal(const uint8_t *lhs, const uint8_t *rhs, size_t count) 
     return memcmp(lhs, rhs, count) == 0;
 }
 
+static int rg_bytes_equal_maybe_ascii_case(
+    const uint8_t *lhs,
+    const uint8_t *rhs,
+    size_t count,
+    int ascii_case_insensitive
+) {
+    if (!ascii_case_insensitive) {
+        return rg_bytes_equal(lhs, rhs, count);
+    }
+    for (size_t index = 0; index < count; ++index) {
+        if (rg_ascii_lower(lhs[index]) != rg_ascii_lower(rhs[index])) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 static int rg_fixed_condition_matches(
     int condition_kind,
     const uint8_t *base,
@@ -966,6 +983,145 @@ rg_darwin_literal_file_result rg_darwin_write_fixed_conditional_pcre_o(
         result.status = -1;
         return result;
     }
+    free(output.bytes);
+    result.status = result.total_match_count > 0 ? 1 : 0;
+    result.bytes_searched = haystack_len;
+    return result;
+}
+
+rg_darwin_literal_file_result rg_darwin_write_fixed_literal_pcre_o(
+    const uint8_t *base,
+    size_t haystack_len,
+    const uint8_t *literal,
+    size_t literal_len,
+    const uint8_t *prefix,
+    size_t prefix_len,
+    int has_prefix,
+    int prefix_should_match,
+    const uint8_t *suffix,
+    size_t suffix_len,
+    int has_suffix,
+    int suffix_should_match,
+    int ascii_case_insensitive
+) {
+    rg_darwin_literal_file_result result = { .status = -2, .matched_line_count = 0, .total_match_count = 0, .bytes_searched = 0 };
+
+    if (base == NULL
+        || literal == NULL
+        || literal_len == 0
+        || (has_prefix && prefix == NULL)
+        || (has_suffix && suffix == NULL)) {
+        return result;
+    }
+
+    rg_output_buffer output = { .bytes = malloc(1024 * 1024), .length = 0, .capacity = 1024 * 1024 };
+    if (output.bytes == NULL) {
+        result.status = -1;
+        return result;
+    }
+
+    uint8_t *folded_literal = NULL;
+    size_t shifts[256];
+    if (ascii_case_insensitive) {
+        folded_literal = malloc(literal_len);
+        if (folded_literal == NULL) {
+            free(output.bytes);
+            result.status = -1;
+            return result;
+        }
+        for (size_t index = 0; index < literal_len; ++index) {
+            folded_literal[index] = rg_ascii_lower(literal[index]);
+        }
+        for (size_t index = 0; index < 256; ++index) {
+            shifts[index] = literal_len;
+        }
+        if (literal_len > 1) {
+            for (size_t index = 0; index + 1 < literal_len; ++index) {
+                shifts[folded_literal[index]] = literal_len - 1 - index;
+            }
+        }
+    }
+
+    size_t current_line_start = 0;
+    size_t last_matched_line_start = (size_t)-1;
+    size_t search_offset = 0;
+    while (search_offset <= haystack_len && literal_len <= haystack_len - search_offset) {
+        const uint8_t *found = ascii_case_insensitive
+            ? rg_memcasemem_ascii_prepared(
+                base + search_offset,
+                haystack_len - search_offset,
+                folded_literal,
+                literal_len,
+                shifts
+            )
+            : rg_memmem_simple(
+                base + search_offset,
+                haystack_len - search_offset,
+                literal,
+                literal_len
+            );
+        if (found == NULL) {
+            break;
+        }
+
+        const size_t match_start = (size_t)(found - base);
+        const size_t match_end = match_start + literal_len;
+        const int prefix_matches = !has_prefix
+            || (match_start >= prefix_len
+                && rg_bytes_equal_maybe_ascii_case(
+                    base + match_start - prefix_len,
+                    prefix,
+                    prefix_len,
+                    ascii_case_insensitive
+                ));
+        const int suffix_matches = !has_suffix
+            || (match_end + suffix_len <= haystack_len
+                && rg_bytes_equal_maybe_ascii_case(
+                    base + match_end,
+                    suffix,
+                    suffix_len,
+                    ascii_case_insensitive
+                ));
+
+        if ((!has_prefix || prefix_matches == prefix_should_match)
+            && (!has_suffix || suffix_matches == suffix_should_match)) {
+            const uint8_t *newline = memchr(base + current_line_start, '\n', match_start - current_line_start);
+            while (newline != NULL) {
+                current_line_start = (size_t)(newline - base) + 1;
+                newline = memchr(base + current_line_start, '\n', match_start - current_line_start);
+            }
+
+            if (rg_output_buffer_write(&output, found, literal_len) != 0) {
+                free(folded_literal);
+                free(output.bytes);
+                result.status = -1;
+                return result;
+            }
+            uint8_t terminator = '\n';
+            if (rg_output_buffer_write(&output, &terminator, 1) != 0) {
+                free(folded_literal);
+                free(output.bytes);
+                result.status = -1;
+                return result;
+            }
+
+            result.total_match_count++;
+            if (current_line_start != last_matched_line_start) {
+                result.matched_line_count++;
+                last_matched_line_start = current_line_start;
+            }
+        }
+
+        search_offset = match_start + literal_len;
+    }
+
+    if (rg_output_buffer_flush(&output) != 0) {
+        free(folded_literal);
+        free(output.bytes);
+        result.status = -1;
+        return result;
+    }
+    free(folded_literal);
     free(output.bytes);
     result.status = result.total_match_count > 0 ? 1 : 0;
     result.bytes_searched = haystack_len;
