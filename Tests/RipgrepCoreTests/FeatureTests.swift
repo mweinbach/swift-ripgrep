@@ -2957,6 +2957,39 @@ struct FeatureTests {
             .sorted()
         #expect(executableVisibleRelativePaths == ["café.txt", "visible.txt"])
 
+        #if canImport(Darwin)
+        let parallelRoot = try TemporaryDirectory()
+        try parallelRoot.write("root\n", to: "root.txt")
+        try parallelRoot.write("a\n", to: "a/one.txt")
+        try parallelRoot.write("b\n", to: "b/two.txt")
+        guard case .run(let noIgnoreOptions) = RipgrepArgumentParser.parse([
+            "--no-ignore",
+            "--hidden",
+            "--files",
+            parallelRoot.url.path,
+        ]) else {
+            Issue.record("expected file-list arguments to parse")
+            return
+        }
+        var directBytes = Data()
+        let directResults = try FileWalker().writeDarwinFilePathsWithMessages(
+            for: noIgnoreOptions,
+            writeBytes: { bytes in
+                directBytes.append(bytes.bindMemory(to: UInt8.self))
+            }
+        )
+        var streamedLines: [String] = []
+        let streamedResults = try FileWalker().streamFilePathsWithMessages(
+            for: noIgnoreOptions,
+            emit: { streamedLines.append($0) }
+        )
+        let directLines = String(decoding: directBytes, as: UTF8.self)
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .map(String.init)
+        #expect(directResults?.count == streamedResults?.count)
+        #expect(directLines == streamedLines)
+        #endif
+
         let whitelisted = try TemporaryDirectory()
         try whitelisted.createDirectory("subdir")
         try whitelisted.write("text\n", to: "subdir/.foo.txt")

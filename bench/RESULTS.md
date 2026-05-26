@@ -239,6 +239,14 @@ The key improvements since the 2026-05-24 baseline are:
   `--no-ignore --hidden --files` at 162.2 ms on the same Linux tree, preserving
   byte-identical sorted output while avoiding linked PCRE2 or any external
   dependency.
+- No-ignore Darwin file listing now parallelizes independent top-level
+  directory subtrees and emits their byte buffers in the same order as the
+  previous sequential Swift writer. A same-machine 10-run A/B against
+  checkpoint `faa52c3` measured Swift release `--no-ignore --files` at
+  135.6 ms versus 167.1 ms on `/tmp/swift-rg-bench/linux`, with Rust at
+  81.4 ms. The hidden-inclusive form measured 126.1 ms versus 171.4 ms, with
+  Rust at 81.0 ms. Exact Swift output order matched the pre-change writer, and
+  sorted output remained byte-identical to Rust.
 - `--quiet --files` has an early-exit walker for the plain single-root Darwin
   path that checks files before descending once ignore files for the current
   directory are loaded. A 2026-05-25 7-run recheck measured Swift release at
