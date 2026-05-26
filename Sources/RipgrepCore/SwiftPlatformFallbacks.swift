@@ -269,6 +269,32 @@ func rg_memchr_any_bytes(
         return rgConstBytePointer(memchr(haystack, Int32(needles[0]), haystackLength))
     }
 
+    if needleCount <= 8, haystackLength >= 16 {
+        var cursor = 0
+        let vectorLimit = haystackLength - 15
+        while cursor < vectorLimit {
+            let bytes = UnsafeRawPointer(haystack.advanced(by: cursor))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            var matches = bytes .== SIMD16<UInt8>(repeating: needles[0])
+            for index in 1..<needleCount {
+                matches = matches .| (bytes .== SIMD16<UInt8>(repeating: needles[index]))
+            }
+            let candidateStorage = matches._storage
+            if candidateStorage.min() < 0 {
+                for lane in 0..<16 where candidateStorage[lane] != 0 {
+                    return haystack.advanced(by: cursor + lane)
+                }
+            }
+            cursor += 16
+        }
+        for index in cursor..<haystackLength {
+            for needleIndex in 0..<needleCount where haystack[index] == needles[needleIndex] {
+                return haystack.advanced(by: index)
+            }
+        }
+        return nil
+    }
+
     var mask = (UInt64(0), UInt64(0), UInt64(0), UInt64(0))
     for index in 0..<needleCount {
         let byte = Int(needles[index])

@@ -103,6 +103,15 @@ measured `-m 129` at 145.4 ms versus 322.7 ms before and 23.4 ms for Rust,
 63.8 ms for Rust; `-m 1280` measured 289.6 ms versus 317.0 ms before and
 66.1 ms for Rust. Unlimited output continues through the previous scanner.
 
+The Swift byte-set scanner now uses SIMD for alternations with up to eight
+single-byte literals, while keeping the previous scalar bitset fallback for
+larger sets. Output for `--count-matches 'A|B|C|D|E'`, `-o 'A|B|C|D|E'` and
+bounded full-line output matched the previous Swift checkpoint and the sibling
+Rust oracle. On the 193 MiB subtitles corpus, 15-run checks measured
+`--count-matches 'A|B|C|D|E'` at 158.9 ms versus 237.3 ms before and
+168.9 ms for Rust; `-o 'A|B|C|D|E'` at 269.7 ms versus 345.4 ms before and
+205.6 ms for Rust; and `-m 20 'A|B|C|D|E'` at 46.9 ms versus 53.5 ms before.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Routing multi-literal full-line output through the existing line-by-line
@@ -127,6 +136,12 @@ Rejected Swift-only probes from the same checkpoint:
 - Skipping the unavailable C-shim multi-literal stdout probe in the default
   Swift-only build avoided a small setup detour but did not improve the
   representative unlimited `Sherlock|Watson` benchmark.
+- Replacing the general literal scanner with a first-byte `memchr` loop helped
+  no-match literal scans in one trial, but regressed normal matching literals
+  badly (`'Sherlock Holmes'` measured 275.1 ms versus 190.2 ms before). A
+  narrower first-search-only version was neutral for no-match and slightly
+  slower for matching output, so the SIMD first/tail scanner remains the
+  default literal path.
 - Replacing the Swift SIMD fallback with Foundation `Data.range(of:)` or libc
   `memmem` was much slower on the literal subtitles scan: `Data.range(of:)`
   measured 633.7 ms and libc `memmem` measured 1.046 s, versus about 213 ms
