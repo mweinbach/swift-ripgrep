@@ -1170,13 +1170,20 @@ public struct RipgrepSearcher: @unchecked Sendable {
                                     options: options,
                                     writeBytes: writeBytes
                                 )
-                                writeBytes(UnsafeRawBufferPointer(
-                                    start: rawBaseAddress.advanced(by: matchStart),
-                                    count: literal.count
-                                ))
-                                var newline = UInt8(ascii: "\n")
-                                withUnsafeBytes(of: &newline) { buffer in
-                                    writeBytes(buffer)
+                                if literal.count == 1 {
+                                    var matchWithNewline = (baseAddress[matchStart], UInt8(ascii: "\n"))
+                                    withUnsafeBytes(of: &matchWithNewline) { buffer in
+                                        writeBytes(buffer)
+                                    }
+                                } else {
+                                    writeBytes(UnsafeRawBufferPointer(
+                                        start: rawBaseAddress.advanced(by: matchStart),
+                                        count: literal.count
+                                    ))
+                                    var newline = UInt8(ascii: "\n")
+                                    withUnsafeBytes(of: &newline) { buffer in
+                                        writeBytes(buffer)
+                                    }
                                 }
                             }
                             searchOffset = matchStart + literal.count
@@ -1252,12 +1259,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
                                 options: options,
                                 writeBytes: writeBytes
                             )
-                            writeBytes(UnsafeRawBufferPointer(
-                                start: rawBaseAddress.advanced(by: matchStart),
-                                count: 1
-                            ))
-                            var newline = UInt8(ascii: "\n")
-                            withUnsafeBytes(of: &newline) { buffer in
+                            var matchWithNewline = (baseAddress[matchStart], UInt8(ascii: "\n"))
+                            withUnsafeBytes(of: &matchWithNewline) { buffer in
                                 writeBytes(buffer)
                             }
                         }
