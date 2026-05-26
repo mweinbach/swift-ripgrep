@@ -112,16 +112,17 @@ versus 2.699 s for Rust. These cases previously fell through the formatted
 Swift path at about 10.6 s on the same corpus.
 
 The recursive Linux-kernel traversal/search path now matches or beats Rust in
-this environment for the default literal search. A fresh confirmation run used
-2 warm-ups and 7 timed iterations for the default Swift worker count and Rust
-`rg`:
+this environment for the default literal search. The file-list rows below use
+3 warm-ups and 15 timed iterations for the default Swift worker count and Rust
+`rg`; the default literal row is the earlier 7-run confirmation:
 
 | Bench | Flags | rg | swift-rg | swift / rg |
 |---|---|---:|---:|---:|
-| Linux tree files | `--files` | 83.0 ms | 306.0 ms | **3.69x** |
-| Linux tree files, no ignore | `--no-ignore --files` | 73.3 ms | 167.4 ms | **2.28x** |
-| Linux tree files, no ignore/hidden | `--no-ignore --hidden --files` | 71.6 ms | 168.4 ms | **2.35x** |
-| Linux tree files, quiet | `--quiet --files` | 6.5 ms | 44.3 ms | **6.82x** |
+| Linux tree files | `--files` | 93.0 ms | 134.0 ms | **1.44x** |
+| Linux tree files, hidden | `--hidden --files` | 83.0 ms | 126.3 ms | **1.52x** |
+| Linux tree files, no ignore | `--no-ignore --files` | 71.9 ms | 82.1 ms | **1.14x** |
+| Linux tree files, no ignore/hidden | `--no-ignore --hidden --files` | 73.8 ms | 83.2 ms | **1.13x** |
+| Linux tree files, quiet | `--quiet --files` | 6.7 ms | 9.2 ms | **1.36x** |
 | Linux tree literal | `PM_RESUME` | 3.92 s | 2.37 s | **0.61x** |
 
 The Linux-tree comparisons above have byte-identical sorted output, including
@@ -286,6 +287,15 @@ The key improvements since the 2026-05-24 baseline are:
   materializing per-directory child arrays, and exits as soon as an allowed
   file is found. A 30-run A/B against checkpoint `a386edc` measured Swift
   release at 37.0 ms versus 48.6 ms on `/tmp/swift-rg-bench/linux`.
+- `--files` mode now constructs `StandardPrinter` only for the fallback path
+  that needs rendered paths. The Darwin stream/byte-output fast paths and
+  quiet existence path no longer pay for search-result formatting setup. A
+  same-machine 20-run A/B against checkpoint `6104d57` measured Swift release
+  `--quiet --files` at 9.2 ms versus 50.3 ms, `--files` at 129.2 ms versus
+  163.5 ms, and `--no-ignore --files` at 81.1 ms versus 120.7 ms on
+  `/tmp/swift-rg-bench/linux`. Exact Swift natural output remained
+  byte-identical for default and no-ignore file listing, and quiet output
+  remained empty with the same exit status.
 
 ### Rejected A/B checks — 2026-05-25
 

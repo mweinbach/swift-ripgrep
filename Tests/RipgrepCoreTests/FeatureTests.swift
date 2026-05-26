@@ -3140,6 +3140,31 @@ struct FeatureTests {
         #expect(output.isEmpty)
         #expect(errors.isEmpty)
 
+        let hiddenDirectoryOnly = try TemporaryDirectory()
+        try hiddenDirectoryOnly.write("secret\n", to: ".hidden-dir/nested.txt")
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--no-ignore", "--quiet", "--files", hiddenDirectoryOnly.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 1)
+        #expect(output.isEmpty)
+        #expect(errors.isEmpty)
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["--no-ignore", "--hidden", "--quiet", "--files", hiddenDirectoryOnly.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(output.isEmpty)
+        #expect(errors.isEmpty)
+
         output = []
         errors = []
         exitCode = RipgrepCLI.run(

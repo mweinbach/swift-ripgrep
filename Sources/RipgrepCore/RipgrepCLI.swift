@@ -82,7 +82,6 @@ public enum RipgrepCLI {
                     searchStdin = stdin
                 }
                 let searcher = RipgrepSearcher(fileManager: fileManager, environment: environment)
-                let printer = StandardPrinter(options: options)
 
                 if options.mode == .files {
                     var filePathOutputBuffer = Data()
@@ -158,6 +157,7 @@ public enum RipgrepCLI {
                     }
                     let hasFiles = stdinAdjustedFiles?.isEmpty == false || (stdinAdjustedFiles == nil && !walkResults.haystacks.isEmpty)
                     if !options.quiet {
+                        let printer = StandardPrinter(options: options)
                         if let stdinAdjustedFiles {
                             for url in stdinAdjustedFiles {
                                 let line = printer.path(for: url)
@@ -200,6 +200,7 @@ public enum RipgrepCLI {
                     return registry.definitions.isEmpty ? 1 : 0
                 }
 
+                let printer = StandardPrinter(options: options)
                 let results: SearchResults
                 if stdout == nil,
                    let streamedResults = try searcher.writeDarwinSimpleByteLiteralLines(
