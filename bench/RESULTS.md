@@ -208,6 +208,16 @@ corpus. Five-run checks measured `--vimgrep -o 'Sherlock Holmes'` at
 `--vimgrep -o 'Sherlock|Watson'` form measured 261.9 ms versus 16.342 s before
 and 43.8 ms for Rust.
 
+Plain single-literal replacement output now has a direct byte writer when the
+replacement text is literal-only and no formatted fields are requested. It
+replaces every non-overlapping match on each matching line and leaves `$`
+expansions, field-prefixed output, vimgrep, max-count and context forms on the
+existing replacement path. Output for literal and empty replacements matched
+the previous Swift checkpoint, and the representative literal replacement also
+matched the sibling Rust oracle on the 193 MiB subtitles corpus. Five-run
+checks measured `-r Holmes 'Sherlock Holmes'` at 64.1 ms versus 10.828 s
+before and 24.9 ms for Rust.
+
 Direct executable byte-unit PCRE2 `--count-matches` now counts totals without
 matched-line bookkeeping while preserving the exact summary path for non-direct
 callers. Output for default Unicode `\C`, byte-mode `\C`, `\C+`, `\C{2}`, and

@@ -761,6 +761,21 @@ public struct RipgrepSearcher: @unchecked Sendable {
             && options.maxCount == nil
             && (fastPath.literals.count == 1
                 || (fastPathByteSet == nil && canScanDarwinLiteralsIndependently(fastPath)))
+        let directLiteralReplacementBytes = options.replacement.flatMap(darwinLiteralReplacementBytes)
+        let canDirectWriteLiteralReplacement = directLiteralReplacementBytes != nil
+            && allowDirectStdout
+            && options.printMode == .matchingLines
+            && !onlyMatching
+            && !options.vimgrep
+            && options.maxCount == nil
+            && fastPath.literals.count == 1
+            && fastPathByteSet == nil
+            && !fastPath.caseInsensitiveASCII
+            && !fastPath.wordASCII
+            && !options.wantsLineNumber
+            && !options.column
+            && !options.byteOffset
+            && options.withFilename != true
         guard (!onlyMatching
                 || fastPath.literals.count == 1
                 || fastPathByteSet != nil
@@ -770,6 +785,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 || fastPathByteSet != nil
                 || canDirectCountIndependentLiterals),
               (!options.vimgrep || canDirectWriteVimgrep),
+              (options.replacement == nil || canDirectWriteLiteralReplacement),
               (!options.byteOffset && !options.column
                 || (options.printMode == .matchingLines
                     && (fastPath.literals.count == 1
@@ -952,6 +968,78 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         count: buffer.count - cursor
                     ))
                 }
+            }
+
+            if canDirectWriteLiteralReplacement,
+               let replacementBytes = directLiteralReplacementBytes,
+               let literal = literals.first {
+                var searchOffset = 0
+                var newline = UInt8(ascii: "\n")
+                while searchOffset < data.count {
+                    let foundPointer = literal.withUnsafeBufferPointer { needle in
+                        rg_memmem_simple(
+                            baseAddress.advanced(by: searchOffset),
+                            data.count - searchOffset,
+                            needle.baseAddress,
+                            needle.count
+                        )
+                    }
+                    guard let rawFoundPointer = foundPointer else {
+                        break
+                    }
+                    let matchStart = baseAddress.distance(to: rawFoundPointer)
+                    var lineStart = matchStart
+                    while lineStart > 0, baseAddress[lineStart - 1] != UInt8(ascii: "\n") {
+                        lineStart -= 1
+                    }
+                    let newlinePointer = memchr(
+                        rawFoundPointer,
+                        Int32(UInt8(ascii: "\n")),
+                        data.count - matchStart
+                    )
+                    let lineEnd = newlinePointer.map {
+                        baseAddress.distance(to: $0.assumingMemoryBound(to: UInt8.self))
+                    } ?? data.count
+                    var cursor = lineStart
+                    var lineSearchOffset = lineStart
+                    var lineMatchCount = 0
+                    while lineSearchOffset < lineEnd {
+                        let lineFoundPointer = literal.withUnsafeBufferPointer { needle in
+                            rg_memmem_simple(
+                                baseAddress.advanced(by: lineSearchOffset),
+                                lineEnd - lineSearchOffset,
+                                needle.baseAddress,
+                                needle.count
+                            )
+                        }
+                        guard let rawLineFoundPointer = lineFoundPointer else {
+                            break
+                        }
+                        let lineMatchStart = baseAddress.distance(to: rawLineFoundPointer)
+                        writeBytes(UnsafeRawBufferPointer(
+                            start: rawBaseAddress.advanced(by: cursor),
+                            count: lineMatchStart - cursor
+                        ))
+                        replacementBytes.withUnsafeBytes { buffer in
+                            writeBytes(buffer)
+                        }
+                        cursor = lineMatchStart + literal.count
+                        lineSearchOffset = cursor
+                        lineMatchCount += 1
+                    }
+                    writeBytes(UnsafeRawBufferPointer(
+                        start: rawBaseAddress.advanced(by: cursor),
+                        count: lineEnd - cursor
+                    ))
+                    withUnsafeBytes(of: &newline) { buffer in
+                        writeBytes(buffer)
+                    }
+                    matchedLineCount += 1
+                    totalMatchCount += lineMatchCount
+                    searchOffset = newlinePointer == nil ? data.count : lineEnd + 1
+                    bytesSearched = searchOffset
+                }
+                return
             }
 
             if canDirectWriteVimgrep {
@@ -3310,7 +3398,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !options.stopOnNonmatch,
               (!options.onlyMatching || (options.printMode == .matchingLines && options.maxCount == nil)),
               (options.printMode != .countMatches || options.maxCount == nil),
-              options.replacement == nil,
+              options.replacement == nil || options.printMode == .matchingLines,
               !options.json,
               !options.stats,
               options.maxColumns == nil,
@@ -3357,6 +3445,16 @@ public struct RipgrepSearcher: @unchecked Sendable {
             }
         }
         return true
+    }
+
+    private func darwinLiteralReplacementBytes(_ replacement: String) -> [UInt8]? {
+        guard !replacement.contains("$"),
+              !replacement.contains("\n"),
+              !replacement.contains("\r"),
+              !replacement.contains("\0") else {
+            return nil
+        }
+        return Array(replacement.utf8)
     }
 
     private func canScanDarwinLiteralsIndependently(_ fastPath: ByteLiteralFastPath) -> Bool {

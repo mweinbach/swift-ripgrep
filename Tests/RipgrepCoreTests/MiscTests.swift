@@ -469,6 +469,19 @@ struct MiscTests {
             "a",
             root.path("repeat.txt"),
         ], fixture: {})
+        try root.write("bravo bravo\ncharlie\nbravo", to: "replace.txt")
+        let literalReplacementOutput = try runExecutableData([
+            "--replace",
+            "delta",
+            "bravo",
+            root.path("replace.txt"),
+        ], fixture: {})
+        let emptyLiteralReplacementOutput = try runExecutableData([
+            "--replace",
+            "",
+            "bravo",
+            root.path("replace.txt"),
+        ], fixture: {})
         let countMatchesOutput = try runExecutableData([
             "--count-matches",
             "b|d",
@@ -517,6 +530,8 @@ struct MiscTests {
         #expect(multiByteNoFilenameOnlyMatchingVimgrepOutput == Data("2:1:bravo\n4:1:delta\n".utf8))
         #expect(singleByteRepeatedVimgrepOutput == Data("\(root.path("repeat.txt")):1:1:aba\n\(root.path("repeat.txt")):1:3:aba\n".utf8))
         #expect(singleByteRepeatedOnlyMatchingVimgrepOutput == Data("\(root.path("repeat.txt")):1:1:a\n\(root.path("repeat.txt")):1:3:a\n".utf8))
+        #expect(literalReplacementOutput == Data("delta delta\ndelta\n".utf8))
+        #expect(emptyLiteralReplacementOutput == Data(" \n\n".utf8))
         #expect(countMatchesOutput == Data("2\n".utf8))
         #expect(singleByteCountMatchesOutput == Data("5\n".utf8))
         #expect(singleByteIgnoreCaseCountMatchesOutput == Data("5\n".utf8))
