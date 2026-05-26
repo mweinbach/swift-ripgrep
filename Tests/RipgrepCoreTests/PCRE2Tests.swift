@@ -588,6 +588,54 @@ struct PCRE2Tests {
         #expect(decodedFallbackOutput == ["", "", "", ""])
     }
 
+    @Test func pcre2ResetStartSupportsLiteralPrefixRegexSuffix() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("foobar foo123 foobaz\nfoocafé\n", to: "pcre.txt")
+
+        let wordOutput = try runExecutableData([
+            "-P",
+            "-n",
+            "-o",
+            #"foo\K\w+"#,
+            temp.path("pcre.txt"),
+        ]) {}
+        let noUnicodeWordOutput = try runExecutableData([
+            "-P",
+            "--no-pcre2-unicode",
+            "-n",
+            "-o",
+            #"foo\K\w+"#,
+            temp.path("pcre.txt"),
+        ]) {}
+        let digitOutput = try runExecutableData([
+            "-P",
+            "-n",
+            "-o",
+            #"foo\K[0-9]+"#,
+            temp.path("pcre.txt"),
+        ]) {}
+        let alternationOutput = try runExecutableData([
+            "-P",
+            "-n",
+            "-o",
+            #"foo\K(?:bar|baz)"#,
+            temp.path("pcre.txt"),
+        ]) {}
+        let emptyLookaheadOutput = try runExecutableData([
+            "-P",
+            "-n",
+            "-o",
+            #"foo\K(?=bar)"#,
+            temp.path("pcre.txt"),
+        ]) {}
+
+        #expect(wordOutput == Data("1:bar\n1:123\n1:baz\n2:café\n".utf8))
+        #expect(noUnicodeWordOutput == Data("1:bar\n1:123\n1:baz\n2:caf\n".utf8))
+        #expect(digitOutput == Data("1:123\n".utf8))
+        #expect(alternationOutput == Data("1:bar\n1:baz\n".utf8))
+        #expect(emptyLookaheadOutput == Data("1:\n".utf8))
+    }
+
     @Test func pcre2ResetStartRespectsDefaultEngineSelection() throws {
         let temp = try TemporaryDirectory()
         try temp.write("foobar\n", to: "pcre.txt")

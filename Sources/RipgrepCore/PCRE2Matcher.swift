@@ -35,6 +35,7 @@ final class PCRE2CompiledPattern {
         case fixedPositiveLookahead(literal: [UInt8], suffix: [UInt8], caseInsensitiveASCII: Bool)
         case fixedNegativeLookahead(literal: [UInt8], suffix: [UInt8], caseInsensitiveASCII: Bool)
         case fixedResetStart(prefix: [UInt8], literal: [UInt8], caseInsensitiveASCII: Bool)
+        case literalPrefixResetStartRegex(prefixUTF16Length: Int, regex: NSRegularExpression)
         case fixedLiteralBackreference(literal: [UInt8], captureRanges: [Range<Int>], caseInsensitiveASCII: Bool)
         case fixedAssertionConditional(
             condition: FixedAssertionCondition,
@@ -207,6 +208,18 @@ final class PCRE2CompiledPattern {
             regexOptions.insert(.dotMatchesLineSeparators)
         }
 
+        if let resetStartRegex = try Self.literalPrefixResetStartRegex(
+            pattern,
+            options: options,
+            regexOptions: regexOptions
+        ) {
+            self.matcher = .literalPrefixResetStartRegex(
+                prefixUTF16Length: resetStartRegex.prefixUTF16Length,
+                regex: resetStartRegex.regex
+            )
+            return
+        }
+
         var regexPattern = try Self.regexPatternExpandingPCREQuotedLiterals(
             pattern,
             asciiShorthandEscapes: options.noUnicode
@@ -264,6 +277,12 @@ final class PCRE2CompiledPattern {
                 prefix: prefix,
                 literal: literal,
                 caseInsensitiveASCII: caseInsensitiveASCII,
+                in: text
+            )
+        case .literalPrefixResetStartRegex(let prefixUTF16Length, let regex):
+            return Self.literalPrefixResetStartRegexMatches(
+                prefixUTF16Length: prefixUTF16Length,
+                regex: regex,
                 in: text
             )
         case .fixedLiteralBackreference(let literal, let captureRanges, let caseInsensitiveASCII):
@@ -456,6 +475,41 @@ final class PCRE2CompiledPattern {
         pattern.isEmpty
             ? ""
             : RegexLiteralParser.literal(fromPlainRegexPattern: pattern, allowPCREQuotedLiterals: true)
+    }
+
+    private static func literalPrefixResetStartRegex(
+        _ pattern: String,
+        options: RipgrepOptions,
+        regexOptions: NSRegularExpression.Options
+    ) throws -> (prefixUTF16Length: Int, regex: NSRegularExpression)? {
+        guard let resetRange = firstUnescapedResetStart(in: pattern) else {
+            return nil
+        }
+        let rawPrefix = String(pattern[..<resetRange.lowerBound])
+        let rawSuffix = String(pattern[resetRange.upperBound...])
+        guard !rawPrefix.isEmpty,
+              !rawSuffix.isEmpty,
+              firstUnescapedResetStart(in: rawSuffix) == nil,
+              let prefix = RegexLiteralParser.literal(
+                fromPlainRegexPattern: rawPrefix,
+                allowPCREQuotedLiterals: true
+              ) else {
+            return nil
+        }
+
+        let suffixPattern = try regexPatternExpandingPCREQuotedLiterals(
+            rawSuffix,
+            asciiShorthandEscapes: options.noUnicode
+        )
+        let expandedPattern = NSRegularExpression.escapedPattern(for: prefix) + suffixPattern
+        do {
+            return (
+                prefix.utf16.count,
+                try NSRegularExpression(pattern: expandedPattern, options: regexOptions)
+            )
+        } catch {
+            throw RipgrepError.message(Self.compileErrorMessage(pattern: pattern, error: error))
+        }
     }
 
     private static func fixedLiteralBackreference(_ pattern: String) -> (literal: String, captureRanges: [Range<Int>])? {
@@ -1124,6 +1178,50 @@ final class PCRE2CompiledPattern {
         #else
         return []
         #endif
+    }
+
+    private static func literalPrefixResetStartRegexMatches(
+        prefixUTF16Length: Int,
+        regex: NSRegularExpression,
+        in text: String
+    ) -> [PCRE2Match] {
+        regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { match in
+            let fullRange = match.range(at: 0)
+            guard fullRange.location != NSNotFound else {
+                return nil
+            }
+            let resetLocation = fullRange.location + prefixUTF16Length
+            let fullEnd = fullRange.location + fullRange.length
+            guard resetLocation <= fullEnd,
+                  let range = Range(
+                    NSRange(location: resetLocation, length: fullEnd - resetLocation),
+                    in: text
+                  ) else {
+                return nil
+            }
+
+            var captures: [Range<String.Index>?] = [range]
+            captures.reserveCapacity(match.numberOfRanges)
+            if match.numberOfRanges > 1 {
+                for index in 1..<match.numberOfRanges {
+                    let captureRange = match.range(at: index)
+                    guard captureRange.location != NSNotFound else {
+                        captures.append(nil)
+                        continue
+                    }
+                    guard let capture = Range(captureRange, in: text) else {
+                        return nil
+                    }
+                    captures.append(capture)
+                }
+            }
+
+            return PCRE2Match(
+                range: range,
+                byteRange: byteRange(for: range, in: text),
+                captures: captures
+            )
+        }
     }
 
     private static func fixedLiteralBackreferenceMatches(
