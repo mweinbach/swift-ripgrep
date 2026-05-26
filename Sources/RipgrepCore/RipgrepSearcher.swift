@@ -633,7 +633,14 @@ public struct RipgrepSearcher: @unchecked Sendable {
                ) {
                 return directResults
             }
-            return nil
+            return writeDarwinByteUnitFastPath(
+                data,
+                fileURL: fileURL,
+                pattern: byteUnitFastPath.pattern,
+                unicodeStartOnly: byteUnitFastPath.unicodeStartOnly,
+                options: options,
+                writeBytes: writeBytes
+            )
         }
 
         guard let fastPath = byteLiteralFastPath,
@@ -1636,6 +1643,156 @@ public struct RipgrepSearcher: @unchecked Sendable {
         )
     }
 
+    private func writeDarwinByteUnitFastPath(
+        _ data: Data,
+        fileURL: URL,
+        pattern: PCRE2CompiledPattern.ByteUnitPattern,
+        unicodeStartOnly: Bool,
+        options: RipgrepOptions,
+        writeBytes: (UnsafeRawBufferPointer) -> Void
+    ) -> SearchResults? {
+        guard options.quiet
+            || (options.onlyMatching && options.printMode == .matchingLines && options.maxCount == nil)
+            || (!options.onlyMatching
+                && (options.printMode == .count
+                    || options.printMode == .countMatches
+                    || options.printMode == .filesWithMatches
+                    || options.printMode == .filesWithoutMatch)) else {
+            return nil
+        }
+
+        var matchedLineCount = 0
+        var totalMatchCount = 0
+        var bytesSearched = data.count
+        let onlyMatching = options.onlyMatching && options.printMode == .matchingLines
+        let countOnly = options.printMode == .count
+        let countMatchesOnly = options.printMode == .countMatches
+        let filesWithMatches = options.printMode == .filesWithMatches
+        let filesWithoutMatch = options.printMode == .filesWithoutMatch
+        let stopAfterFirstMatch = options.quiet || filesWithMatches || filesWithoutMatch
+        let maxCount = options.maxCount ?? Int.max
+
+        data.withUnsafeBytes { rawBytes in
+            guard let rawBaseAddress = rawBytes.baseAddress else {
+                return
+            }
+            let baseAddress = rawBaseAddress.assumingMemoryBound(to: UInt8.self)
+            var lineStart = 0
+            var lineNumber = 1
+            var shouldStop = false
+
+            func isAllowedStart(_ offset: Int) -> Bool {
+                !unicodeStartOnly || !isDarwinUTF8ContinuationByte(baseAddress[offset])
+            }
+
+            func recordMatch(start: Int, end: Int) {
+                totalMatchCount += 1
+                if stopAfterFirstMatch || (countOnly && matchedLineCount + 1 == maxCount) {
+                    bytesSearched = end
+                }
+                if onlyMatching {
+                    writeDarwinOnlyMatchingPrefixes(
+                        lineNumber: lineNumber,
+                        column: start - lineStart + 1,
+                        byteOffset: start,
+                        options: options,
+                        writeBytes: writeBytes
+                    )
+                    writeBytes(UnsafeRawBufferPointer(
+                        start: rawBaseAddress.advanced(by: start),
+                        count: end - start
+                    ))
+                    var newline = UInt8(ascii: "\n")
+                    withUnsafeBytes(of: &newline) { buffer in
+                        writeBytes(buffer)
+                    }
+                }
+            }
+
+            while lineStart < data.count, !shouldStop {
+                let lineEnd = findNextDarwinNewline(
+                    baseAddress: baseAddress,
+                    dataCount: data.count,
+                    from: lineStart
+                )
+                let matchesBeforeLine = totalMatchCount
+
+                switch pattern {
+                case .single:
+                    var offset = lineStart
+                    while offset < lineEnd, !shouldStop {
+                        if isAllowedStart(offset) {
+                            recordMatch(start: offset, end: offset + 1)
+                        }
+                        offset += 1
+                        if stopAfterFirstMatch || (countOnly && matchedLineCount + 1 == maxCount) {
+                            shouldStop = totalMatchCount > matchesBeforeLine
+                        }
+                    }
+                case .oneOrMore:
+                    var offset = lineStart
+                    while offset < lineEnd, !isAllowedStart(offset) {
+                        offset += 1
+                    }
+                    if offset < lineEnd {
+                        recordMatch(start: offset, end: lineEnd)
+                    }
+                case .fixed(let count):
+                    var offset = lineStart
+                    while offset < lineEnd, lineEnd - offset >= count, !shouldStop {
+                        if isAllowedStart(offset) {
+                            recordMatch(start: offset, end: offset + count)
+                            offset += count
+                        } else {
+                            offset += 1
+                        }
+                        if stopAfterFirstMatch || (countOnly && matchedLineCount + 1 == maxCount) {
+                            shouldStop = totalMatchCount > matchesBeforeLine
+                        }
+                    }
+                }
+
+                if totalMatchCount > matchesBeforeLine {
+                    matchedLineCount += 1
+                    if stopAfterFirstMatch || (countOnly && matchedLineCount == maxCount) {
+                        shouldStop = true
+                    }
+                }
+                lineNumber += 1
+                lineStart = lineEnd < data.count ? lineEnd + 1 : data.count
+            }
+        }
+
+        if !options.quiet {
+            if countMatchesOnly && totalMatchCount > 0 {
+                writeDarwinDecimalLine(totalMatchCount, writeBytes: writeBytes)
+            } else if countOnly && matchedLineCount > 0 {
+                writeDarwinDecimalLine(matchedLineCount, writeBytes: writeBytes)
+            } else if (filesWithMatches && matchedLineCount > 0) || (filesWithoutMatch && matchedLineCount == 0) {
+                writeDarwinPathLine(fileURL.path, writeBytes: writeBytes)
+            }
+        }
+
+        let reportedMatches = totalMatchCount > 0 ? totalMatchCount : matchedLineCount
+        let fileResult = SearchFileResult(
+            fileURL: fileURL,
+            matches: [],
+            bytesSearched: bytesSearched,
+            searched: true,
+            supplementalMatchedLines: matchedLineCount,
+            supplementalMatches: reportedMatches
+        )
+        return SearchResults(
+            files: [fileResult],
+            summary: SearchSummary(
+                filesSearched: 1,
+                filesWithMatches: matchedLineCount > 0 ? 1 : 0,
+                matchedLines: matchedLineCount,
+                totalMatches: reportedMatches
+            )
+        )
+    }
+
     private func writeDarwinByteUnitStdout(
         _ data: Data,
         fileURL: URL,
@@ -1704,6 +1861,10 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 totalMatches: reportedMatches
             )
         )
+    }
+
+    private func isDarwinUTF8ContinuationByte(_ byte: UInt8) -> Bool {
+        byte & 0xC0 == 0x80
     }
 
     private func matchesFixedAssertionCondition(

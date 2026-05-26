@@ -10,7 +10,7 @@ in-tree Swift compatibility engine; it does not link libpcre2.
 **Functional 1:1 with Rust ripgrep 15.1.0, including the streaming I/O
 architecture.** Verified via:
 
-- **145 Swift Testing cases** across 12 suites covering search, output formats,
+- **146 Swift Testing cases** across 12 suites covering search, output formats,
   ignore rules, file types, stdin, encodings, binary handling, parser
   diagnostics, mmap/worker pool, PCRE2, streaming haystack reads, and
   generated-asset drift.
@@ -69,7 +69,9 @@ count/path/quiet modes. Fixed PCRE byte-unit escapes (`\C`, `\C+` and
 of starting matches only at UTF-8 scalar boundaries unless
 `--no-pcre2-unicode` is selected. Literal assertion-conditionals and plain
 byte-unit only-match output also get narrow Darwin stdout writers for the
-plain executable `-P -o` shape. The Darwin arm hot paths live in the checked-in
+plain executable `-P -o` shape, with a Swift byte-loop fast path covering
+line-numbered/byte-offset/column only-match output plus count/path/quiet modes.
+The Darwin arm hot paths live in the checked-in
 `CRipgrepPlatform` shim because they provide measurable NEON/mmap throughput
 that Swift cannot currently express directly.
 
@@ -164,10 +166,12 @@ into a much smaller implementation:
    Darwin stdout writer for plain executable `-P -o`; they remain
    byte-identical to Rust `rg` and benchmark faster than Rust PCRE2 on the
    dense conditional corpus in `bench/RESULTS.md`. Fixed byte-unit forms
-   `\C`, `\C+` and `\C{n}` now use a Swift raw-byte matcher and direct Darwin
-   writer for the plain executable `-P -o` case; auto mode falls through to
-   that compatibility path, while default/no-PCRE modes reject `\C` with the
-   same diagnostic shape as Rust.
+   `\C`, `\C+` and `\C{n}` now use a Swift raw-byte matcher, a direct Darwin
+   writer for the plain executable `-P -o` case, and a formatted Swift byte
+   loop for line-numbered/byte-offset/column only-match output plus
+   count/path/quiet modes; auto mode falls through to that compatibility path,
+   while default/no-PCRE modes reject `\C` with the same diagnostic shape as
+   Rust.
 
 2. **(Done 2026-05-24)** Enforced regex resource limits — see the size-budget
    guard in `Sources/RipgrepCore/PatternMatcher.swift`.

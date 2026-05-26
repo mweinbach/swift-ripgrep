@@ -152,6 +152,14 @@ Swift-only spot check on the 193 MiB file produced 391,244,874 bytes for
 `\C` and 202,721,401 bytes for `\C+`, confirming the direct byte writer is
 being exercised on dense output.
 
+The same byte-unit matcher now has a formatted Swift byte-loop fast path for
+field/count/path/quiet modes, with Rust-oracle spot checks covering fielded
+`\C{2}`, counts, path modes and quiet statuses. On the same 16 MiB corpus,
+`-P -n --column --byte-offset -o '\C'` measured Swift release at 1.935 s versus
+system Rust PCRE2 at 1.924 s in 5-run checks, effectively output-format bound.
+The non-output-heavy `-P --count-matches '\C'` form measured Swift at 93.8 ms
+versus Rust PCRE2 at 876.6 ms on the same corpus.
+
 Line-numbered only-match output for the same fixed PCRE2 family now stays on
 the executable Darwin byte writer too. On the 193 MiB subtitles corpus,
 `-P -n -o '(?<=Sherlock )Holmes'` produced byte-identical output to the sibling

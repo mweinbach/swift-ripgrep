@@ -329,6 +329,70 @@ struct PCRE2Tests {
         }
     }
 
+    @Test func pcre2ByteUnitEscapeFastPathFieldsCountsAndPathModes() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write(Data([0x63, 0x61, 0x66, 0xC3, 0xA9, 0x0A, 0x61, 0x62, 0x63, 0x0A]), to: "pcre.txt")
+        try temp.write(Data([0xA9, 0x0A]), to: "continuation.txt")
+
+        let fieldOutput = try runExecutableData([
+            "-P",
+            "-n",
+            "--column",
+            "--byte-offset",
+            "-o",
+            #"\C{2}"#,
+            temp.path("pcre.txt"),
+        ]) {}
+        let countOutput = try runExecutableData(["-P", "-c", #"\C"#, temp.path("pcre.txt")]) {}
+        let countMatchesOutput = try runExecutableData([
+            "-P",
+            "--count-matches",
+            #"\C"#,
+            temp.path("pcre.txt"),
+        ]) {}
+        let matchingPathOutput = try runExecutableData([
+            "-P",
+            "--files-with-matches",
+            #"\C"#,
+            temp.path("pcre.txt"),
+        ]) {}
+        let nonmatchingPathOutput = try runExecutableData([
+            "-P",
+            "--files-without-match",
+            #"\C"#,
+            temp.path("continuation.txt"),
+        ]) {}
+
+        var expectedFieldOutput = Data("1:1:0:ca\n1:3:2:f".utf8)
+        expectedFieldOutput.append(0xC3)
+        expectedFieldOutput.append(contentsOf: Data("\n2:1:6:ab\n".utf8))
+        #expect(fieldOutput == expectedFieldOutput)
+        #expect(countOutput == Data("2\n".utf8))
+        #expect(countMatchesOutput == Data("7\n".utf8))
+        #expect(matchingPathOutput == Data("\(temp.path("pcre.txt"))\n".utf8))
+        #expect(nonmatchingPathOutput == Data("\(temp.path("continuation.txt"))\n".utf8))
+
+        var quietOutput: [String] = []
+        var quietErrors: [String] = []
+        let quietMatchExit = RipgrepCLI.run(
+            arguments: ["-P", "-q", #"\C"#, temp.path("pcre.txt")],
+            stdout: { quietOutput.append($0) },
+            stderr: { quietErrors.append($0) }
+        )
+        #expect(quietMatchExit == 0)
+        #expect(quietOutput.isEmpty)
+        #expect(quietErrors.isEmpty)
+
+        let quietNoMatchExit = RipgrepCLI.run(
+            arguments: ["-P", "-q", #"\C"#, temp.path("continuation.txt")],
+            stdout: { quietOutput.append($0) },
+            stderr: { quietErrors.append($0) }
+        )
+        #expect(quietNoMatchExit == 1)
+        #expect(quietOutput.isEmpty)
+        #expect(quietErrors.isEmpty)
+    }
+
     @Test func pcre2AssertionConditionalsOnlyMatching() throws {
         let temp = try TemporaryDirectory()
         try temp.write("foofoo\nbar\nfoobar\n", to: "pcre.txt")
