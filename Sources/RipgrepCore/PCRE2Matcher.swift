@@ -534,8 +534,7 @@ final class PCRE2CompiledPattern {
         let rawPrefix = String(pattern[..<resetRange.lowerBound])
         let rawSuffix = String(pattern[resetRange.upperBound...])
         guard !rawPrefix.isEmpty || !rawSuffix.isEmpty,
-              firstUnescapedResetStart(in: rawSuffix) == nil,
-              !containsNumericOrPCREBackreferenceSyntax(pattern) else {
+              firstUnescapedResetStart(in: rawSuffix) == nil else {
             return nil
         }
 
@@ -543,13 +542,15 @@ final class PCRE2CompiledPattern {
             ? ""
             : try regexPatternExpandingPCREQuotedLiterals(
                 rawPrefix,
-                asciiShorthandEscapes: options.noUnicode
+                asciiShorthandEscapes: options.noUnicode,
+                numericCaptureOffset: 1
             )
         let suffixPattern = rawSuffix.isEmpty
             ? ""
             : try regexPatternExpandingPCREQuotedLiterals(
                 rawSuffix,
-                asciiShorthandEscapes: options.noUnicode
+                asciiShorthandEscapes: options.noUnicode,
+                numericCaptureOffset: 1
             )
         do {
             return try NSRegularExpression(
@@ -559,34 +560,6 @@ final class PCRE2CompiledPattern {
         } catch {
             throw RipgrepError.message(Self.compileErrorMessage(pattern: pattern, error: error))
         }
-    }
-
-    private static func containsNumericOrPCREBackreferenceSyntax(_ pattern: String) -> Bool {
-        var escaped = false
-        var inClass = false
-        var index = pattern.startIndex
-        while index < pattern.endIndex {
-            let character = pattern[index]
-            if escaped {
-                escaped = false
-                if !inClass,
-                   (character.isNumber || character == "g" || character == "k") {
-                    return true
-                }
-            } else if character == "\\" {
-                escaped = true
-            } else if character == "[" {
-                inClass = true
-            } else if character == "]" {
-                inClass = false
-            } else if !inClass,
-                      character == "(",
-                      pattern[index...].hasPrefix("(?P=") {
-                return true
-            }
-            index = pattern.index(after: index)
-        }
-        return false
     }
 
     private static func fixedLiteralBackreference(_ pattern: String) -> (literal: String, captureRanges: [Range<Int>])? {
@@ -1719,7 +1692,8 @@ final class PCRE2CompiledPattern {
 
     private static func regexPatternExpandingPCREQuotedLiterals(
         _ pattern: String,
-        asciiShorthandEscapes: Bool = false
+        asciiShorthandEscapes: Bool = false,
+        numericCaptureOffset: Int = 0
     ) throws -> String {
         var output = ""
         var inClass = false
@@ -1771,11 +1745,43 @@ final class PCRE2CompiledPattern {
                         )
                     }
                     if !inClass,
+                       let digit = pattern[marker].wholeNumberValue,
+                       numericCaptureOffset != 0 {
+                        var digits = String(digit)
+                        var digitIndex = pattern.index(after: marker)
+                        while digitIndex < pattern.endIndex,
+                              pattern[digitIndex].isNumber {
+                            digits.append(pattern[digitIndex])
+                            digitIndex = pattern.index(after: digitIndex)
+                        }
+                        if let groupIndex = Int(digits) {
+                            output += "\\\(groupIndex + numericCaptureOffset)"
+                            index = digitIndex
+                            continue
+                        }
+                    }
+                    if !inClass,
                        pattern[marker] == "g",
-                       let backreference = pcreGBackreference(after: marker, in: pattern) {
+                       let backreference = pcreGBackreference(
+                        after: marker,
+                        in: pattern,
+                        numericCaptureOffset: numericCaptureOffset
+                       ) {
                         output += backreference.pattern
                         index = backreference.end
                         continue
+                    }
+                    if !inClass,
+                       pattern[marker] == "k",
+                       numericCaptureOffset != 0 {
+                        let payloadStart = pattern.index(after: marker)
+                        if let identifier = delimitedPCREBackreferenceIdentifier(at: payloadStart, in: pattern),
+                           identifier.name.allSatisfy(\.isNumber),
+                           let groupIndex = Int(identifier.name) {
+                            output += "\\\(groupIndex + numericCaptureOffset)"
+                            index = identifier.end
+                            continue
+                        }
                     }
                     if asciiShorthandEscapes,
                        let shorthand = asciiShorthandEscapePattern(pattern[marker], inClass: inClass) {
@@ -1952,7 +1958,8 @@ final class PCRE2CompiledPattern {
 
     private static func pcreGBackreference(
         after marker: String.Index,
-        in pattern: String
+        in pattern: String,
+        numericCaptureOffset: Int = 0
     ) -> (pattern: String, end: String.Index)? {
         let payloadStart = pattern.index(after: marker)
         guard payloadStart < pattern.endIndex else {
@@ -1967,7 +1974,10 @@ final class PCRE2CompiledPattern {
                 return nil
             }
             let name = String(pattern[nameStart..<close])
-            guard let replacement = pcreBackreferenceReplacement(for: name) else {
+            guard let replacement = pcreBackreferenceReplacement(
+                for: name,
+                numericCaptureOffset: numericCaptureOffset
+            ) else {
                 return nil
             }
             return (replacement, pattern.index(after: close))
@@ -1982,7 +1992,10 @@ final class PCRE2CompiledPattern {
             digits.append(pattern[index])
             index = pattern.index(after: index)
         }
-        return ("\\\(digits)", index)
+        guard let groupIndex = Int(digits) else {
+            return nil
+        }
+        return ("\\\(groupIndex + numericCaptureOffset)", index)
     }
 
     private static func pcrePythonGroupSyntax(
@@ -2028,12 +2041,18 @@ final class PCRE2CompiledPattern {
         return nil
     }
 
-    private static func pcreBackreferenceReplacement(for name: String) -> String? {
+    private static func pcreBackreferenceReplacement(
+        for name: String,
+        numericCaptureOffset: Int = 0
+    ) -> String? {
         guard !name.isEmpty else {
             return nil
         }
         if name.allSatisfy(\.isNumber) {
-            return "\\\(name)"
+            guard let groupIndex = Int(name) else {
+                return nil
+            }
+            return "\\\(groupIndex + numericCaptureOffset)"
         }
         guard isPCREGroupName(name) else {
             return nil

@@ -10,7 +10,7 @@ in-tree Swift compatibility engine; it does not link libpcre2.
 **Functional 1:1 with Rust ripgrep 15.1.0, including the streaming I/O
 architecture.** Verified via:
 
-- **150 Swift Testing cases** across 12 suites covering search, output formats,
+- **151 Swift Testing cases** across 12 suites covering search, output formats,
   ignore rules, file types, stdin, encodings, binary handling, parser
   diagnostics, mmap/worker pool, PCRE2, streaming haystack reads, and
   generated-asset drift.
@@ -69,7 +69,9 @@ prefix plus regex suffix forms such as `foo\K\w+`, `foo\K[0-9]+` and
 `(?<=foo)\Kbar`. The fixed byte cases use the checked-in Darwin byte scanner
 for `-P -o`, line-numbered, byte-offset and byte-column only-match output, plus
 count/path/quiet modes. Broader reset-start forms are rewritten through the
-Swift/Foundation compatibility matcher and preserve post-reset replacements.
+Swift/Foundation compatibility matcher and preserve post-reset replacements,
+including reset-start backreference shapes such as `(foo)\K\1`, `(foo)\K\g1`,
+`(foo)\K\g{1}`, `(?P<w>foo)\K(?P=w)` and `(foo|abc)\K\1`.
 Backreference spellings such as `\g` and Python-style named backreferences are
 translated in-tree. Fixed PCRE byte-unit escapes (`\C`, `\C+` and `\C{n}`) are
 matched in-tree as raw bytes, preserving Rust's UTF-mode behavior of starting
@@ -170,8 +172,10 @@ into a much smaller implementation:
    longer need PCRE2. Regex-prefix reset-start forms such as
    `(foo|abc)\K[0-9]+`, `\w+\K[0-9]+`, `foo.*\Kbar`, `foo(?=bar)\K` and
    `(?<=foo)\Kbar` now use the same in-tree reset-range adjustment and preserve
-   capture numbering for replacements when numeric backreferences are not part
-   of the reset-start pattern. Bare `\N` now matches any
+   capture numbering for replacements. Numeric and PCRE/Python named
+   backreferences after `\K` are shifted around the synthetic boundary capture,
+   covering forms like `(foo)\K\1`, `(foo)\K\g1`, `(foo)\K\g{1}`,
+   `(?P<w>foo)\K(?P=w)` and `(foo|abc)\K\1`. Bare `\N` now matches any
    non-newline character in PCRE/auto
    mode, while `\N{name}` stays a Rust-compatible PCRE2 error. Under
    `--no-pcre2-unicode`, shorthand classes such as `\w` and `\d` are translated

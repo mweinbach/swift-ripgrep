@@ -703,6 +703,61 @@ struct PCRE2Tests {
         ])
     }
 
+    @Test func pcre2ResetStartSupportsBackreferences() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("foofoo foofoobar barfoo abcabc abc123\n", to: "pcre.txt")
+
+        let numericOutput = try runExecutableData([
+            "-P",
+            "-n",
+            "-o",
+            #"(foo)\K\1"#,
+            temp.path("pcre.txt"),
+        ]) {}
+        let gOutput = try runExecutableData([
+            "-P",
+            "-n",
+            "-o",
+            #"(foo)\K\g1"#,
+            temp.path("pcre.txt"),
+        ]) {}
+        let bracedGOutput = try runExecutableData([
+            "-P",
+            "-n",
+            "-o",
+            #"(foo)\K\g{1}"#,
+            temp.path("pcre.txt"),
+        ]) {}
+        let namedOutput = try runExecutableData([
+            "-P",
+            "-n",
+            "-o",
+            #"(?P<w>foo)\K(?P=w)"#,
+            temp.path("pcre.txt"),
+        ]) {}
+        let alternationOutput = try runExecutableData([
+            "-P",
+            "-n",
+            "-o",
+            #"(foo|abc)\K\1"#,
+            temp.path("pcre.txt"),
+        ]) {}
+        let replacementOutput = try run([
+            "-P",
+            #"(foo)\K\1"#,
+            "-r",
+            "[$1]",
+            temp.path("pcre.txt"),
+        ])
+
+        #expect(numericOutput == Data("1:foo\n1:foo\n".utf8))
+        #expect(gOutput == numericOutput)
+        #expect(bracedGOutput == numericOutput)
+        #expect(namedOutput == numericOutput)
+        #expect(alternationOutput == Data("1:foo\n1:foo\n1:abc\n".utf8))
+        #expect(replacementOutput == ["foo[foo] foo[foo]bar barfoo abcabc abc123"])
+    }
+
     @Test func pcre2ResetStartRespectsDefaultEngineSelection() throws {
         let temp = try TemporaryDirectory()
         try temp.write("foobar\n", to: "pcre.txt")
