@@ -10,7 +10,7 @@ in-tree Swift compatibility engine; it does not link libpcre2.
 **Functional 1:1 with Rust ripgrep 15.1.0 across the covered harness,
 including the streaming I/O architecture.** Verified via:
 
-- **159 Swift Testing cases** across 12 suites covering search, output formats,
+- **160 Swift Testing cases** across 12 suites covering search, output formats,
   ignore rules, file types, stdin, encodings, binary handling, parser
   diagnostics, mmap/worker pool, PCRE2, streaming haystack reads, and
   generated-asset drift.
@@ -26,10 +26,11 @@ including the streaming I/O architecture.** Verified via:
 - **Ad-hoc parity sweep:** 36/36 probes byte-identical to `rg` across PCRE2,
   encoding labels, mmap selection, threaded search, every output mode,
   glob/ignore handling, and JSON output.
-- **PCRE long-tail stress sweep:** 30/36 probes byte-identical to the sibling
+- **PCRE long-tail stress sweep:** 32/36 probes byte-identical to the sibling
   Rust PCRE2 oracle after the 2026-05-26 named-replacement, branch-reset
-  suffix, leading-`(?U)` and `(*PRUNE)` fixes. The remaining 6 are tracked
-  under the regex-engine-fidelity backlog below, rather than hidden behind an
+  suffix, leading-`(?U)`, `(*PRUNE)` and group-state conditional fixes. The
+  remaining 4 are tracked under the regex-engine-fidelity backlog below,
+  rather than hidden behind an
   external libpcre2 dependency.
 - **Asset drift suite:** stored help/man/completion files are pinned to the
   current binary's `--generate`/`--help` output via 7 dedicated tests.
@@ -221,7 +222,10 @@ into a much smaller implementation:
    in-tree for brace, angle, quoted and bare signed spellings without libpcre2.
    Leading `(?U)` ungreedy mode is translated by flipping quantifier defaults
    before Foundation compilation, including the PCRE behavior where an explicit
-   lazy suffix becomes greedy under ungreedy mode.
+   lazy suffix becomes greedy under ungreedy mode. Simple group-state
+   conditionals over a leading optional fixed capture, such as `(a)?(?(1)b|c)`,
+   `(?<x>a)?(?(<x>)b|c)` and `(?P<x>a)?(?(<x>)b|c)`, lower to equivalent
+   Swift-compatible alternations for PCRE/auto modes without libpcre2.
    Plain fixed literal PCRE lookaround/backreference `-P -o` output uses a
    narrow Darwin stdout writer; the 2026-05-26 release smoke measured relative
    `\g{-1}` at 57.6 ms versus Rust PCRE2 release at 73.0 ms on a 900k-line
@@ -254,10 +258,9 @@ into a much smaller implementation:
    still more likely to drift on regex syntax and pathological edge cases. The
    auto-hybrid fallback (item 1) reduces the impact in practice because patterns
    the default engine cannot handle now degrade gracefully to the compatibility
-   engine. The 2026-05-26 PCRE stress sweep leaves six known long-tail gaps:
-   group-state conditionals such as `(a)?(?(1)b|c)`, named group-state
-   conditionals, PCRE subroutines, recursion, and Rust's unusual line-mode
-   `-P -o '\Afoo'` whole-line output.
+   engine. The 2026-05-26 PCRE stress sweep leaves four known long-tail gaps:
+   PCRE subroutines, recursion, and Rust's unusual line-mode `-P -o '\Afoo'`
+   whole-line output.
    This is best driven by running upstream regex fixture suites against the
    Swift binary and folding the diffs back into `PatternMatcher.swift` — an
    ongoing quality effort rather than a finite porting slice.

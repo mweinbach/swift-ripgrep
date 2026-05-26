@@ -450,6 +450,24 @@ struct PCRE2Tests {
         #expect(autoOutput == positiveLookahead)
     }
 
+    @Test func pcre2GroupStateConditionalsOnlyMatching() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("a\nab\nabc\nac\nc\nbc\n", to: "pcre.txt")
+        let expected = ["2:ab", "3:ab", "3:c", "4:c", "5:c", "6:c"]
+
+        let numericOutput = try run(["-P", "-n", "-o", #"(a)?(?(1)b|c)"#, temp.path("pcre.txt")])
+        let namedOutput = try run(["-P", "-n", "-o", #"(?<x>a)?(?(<x>)b|c)"#, temp.path("pcre.txt")])
+        let bareNamedOutput = try run(["-P", "-n", "-o", #"(?<x>a)?(?(x)b|c)"#, temp.path("pcre.txt")])
+        let pythonNamedOutput = try run(["-P", "-n", "-o", #"(?P<x>a)?(?(<x>)b|c)"#, temp.path("pcre.txt")])
+        let autoOutput = try run(["--engine=auto", "-n", "-o", #"(a)?(?(1)b|c)"#, temp.path("pcre.txt")])
+
+        #expect(numericOutput == expected)
+        #expect(namedOutput == expected)
+        #expect(bareNamedOutput == expected)
+        #expect(pythonNamedOutput == expected)
+        #expect(autoOutput == expected)
+    }
+
     @Test func pcre2AssertionConditionalExecutableFastPathOnlyMatchingOutput() throws {
         let temp = try TemporaryDirectory()
         try temp.write("foofoo\nbar\nfoobar\n", to: "pcre.txt")

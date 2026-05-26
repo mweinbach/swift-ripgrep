@@ -2531,7 +2531,8 @@ final class PCRE2CompiledPattern {
         captureCountBase: Int = 0,
         totalCaptureCountOverride: Int? = nil
     ) throws -> String {
-        let pattern = patternExpandingLeadingUngreedyMode(pattern)
+        var pattern = patternExpandingSimpleGroupStateConditional(pattern) ?? pattern
+        pattern = patternExpandingLeadingUngreedyMode(pattern)
         var output = ""
         var inClass = false
         var index = pattern.startIndex
@@ -2693,6 +2694,103 @@ final class PCRE2CompiledPattern {
             index = pattern.index(after: index)
         }
         return output
+    }
+
+    private enum PCREGroupStateCondition {
+        case numbered(Int)
+        case named(String)
+    }
+
+    private static func patternExpandingSimpleGroupStateConditional(_ pattern: String) -> String? {
+        guard let group = fixedLiteralCaptureGroup(at: pattern.startIndex, in: pattern) else {
+            return nil
+        }
+        let quantifier = pattern.index(after: group.close)
+        guard quantifier < pattern.endIndex,
+              pattern[quantifier] == "?" else {
+            return nil
+        }
+        let conditionalStart = pattern.index(after: quantifier)
+        guard conditionalStart < pattern.endIndex,
+              let condition = pcreGroupStateCondition(at: conditionalStart, in: pattern),
+              let branches = pcreConditionalBranches(from: condition.end, in: pattern),
+              pattern.index(after: branches.close) == pattern.endIndex else {
+            return nil
+        }
+        switch condition.group {
+        case .numbered(let groupIndex):
+            guard groupIndex == 1 else {
+                return nil
+            }
+        case .named(let name):
+            guard group.name == name else {
+                return nil
+            }
+        }
+
+        let rawGroup = String(pattern[pattern.startIndex...group.close])
+        let trueBranch = String(pattern[condition.end..<branches.separator])
+        let falseBranch = branches.falseBranchStart.map { String(pattern[$0..<branches.close]) } ?? ""
+        return "(?:\(rawGroup)\(trueBranch)|\(falseBranch))"
+    }
+
+    private static func pcreGroupStateCondition(
+        at index: String.Index,
+        in pattern: String
+    ) -> (group: PCREGroupStateCondition, end: String.Index)? {
+        guard pattern[index...].hasPrefix("(?(") else {
+            return nil
+        }
+        let payloadStart = pattern.index(index, offsetBy: 3)
+        guard payloadStart < pattern.endIndex else {
+            return nil
+        }
+        if pattern[payloadStart].isNumber {
+            var payloadEnd = payloadStart
+            var digits = ""
+            while payloadEnd < pattern.endIndex,
+                  pattern[payloadEnd].isNumber {
+                digits.append(pattern[payloadEnd])
+                payloadEnd = pattern.index(after: payloadEnd)
+            }
+            guard payloadEnd < pattern.endIndex,
+                  pattern[payloadEnd] == ")",
+                  let groupIndex = Int(digits) else {
+                return nil
+            }
+            return (.numbered(groupIndex), pattern.index(after: payloadEnd))
+        }
+        if pattern[payloadStart] == "<" {
+            let nameStart = pattern.index(after: payloadStart)
+            guard nameStart < pattern.endIndex,
+                  let nameEnd = pattern[nameStart...].firstIndex(of: ">") else {
+                return nil
+            }
+            let close = pattern.index(after: nameEnd)
+            guard close < pattern.endIndex,
+                  pattern[close] == ")" else {
+                return nil
+            }
+            let name = String(pattern[nameStart..<nameEnd])
+            guard isPCREGroupName(name) else {
+                return nil
+            }
+            return (.named(name), pattern.index(after: close))
+        }
+
+        var payloadEnd = payloadStart
+        while payloadEnd < pattern.endIndex,
+              pattern[payloadEnd] != ")" {
+            payloadEnd = pattern.index(after: payloadEnd)
+        }
+        guard payloadEnd < pattern.endIndex else {
+            return nil
+        }
+        let name = String(pattern[payloadStart..<payloadEnd])
+        guard isPCREGroupName(name) else {
+            return nil
+        }
+        return (.named(name), pattern.index(after: payloadEnd))
     }
 
     private static func patternExpandingLeadingUngreedyMode(_ pattern: String) -> String {
