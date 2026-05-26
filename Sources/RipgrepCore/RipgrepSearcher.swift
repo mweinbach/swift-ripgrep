@@ -6055,6 +6055,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 return nil
             }
             if options.onlyMatching,
+               options.replacement == nil,
                isLineTerminatorOnlySpan(span, in: searchLines, lineIndex: startLineIndex, options: options) {
                 return nil
             }

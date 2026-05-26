@@ -5,6 +5,7 @@ public struct StandardPrinter {
     private let pathFormatter: OutputPathFormatter
     private let colors: ANSIColorPalette
     private let hyperlinks: HyperlinkFormatter
+    private let suppressesTerminatorCapableEmptyReplacement: Bool
 
     public init(
         options: RipgrepOptions,
@@ -15,6 +16,12 @@ public struct StandardPrinter {
         let colorPalette = ANSIColorPalette(options: options)
         self.colors = colorPalette
         self.hyperlinks = HyperlinkFormatter(options: options, colorsEnabled: colorPalette.isEnabled)
+        self.suppressesTerminatorCapableEmptyReplacement = options.replacement == ""
+            && options.multiline
+            && !options.fixedStrings
+            && options.effectivePatterns.contains {
+                PatternMatcher.replacementSuppressionPatternCanMatchLineTerminator($0, options: options)
+            }
     }
 
     public func lines(for results: SearchResults) -> [String] {
@@ -693,7 +700,8 @@ public struct StandardPrinter {
                     && options.effectivePatterns.contains(where: containsLineAnchor))
                 || (span.replacement == ""
                     && (containsRenderedLineTerminator(span.text)
-                        || options.effectivePatterns.contains(where: containsLineAnchor))))
+                        || options.effectivePatterns.contains(where: containsLineAnchor)
+                        || suppressesTerminatorCapableEmptyReplacement)))
             && !options.fixedStrings
             && !options.effectivePatterns.isEmpty
     }

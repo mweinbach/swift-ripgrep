@@ -734,6 +734,33 @@ struct MultilineTests {
             "12:\t)",
             "15:two",
         ])
+        var emptyDotAllReplacementOutput: [String] = []
+        var emptyDotAllReplacementErrors: [String] = []
+        let emptyDotAllReplacementExitCode = RipgrepCLI.run(
+            arguments: [
+                "-U",
+                "-o",
+                "--replace",
+                "",
+                #"(?s).+?"#,
+                root.path("usage-replace.txt"),
+            ],
+            stdout: { emptyDotAllReplacementOutput.append($0) },
+            stderr: { emptyDotAllReplacementErrors.append($0) }
+        )
+        #expect(emptyDotAllReplacementExitCode == 0)
+        #expect(emptyDotAllReplacementOutput.isEmpty)
+        #expect(emptyDotAllReplacementErrors.isEmpty)
+        let dotAllOnlyMatchingReplacement = try runExecutableData([
+            "-U",
+            "-o",
+            "--replace",
+            "X",
+            #"(?s).+?"#,
+            root.path("usage-replace.txt"),
+        ]) {}
+        let usageReplaceBytes = try Data(contentsOf: URL(fileURLWithPath: root.path("usage-replace.txt"))).count
+        #expect(dotAllOnlyMatchingReplacement == Data(String(repeating: "X\n", count: usageReplaceBytes).utf8))
         #expect(try run([
             "-N",
             "-U",

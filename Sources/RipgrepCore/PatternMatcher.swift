@@ -322,6 +322,139 @@ public struct PatternMatcher {
         return false
     }
 
+    static func replacementSuppressionPatternCanMatchLineTerminator(
+        _ pattern: String,
+        options: RipgrepOptions
+    ) -> Bool {
+        let terminatorValue: UInt32 = options.nullData ? 0x00 : 0x0A
+        if options.fixedStrings {
+            return pattern.unicodeScalars.contains { $0.value == terminatorValue }
+        }
+
+        var source = foundationAnyClassPattern(for: pattern)
+        source = scalarDotAllWildcardPattern(for: source, options: options)
+        source = binaryWildcardPattern(for: source, options: options)
+        source = foundationScalarEscapePattern(for: source)
+        source = negatedASCIIPosixClasses(for: source)
+        source = asciiPOSIXClasses(for: source)
+        return regexSourceCanMatchLineTerminator(source, terminatorValue: terminatorValue)
+    }
+
+    private static func regexSourceCanMatchLineTerminator(
+        _ pattern: String,
+        terminatorValue: UInt32
+    ) -> Bool {
+        var escaped = false
+        var inClass = false
+        var classNegated = false
+        var classContentStarted = false
+        var classHasTerminator = false
+        var escapeStart: String.Index?
+        var index = pattern.startIndex
+
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                let escapeEnd = escapeStart.flatMap { regexEscapeEnd(in: pattern, backslashAt: $0) }
+                let matchesTerminator = regexEscapeCanMatchLineTerminator(
+                    character,
+                    in: pattern,
+                    at: index,
+                    terminatorValue: terminatorValue
+                )
+                if inClass {
+                    classContentStarted = true
+                    classHasTerminator = classHasTerminator || matchesTerminator
+                } else if matchesTerminator {
+                    return true
+                }
+                escaped = false
+                escapeStart = nil
+                index = escapeEnd ?? pattern.index(after: index)
+                continue
+            }
+
+            if character == "\\" {
+                escaped = true
+                escapeStart = index
+                index = pattern.index(after: index)
+                continue
+            }
+
+            if inClass {
+                if character == "^", classNegated, !classContentStarted {
+                    index = pattern.index(after: index)
+                    continue
+                }
+                if character == "]", classContentStarted {
+                    if classNegated ? !classHasTerminator : classHasTerminator {
+                        return true
+                    }
+                    inClass = false
+                    classNegated = false
+                    classContentStarted = false
+                    classHasTerminator = false
+                    index = pattern.index(after: index)
+                    continue
+                }
+                classContentStarted = true
+                classHasTerminator = classHasTerminator || character.unicodeScalars.contains {
+                    $0.value == terminatorValue
+                }
+                index = pattern.index(after: index)
+                continue
+            }
+
+            if character == "[" {
+                let next = pattern.index(after: index)
+                inClass = true
+                classNegated = next < pattern.endIndex && pattern[next] == "^"
+                classContentStarted = false
+                classHasTerminator = false
+                index = next
+                continue
+            }
+
+            if character.unicodeScalars.contains(where: { $0.value == terminatorValue }) {
+                return true
+            }
+            index = pattern.index(after: index)
+        }
+
+        return inClass && (classNegated ? !classHasTerminator : classHasTerminator)
+    }
+
+    private static func regexEscapeCanMatchLineTerminator(
+        _ character: Character,
+        in pattern: String,
+        at index: String.Index,
+        terminatorValue: UInt32
+    ) -> Bool {
+        if character == "n" {
+            return terminatorValue == 0x0A
+        }
+        if character == "0" {
+            return terminatorValue == 0x00
+        }
+        if character == "s" {
+            return terminatorValue == 0x0A
+        }
+        if character == "p" {
+            let propertyStart = pattern.index(after: index)
+            return pattern[propertyStart...].hasPrefix("{Any}")
+        }
+        if character == "x" || character == "u" {
+            let next = pattern.index(after: index)
+            let remainder = pattern[next...].lowercased()
+            let width = character == "x" ? 2 : 4
+            if remainder.hasPrefix(String(format: "%0\(width)x", terminatorValue)) {
+                return true
+            }
+            return bracedHexEscapeValue(in: remainder) == terminatorValue
+        }
+        return false
+    }
+
     private static func bracedHexEscapeValue(in remainder: String) -> UInt32? {
         guard remainder.first == "{",
               let close = remainder.firstIndex(of: "}") else {
