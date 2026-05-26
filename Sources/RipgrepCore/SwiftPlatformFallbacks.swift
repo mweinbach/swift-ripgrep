@@ -22,11 +22,149 @@ private func rgASCIILower(_ byte: UInt8) -> UInt8 {
 }
 
 @inline(__always)
+private func rgASCIIIsAlpha(_ byte: UInt8) -> Bool {
+    (byte >= UInt8(ascii: "A") && byte <= UInt8(ascii: "Z"))
+        || (byte >= UInt8(ascii: "a") && byte <= UInt8(ascii: "z"))
+}
+
+@inline(__always)
+private func rgSIMDFoldASCIIForCompare(_ bytes: SIMD16<UInt8>, isAlpha: Bool) -> SIMD16<UInt8> {
+    isAlpha ? bytes | SIMD16<UInt8>(repeating: 0x20) : bytes
+}
+
+@inline(__always)
 private func rgConstBytePointer(_ pointer: UnsafeMutableRawPointer?) -> UnsafePointer<UInt8>? {
     guard let pointer else {
         return nil
     }
     return UnsafeRawPointer(pointer).assumingMemoryBound(to: UInt8.self)
+}
+
+private func rgMemmemSIMD16(
+    haystack: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    needle: UnsafePointer<UInt8>,
+    needleLength: Int
+) -> UnsafePointer<UInt8>? {
+    let first = needle[0]
+    let tail = needle[needleLength - 1]
+    let firstVector = SIMD16<UInt8>(repeating: first)
+    let tailVector = SIMD16<UInt8>(repeating: tail)
+
+    var cursor = 0
+    let vectorLimit = haystackLength >= needleLength + 15
+        ? haystackLength - needleLength - 15 + 1
+        : 0
+    while cursor < vectorLimit {
+        let firstBytes = UnsafeRawPointer(haystack.advanced(by: cursor))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let tailBytes = UnsafeRawPointer(haystack.advanced(by: cursor + needleLength - 1))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let candidateStorage = ((firstBytes .== firstVector) .& (tailBytes .== tailVector))._storage
+        if candidateStorage.min() < 0 {
+            for lane in 0..<16 where candidateStorage[lane] != 0 {
+                let candidate = haystack.advanced(by: cursor + lane)
+                if needleLength <= 2
+                    || memcmp(candidate.advanced(by: 1), needle.advanced(by: 1), needleLength - 2) == 0 {
+                    return candidate
+                }
+            }
+        }
+        cursor += 16
+    }
+
+    let maxStart = haystackLength - needleLength + 1
+    while cursor < maxStart {
+        if haystack[cursor] == first,
+           haystack[cursor + needleLength - 1] == tail,
+           needleLength <= 2
+            || memcmp(
+                haystack.advanced(by: cursor + 1),
+                needle.advanced(by: 1),
+                needleLength - 2
+            ) == 0 {
+            return haystack.advanced(by: cursor)
+        }
+        cursor += 1
+    }
+    return nil
+}
+
+@inline(__always)
+private func rgCaseInsensitiveMiddleMatches(
+    candidate: UnsafePointer<UInt8>,
+    foldedNeedle: UnsafePointer<UInt8>,
+    needleLength: Int
+) -> Bool {
+    guard needleLength > 2 else {
+        return true
+    }
+    var offset = 1
+    while offset + 1 < needleLength {
+        guard rgASCIILower(candidate[offset]) == foldedNeedle[offset] else {
+            return false
+        }
+        offset += 1
+    }
+    return true
+}
+
+private func rgMemcaseMemASCII_SIMD16(
+    haystack: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    foldedNeedle: UnsafePointer<UInt8>,
+    needleLength: Int
+) -> UnsafePointer<UInt8>? {
+    let first = foldedNeedle[0]
+    let tail = foldedNeedle[needleLength - 1]
+    let firstIsAlpha = rgASCIIIsAlpha(first)
+    let tailIsAlpha = rgASCIIIsAlpha(tail)
+    let firstVector = SIMD16<UInt8>(repeating: first)
+    let tailVector = SIMD16<UInt8>(repeating: tail)
+
+    var cursor = 0
+    let vectorLimit = haystackLength >= needleLength + 15
+        ? haystackLength - needleLength - 15 + 1
+        : 0
+    while cursor < vectorLimit {
+        let firstBytes = rgSIMDFoldASCIIForCompare(
+            UnsafeRawPointer(haystack.advanced(by: cursor)).loadUnaligned(as: SIMD16<UInt8>.self),
+            isAlpha: firstIsAlpha
+        )
+        let tailBytes = rgSIMDFoldASCIIForCompare(
+            UnsafeRawPointer(haystack.advanced(by: cursor + needleLength - 1)).loadUnaligned(as: SIMD16<UInt8>.self),
+            isAlpha: tailIsAlpha
+        )
+        let candidateStorage = ((firstBytes .== firstVector) .& (tailBytes .== tailVector))._storage
+        if candidateStorage.min() < 0 {
+            for lane in 0..<16 where candidateStorage[lane] != 0 {
+                let candidate = haystack.advanced(by: cursor + lane)
+                if rgCaseInsensitiveMiddleMatches(
+                    candidate: candidate,
+                    foldedNeedle: foldedNeedle,
+                    needleLength: needleLength
+                ) {
+                    return candidate
+                }
+            }
+        }
+        cursor += 16
+    }
+
+    let maxStart = haystackLength - needleLength + 1
+    while cursor < maxStart {
+        if rgASCIILower(haystack[cursor]) == first,
+           rgASCIILower(haystack[cursor + needleLength - 1]) == tail,
+           rgCaseInsensitiveMiddleMatches(
+            candidate: haystack.advanced(by: cursor),
+            foldedNeedle: foldedNeedle,
+            needleLength: needleLength
+           ) {
+            return haystack.advanced(by: cursor)
+        }
+        cursor += 1
+    }
+    return nil
 }
 
 func rg_memmem_simple(
@@ -47,24 +185,12 @@ func rg_memmem_simple(
     if needleLength == 1 {
         return rgConstBytePointer(memchr(haystack, Int32(needle[0]), haystackLength))
     }
-
-    var cursor = 0
-    let lastStart = haystackLength - needleLength
-    while cursor <= lastStart {
-        let remaining = lastStart - cursor + 1
-        guard let candidate = rgConstBytePointer(memchr(
-            haystack.advanced(by: cursor),
-            Int32(needle[0]),
-            remaining
-        )) else {
-            return nil
-        }
-        if memcmp(candidate.advanced(by: 1), needle.advanced(by: 1), needleLength - 1) == 0 {
-            return candidate
-        }
-        cursor = haystack.distance(to: candidate) + 1
-    }
-    return nil
+    return rgMemmemSIMD16(
+        haystack: haystack,
+        haystackLength: haystackLength,
+        needle: needle,
+        needleLength: needleLength
+    )
 }
 
 func rg_memcasemem_ascii(
@@ -101,7 +227,7 @@ func rg_memcasemem_ascii_prepared(
     _ haystackLength: Int,
     _ foldedNeedle: UnsafePointer<UInt8>?,
     _ needleLength: Int,
-    _ shifts: UnsafePointer<Int>?
+    _: UnsafePointer<Int>?
 ) -> UnsafePointer<UInt8>? {
     guard let haystack, let foldedNeedle else {
         return nil
@@ -112,29 +238,20 @@ func rg_memcasemem_ascii_prepared(
     guard haystackLength >= needleLength else {
         return nil
     }
+    if needleLength > 1 {
+        return rgMemcaseMemASCII_SIMD16(
+            haystack: haystack,
+            haystackLength: haystackLength,
+            foldedNeedle: foldedNeedle,
+            needleLength: needleLength
+        )
+    }
     if needleLength == 1 {
         let folded = foldedNeedle[0]
         for index in 0..<haystackLength where rgASCIILower(haystack[index]) == folded {
             return haystack.advanced(by: index)
         }
         return nil
-    }
-
-    var cursor = 0
-    while cursor + needleLength <= haystackLength {
-        let tail = rgASCIILower(haystack[cursor + needleLength - 1])
-        if tail == foldedNeedle[needleLength - 1] {
-            var offset = 0
-            while offset < needleLength,
-                  rgASCIILower(haystack[cursor + offset]) == foldedNeedle[offset] {
-                offset += 1
-            }
-            if offset == needleLength {
-                return haystack.advanced(by: cursor)
-            }
-        }
-        let shift = shifts?[Int(tail)] ?? needleLength
-        cursor += shift == 0 ? 1 : shift
     }
     return nil
 }

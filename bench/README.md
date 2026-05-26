@@ -28,6 +28,9 @@ To benchmark the Swift fallback path without the in-tree C shim, build with:
 SWIFT_RIPGREP_NO_C_SHIM=1 swift build -c release --build-path .build/no-c-shim
 ```
 
+Use that build to compare the Swift SIMD fallback scanners and no-shim Darwin
+literal preflight against the default C-shim release binary.
+
 You also need the upstream `ripgrep` checkout (for its `benchsuite/benchsuite`
 script) and the upstream corpora:
 

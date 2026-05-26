@@ -24,5 +24,7 @@ swift test
 
 Set `SWIFT_RIPGREP_NO_C_SHIM=1` when building or testing to omit the
 `CRipgrepPlatform` target. This keeps the Swift PCRE2 compatibility engine
-available, but disables the Darwin mmap/NEON fast paths and is meant for
-portability and performance investigation rather than the default macOS build.
+available and replaces the shim's hottest byte scanners with Swift SIMD
+fallbacks, including a Swift-only Darwin mmap preflight for simple
+literal and case-insensitive literal searches. The C-shim build remains the
+default macOS configuration until the remaining scanner CPU gap is closed.

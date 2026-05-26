@@ -21,6 +21,11 @@ struct RipgrepCommand {
             exit(exitCode)
         }
         #endif
+        #if canImport(Darwin) && !canImport(CRipgrepPlatform)
+        if let exitCode = runSwiftDarwinLiteralPreflight(arguments: Array(CommandLine.arguments.dropFirst())) {
+            exit(exitCode)
+        }
+        #endif
 
         let exitCode = RipgrepCLI.run(
             arguments: Array(CommandLine.arguments.dropFirst()),
@@ -42,7 +47,8 @@ struct RipgrepCommand {
         #endif
     }
 
-    #if canImport(Darwin) && canImport(CRipgrepPlatform)
+    #if canImport(Darwin)
+    #if canImport(CRipgrepPlatform)
     private static func runDarwinLiteralPreflight(arguments: [String]) -> Int32? {
         guard getenv("RIPGREP_CONFIG_PATH") == nil else {
             return nil
@@ -252,6 +258,55 @@ struct RipgrepCommand {
         }
         return result.status > 0 ? 0 : 1
     }
+    #endif
+
+    #if !canImport(CRipgrepPlatform)
+    private static func runSwiftDarwinLiteralPreflight(arguments: [String]) -> Int32? {
+        guard getenv("RIPGREP_CONFIG_PATH") == nil else {
+            return nil
+        }
+
+        let preflightArguments = darwinLiteralPreflightArguments(
+            afterStrippingLeadingEngineSelectorFrom: arguments
+        )
+        let arguments = preflightArguments.arguments
+        let asciiCaseInsensitive: Bool
+        let pattern: String
+        let path: String
+        if arguments.count == 2 {
+            asciiCaseInsensitive = false
+            pattern = arguments[0]
+            path = arguments[1]
+        } else if arguments.count == 3,
+                  arguments[0] == "-i" || arguments[0] == "--ignore-case" {
+            asciiCaseInsensitive = true
+            pattern = arguments[1]
+            path = arguments[2]
+        } else {
+            return nil
+        }
+
+        guard !pattern.hasPrefix("-"),
+              path != "-",
+              let literalPattern = RegexLiteralParser.literal(
+                fromPlainRegexPattern: pattern,
+                allowPCREQuotedLiterals: preflightArguments.allowPCREQuotedLiterals
+              ) else {
+            return nil
+        }
+
+        let literal = Array(literalPattern.utf8)
+        guard !literal.isEmpty,
+              !asciiCaseInsensitive || literal.allSatisfy({ $0 < 0x80 }) else {
+            return nil
+        }
+        return SwiftDarwinLiteralPreflight.exitCode(
+            path: path,
+            literal: literal,
+            asciiCaseInsensitive: asciiCaseInsensitive
+        )
+    }
+    #endif
 
     private static func darwinLiteralPreflightArguments(
         afterStrippingLeadingEngineSelectorFrom arguments: [String]

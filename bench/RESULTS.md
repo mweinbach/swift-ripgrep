@@ -26,18 +26,19 @@ between the C-shim and no-shim binaries.
 | Bench | Flags / corpus | rg | C-shim Swift | no-shim Swift | no-shim / C-shim |
 |---|---|---:|---:|---:|---:|
 | file listing | `--files /tmp/swift-rg-bench/linux` | 91.0 ms | 149.4 ms | 154.5 ms | **1.03x** |
-| no-match literal | `PM_RESUME` on 1.5 GiB subtitles | 171.0 ms | 167.0 ms | 218.0 ms | **1.31x** |
-| case-insensitive literal | `-i sherlock` on 1.5 GiB subtitles | 300.1 ms | 179.1 ms | 1.338 s | **7.47x** |
+| no-match literal | `PM_RESUME` on 1.5 GiB subtitles | 171.0 ms | 159.8 ms | 182.0 ms | **1.14x** |
+| case-insensitive literal | `-i sherlock` on 1.5 GiB subtitles | 300.1 ms | 174.7 ms | 202.4 ms | **1.16x** |
 | multi-literal regex | `Sherlock|Watson` on 1.5 GiB subtitles | 298.5 ms | 343.0 ms | 380.3 ms | **1.11x** |
 
 Bottom line: traversal/file-listing performance can effectively match the
-current build without the C shim, and case-sensitive literal scans are close
-enough to be plausible. The blocker is ASCII case-insensitive scanning: the
-shim's prepared/NEON scanner remains about 7-8x faster than the Swift fallback
-on the large subtitles corpus. Matching current overall performance without
-the shim would require a Swift SIMD implementation of the prepared
-case-insensitive scanner (and likely the byte-set scanner) rather than simply
-removing `CRipgrepPlatform`.
+current build without the C shim, and the matcher path is now close enough to
+be plausible. The no-shim build uses Swift SIMD16 first/tail candidate
+scanners for case-sensitive and ASCII case-insensitive literals, plus a
+Swift-only Darwin mmap preflight for simple `literal file` and `-i literal
+file` invocations. That cuts the original no-shim `-i sherlock` result from
+1.338 s to 202.4 ms. The
+remaining gap is scanner CPU: system time is effectively tied with the C-shim
+preflight, while user time remains about 27 ms higher on this corpus.
 
 ## Status — 2026-05-25 fast-path checkpoint
 
@@ -447,7 +448,10 @@ The key improvements since the 2026-05-24 baseline are:
   byte-identical for default and no-ignore file listing, and quiet output
   remained empty with the same exit status.
 
-### No-C-shim investigation — 2026-05-26
+### Initial no-C-shim investigation — 2026-05-26
+
+Superseded by the checkpoint above after adding the Swift SIMD literal
+scanners and no-shim Darwin preflight.
 
 `SWIFT_RIPGREP_NO_C_SHIM=1` now builds and tests without the
 `CRipgrepPlatform` target, so the portability experiment is mechanically
