@@ -249,6 +249,15 @@ Swift checkpoint and the sibling Rust oracle. Seven-run checks measured
 for Rust, and the alphabet set at 159.8 ms versus 280.1 ms before and 892.1 ms
 for Rust.
 
+The Swift fallback two-byte `memchr-any` scanner now keeps both SIMD comparison
+vectors outside the scan loop instead of rebuilding them for each chunk. Output
+for sparse, dense, and prefixed two-byte only-match cases matched both the
+previous Swift checkpoint and the sibling Rust oracle. Twenty-run checks on the
+193 MiB subtitles corpus measured `-o 'Q|Z'` at 55.9 ms versus 65.7 ms before
+and 27.0 ms for Rust, and `-o 'A|B'` at 120.3 ms versus 131.3 ms before and
+103.4 ms for Rust. The neighboring `-n -o 'A|B'` form stayed neutral at
+167.1 ms versus 167.8 ms before.
+
 Direct executable byte-unit PCRE2 `--count-matches` now counts totals without
 matched-line bookkeeping while preserving the exact summary path for non-direct
 callers. Output for default Unicode `\C`, byte-mode `\C`, `\C+`, `\C{2}`, and
