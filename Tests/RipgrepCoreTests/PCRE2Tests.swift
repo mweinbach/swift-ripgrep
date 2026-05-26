@@ -350,6 +350,25 @@ struct PCRE2Tests {
             #"\C"#,
             temp.path("pcre.txt"),
         ]) {}
+        let byteCountMatchesOutput = try runExecutableData([
+            "-P",
+            "--no-pcre2-unicode",
+            "--count-matches",
+            #"\C"#,
+            temp.path("pcre.txt"),
+        ]) {}
+        let oneOrMoreCountMatchesOutput = try runExecutableData([
+            "-P",
+            "--count-matches",
+            #"\C+"#,
+            temp.path("pcre.txt"),
+        ]) {}
+        let fixedCountMatchesOutput = try runExecutableData([
+            "-P",
+            "--count-matches",
+            #"\C{2}"#,
+            temp.path("pcre.txt"),
+        ]) {}
         let matchingPathOutput = try runExecutableData([
             "-P",
             "--files-with-matches",
@@ -369,6 +388,9 @@ struct PCRE2Tests {
         #expect(fieldOutput == expectedFieldOutput)
         #expect(countOutput == Data("2\n".utf8))
         #expect(countMatchesOutput == Data("7\n".utf8))
+        #expect(byteCountMatchesOutput == Data("8\n".utf8))
+        #expect(oneOrMoreCountMatchesOutput == Data("2\n".utf8))
+        #expect(fixedCountMatchesOutput == Data("3\n".utf8))
         #expect(matchingPathOutput == Data("\(temp.path("pcre.txt"))\n".utf8))
         #expect(nonmatchingPathOutput == Data("\(temp.path("continuation.txt"))\n".utf8))
 

@@ -726,7 +726,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 pattern: byteUnitFastPath.pattern,
                 unicodeStartOnly: byteUnitFastPath.unicodeStartOnly,
                 options: options,
-                writeBytes: writeBytes
+                writeBytes: writeBytes,
+                allowDirectStdout: allowDirectStdout
             )
         }
 
@@ -2252,7 +2253,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
         pattern: PCRE2CompiledPattern.ByteUnitPattern,
         unicodeStartOnly: Bool,
         options: RipgrepOptions,
-        writeBytes: (UnsafeRawBufferPointer) -> Void
+        writeBytes: (UnsafeRawBufferPointer) -> Void,
+        allowDirectStdout: Bool = false
     ) -> SearchResults? {
         guard options.quiet
             || (options.onlyMatching && options.printMode == .matchingLines && options.maxCount == nil)
@@ -2286,6 +2288,84 @@ public struct RipgrepSearcher: @unchecked Sendable {
 
             func isAllowedStart(_ offset: Int) -> Bool {
                 !unicodeStartOnly || !isDarwinUTF8ContinuationByte(baseAddress[offset])
+            }
+
+            func countDirectMatches() -> Int {
+                switch pattern {
+                case .single:
+                    if !unicodeStartOnly {
+                        let newlineCount = rg_memcount_byte(baseAddress, data.count, UInt8(ascii: "\n"))
+                        return data.count - Int(newlineCount)
+                    }
+                    var count = 0
+                    var offset = 0
+                    while offset < data.count {
+                        if baseAddress[offset] != UInt8(ascii: "\n"),
+                           !isDarwinUTF8ContinuationByte(baseAddress[offset]) {
+                            count += 1
+                        }
+                        offset += 1
+                    }
+                    return count
+
+                case .oneOrMore:
+                    var count = 0
+                    var lineStart = 0
+                    while lineStart < data.count {
+                        let lineEnd = findNextDarwinNewline(
+                            baseAddress: baseAddress,
+                            dataCount: data.count,
+                            from: lineStart
+                        )
+                        if unicodeStartOnly {
+                            var offset = lineStart
+                            while offset < lineEnd, !isAllowedStart(offset) {
+                                offset += 1
+                            }
+                            if offset < lineEnd {
+                                count += 1
+                            }
+                        } else if lineEnd > lineStart {
+                            count += 1
+                        }
+                        lineStart = lineEnd < data.count ? lineEnd + 1 : data.count
+                    }
+                    return count
+
+                case .fixed(let byteCount):
+                    var count = 0
+                    var lineStart = 0
+                    while lineStart < data.count {
+                        let lineEnd = findNextDarwinNewline(
+                            baseAddress: baseAddress,
+                            dataCount: data.count,
+                            from: lineStart
+                        )
+                        if unicodeStartOnly {
+                            var offset = lineStart
+                            while offset + byteCount <= lineEnd {
+                                if isAllowedStart(offset) {
+                                    count += 1
+                                    offset += byteCount
+                                } else {
+                                    offset += 1
+                                }
+                            }
+                        } else {
+                            count += (lineEnd - lineStart) / byteCount
+                        }
+                        lineStart = lineEnd < data.count ? lineEnd + 1 : data.count
+                    }
+                    return count
+                }
+            }
+
+            if countMatchesOnly && allowDirectStdout {
+                totalMatchCount = countDirectMatches()
+                if totalMatchCount > 0 {
+                    matchedLineCount = 1
+                }
+                return
             }
 
             func recordMatch(start: Int, end: Int) {

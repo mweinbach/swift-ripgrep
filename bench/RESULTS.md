@@ -144,6 +144,17 @@ measured `--count-matches -i 'a'` at 214.9 ms versus 466.1 ms before and
 509.1 ms for Rust. Multi-byte `--count-matches 'Sherlock Holmes'` stayed
 effectively neutral at 62.8 ms versus 63.9 ms before.
 
+Direct executable byte-unit PCRE2 `--count-matches` now counts totals without
+matched-line bookkeeping while preserving the exact summary path for non-direct
+callers. Output for default Unicode `\C`, byte-mode `\C`, `\C+`, `\C{2}`, and
+a continuation-byte no-match case matched the previous Swift checkpoint and the
+sibling Rust oracle. On the 193 MiB subtitles corpus, 20-run checks measured
+`-P --count-matches '\C'` at 276.8 ms versus 576.3 ms before and 10.669 s for
+Rust PCRE2. Ten-run Swift A/B checks measured `-P --no-pcre2-unicode
+--count-matches '\C'` at 149.0 ms versus 579.7 ms before, `-P --count-matches
+'\C+'` at 134.4 ms versus 145.8 ms before, and `-P --count-matches '\C{2}'`
+at 218.4 ms versus 428.5 ms before.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Routing multi-literal full-line output through the existing line-by-line
