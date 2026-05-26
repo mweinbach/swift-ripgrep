@@ -341,16 +341,23 @@ func rg_memcount_byte(
     }
     var count = 0
     var cursor = 0
-    while cursor < haystackLength {
-        guard let found = rgConstBytePointer(memchr(
-            haystack.advanced(by: cursor),
-            Int32(byte),
-            haystackLength - cursor
-        )) else {
-            break
+
+    if haystackLength >= 16 {
+        let target = SIMD16<UInt8>(repeating: byte)
+        let vectorLimit = haystackLength - 15
+        while cursor < vectorLimit {
+            let bytes = UnsafeRawPointer(haystack.advanced(by: cursor))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            count -= Int((bytes .== target)._storage.wrappedSum())
+            cursor += 16
         }
-        count += 1
-        cursor = haystack.distance(to: found) + 1
+    }
+
+    while cursor < haystackLength {
+        if haystack[cursor] == byte {
+            count += 1
+        }
+        cursor += 1
     }
     return count
 }

@@ -228,6 +228,18 @@ A/B checks on the 193 MiB subtitles corpus measured `-o 'Sherlock|Watson'` at
 and `--vimgrep 'Sherlock|Watson'` at 158.8 ms versus 263.1 ms before and
 43.6 ms for Rust.
 
+The Swift fallback byte counter now uses a SIMD mask sum instead of a repeated
+`memchr` loop, which cuts the line-number accounting cost in formatted direct
+writers and speeds dense byte counts without reintroducing any C shim. Output
+for vimgrep, prefixed only-match, one-byte count, byte-set count, ignore-case
+one-byte count and multi-byte count cases matched both the previous Swift
+checkpoint and the sibling Rust oracle. Five-run checks measured `--vimgrep
+'Sherlock Holmes'` at 75.8 ms versus 125.5 ms before and 29.1 ms for Rust,
+`--vimgrep 'Sherlock|Watson'` at 72.9 ms versus 158.8 ms before and 43.5 ms
+for Rust, `-n -o 'Sherlock|Watson'` at 82.5 ms versus 156.3 ms before and
+43.5 ms for Rust, and `--count-matches -i 'a'` at 66.3 ms versus 198.7 ms
+before and 509.0 ms for Rust.
+
 Direct executable byte-unit PCRE2 `--count-matches` now counts totals without
 matched-line bookkeeping while preserving the exact summary path for non-direct
 callers. Output for default Unicode `\C`, byte-mode `\C`, `\C+`, `\C{2}`, and
