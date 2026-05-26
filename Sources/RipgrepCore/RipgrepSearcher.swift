@@ -1093,6 +1093,43 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         }
                     }
                 }
+                if countMatchesOnly && allowDirectStdout && literal.count == 1 && !fastPath.wordASCII {
+                    // Direct stdout count-matches cannot print stats/JSON, so only the total is observable here.
+                    while searchOffset < data.count {
+                        let foundPointer: UnsafePointer<UInt8>?
+                        if fastPath.caseInsensitiveASCII {
+                            foundPointer = foldedLiteral.withUnsafeBufferPointer { foldedNeedle in
+                                caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
+                                    rg_memcasemem_ascii_prepared(
+                                        baseAddress.advanced(by: searchOffset),
+                                        data.count - searchOffset,
+                                        foldedNeedle.baseAddress,
+                                        foldedNeedle.count,
+                                        shifts.baseAddress
+                                    )
+                                }
+                            }
+                        } else {
+                            foundPointer = literal.withUnsafeBufferPointer { needle in
+                                rg_memmem_simple(
+                                    baseAddress.advanced(by: searchOffset),
+                                    data.count - searchOffset,
+                                    needle.baseAddress,
+                                    needle.count
+                                )
+                            }
+                        }
+                        guard let rawFoundPointer = foundPointer else {
+                            break
+                        }
+                        totalMatchCount += 1
+                        if matchedLineCount == 0 {
+                            matchedLineCount = 1
+                        }
+                        searchOffset = baseAddress.distance(to: rawFoundPointer) + 1
+                    }
+                    return
+                }
                 while searchOffset < data.count, matchedLineCount < maxCount {
                     let foundPointer: UnsafePointer<UInt8>?
                     if fastPath.caseInsensitiveASCII {

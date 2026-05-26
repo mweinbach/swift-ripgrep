@@ -133,6 +133,17 @@ sibling Rust oracle. On the 193 MiB subtitles corpus, 25-run checks measured
 171.6 ms for Rust. The neighboring `-c 'A|B|C|D|E'` mode remains on the exact
 matched-line counter and measured effectively neutral on the same run.
 
+The same direct-output total-only shortcut now covers one-byte literal
+`--count-matches` searches, leaving word-boundary searches and multi-byte
+literals on the exact matched-line path. Output for one-byte, multi-byte,
+ignore-case, whole-line count, only-matching, and word-boundary count forms
+matched the previous Swift checkpoint and the sibling Rust oracle. On the 193
+MiB subtitles corpus, 25-run checks measured `--count-matches 'A'` at
+67.4 ms versus 75.1 ms before and 65.1 ms for Rust. A 20-run ignore-case check
+measured `--count-matches -i 'a'` at 214.9 ms versus 466.1 ms before and
+509.1 ms for Rust. Multi-byte `--count-matches 'Sherlock Holmes'` stayed
+effectively neutral at 62.8 ms versus 63.9 ms before.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Routing multi-literal full-line output through the existing line-by-line
@@ -176,6 +187,10 @@ Rejected Swift-only probes from the same checkpoint:
   'A|B|C|D|E'` measured 254.3 ms versus 155.6 ms before, `-o` measured
   312.6 ms versus 220.5 ms before, and `-n -o` measured 435.3 ms versus
   348.3 ms before, so the local backward/newline scans remain on those paths.
+- Widening the Swift first/tail literal candidate scanner from `SIMD16` to
+  `SIMD32` preserved output but badly regressed representative literal scans:
+  no-match `PM_RESUME` measured 120.8 ms versus 28.0 ms before, and
+  `'Sherlock Holmes'` measured 117.2 ms versus 28.3 ms before.
 
 ## Status — 2026-05-25 fast-path checkpoint
 
