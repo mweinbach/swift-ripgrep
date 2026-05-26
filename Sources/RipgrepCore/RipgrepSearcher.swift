@@ -3132,10 +3132,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
         let literalStart = pattern.index(pattern.startIndex, offsetBy: prefix.count)
         let literalEnd = pattern.index(pattern.endIndex, offsetBy: -suffix.count)
-        let literal = String(pattern[literalStart..<literalEnd])
-        guard !literal.isEmpty,
-              literal.utf8.allSatisfy({ $0 < 0x80 }),
-              !literal.contains(where: { #"\.[]{}()+*?^$|"#.contains($0) }) else {
+        guard let literal = RegexLiteralParser.literal(fromPlainRegexPattern: String(pattern[literalStart..<literalEnd])),
+              literal.utf8.allSatisfy({ $0 < 0x80 }) else {
             return nil
         }
         return Array(literal.utf8)

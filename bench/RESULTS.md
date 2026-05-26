@@ -91,6 +91,13 @@ The first escaped-literal version exposed the old per-line writer cost at
 1.463 s on the same corpus, so the plain Darwin literal writer now batches
 stdout through the shared 1 MiB output buffer.
 
+The remaining literal-style Darwin writers now use the same buffered output
+path for dense line output. On the escaped-literal corpus,
+`--no-mmap -P '\[Sherlock\]\.Holmes'` measured Swift release at 180.7 ms
+versus system Rust at 218.8 ms in 7-run checks. On a 105 MiB dense word-boundary
+corpus, `-nw 'Sherlock'` measured Swift release at 129.9 ms versus system Rust
+at 524.9 ms, with byte-identical output in release spot checks.
+
 Fixed negative lookaround literals also avoid the Foundation regex path for
 single-file `-P -o`. On a 54 MiB repeated
 `Sherlock Holmes` / `Mycroft Holmes` / `Sherlock Watson` corpus,
@@ -211,6 +218,9 @@ The key improvements since the 2026-05-24 baseline are:
 - safely escaped fixed PCRE literals such as `foo\.bar` now use the same
   parser and executable preflight, and the plain Darwin literal writer batches
   dense output through the shared 1 MiB buffer instead of writing per line;
+- streaming no-mmap literals, surrounding-word regex output, and line-numbered
+  word literal output now use that same buffered writer so dense-match cases
+  avoid per-line syscalls;
 - PCRE2 fixed negative-lookaround literal shapes now use the same in-tree
   parser and Darwin byte scanner for `-P -o`, preserving Rust output while
   reducing representative negative lookbehind/lookahead cases by about two

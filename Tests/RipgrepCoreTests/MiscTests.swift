@@ -339,6 +339,20 @@ struct MiscTests {
         ], fixture: {})
 
         #expect(String(decoding: output, as: UTF8.self) == "2:Mr Holmes returns\n4:Doctor Holmes arrives\n")
+
+        try root.write("""
+        Mr Holmes.Jr returns
+        Mr HolmesxJr returns
+        Doctor Holmes.Jr arrives
+        """, to: "escaped-sherlock.txt")
+
+        let escapedOutput = try runExecutableData([
+            "-n",
+            #"\w+\s+Holmes\.Jr\s+\w+"#,
+            root.path("escaped-sherlock.txt"),
+        ], fixture: {})
+
+        #expect(String(decoding: escapedOutput, as: UTF8.self) == "1:Mr Holmes.Jr returns\n3:Doctor Holmes.Jr arrives\n")
         #endif
     }
 
