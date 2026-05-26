@@ -1096,38 +1096,26 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 }
                 if countMatchesOnly && allowDirectStdout && literal.count == 1 && !fastPath.wordASCII {
                     // Direct stdout count-matches cannot print stats/JSON, so only the total is observable here.
-                    while searchOffset < data.count {
-                        let foundPointer: UnsafePointer<UInt8>?
-                        if fastPath.caseInsensitiveASCII {
-                            foundPointer = foldedLiteral.withUnsafeBufferPointer { foldedNeedle in
-                                caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
-                                    rg_memcasemem_ascii_prepared(
-                                        baseAddress.advanced(by: searchOffset),
-                                        data.count - searchOffset,
-                                        foldedNeedle.baseAddress,
-                                        foldedNeedle.count,
-                                        shifts.baseAddress
-                                    )
-                                }
-                            }
+                    if fastPath.caseInsensitiveASCII {
+                        let foldedByte = foldedLiteral[0]
+                        if foldedByte >= UInt8(ascii: "a") && foldedByte <= UInt8(ascii: "z") {
+                            totalMatchCount = Int(rg_memcount_byte(
+                                baseAddress,
+                                data.count,
+                                foldedByte
+                            )) + Int(rg_memcount_byte(
+                                baseAddress,
+                                data.count,
+                                foldedByte - (UInt8(ascii: "a") - UInt8(ascii: "A"))
+                            ))
                         } else {
-                            foundPointer = literal.withUnsafeBufferPointer { needle in
-                                rg_memmem_simple(
-                                    baseAddress.advanced(by: searchOffset),
-                                    data.count - searchOffset,
-                                    needle.baseAddress,
-                                    needle.count
-                                )
-                            }
+                            totalMatchCount = Int(rg_memcount_byte(baseAddress, data.count, foldedByte))
                         }
-                        guard let rawFoundPointer = foundPointer else {
-                            break
-                        }
-                        totalMatchCount += 1
-                        if matchedLineCount == 0 {
-                            matchedLineCount = 1
-                        }
-                        searchOffset = baseAddress.distance(to: rawFoundPointer) + 1
+                    } else {
+                        totalMatchCount = Int(rg_memcount_byte(baseAddress, data.count, literal[0]))
+                    }
+                    if totalMatchCount > 0 {
+                        matchedLineCount = 1
                     }
                     return
                 }
@@ -1272,6 +1260,15 @@ public struct RipgrepSearcher: @unchecked Sendable {
             if let byteSet = fastPathByteSet {
                 var searchOffset = 0
                 var lastMatchedLineStart: Int?
+                if countMatchesOnly && allowDirectStdout {
+                    totalMatchCount = byteSet.reduce(0) { count, byte in
+                        count + Int(rg_memcount_byte(baseAddress, data.count, byte))
+                    }
+                    if totalMatchCount > 0 {
+                        matchedLineCount = 1
+                    }
+                    return
+                }
                 while searchOffset < data.count, matchedLineCount < maxCount {
                     let foundPointer = byteSet.withUnsafeBufferPointer { needles in
                         rg_memchr_any_bytes(
@@ -1285,15 +1282,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         break
                     }
                     let matchStart = baseAddress.distance(to: rawFoundPointer)
-                    if countMatchesOnly && allowDirectStdout {
-                        // Direct stdout count-matches cannot print stats/JSON, so only the total is observable here.
-                        totalMatchCount += 1
-                        if matchedLineCount == 0 {
-                            matchedLineCount = 1
-                        }
-                        searchOffset = matchStart + 1
-                        continue
-                    }
                     var lineStart = matchStart
                     while lineStart > 0, baseAddress[lineStart - 1] != UInt8(ascii: "\n") {
                         lineStart -= 1

@@ -155,6 +155,18 @@ Rust PCRE2. Ten-run Swift A/B checks measured `-P --no-pcre2-unicode
 '\C+'` at 134.4 ms versus 145.8 ms before, and `-P --count-matches '\C{2}'`
 at 218.4 ms versus 428.5 ms before.
 
+The direct one-byte and byte-set `--count-matches` paths now use the existing
+Swift byte counter instead of issuing a find-next call per match. Output for
+five-byte, alphabet, sparse, and ignore-case counts matched the previous Swift
+checkpoint and the sibling Rust oracle. On the 193 MiB subtitles corpus, 25-run
+checks measured `--count-matches -i 'a'` at 198.7 ms versus 211.8 ms before,
+`--count-matches 'A|B|C|D|E'` at 103.4 ms versus 116.4 ms before, and the
+single-byte `--count-matches 'A'` form effectively neutral at 64.2 ms versus
+64.3 ms before. Ten-run size checks measured `--count-matches
+'A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z'` at 310.4 ms versus
+529.5 ms before, while sparse `--count-matches 'Q|Z'` stayed neutral at
+61.5 ms versus 63.2 ms before.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Routing multi-literal full-line output through the existing line-by-line
