@@ -18,6 +18,7 @@ benchmarks below use `/tmp/swift-rg-bench/subtitles/en.small.txt` (193 MiB).
 |---|---|---:|---:|---:|
 | literal | `'Sherlock Holmes'` | 25.8 ms | 26.4 ms | **1.03x** |
 | PCRE literal | `-P 'Sherlock Holmes'` | 220.0 ms | 26.7 ms | **0.12x** |
+| PCRE literal, case-insensitive | `-P -i 'sherlock holmes'` | 371.8 ms | 35.3 ms | **0.09x** |
 | literal, no-mmap | `--no-mmap 'Sherlock Holmes'` | 26.2 ms | 24.8 ms | **0.95x** |
 | literal, case-insensitive | `-i 'Sherlock Holmes'` | 41.5 ms | 35.3 ms | **0.85x** |
 | word boundary | `-nw 'Sherlock Holmes'` | 31.2 ms | 32.0 ms | **1.03x** |
@@ -74,10 +75,13 @@ The matching fixed-lookahead shape is on the same byte path:
 Swift at 145.5 ms versus Rust PCRE2 at 216.0 ms (**0.67x**) in a 3-run check.
 
 Plain PCRE literal searches now route through the default literal matcher and,
-for the executable spelling, the Darwin literal preflight. On the 193 MiB
-subtitles corpus, `-P 'Sherlock Holmes'` produced byte-identical output and
-measured Swift release at 26.7 ms versus system Rust `rg` PCRE2 at 220.0 ms
-in 7-run checks.
+for executable spellings with leading engine selectors (`-P`, `--pcre2`,
+`--engine`, `--auto-hybrid-regex`, `--no-pcre2`), the Darwin literal preflight.
+On the 193 MiB subtitles corpus, `-P 'Sherlock Holmes'` produced
+byte-identical output and measured Swift release at 26.7 ms versus system Rust
+`rg` PCRE2 at 220.0 ms in 7-run checks. The newly covered `-P -i 'sherlock
+holmes'` literal form measured Swift release at 35.3 ms versus Rust PCRE2 at
+371.8 ms in a separate 7-run check.
 
 Fixed negative lookaround literals also avoid the Foundation regex path for
 single-file `-P -o`. On a 54 MiB repeated
@@ -191,10 +195,11 @@ The key improvements since the 2026-05-24 baseline are:
   shapes now use an in-tree Swift parser plus Darwin byte scanning for
   `-P -o`, preserving Rust output while avoiding Foundation regex work on the
   hot path;
-- plain `-P`/`--engine=pcre2` literals now bypass the compatibility matcher
-  entirely, reuse the default literal fast path, and hit the executable Darwin
-  literal preflight for direct invocations while keeping the Rust-compatible
-  PCRE2 CLI surface;
+- plain literals behind leading PCRE/engine selectors (`-P`, `--pcre2`,
+  `--engine`, `--auto-hybrid-regex`, `--no-pcre2`) now bypass the
+  compatibility matcher entirely, reuse the default literal fast path, and hit
+  the executable Darwin literal preflight for direct invocations while keeping
+  the Rust-compatible PCRE2 CLI surface;
 - PCRE2 fixed negative-lookaround literal shapes now use the same in-tree
   parser and Darwin byte scanner for `-P -o`, preserving Rust output while
   reducing representative negative lookbehind/lookahead cases by about two

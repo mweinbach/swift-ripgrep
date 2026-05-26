@@ -10,7 +10,7 @@ in-tree Swift compatibility engine; it does not link libpcre2.
 **Functional 1:1 with Rust ripgrep 15.1.0, including the streaming I/O
 architecture.** Verified via:
 
-- **117 Swift Testing cases** across 12 suites covering search, output formats,
+- **119 Swift Testing cases** across 12 suites covering search, output formats,
   ignore rules, file types, stdin, encodings, binary handling, parser
   diagnostics, mmap/worker pool, PCRE2, streaming haystack reads, and
   generated-asset drift.
@@ -48,9 +48,13 @@ test suite that mirrors the Rust upstream split (`BinaryTests`, `FeatureTests`,
 `JSONTests`, `MiscTests`, `MultilineTests`, `RegressionTests`, plus
 `HaystackReaderTests`, `ParityHarnessTests` and `RipgrepTestSupport`).
 
-The normal build has no package-manager or system-library dependency. PCRE2
-syntax compatibility is implemented in Swift/Foundation for the covered `-P`
-surface, with Swift-parsed fixed positive/negative lookaround literal and
+The normal build has no package-manager or system-library dependency. Plain
+literals selected through PCRE-compatible flags (`-P`, `--pcre2`, `--engine`,
+`--auto-hybrid-regex` and their disabling/default forms) reuse the default
+literal matcher and, for single-file executable searches, the Darwin literal
+preflight before the compatibility engine is needed. PCRE2 syntax
+compatibility is implemented in Swift/Foundation for the covered non-literal
+`-P` surface, with Swift-parsed fixed positive/negative lookaround literal and
 literal-backreference specializations that use the checked-in Darwin byte
 scanner for `-P -o`, line-numbered, byte-offset and byte-column only-match
 output, plus count/path/quiet modes. The Darwin arm hot paths live in the
@@ -95,7 +99,8 @@ into a much smaller implementation:
 - In-tree PCRE2-compatible regex support powers `-P`, `--engine=pcre2`,
   `--engine=auto` (auto-hybrid fallback), and the
   `--pcre2-unicode`/`--no-pcre2-unicode` compatibility toggles without linking
-  libpcre2.
+  libpcre2. Plain literals selected through those engine flags bypass the
+  compatibility matcher and stay on the default literal/Darwin byte path.
 - Default-engine size accounting honours `--regex-size-limit` and emits the
   Rust-compatible `compiled regex exceeds size limit of <N>` diagnostic when
   the budget is exceeded. `--dfa-size-limit` is plumbed in for the same
@@ -121,6 +126,9 @@ into a much smaller implementation:
 1. **(Updated 2026-05-25)** PCRE2-style and auto-hybrid regex support without
    libpcre2 — see `Sources/RipgrepCore/PCRE2Matcher.swift` and the
    compatibility integration in `Sources/RipgrepCore/PatternMatcher.swift`.
+   Plain literals selected through PCRE/auto/default engine flags bypass the
+   compatibility matcher entirely and use the same literal fast paths as the
+   default engine.
    Fixed positive/negative lookaround literals and simple literal-group
    backreferences now avoid the Foundation regex path for single-file `-P -o`
    output, line-numbered/byte-offset/byte-column only-match output and

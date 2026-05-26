@@ -39,9 +39,23 @@ struct PCRE2Tests {
 
         let shortFlagOutput = try runExecutableData(["-P", "Sherlock", temp.path("pcre.txt")]) {}
         let engineFlagOutput = try runExecutableData(["--engine=pcre2", "Sherlock", temp.path("pcre.txt")]) {}
+        let splitEngineFlagOutput = try runExecutableData(["--engine", "pcre2", "Sherlock", temp.path("pcre.txt")]) {}
+        let autoEngineOutput = try runExecutableData(["--engine=auto", "Sherlock", temp.path("pcre.txt")]) {}
+        let splitAutoEngineOutput = try runExecutableData(["--engine", "auto", "Sherlock", temp.path("pcre.txt")]) {}
+        let autoHybridOutput = try runExecutableData(["--auto-hybrid-regex", "Sherlock", temp.path("pcre.txt")]) {}
+        let noPcreOutput = try runExecutableData(["--no-pcre2", "Sherlock", temp.path("pcre.txt")]) {}
+        let ignoreCaseOutput = try runExecutableData(["-P", "-i", "sherlock", temp.path("pcre.txt")]) {}
+        let noMmapOutput = try runExecutableData(["-P", "--no-mmap", "Sherlock", temp.path("pcre.txt")]) {}
 
         #expect(shortFlagOutput == Data("Sherlock Holmes\n".utf8))
         #expect(engineFlagOutput == Data("Sherlock Holmes\n".utf8))
+        #expect(splitEngineFlagOutput == Data("Sherlock Holmes\n".utf8))
+        #expect(autoEngineOutput == Data("Sherlock Holmes\n".utf8))
+        #expect(splitAutoEngineOutput == Data("Sherlock Holmes\n".utf8))
+        #expect(autoHybridOutput == Data("Sherlock Holmes\n".utf8))
+        #expect(noPcreOutput == Data("Sherlock Holmes\n".utf8))
+        #expect(ignoreCaseOutput == Data("Sherlock Holmes\n".utf8))
+        #expect(noMmapOutput == Data("Sherlock Holmes\n".utf8))
     }
 
     @Test func pcre2FixedLookbehindLiteralOnlyMatchesAfterPrefix() throws {

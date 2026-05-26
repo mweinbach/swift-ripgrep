@@ -55,6 +55,7 @@ struct RipgrepCommand {
             case wordWithLineNumbers
         }
 
+        let arguments = darwinLiteralPreflightArguments(afterStrippingLeadingEngineSelectorFrom: arguments)
         let mode: DarwinLiteralPreflightMode
         let pattern: String
         let path: String
@@ -63,15 +64,13 @@ struct RipgrepCommand {
             pattern = arguments[0]
             path = arguments[1]
         } else if arguments.count == 3,
-                  arguments[0] == "-P"
-                    || arguments[0] == "--pcre2"
-                    || arguments[0] == "--engine=pcre2" {
+                  isSingleArgumentEngineSelector(arguments[0]) {
             mode = .mmap
             pattern = arguments[1]
             path = arguments[2]
         } else if arguments.count == 4,
                   arguments[0] == "--engine",
-                  arguments[1] == "pcre2" {
+                  isEngineSelectorValue(arguments[1]) {
             mode = .mmap
             pattern = arguments[2]
             path = arguments[3]
@@ -231,6 +230,48 @@ struct RipgrepCommand {
             return nil
         }
         return result.status > 0 ? 0 : 1
+    }
+
+    private static func darwinLiteralPreflightArguments(
+        afterStrippingLeadingEngineSelectorFrom arguments: [String]
+    ) -> [String] {
+        guard let first = arguments.first else {
+            return arguments
+        }
+        if isSingleArgumentEngineSelector(first) {
+            return Array(arguments.dropFirst())
+        }
+        if arguments.count >= 2,
+           first == "--engine",
+           isEngineSelectorValue(arguments[1]) {
+            return Array(arguments.dropFirst(2))
+        }
+        return arguments
+    }
+
+    private static func isSingleArgumentEngineSelector(_ argument: String) -> Bool {
+        switch argument {
+        case "-P",
+             "--pcre2",
+             "--no-pcre2",
+             "--auto-hybrid-regex",
+             "--no-auto-hybrid-regex",
+             "--engine=default",
+             "--engine=pcre2",
+             "--engine=auto":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func isEngineSelectorValue(_ value: String) -> Bool {
+        switch value {
+        case "default", "pcre2", "auto":
+            return true
+        default:
+            return false
+        }
     }
 
     private static func isPlainDarwinLiteral(_ pattern: String) -> Bool {
