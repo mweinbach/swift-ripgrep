@@ -972,6 +972,99 @@ rg_darwin_literal_file_result rg_darwin_write_fixed_conditional_pcre_o(
     return result;
 }
 
+static int rg_is_utf8_continuation_byte(uint8_t byte) {
+    return (byte & 0xC0) == 0x80;
+}
+
+rg_darwin_literal_file_result rg_darwin_write_byte_unit_pcre_o(
+    const uint8_t *base,
+    size_t haystack_len,
+    int mode,
+    size_t fixed_count,
+    int unicode_start_only
+) {
+    rg_darwin_literal_file_result result = { .status = -2, .matched_line_count = 0, .total_match_count = 0, .bytes_searched = 0 };
+
+    if (base == NULL || (mode == 2 && fixed_count == 0)) {
+        return result;
+    }
+
+    rg_output_buffer output = { .bytes = malloc(1024 * 1024), .length = 0, .capacity = 1024 * 1024 };
+    if (output.bytes == NULL) {
+        result.status = -1;
+        return result;
+    }
+
+    size_t line_start = 0;
+    while (line_start < haystack_len) {
+        size_t line_end = line_start;
+        while (line_end < haystack_len && base[line_end] != '\n') {
+            line_end++;
+        }
+
+        size_t line_matches = 0;
+        if (mode == 1) {
+            size_t offset = line_start;
+            while (offset < line_end && unicode_start_only && rg_is_utf8_continuation_byte(base[offset])) {
+                offset++;
+            }
+            if (line_end > offset) {
+                if (rg_output_buffer_write(&output, base + offset, line_end - offset) != 0) {
+                    free(output.bytes);
+                    result.status = -1;
+                    return result;
+                }
+                uint8_t terminator = '\n';
+                if (rg_output_buffer_write(&output, &terminator, 1) != 0) {
+                    free(output.bytes);
+                    result.status = -1;
+                    return result;
+                }
+                line_matches = 1;
+                result.total_match_count++;
+            }
+        } else {
+            const size_t match_len = mode == 2 ? fixed_count : 1;
+            size_t offset = line_start;
+            while (offset + match_len <= line_end) {
+                if (unicode_start_only && rg_is_utf8_continuation_byte(base[offset])) {
+                    offset++;
+                    continue;
+                }
+                if (rg_output_buffer_write(&output, base + offset, match_len) != 0) {
+                    free(output.bytes);
+                    result.status = -1;
+                    return result;
+                }
+                uint8_t terminator = '\n';
+                if (rg_output_buffer_write(&output, &terminator, 1) != 0) {
+                    free(output.bytes);
+                    result.status = -1;
+                    return result;
+                }
+                line_matches++;
+                result.total_match_count++;
+                offset += match_len;
+            }
+        }
+
+        if (line_matches > 0) {
+            result.matched_line_count++;
+        }
+        line_start = line_end < haystack_len ? line_end + 1 : haystack_len;
+    }
+
+    if (rg_output_buffer_flush(&output) != 0) {
+        free(output.bytes);
+        result.status = -1;
+        return result;
+    }
+    free(output.bytes);
+    result.status = result.total_match_count > 0 ? 1 : 0;
+    result.bytes_searched = haystack_len;
+    return result;
+}
+
 static int rg_output_buffer_write_decimal_colon(rg_output_buffer *output, size_t value) {
     uint8_t buffer[32];
     size_t cursor = sizeof(buffer);

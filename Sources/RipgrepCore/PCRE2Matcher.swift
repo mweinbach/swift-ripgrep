@@ -20,8 +20,15 @@ final class PCRE2CompiledPattern {
         case negativeLookbehind([UInt8])
     }
 
+    enum ByteUnitPattern {
+        case single
+        case oneOrMore
+        case fixed(Int)
+    }
+
     private enum Matcher {
         case regex(NSRegularExpression)
+        case byteUnit(ByteUnitPattern, unicodeStartOnly: Bool)
         case fixedPositiveLookbehind(prefix: [UInt8], literal: [UInt8], caseInsensitiveASCII: Bool)
         case fixedNegativeLookbehind(prefix: [UInt8], literal: [UInt8], caseInsensitiveASCII: Bool)
         case fixedPositiveLookahead(literal: [UInt8], suffix: [UInt8], caseInsensitiveASCII: Bool)
@@ -86,8 +93,20 @@ final class PCRE2CompiledPattern {
         return (condition, trueLiteral, falseLiteral, caseInsensitiveASCII)
     }
 
+    var byteUnitFastPath: (pattern: ByteUnitPattern, unicodeStartOnly: Bool)? {
+        guard case .byteUnit(let pattern, let unicodeStartOnly) = matcher else {
+            return nil
+        }
+        return (pattern, unicodeStartOnly)
+    }
+
     init(pattern: String, options: RipgrepOptions) throws {
         self.source = pattern
+        if let byteUnit = Self.byteUnitPattern(pattern) {
+            self.matcher = .byteUnit(byteUnit, unicodeStartOnly: !options.noUnicode)
+            return
+        }
+
         #if canImport(CRipgrepPlatform)
         let canUseFixedByteMatcher = !options.effectiveIgnoreCase || options.noUnicode
         let caseInsensitiveASCII = options.effectiveIgnoreCase && options.noUnicode
@@ -188,6 +207,8 @@ final class PCRE2CompiledPattern {
             return regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { match in
                 Self.match(from: match, in: text)
             }
+        case .byteUnit(let pattern, let unicodeStartOnly):
+            return Self.byteUnitMatches(pattern: pattern, unicodeStartOnly: unicodeStartOnly, in: text)
         case .fixedPositiveLookbehind(let prefix, let literal, let caseInsensitiveASCII):
             return Self.fixedPositiveLookbehindMatches(
                 prefix: prefix,
@@ -504,6 +525,35 @@ final class PCRE2CompiledPattern {
             return nil
         }
         return (condition, trueLiteral, falseLiteral)
+    }
+
+    private static func byteUnitPattern(_ pattern: String) -> ByteUnitPattern? {
+        guard pattern.hasPrefix(#"\C"#) else {
+            return nil
+        }
+        let quantifierStart = pattern.index(pattern.startIndex, offsetBy: 2)
+        guard quantifierStart < pattern.endIndex else {
+            return .single
+        }
+        let quantifier = pattern[quantifierStart...]
+        if quantifier == "+" {
+            return .oneOrMore
+        }
+        if quantifier == "+?" {
+            return .single
+        }
+        guard quantifier.first == "{",
+              quantifier.last == "}" else {
+            return nil
+        }
+        let countText = quantifier.dropFirst().dropLast()
+        guard !countText.isEmpty,
+              countText.allSatisfy({ $0.isNumber }),
+              let count = Int(countText),
+              count > 0 else {
+            return nil
+        }
+        return .fixed(count)
     }
 
     private static func fixedLiteralCaptureGroup(
@@ -1170,6 +1220,100 @@ final class PCRE2CompiledPattern {
         #else
         return []
         #endif
+    }
+
+    private static func byteUnitMatches(
+        pattern: ByteUnitPattern,
+        unicodeStartOnly: Bool,
+        in text: String
+    ) -> [PCRE2Match] {
+        let scalars = Array(text.unicodeScalars)
+        let bytes = scalars.compactMap { scalar -> UInt8? in
+            guard scalar.value <= UInt8.max else {
+                return nil
+            }
+            return UInt8(scalar.value)
+        }
+        guard bytes.count == scalars.count, !bytes.isEmpty else {
+            return []
+        }
+
+        func isAllowedStart(_ offset: Int) -> Bool {
+            !unicodeStartOnly || !isUTF8ContinuationByte(bytes[offset])
+        }
+
+        var matches: [PCRE2Match] = []
+        switch pattern {
+        case .single:
+            var offset = 0
+            while offset < bytes.count {
+                guard isAllowedStart(offset) else {
+                    offset += 1
+                    continue
+                }
+                appendByteUnitMatch(start: offset, end: offset + 1, in: text, to: &matches)
+                offset += 1
+            }
+        case .oneOrMore:
+            var offset = 0
+            while offset < bytes.count, !isAllowedStart(offset) {
+                offset += 1
+            }
+            if offset < bytes.count {
+                appendByteUnitMatch(start: offset, end: bytes.count, in: text, to: &matches)
+            }
+        case .fixed(let count):
+            var offset = 0
+            while offset + count <= bytes.count {
+                guard isAllowedStart(offset) else {
+                    offset += 1
+                    continue
+                }
+                appendByteUnitMatch(start: offset, end: offset + count, in: text, to: &matches)
+                offset += count
+            }
+        }
+        return matches
+    }
+
+    private static func appendByteUnitMatch(
+        start: Int,
+        end: Int,
+        in text: String,
+        to matches: inout [PCRE2Match]
+    ) {
+        guard let range = scalarRange(startOffset: start, endOffset: end, in: text) else {
+            return
+        }
+        matches.append(PCRE2Match(
+            range: range,
+            byteRange: start..<end,
+            captures: [range]
+        ))
+    }
+
+    private static func scalarRange(startOffset: Int, endOffset: Int, in text: String) -> Range<String.Index>? {
+        guard startOffset >= 0,
+              endOffset >= startOffset,
+              let lower = text.unicodeScalars.index(
+                text.unicodeScalars.startIndex,
+                offsetBy: startOffset,
+                limitedBy: text.unicodeScalars.endIndex
+              ),
+              let upper = text.unicodeScalars.index(
+                text.unicodeScalars.startIndex,
+                offsetBy: endOffset,
+                limitedBy: text.unicodeScalars.endIndex
+              ),
+              let lowerIndex = lower.samePosition(in: text),
+              let upperIndex = upper.samePosition(in: text) else {
+            return nil
+        }
+        return lowerIndex..<upperIndex
+    }
+
+    private static func isUTF8ContinuationByte(_ byte: UInt8) -> Bool {
+        byte & 0xC0 == 0x80
     }
 
     #if canImport(CRipgrepPlatform)

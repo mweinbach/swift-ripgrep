@@ -88,6 +88,14 @@ rg_darwin_literal_file_result rg_darwin_write_fixed_conditional_pcre_o(
     size_t false_literal_len
 );
 
+rg_darwin_literal_file_result rg_darwin_write_byte_unit_pcre_o(
+    const uint8_t *base,
+    size_t haystack_len,
+    int mode,
+    size_t fixed_count,
+    int unicode_start_only
+);
+
 rg_darwin_literal_file_result rg_darwin_write_word_literal_file_lines(
     const char *path,
     const uint8_t *literal,

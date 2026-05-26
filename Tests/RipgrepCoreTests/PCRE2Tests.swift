@@ -264,6 +264,71 @@ struct PCRE2Tests {
         #expect(!pcreErrors.isEmpty)
     }
 
+    @Test func pcre2ByteUnitEscapeOnlyMatchingOutput() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write(Data([0x63, 0x61, 0x66, 0xC3, 0xA9, 0x0A, 0x61, 0x62, 0x63, 0x0A]), to: "pcre.txt")
+        try temp.write(Data([0xA9, 0x61, 0x62, 0x63, 0x0A]), to: "invalid-prefix.txt")
+
+        let unicodeSingle = try runExecutableData(["-P", "-o", #"\C"#, temp.path("pcre.txt")]) {}
+        let byteSingle = try runExecutableData([
+            "-P",
+            "--no-pcre2-unicode",
+            "-o",
+            #"\C"#,
+            temp.path("pcre.txt"),
+        ]) {}
+        let oneOrMore = try runExecutableData(["-P", "-o", #"\C+"#, temp.path("pcre.txt")]) {}
+        let fixedTwo = try runExecutableData(["-P", "-o", #"\C{2}"#, temp.path("pcre.txt")]) {}
+        let autoSingle = try runExecutableData(["--engine=auto", "-o", #"\C"#, temp.path("pcre.txt")]) {}
+        let invalidPrefixOneOrMore = try runExecutableData(["-P", "-o", #"\C+"#, temp.path("invalid-prefix.txt")]) {}
+        let invalidPrefixByteOneOrMore = try runExecutableData([
+            "-P",
+            "--no-pcre2-unicode",
+            "-o",
+            #"\C+"#,
+            temp.path("invalid-prefix.txt"),
+        ]) {}
+        let lazyOneOrMore = try runExecutableData(["-P", "-o", #"\C+?"#, temp.path("invalid-prefix.txt")]) {}
+
+        #expect(unicodeSingle == Data([0x63, 0x0A, 0x61, 0x0A, 0x66, 0x0A, 0xC3, 0x0A, 0x61, 0x0A, 0x62, 0x0A, 0x63, 0x0A]))
+        #expect(byteSingle == Data([0x63, 0x0A, 0x61, 0x0A, 0x66, 0x0A, 0xC3, 0x0A, 0xA9, 0x0A, 0x61, 0x0A, 0x62, 0x0A, 0x63, 0x0A]))
+        #expect(oneOrMore == Data([0x63, 0x61, 0x66, 0xC3, 0xA9, 0x0A, 0x61, 0x62, 0x63, 0x0A]))
+        #expect(fixedTwo == Data([0x63, 0x61, 0x0A, 0x66, 0xC3, 0x0A, 0x61, 0x62, 0x0A]))
+        #expect(autoSingle == unicodeSingle)
+        #expect(invalidPrefixOneOrMore == Data([0x61, 0x62, 0x63, 0x0A]))
+        #expect(invalidPrefixByteOneOrMore == Data([0xA9, 0x61, 0x62, 0x63, 0x0A]))
+        #expect(lazyOneOrMore == Data([0x61, 0x0A, 0x62, 0x0A, 0x63, 0x0A]))
+    }
+
+    @Test func pcre2ByteUnitEscapeRespectsDefaultEngineSelection() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("ab\n", to: "pcre.txt")
+        let expected = """
+        rg: regex parse error:
+            (?:\\C)
+               ^^
+        error: unrecognized escape sequence
+        """
+
+        for arguments in [
+            [#"\C"#, temp.path("pcre.txt")],
+            ["--engine=default", #"\C"#, temp.path("pcre.txt")],
+            ["--no-pcre2", #"\C"#, temp.path("pcre.txt")],
+        ] {
+            var output: [String] = []
+            var errors: [String] = []
+            let exitCode = RipgrepCLI.run(
+                arguments: arguments,
+                stdout: { output.append($0) },
+                stderr: { errors.append($0) }
+            )
+
+            #expect(exitCode == 2)
+            #expect(output.isEmpty)
+            #expect(errors == [expected])
+        }
+    }
+
     @Test func pcre2AssertionConditionalsOnlyMatching() throws {
         let temp = try TemporaryDirectory()
         try temp.write("foofoo\nbar\nfoobar\n", to: "pcre.txt")

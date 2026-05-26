@@ -573,6 +573,17 @@ public struct PatternMatcher {
         return regex.fixedAssertionConditionalFastPath
     }
 
+    func byteUnitFastPath() -> (
+        pattern: PCRE2CompiledPattern.ByteUnitPattern,
+        unicodeStartOnly: Bool
+    )? {
+        guard patterns.count == 1,
+              case .pcre2(let regex) = patterns[0] else {
+            return nil
+        }
+        return regex.byteUnitFastPath
+    }
+
     private static func makeByteLiteralFastPath(
         patterns: [CompiledPattern],
         options: RipgrepOptions,
@@ -1154,10 +1165,35 @@ public struct PatternMatcher {
     }
 
     private static func regexUsesByteSemantics(pattern: String, options: RipgrepOptions) -> Bool {
+        if hasPCREByteUnitEscape(pattern) {
+            return true
+        }
         if options.noUnicode {
             return !wholePatternUnicodeEnabled(pattern) && !hasInlineUnicodeEnableOption(pattern)
         }
         return hasInlineNoUnicodeOption(pattern) && !hasInlineUnicodeEnableOption(pattern)
+    }
+
+    private static func hasPCREByteUnitEscape(_ pattern: String) -> Bool {
+        var escaped = false
+        var inClass = false
+        for character in pattern {
+            if escaped {
+                if !inClass, character == "C" {
+                    return true
+                }
+                escaped = false
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+            } else if character == "[" {
+                inClass = true
+            } else if character == "]" {
+                inClass = false
+            }
+        }
+        return false
     }
 
     private static func wholePatternUnicodeEnabled(_ pattern: String) -> Bool {
@@ -1902,6 +1938,7 @@ public struct PatternMatcher {
                 if character == "g"
                     || character == "k"
                     || character == "K"
+                    || character == "C"
                     || character == "N"
                     || character == "Q"
                     || character == "E" {
@@ -2135,7 +2172,7 @@ public struct PatternMatcher {
         while index < pattern.endIndex {
             let character = pattern[index]
             if escaped {
-                if character == "q" {
+                if character == "q" || character == "C" {
                     return UnsupportedRegexFeature(
                         byteOffset: pattern[..<pattern.index(before: index)].utf8.count,
                         caretLength: 2,

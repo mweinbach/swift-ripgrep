@@ -142,6 +142,16 @@ executable `-P -o` form uses a narrow checked-in Darwin stdout writer, while
 default and `--no-pcre2` modes still reject assertion-conditionals with
 Rust-compatible `unrecognized flag` diagnostics.
 
+Fixed PCRE byte-unit escapes now avoid both libpcre2 and Foundation regex for
+the covered whole-pattern forms. On a 16 MiB slice of the subtitles corpus,
+`-P -o '\C'` produced byte-identical output to system Rust `rg` PCRE2 and
+measured Swift release at 155.8 ms versus Rust at 1.102 s in 7-run checks.
+The greedy whole-line form `-P -o '\C+'` also produced byte-identical output
+and measured Swift at 64.3 ms versus Rust PCRE2 at 120.6 ms. A full-corpus
+Swift-only spot check on the 193 MiB file produced 391,244,874 bytes for
+`\C` and 202,721,401 bytes for `\C+`, confirming the direct byte writer is
+being exercised on dense output.
+
 Line-numbered only-match output for the same fixed PCRE2 family now stays on
 the executable Darwin byte writer too. On the 193 MiB subtitles corpus,
 `-P -n -o '(?<=Sherlock )Holmes'` produced byte-identical output to the sibling

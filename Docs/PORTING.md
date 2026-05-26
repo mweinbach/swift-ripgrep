@@ -10,7 +10,7 @@ in-tree Swift compatibility engine; it does not link libpcre2.
 **Functional 1:1 with Rust ripgrep 15.1.0, including the streaming I/O
 architecture.** Verified via:
 
-- **143 Swift Testing cases** across 12 suites covering search, output formats,
+- **145 Swift Testing cases** across 12 suites covering search, output formats,
   ignore rules, file types, stdin, encodings, binary handling, parser
   diagnostics, mmap/worker pool, PCRE2, streaming haystack reads, and
   generated-asset drift.
@@ -64,9 +64,12 @@ positive/negative lookaround literal, reset-start (`\K`) literal and
 literal-backreference specializations, including `\g` and Python-style named
 backreference spellings, that use the checked-in Darwin byte scanner for
 `-P -o`, line-numbered, byte-offset and byte-column only-match output, plus
-count/path/quiet modes. Literal assertion-conditionals also get a narrow
-Darwin stdout writer for the plain executable `-P -o` shape. The Darwin arm
-hot paths live in the checked-in
+count/path/quiet modes. Fixed PCRE byte-unit escapes (`\C`, `\C+` and
+`\C{n}`) are matched in-tree as raw bytes, preserving Rust's UTF-mode behavior
+of starting matches only at UTF-8 scalar boundaries unless
+`--no-pcre2-unicode` is selected. Literal assertion-conditionals and plain
+byte-unit only-match output also get narrow Darwin stdout writers for the
+plain executable `-P -o` shape. The Darwin arm hot paths live in the checked-in
 `CRipgrepPlatform` shim because they provide measurable NEON/mmap throughput
 that Swift cannot currently express directly.
 
@@ -111,8 +114,8 @@ into a much smaller implementation:
   libpcre2. Plain literals selected through those engine flags bypass the
   compatibility matcher and stay on the default literal/Darwin byte path,
   including safely escaped fixed literals and PCRE quoted literals. Default and
-  `--no-pcre2` modes still reject PCRE-only quote escapes with Rust-compatible
-  diagnostics.
+  `--no-pcre2` modes still reject PCRE-only quote escapes and byte-unit escapes
+  with Rust-compatible diagnostics.
 - Default-engine size accounting honours `--regex-size-limit` and emits the
   Rust-compatible `compiled regex exceeds size limit of <N>` diagnostic when
   the budget is exceeded. `--dfa-size-limit` is plumbed in for the same
@@ -160,7 +163,11 @@ into a much smaller implementation:
    diagnostics. Literal condition/branch forms use a Swift matcher plus a
    Darwin stdout writer for plain executable `-P -o`; they remain
    byte-identical to Rust `rg` and benchmark faster than Rust PCRE2 on the
-   dense conditional corpus in `bench/RESULTS.md`.
+   dense conditional corpus in `bench/RESULTS.md`. Fixed byte-unit forms
+   `\C`, `\C+` and `\C{n}` now use a Swift raw-byte matcher and direct Darwin
+   writer for the plain executable `-P -o` case; auto mode falls through to
+   that compatibility path, while default/no-PCRE modes reject `\C` with the
+   same diagnostic shape as Rust.
 
 2. **(Done 2026-05-24)** Enforced regex resource limits — see the size-budget
    guard in `Sources/RipgrepCore/PatternMatcher.swift`.

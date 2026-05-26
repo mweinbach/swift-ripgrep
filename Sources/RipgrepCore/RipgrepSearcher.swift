@@ -485,6 +485,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let fixedNegativeLookaheadFastPath = matcher.fixedNegativeLookaheadFastPath()
         let fixedBackreferenceFastPath = matcher.fixedLiteralBackreferenceFastPath()
         let fixedConditionalFastPath = matcher.fixedAssertionConditionalFastPath()
+        let byteUnitFastPath = matcher.byteUnitFastPath()
         let byteLiteralFastPath = matcher.byteLiteralFastPath()
         guard let fileURL = options.roots.first?.standardizedFileURL,
               fixedLookbehindFastPath != nil
@@ -493,6 +494,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 || fixedNegativeLookaheadFastPath != nil
                 || fixedBackreferenceFastPath != nil
                 || fixedConditionalFastPath != nil
+                || byteUnitFastPath != nil
                 || byteLiteralFastPath != nil else {
             return nil
         }
@@ -619,6 +621,19 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 options: options,
                 writeBytes: writeBytes
             )
+        }
+        if let byteUnitFastPath {
+            if allowDirectStdout,
+               let directResults = try writeDarwinByteUnitStdout(
+                data,
+                fileURL: fileURL,
+                pattern: byteUnitFastPath.pattern,
+                unicodeStartOnly: byteUnitFastPath.unicodeStartOnly,
+                options: options
+               ) {
+                return directResults
+            }
+            return nil
         }
 
         guard let fastPath = byteLiteralFastPath,
@@ -1591,6 +1606,76 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     }
                 }
             }
+        }
+
+        if result.status == -2 {
+            return nil
+        }
+        if result.status == -1 {
+            throw RipgrepError.message("failed writing stdout")
+        }
+
+        let matchedLineCount = Int(result.matched_line_count)
+        let reportedMatches = result.total_match_count > 0 ? Int(result.total_match_count) : matchedLineCount
+        let fileResult = SearchFileResult(
+            fileURL: fileURL,
+            matches: [],
+            bytesSearched: Int(result.bytes_searched),
+            searched: true,
+            supplementalMatchedLines: matchedLineCount,
+            supplementalMatches: reportedMatches
+        )
+        return SearchResults(
+            files: [fileResult],
+            summary: SearchSummary(
+                filesSearched: 1,
+                filesWithMatches: matchedLineCount > 0 ? 1 : 0,
+                matchedLines: matchedLineCount,
+                totalMatches: reportedMatches
+            )
+        )
+    }
+
+    private func writeDarwinByteUnitStdout(
+        _ data: Data,
+        fileURL: URL,
+        pattern: PCRE2CompiledPattern.ByteUnitPattern,
+        unicodeStartOnly: Bool,
+        options: RipgrepOptions
+    ) throws -> SearchResults? {
+        guard options.onlyMatching,
+              options.printMode == .matchingLines,
+              options.maxCount == nil,
+              !options.quiet,
+              !options.wantsLineNumber,
+              !options.byteOffset,
+              !options.column,
+              options.withFilename != true else {
+            return nil
+        }
+
+        let mode: Int32
+        let fixedCount: Int
+        switch pattern {
+        case .single:
+            mode = 0
+            fixedCount = 1
+        case .oneOrMore:
+            mode = 1
+            fixedCount = 1
+        case .fixed(let count):
+            mode = 2
+            fixedCount = count
+        }
+
+        let result = data.withUnsafeBytes { rawBytes in
+            rg_darwin_write_byte_unit_pcre_o(
+                rawBytes.bindMemory(to: UInt8.self).baseAddress,
+                data.count,
+                mode,
+                fixedCount,
+                unicodeStartOnly ? 1 : 0
+            )
         }
 
         if result.status == -2 {
