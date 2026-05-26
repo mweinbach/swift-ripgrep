@@ -102,6 +102,15 @@ final class PCRE2CompiledPattern {
             return
         }
         if canUseFixedByteMatcher,
+           let resetStart = Self.fixedLiteralResetStart(pattern) {
+            self.matcher = .fixedPositiveLookbehind(
+                prefix: Array(resetStart.prefix.utf8),
+                literal: Array(resetStart.literal.utf8),
+                caseInsensitiveASCII: caseInsensitiveASCII
+            )
+            return
+        }
+        if canUseFixedByteMatcher,
            let backreference = Self.fixedLiteralBackreference(pattern) {
             self.matcher = .fixedLiteralBackreference(
                 literal: Array(backreference.literal.utf8),
@@ -324,6 +333,35 @@ final class PCRE2CompiledPattern {
         return (literal, suffix)
     }
 
+    private static func fixedLiteralResetStart(_ pattern: String) -> (prefix: String, literal: String)? {
+        guard let resetRange = firstUnescapedResetStart(in: pattern) else {
+            return nil
+        }
+        let rawPrefix = String(pattern[..<resetRange.lowerBound])
+        let rawLiteral = String(pattern[resetRange.upperBound...])
+        guard let prefix = RegexLiteralParser.literal(
+            fromPlainRegexPattern: rawPrefix,
+            allowPCREQuotedLiterals: true
+        ),
+              let literal = RegexLiteralParser.literal(
+                fromPlainRegexPattern: rawLiteral,
+                allowPCREQuotedLiterals: true
+              ) else {
+            return nil
+        }
+        guard !prefix.isEmpty,
+              !literal.isEmpty,
+              !prefix.contains("\n"),
+              !prefix.contains("\r"),
+              !literal.contains("\n"),
+              !literal.contains("\r"),
+              prefix.utf8.allSatisfy({ $0 < 0x80 }),
+              literal.utf8.allSatisfy({ $0 < 0x80 }) else {
+            return nil
+        }
+        return (prefix, literal)
+    }
+
     private static func fixedLiteralBackreference(_ pattern: String) -> (literal: String, captureRanges: [Range<Int>])? {
         var groups: [String] = []
         var captureRanges: [Range<Int>] = []
@@ -372,6 +410,48 @@ final class PCRE2CompiledPattern {
         }
         literal += groups[reference - 1]
         return (literal, captureRanges)
+    }
+
+    private static func firstUnescapedResetStart(in pattern: String) -> Range<String.Index>? {
+        var escaped = false
+        var escapeStart: String.Index?
+        var index = pattern.startIndex
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                if character == "Q" {
+                    var quotedIndex = pattern.index(after: index)
+                    var closedQuote = false
+                    while quotedIndex < pattern.endIndex {
+                        if pattern[quotedIndex] == "\\" {
+                            let quoteEscapeIndex = pattern.index(after: quotedIndex)
+                            if quoteEscapeIndex < pattern.endIndex,
+                               pattern[quoteEscapeIndex] == "E" {
+                                index = pattern.index(after: quoteEscapeIndex)
+                                closedQuote = true
+                                break
+                            }
+                        }
+                        quotedIndex = pattern.index(after: quotedIndex)
+                    }
+                    guard closedQuote else {
+                        return nil
+                    }
+                    escaped = false
+                    continue
+                }
+                if character == "K", let escapeStart {
+                    return escapeStart..<pattern.index(after: index)
+                }
+                escaped = false
+                escapeStart = nil
+            } else if character == "\\" {
+                escaped = true
+                escapeStart = index
+            }
+            index = pattern.index(after: index)
+        }
+        return nil
     }
 
     private static func firstUnescapedClosingParen(in text: Substring) -> String.Index? {

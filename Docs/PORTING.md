@@ -10,7 +10,7 @@ in-tree Swift compatibility engine; it does not link libpcre2.
 **Functional 1:1 with Rust ripgrep 15.1.0, including the streaming I/O
 architecture.** Verified via:
 
-- **128 Swift Testing cases** across 12 suites covering search, output formats,
+- **132 Swift Testing cases** across 12 suites covering search, output formats,
   ignore rules, file types, stdin, encodings, binary handling, parser
   diagnostics, mmap/worker pool, PCRE2, streaming haystack reads, and
   generated-asset drift.
@@ -58,11 +58,12 @@ PCRE quote escapes (`\Q...\E`) when the selected engine permits them.
 PCRE2 syntax compatibility is implemented in Swift/Foundation for the covered
 non-literal `-P` surface, including translation of partial PCRE quoted regexes
 before Foundation compilation, with Swift-parsed fixed positive/negative
-lookaround literal and literal-backreference specializations that use the
-checked-in Darwin byte scanner for `-P -o`, line-numbered, byte-offset and
-byte-column only-match output, plus count/path/quiet modes. The Darwin arm hot
-paths live in the checked-in `CRipgrepPlatform` shim because they provide
-measurable NEON/mmap throughput that Swift cannot currently express directly.
+lookaround literal, reset-start (`\K`) literal and literal-backreference
+specializations that use the checked-in Darwin byte scanner for `-P -o`,
+line-numbered, byte-offset and byte-column only-match output, plus
+count/path/quiet modes. The Darwin arm hot paths live in the checked-in
+`CRipgrepPlatform` shim because they provide measurable NEON/mmap throughput
+that Swift cannot currently express directly.
 
 File input flows through `HaystackReader` (mmap for regular files ≥ 16 KiB or
 when `--mmap` is forced, chunked 64 KiB buffered reads otherwise, stdin always
@@ -138,9 +139,10 @@ into a much smaller implementation:
    and PCRE quoted literals such as `\Qfoo.bar\E` when PCRE or auto mode is
    selected. Partial quoted regexes are translated in-tree before Foundation
    compilation, while default/no-PCRE modes retain Rust-compatible rejection
-   diagnostics for `\Q` and `\E`. Fixed positive/negative lookaround literals
-   and simple literal-group backreferences now avoid the Foundation regex path
-   for single-file `-P -o` output, line-numbered/byte-offset/byte-column
+   diagnostics for `\Q`, `\E` and `\K`. Fixed positive/negative lookaround
+   literals, fixed reset-start literals such as `foo\Kbar`, and simple
+   literal-group backreferences now avoid the Foundation regex path for
+   single-file `-P -o` output, line-numbered/byte-offset/byte-column
    only-match output and count/path/quiet modes, including ASCII ignore-case
    forms when `--no-pcre2-unicode` selects byte semantics. They remain
    byte-identical to Rust `rg`.

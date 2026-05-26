@@ -210,6 +210,66 @@ struct PCRE2Tests {
         #expect(output == ["[Sherlock].Holmes", "[Sherlock].123"])
     }
 
+    @Test func pcre2ResetStartLiteralOnlyMatching() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("foobar\nfooqux\nbar\n", to: "pcre.txt")
+
+        let lineOutput = try run(["-P", #"foo\Kbar"#, temp.path("pcre.txt")])
+        let onlyMatchingOutput = try run(["-P", "-o", #"foo\Kbar"#, temp.path("pcre.txt")])
+        let autoOnlyMatchingOutput = try run(["--engine=auto", "-o", #"foo\Kbar"#, temp.path("pcre.txt")])
+
+        #expect(lineOutput == ["foobar"])
+        #expect(onlyMatchingOutput == ["bar"])
+        #expect(autoOnlyMatchingOutput == ["bar"])
+    }
+
+    @Test func pcre2ResetStartReplacementUsesResetMatchRange() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("foobar\nfooqux\nbar\n", to: "pcre.txt")
+
+        let output = try run(["-P", #"foo\Kbar"#, "-r", "X", temp.path("pcre.txt")])
+
+        #expect(output == ["fooX"])
+    }
+
+    @Test func pcre2ResetStartExecutableFastPathOnlyMatchingOutput() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("foobar\nfooqux\nbar\n", to: "pcre.txt")
+
+        let output = try runExecutableData(["-P", "-o", #"foo\Kbar"#, temp.path("pcre.txt")]) {}
+
+        #expect(output == Data("bar\n".utf8))
+    }
+
+    @Test func pcre2ResetStartRespectsDefaultEngineSelection() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("foobar\n", to: "pcre.txt")
+        let expected = """
+        rg: regex parse error:
+            (?:foo\\Kbar)
+                  ^^
+        error: unrecognized escape sequence
+        """
+
+        for arguments in [
+            [#"foo\Kbar"#, temp.path("pcre.txt")],
+            ["--engine=default", #"foo\Kbar"#, temp.path("pcre.txt")],
+            ["--no-pcre2", #"foo\Kbar"#, temp.path("pcre.txt")],
+        ] {
+            var output: [String] = []
+            var errors: [String] = []
+            let exitCode = RipgrepCLI.run(
+                arguments: arguments,
+                stdout: { output.append($0) },
+                stderr: { errors.append($0) }
+            )
+
+            #expect(exitCode == 2)
+            #expect(output.isEmpty)
+            #expect(errors == [expected])
+        }
+    }
+
     @Test func pcre2EscapedLookbehindExecutableFastPathOnlyMatchingOutput() throws {
         let temp = try TemporaryDirectory()
         try temp.write("Sherlock.Holmes\nSherlockxHolmes\n", to: "pcre.txt")

@@ -121,6 +121,13 @@ corpus, `-P -o '(a)(b)\2'` produced byte-identical output to Rust and measured
 Swift release at 229.3 ms versus 19.239 s for the previous Swift Foundation
 regex path and 2.912 s for the sibling Rust PCRE2 oracle in 10-run checks.
 
+Fixed PCRE reset-start literals now reuse the same in-tree fixed-lookbehind
+byte path. On a 60 MiB repeated `foobar` / `fooqux` / `bar` corpus,
+`-P -o 'foo\Kbar'` produced byte-identical output to system Rust `rg` PCRE2
+and measured Swift release at 396.1 ms versus Rust PCRE2 at 502.3 ms in
+10-run checks. Default and `--no-pcre2` modes still reject `\K` with
+Rust-identical diagnostics.
+
 Line-numbered only-match output for the same fixed PCRE2 family now stays on
 the executable Darwin byte writer too. On the 193 MiB subtitles corpus,
 `-P -n -o '(?<=Sherlock )Holmes'` produced byte-identical output to the sibling
@@ -242,6 +249,10 @@ The key improvements since the 2026-05-24 baseline are:
   in-tree parser and Darwin byte-output path for single-file `-P -o`, while
   still preserving capture replacement semantics through the non-executable
   matcher path;
+- PCRE2 reset-start literals such as `foo\Kbar` now parse into the same
+  in-tree fixed-lookbehind representation, preserving line output,
+  only-matching output, replacement ranges, auto-hybrid fallback, and
+  default/no-PCRE rejection diagnostics without linking PCRE2;
 - line-numbered `-P -n -o` output for those fixed lookaround/backreference
   shapes writes the numeric prefix directly in the same Darwin byte-output
   path, cutting representative fixed-lookbehind formatted output from
