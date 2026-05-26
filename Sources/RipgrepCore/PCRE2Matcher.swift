@@ -37,6 +37,11 @@ final class PCRE2CompiledPattern {
         case fixedResetStart(prefix: [UInt8], literal: [UInt8], caseInsensitiveASCII: Bool)
         case literalPrefixResetStartRegex(prefixUTF16Length: Int, regex: NSRegularExpression)
         case capturedPrefixResetStartRegex(NSRegularExpression)
+        case skipFailAlternation(
+            skipRegex: NSRegularExpression,
+            matchRegex: NSRegularExpression,
+            skipCaptureCount: Int
+        )
         case fixedLiteralBackreference(literal: [UInt8], captureRanges: [Range<Int>], caseInsensitiveASCII: Bool)
         case fixedAssertionConditional(
             condition: FixedAssertionCondition,
@@ -228,6 +233,18 @@ final class PCRE2CompiledPattern {
             self.matcher = .capturedPrefixResetStartRegex(resetStartRegex)
             return
         }
+        if let skipFailAlternation = try Self.skipFailAlternation(
+            pattern,
+            options: options,
+            regexOptions: regexOptions
+        ) {
+            self.matcher = .skipFailAlternation(
+                skipRegex: skipFailAlternation.skipRegex,
+                matchRegex: skipFailAlternation.matchRegex,
+                skipCaptureCount: skipFailAlternation.skipCaptureCount
+            )
+            return
+        }
 
         var regexPattern = try Self.regexPatternExpandingPCREQuotedLiterals(
             pattern,
@@ -296,6 +313,13 @@ final class PCRE2CompiledPattern {
             )
         case .capturedPrefixResetStartRegex(let regex):
             return Self.capturedPrefixResetStartRegexMatches(regex: regex, in: text)
+        case .skipFailAlternation(let skipRegex, let matchRegex, let skipCaptureCount):
+            return Self.skipFailAlternationMatches(
+                skipRegex: skipRegex,
+                matchRegex: matchRegex,
+                skipCaptureCount: skipCaptureCount,
+                in: text
+            )
         case .fixedLiteralBackreference(let literal, let captureRanges, let caseInsensitiveASCII):
             return Self.fixedLiteralBackreferenceMatches(
                 literal: literal,
@@ -560,6 +584,161 @@ final class PCRE2CompiledPattern {
         } catch {
             throw RipgrepError.message(Self.compileErrorMessage(pattern: pattern, error: error))
         }
+    }
+
+    private static func skipFailAlternation(
+        _ pattern: String,
+        options: RipgrepOptions,
+        regexOptions: NSRegularExpression.Options
+    ) throws -> (skipRegex: NSRegularExpression, matchRegex: NSRegularExpression, skipCaptureCount: Int)? {
+        guard let split = skipFailAlternationSplit(in: pattern) else {
+            return nil
+        }
+        let rawSkip = String(pattern[..<split.marker.lowerBound])
+        let rawMatch = String(pattern[split.matchStart...])
+        guard !rawSkip.isEmpty, !rawMatch.isEmpty else {
+            return nil
+        }
+
+        let skipPattern = try regexPatternExpandingPCREQuotedLiterals(
+            rawSkip,
+            asciiShorthandEscapes: options.noUnicode
+        )
+        let matchPattern = try regexPatternExpandingPCREQuotedLiterals(
+            rawMatch,
+            asciiShorthandEscapes: options.noUnicode
+        )
+        do {
+            return (
+                try NSRegularExpression(pattern: skipPattern, options: regexOptions),
+                try NSRegularExpression(pattern: matchPattern, options: regexOptions),
+                captureGroupCount(in: rawSkip)
+            )
+        } catch {
+            throw RipgrepError.message(Self.compileErrorMessage(pattern: pattern, error: error))
+        }
+    }
+
+    private static func skipFailAlternationSplit(
+        in pattern: String
+    ) -> (marker: Range<String.Index>, matchStart: String.Index)? {
+        let shortMarker = "(*SKIP)(*F)|"
+        let longMarker = "(*SKIP)(*FAIL)|"
+        var escaped = false
+        var inClass = false
+        var depth = 0
+        var index = pattern.startIndex
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                if character == "Q" {
+                    var quotedIndex = pattern.index(after: index)
+                    var closedQuote = false
+                    while quotedIndex < pattern.endIndex {
+                        if pattern[quotedIndex] == "\\" {
+                            let quoteEscapeIndex = pattern.index(after: quotedIndex)
+                            if quoteEscapeIndex < pattern.endIndex,
+                               pattern[quoteEscapeIndex] == "E" {
+                                index = pattern.index(after: quoteEscapeIndex)
+                                closedQuote = true
+                                break
+                            }
+                        }
+                        quotedIndex = pattern.index(after: quotedIndex)
+                    }
+                    guard closedQuote else {
+                        return nil
+                    }
+                    escaped = false
+                    continue
+                }
+                escaped = false
+            } else if character == "\\" {
+                escaped = true
+            } else if character == "[" {
+                inClass = true
+            } else if character == "]" {
+                inClass = false
+            } else if !inClass, depth == 0, pattern[index...].hasPrefix(shortMarker) {
+                return (
+                    index..<pattern.index(index, offsetBy: shortMarker.count),
+                    pattern.index(index, offsetBy: shortMarker.count)
+                )
+            } else if !inClass, depth == 0, pattern[index...].hasPrefix(longMarker) {
+                return (
+                    index..<pattern.index(index, offsetBy: longMarker.count),
+                    pattern.index(index, offsetBy: longMarker.count)
+                )
+            } else if !inClass, character == "(" {
+                depth += 1
+            } else if !inClass, character == ")", depth > 0 {
+                depth -= 1
+            }
+            index = pattern.index(after: index)
+        }
+        return nil
+    }
+
+    private static func captureGroupCount(in pattern: String) -> Int {
+        var count = 0
+        var escaped = false
+        var inClass = false
+        var index = pattern.startIndex
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                if character == "Q" {
+                    var quotedIndex = pattern.index(after: index)
+                    var closedQuote = false
+                    while quotedIndex < pattern.endIndex {
+                        if pattern[quotedIndex] == "\\" {
+                            let quoteEscapeIndex = pattern.index(after: quotedIndex)
+                            if quoteEscapeIndex < pattern.endIndex,
+                               pattern[quoteEscapeIndex] == "E" {
+                                index = pattern.index(after: quoteEscapeIndex)
+                                closedQuote = true
+                                break
+                            }
+                        }
+                        quotedIndex = pattern.index(after: quotedIndex)
+                    }
+                    guard closedQuote else {
+                        return count
+                    }
+                    escaped = false
+                    continue
+                }
+                escaped = false
+            } else if character == "\\" {
+                escaped = true
+            } else if character == "[" {
+                inClass = true
+            } else if character == "]" {
+                inClass = false
+            } else if !inClass, character == "(" {
+                let next = pattern.index(after: index)
+                if next < pattern.endIndex, pattern[next] == "?" {
+                    let marker = pattern.index(after: next)
+                    if marker < pattern.endIndex, pattern[marker] == "P" {
+                        let payload = pattern.index(after: marker)
+                        if payload < pattern.endIndex, pattern[payload] == "<" {
+                            count += 1
+                        }
+                    } else if marker < pattern.endIndex, pattern[marker] == "<" {
+                        let payload = pattern.index(after: marker)
+                        if payload < pattern.endIndex,
+                           pattern[payload] != "=",
+                           pattern[payload] != "!" {
+                            count += 1
+                        }
+                    }
+                } else {
+                    count += 1
+                }
+            }
+            index = pattern.index(after: index)
+        }
+        return count
     }
 
     private static func fixedLiteralBackreference(_ pattern: String) -> (literal: String, captureRanges: [Range<Int>])? {
@@ -1318,6 +1497,69 @@ final class PCRE2CompiledPattern {
                 captures: captures
             )
         }
+    }
+
+    private static func skipFailAlternationMatches(
+        skipRegex: NSRegularExpression,
+        matchRegex: NSRegularExpression,
+        skipCaptureCount: Int,
+        in text: String
+    ) -> [PCRE2Match] {
+        let fullSearchRange = NSRange(text.startIndex..., in: text)
+        let skipRanges = skipRegex.matches(in: text, range: fullSearchRange)
+            .map(\.range)
+            .filter { $0.location != NSNotFound && $0.length > 0 }
+            .sorted {
+                if $0.location == $1.location {
+                    return $0.length > $1.length
+                }
+                return $0.location < $1.location
+            }
+        let matchResults = matchRegex.matches(in: text, range: fullSearchRange)
+        var matches: [PCRE2Match] = []
+        var skipIndex = 0
+        for match in matchResults {
+            let fullRange = match.range(at: 0)
+            guard fullRange.location != NSNotFound else {
+                continue
+            }
+            while skipIndex < skipRanges.count,
+                  skipRanges[skipIndex].location + skipRanges[skipIndex].length <= fullRange.location {
+                skipIndex += 1
+            }
+            if skipIndex < skipRanges.count,
+               skipRanges[skipIndex].location <= fullRange.location,
+               fullRange.location < skipRanges[skipIndex].location + skipRanges[skipIndex].length {
+                continue
+            }
+            guard let range = Range(fullRange, in: text) else {
+                continue
+            }
+
+            var captures: [Range<String.Index>?] = [range]
+            captures.reserveCapacity(match.numberOfRanges + skipCaptureCount)
+            captures.append(contentsOf: repeatElement(nil, count: skipCaptureCount))
+            if match.numberOfRanges > 1 {
+                for index in 1..<match.numberOfRanges {
+                    let captureRange = match.range(at: index)
+                    guard captureRange.location != NSNotFound else {
+                        captures.append(nil)
+                        continue
+                    }
+                    guard let capture = Range(captureRange, in: text) else {
+                        return matches
+                    }
+                    captures.append(capture)
+                }
+            }
+
+            matches.append(PCRE2Match(
+                range: range,
+                byteRange: byteRange(for: range, in: text),
+                captures: captures
+            ))
+        }
+        return matches
     }
 
     private static func fixedLiteralBackreferenceMatches(

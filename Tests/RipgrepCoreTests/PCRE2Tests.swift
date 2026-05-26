@@ -758,6 +758,58 @@ struct PCRE2Tests {
         #expect(replacementOutput == ["foo[foo] foo[foo]bar barfoo abcabc abc123"])
     }
 
+    @Test func pcre2SkipFailAlternationSkipsIgnoredRegions() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("""
+        alpha beta gamma
+        one [two] three 123
+        foo bar baz
+        qux foo bar
+        """, to: "pcre.txt")
+
+        let literalSkipOutput = try runExecutableData([
+            "-P",
+            "-n",
+            "-o",
+            #"alpha(*SKIP)(*F)|beta"#,
+            temp.path("pcre.txt"),
+        ]) {}
+        let regexSkipOutput = try run([
+            "--engine=auto",
+            "-n",
+            "-o",
+            #"\[[^\]]+\](*SKIP)(*FAIL)|\w+"#,
+            temp.path("pcre.txt"),
+        ])
+        let replacementOutput = try run([
+            "-P",
+            #"(foo)(*SKIP)(*F)|(bar)"#,
+            "-r",
+            #"[$1]/[$2]"#,
+            temp.path("pcre.txt"),
+        ])
+
+        #expect(literalSkipOutput == Data("1:beta\n".utf8))
+        #expect(regexSkipOutput == [
+            "1:alpha",
+            "1:beta",
+            "1:gamma",
+            "2:one",
+            "2:three",
+            "2:123",
+            "3:foo",
+            "3:bar",
+            "3:baz",
+            "4:qux",
+            "4:foo",
+            "4:bar",
+        ])
+        #expect(replacementOutput == [
+            "foo []/[bar] baz",
+            "qux foo []/[bar]",
+        ])
+    }
+
     @Test func pcre2ResetStartRespectsDefaultEngineSelection() throws {
         let temp = try TemporaryDirectory()
         try temp.write("foobar\n", to: "pcre.txt")
