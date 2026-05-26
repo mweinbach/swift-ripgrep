@@ -2344,6 +2344,16 @@ struct FeatureTests {
         #expect(try run(["--replace", "NUM", #"\d+"#, root.path("replace.txt")]) == [
             "abcNUM defNUM",
         ])
+        try root.write("foo bar foo\nqux\nfoo\n", to: "line-replace.txt")
+        #expect(try run(["-n", "--replace", "X", "foo", root.path("line-replace.txt")]) == [
+            "1:X bar X",
+            "3:X",
+        ])
+        try root.write("Foo bar fOo\nqux\nfoo\n", to: "line-replace-ignore-case.txt")
+        #expect(try run(["-n", "-i", "--replace", "X", "foo", root.path("line-replace-ignore-case.txt")]) == [
+            "1:X bar X",
+            "3:X",
+        ])
         #expect(try run(["-o", "--replace", "[$1]", #"([a-z]+)\d+"#, root.path("replace.txt")]) == [
             "[abc]",
             "[def]",

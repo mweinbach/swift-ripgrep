@@ -770,9 +770,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             && options.maxCount == nil
             && fastPath.literals.count == 1
             && fastPathByteSet == nil
-            && !fastPath.caseInsensitiveASCII
             && !fastPath.wordASCII
-            && !options.wantsLineNumber
             && !options.column
             && !options.byteOffset
             && options.withFilename != true
@@ -1036,15 +1034,45 @@ public struct RipgrepSearcher: @unchecked Sendable {
                let literal = literals.first {
                 var searchOffset = 0
                 var newline = UInt8(ascii: "\n")
-                while searchOffset < data.count {
-                    let foundPointer = literal.withUnsafeBufferPointer { needle in
+                var foldedLiteral: [UInt8] = []
+                var caseInsensitiveShifts: [Int] = []
+                if fastPath.caseInsensitiveASCII {
+                    foldedLiteral = literal.map(asciiLowercase)
+                    caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
+                    if literal.count > 1 {
+                        for index in 0..<(foldedLiteral.count - 1) {
+                            caseInsensitiveShifts[Int(foldedLiteral[index])] = literal.count - 1 - index
+                        }
+                    }
+                }
+                func findReplacementLiteral(from offset: Int, count: Int) -> UnsafePointer<UInt8>? {
+                    if fastPath.caseInsensitiveASCII {
+                        return foldedLiteral.withUnsafeBufferPointer { foldedNeedle in
+                            caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
+                                rg_memcasemem_ascii_prepared(
+                                    baseAddress.advanced(by: offset),
+                                    count,
+                                    foldedNeedle.baseAddress,
+                                    foldedNeedle.count,
+                                    shifts.baseAddress
+                                )
+                            }
+                        }
+                    }
+                    return literal.withUnsafeBufferPointer { needle in
                         rg_memmem_simple(
-                            baseAddress.advanced(by: searchOffset),
-                            data.count - searchOffset,
+                            baseAddress.advanced(by: offset),
+                            count,
                             needle.baseAddress,
                             needle.count
                         )
                     }
+                }
+                while searchOffset < data.count {
+                    let foundPointer = findReplacementLiteral(
+                        from: searchOffset,
+                        count: data.count - searchOffset
+                    )
                     guard let rawFoundPointer = foundPointer else {
                         break
                     }
@@ -1064,15 +1092,12 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     var cursor = lineStart
                     var lineSearchOffset = lineStart
                     var lineMatchCount = 0
+                    writeLineNumberPrefix(for: lineStart)
                     while lineSearchOffset < lineEnd {
-                        let lineFoundPointer = literal.withUnsafeBufferPointer { needle in
-                            rg_memmem_simple(
-                                baseAddress.advanced(by: lineSearchOffset),
-                                lineEnd - lineSearchOffset,
-                                needle.baseAddress,
-                                needle.count
-                            )
-                        }
+                        let lineFoundPointer = findReplacementLiteral(
+                            from: lineSearchOffset,
+                            count: lineEnd - lineSearchOffset
+                        )
                         guard let rawLineFoundPointer = lineFoundPointer else {
                             break
                         }

@@ -235,6 +235,15 @@ matched the sibling Rust oracle on the 193 MiB subtitles corpus. Five-run
 checks measured `-r Holmes 'Sherlock Holmes'` at 64.1 ms versus 10.828 s
 before and 24.9 ms for Rust.
 
+That same direct replacement writer now handles line-numbered single-literal
+output, including ASCII case-insensitive literals. Output for `-n -r Holmes
+'Sherlock Holmes'` and `-n -i -r Holmes sherlock` on the 193 MiB subtitles
+corpus matched both the previous Swift checkpoint and the sibling Rust oracle.
+A three-run A/B measured the case-sensitive form at 79.0 ms versus 10.754 s
+before and 28.7 ms for Rust; the case-insensitive form measured 69.5 ms versus
+24.293 s before and 43.8 ms for Rust. A 15-run plain replacement control stayed
+neutral at 64.6 ms versus 63.7 ms before.
+
 Safe multi-literal only-match and vimgrep output now merge each literal's next
 match stream instead of re-scanning every literal from the current global
 offset. Interleaved same-line fixtures and representative subtitles cases
