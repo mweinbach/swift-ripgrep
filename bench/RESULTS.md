@@ -134,15 +134,27 @@ sibling Rust oracle. On the 193 MiB subtitles corpus, 25-run checks measured
 matched-line counter and measured effectively neutral on the same run.
 
 The same direct-output total-only shortcut now covers one-byte literal
-`--count-matches` searches, leaving word-boundary searches and multi-byte
-literals on the exact matched-line path. Output for one-byte, multi-byte,
-ignore-case, whole-line count, only-matching, and word-boundary count forms
-matched the previous Swift checkpoint and the sibling Rust oracle. On the 193
-MiB subtitles corpus, 25-run checks measured `--count-matches 'A'` at
-67.4 ms versus 75.1 ms before and 65.1 ms for Rust. A 20-run ignore-case check
-measured `--count-matches -i 'a'` at 214.9 ms versus 466.1 ms before and
-509.1 ms for Rust. Multi-byte `--count-matches 'Sherlock Holmes'` stayed
-effectively neutral at 62.8 ms versus 63.9 ms before.
+`--count-matches` searches. At that checkpoint, word-boundary searches and
+multi-byte literals still used the exact matched-line path. Output for
+one-byte, multi-byte, ignore-case, whole-line count, only-matching, and
+word-boundary count forms matched the previous Swift checkpoint and the sibling
+Rust oracle. On the 193 MiB subtitles corpus, 25-run checks measured
+`--count-matches 'A'` at 67.4 ms versus 75.1 ms before and 65.1 ms for Rust.
+A 20-run ignore-case check measured `--count-matches -i 'a'` at 214.9 ms
+versus 466.1 ms before and 509.1 ms for Rust. Multi-byte `--count-matches
+'Sherlock Holmes'` stayed effectively neutral at 62.8 ms versus 63.9 ms
+before.
+
+Direct executable `--count-matches` now extends that total-only shortcut to
+single multi-byte literals as well, while the non-direct summary path still
+keeps exact matched-line counts. Output and exit status for multi-byte,
+ignore-case multi-byte, empty-file, one-byte, neighboring `-c`, and `-o`
+fixtures matched the previous Swift checkpoint and sibling Rust oracle. On a
+67 MiB dense `needle` fixture, 20-run checks measured `--count-matches
+'needle'` at 115.9 ms versus 294.0 ms before and 178.0 ms for Rust. A
+40-run sparse subtitles check for `--count-matches 'Sherlock Holmes'` remained
+system-noise-bound: current measured 74.8 ms versus 68.9 ms before with the
+same 23.3 ms user time in both runs.
 
 Direct executable byte-unit PCRE2 `--count-matches` now counts totals without
 matched-line bookkeeping while preserving the exact summary path for non-direct

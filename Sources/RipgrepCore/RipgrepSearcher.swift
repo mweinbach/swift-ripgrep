@@ -1102,25 +1102,59 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         }
                     }
                 }
-                if countMatchesOnly && allowDirectStdout && literal.count == 1 && !fastPath.wordASCII {
+                if countMatchesOnly && allowDirectStdout && !fastPath.wordASCII {
                     // Direct stdout count-matches cannot print stats/JSON, so only the total is observable here.
-                    if fastPath.caseInsensitiveASCII {
-                        let foldedByte = foldedLiteral[0]
-                        if foldedByte >= UInt8(ascii: "a") && foldedByte <= UInt8(ascii: "z") {
-                            totalMatchCount = Int(rg_memcount_byte(
-                                baseAddress,
-                                data.count,
-                                foldedByte
-                            )) + Int(rg_memcount_byte(
-                                baseAddress,
-                                data.count,
-                                foldedByte - (UInt8(ascii: "a") - UInt8(ascii: "A"))
-                            ))
+                    if literal.count == 1 {
+                        if fastPath.caseInsensitiveASCII {
+                            let foldedByte = foldedLiteral[0]
+                            if foldedByte >= UInt8(ascii: "a") && foldedByte <= UInt8(ascii: "z") {
+                                totalMatchCount = Int(rg_memcount_byte(
+                                    baseAddress,
+                                    data.count,
+                                    foldedByte
+                                )) + Int(rg_memcount_byte(
+                                    baseAddress,
+                                    data.count,
+                                    foldedByte - (UInt8(ascii: "a") - UInt8(ascii: "A"))
+                                ))
+                            } else {
+                                totalMatchCount = Int(rg_memcount_byte(baseAddress, data.count, foldedByte))
+                            }
                         } else {
-                            totalMatchCount = Int(rg_memcount_byte(baseAddress, data.count, foldedByte))
+                            totalMatchCount = Int(rg_memcount_byte(baseAddress, data.count, literal[0]))
                         }
                     } else {
-                        totalMatchCount = Int(rg_memcount_byte(baseAddress, data.count, literal[0]))
+                        while searchOffset < data.count {
+                            let foundPointer: UnsafePointer<UInt8>?
+                            if fastPath.caseInsensitiveASCII {
+                                foundPointer = foldedLiteral.withUnsafeBufferPointer { foldedNeedle in
+                                    caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
+                                        rg_memcasemem_ascii_prepared(
+                                            baseAddress.advanced(by: searchOffset),
+                                            data.count - searchOffset,
+                                            foldedNeedle.baseAddress,
+                                            foldedNeedle.count,
+                                            shifts.baseAddress
+                                        )
+                                    }
+                                }
+                            } else {
+                                foundPointer = literal.withUnsafeBufferPointer { needle in
+                                    rg_memmem_simple(
+                                        baseAddress.advanced(by: searchOffset),
+                                        data.count - searchOffset,
+                                        needle.baseAddress,
+                                        needle.count
+                                    )
+                                }
+                            }
+                            guard let rawFoundPointer = foundPointer else {
+                                break
+                            }
+                            let matchStart = baseAddress.distance(to: rawFoundPointer)
+                            totalMatchCount += 1
+                            searchOffset = matchStart + literal.count
+                        }
                     }
                     if totalMatchCount > 0 {
                         matchedLineCount = 1

@@ -398,11 +398,24 @@ struct MiscTests {
             "A",
             root.path("letters.txt"),
         ], fixture: {})
+        let multiByteCountMatchesOutput = try runExecutableData([
+            "--count-matches",
+            "bravo",
+            root.path("letters.txt"),
+        ], fixture: {})
+        let multiByteIgnoreCaseCountMatchesOutput = try runExecutableData([
+            "--count-matches",
+            "-i",
+            "BRAVO",
+            root.path("letters.txt"),
+        ], fixture: {})
 
         #expect(onlyMatchingOutput == Data("b\nd\n".utf8))
         #expect(countMatchesOutput == Data("2\n".utf8))
         #expect(singleByteCountMatchesOutput == Data("5\n".utf8))
         #expect(singleByteIgnoreCaseCountMatchesOutput == Data("5\n".utf8))
+        #expect(multiByteCountMatchesOutput == Data("1\n".utf8))
+        #expect(multiByteIgnoreCaseCountMatchesOutput == Data("1\n".utf8))
         #endif
     }
 
