@@ -50,6 +50,12 @@ public struct PatternMatcher {
                     throw RipgrepError.message(Self.lineTerminatorPatternError(terminator: "\\n"))
                 }
                 if options.engineMode == .pcre2 {
+                    if let literals = Self.defaultLiteralPatterns(for: pattern, options: options),
+                       literals.count == 1 {
+                        return literals.map { literal in
+                            .literal(usesByteSemantics ? Self.bytePattern(literal) : literal)
+                        }
+                    }
                     return [.pcre2(try PCRE2CompiledPattern(pattern: pattern, options: options))]
                 }
                 if let unsupported = Self.defaultEngineUnsupportedFeature(in: pattern) {

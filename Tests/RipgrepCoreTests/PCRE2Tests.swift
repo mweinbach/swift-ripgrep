@@ -13,6 +13,26 @@ struct PCRE2Tests {
         #expect(output == ["b"])
     }
 
+    @Test func pcre2PlainLiteralUsesDefaultLiteralFastPath() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("Sherlock Holmes\nMycroft Holmes\n", to: "pcre.txt")
+        guard case .run(let options) = RipgrepArgumentParser.parse([
+            "-P",
+            "-o",
+            "Sherlock",
+            temp.path("pcre.txt"),
+        ], environment: [:]) else {
+            Issue.record("expected -P literal arguments to parse")
+            return
+        }
+
+        let matcher = try PatternMatcher(options: options)
+        let output = try run(["-P", "-o", "Sherlock", temp.path("pcre.txt")])
+
+        #expect(matcher.byteLiteralFastPath() != nil)
+        #expect(output == ["Sherlock"])
+    }
+
     @Test func pcre2FixedLookbehindLiteralOnlyMatchesAfterPrefix() throws {
         let temp = try TemporaryDirectory()
         try temp.write("Sherlock Holmes\nMycroft Holmes\nSherlock Holmes\n", to: "pcre.txt")
