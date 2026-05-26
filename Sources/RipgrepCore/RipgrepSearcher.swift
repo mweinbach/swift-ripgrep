@@ -748,6 +748,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
 
         let literals = fastPath.literals
         let maxCount = options.maxCount ?? Int.max
+        let finiteMultiLiteralMaxCountFastPathLimit = 1024
         var matchedLineCount = 0
         var bytesSearched = data.count
         var needsDecodedFallback = false
@@ -924,7 +925,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                fastPathByteSet == nil,
                !countMatchesOnly,
                !onlyMatching {
-                if maxCount <= 128 {
+                if maxCount <= finiteMultiLiteralMaxCountFastPathLimit {
                     var searchOffset = 0
                     while searchOffset < data.count, matchedLineCount < maxCount {
                         var earliestMatchStart = Int.max

@@ -399,6 +399,11 @@ struct FeatureTests {
         try root.write("first alpha\nsecond beta\nthird alpha beta\n", to: "alternation.txt")
         #expect(try run(["-m1", "beta|alpha", root.path("alternation.txt")]) == ["first alpha"])
         #expect(try run(["-m2", "beta|alpha", root.path("alternation.txt")]) == ["first alpha", "second beta"])
+        #expect(try run(["-m129", "beta|alpha", root.path("alternation.txt")]) == [
+            "first alpha",
+            "second beta",
+            "third alpha beta",
+        ])
         #expect(try run(["-n", "-m1", "beta|alpha", root.path("alternation.txt")]) == ["1:first alpha"])
         #expect(try run(["-n", "-m2", "beta|alpha", root.path("alternation.txt")]) == [
             "1:first alpha",

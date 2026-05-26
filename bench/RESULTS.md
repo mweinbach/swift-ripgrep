@@ -86,14 +86,19 @@ Rust. For `-m 1 'Sherlock|Watson'` on the subtitles corpus, a 30-run A/B
 measured Swift at 49.7 ms versus 319.4 ms before and 6.0 ms for Rust; the
 line-numbered `-n -m 1` form measured the same 49.7 ms versus 320.6 ms before.
 The same earliest-line strategy now covers finite multi-literal max counts up
-to 128 lines, stopping after the requested output prefix instead of scanning
+to 1024 lines, stopping after the requested output prefix instead of scanning
 and sorting every matching line. Output for `-m 2`, `-n -m 2`, `-c -m 2`,
-`-m 128`, and the fallback boundary `-m 129` was byte-identical to the previous
-Swift checkpoint and the sibling Rust oracle. On the 1.5 GiB subtitles corpus,
-30-run checks measured `-m 2 'Sherlock|Watson'` at 43.5 ms versus 327.8 ms
-before and 6.1 ms for Rust; `-m 10` measured 56.2 ms versus 329.3 ms before.
-A 20-run threshold check measured `-m 128` at 150.6 ms versus 323.7 ms before
-and 23.0 ms for Rust. Unlimited output continues through the previous scanner.
+`-m 128`, `-m 129`, `-m 512`, `-m 1024`, and the fallback boundary `-m 1025`
+was byte-identical to the previous Swift checkpoint and the sibling Rust
+oracle. On the 1.5 GiB subtitles corpus, 30-run checks measured
+`-m 2 'Sherlock|Watson'` at 43.5 ms versus 327.8 ms before and 6.1 ms for
+Rust; `-m 10` measured 56.2 ms versus 329.3 ms before. A 20-run threshold
+check measured `-m 128` at 150.6 ms versus 323.7 ms before and 23.0 ms for
+Rust. Extending the threshold from 128 to 1024 lines kept output identical and
+measured `-m 129` at 145.4 ms versus 322.7 ms before and 23.4 ms for Rust,
+`-m 512` at 211.1 ms versus 322.2 ms before and 48.6 ms for Rust, and
+`-m 1024` at 259.7 ms versus 325.3 ms before. Unlimited output continues
+through the previous scanner.
 
 Rejected Swift-only probes from the same checkpoint:
 
@@ -108,6 +113,10 @@ Rejected Swift-only probes from the same checkpoint:
 - A stdout byte-chunk writer for ignore-aware `--files` preserved current Swift
   ordering and sorted Rust content, but slowed default Linux-tree listing from
   149.7 ms to 168.3 ms.
+- A count-only multi-literal path that skipped line-bound storage and sorting
+  preserved output, but measured neutral to slightly slower on
+  `-c 'Sherlock|Watson'` over the 1.5 GiB subtitles corpus: 327.0 ms versus
+  323.0 ms for the current scanner.
 - Replacing the Swift SIMD fallback with Foundation `Data.range(of:)` or libc
   `memmem` was much slower on the literal subtitles scan: `Data.range(of:)`
   measured 633.7 ms and libc `memmem` measured 1.046 s, versus about 213 ms
