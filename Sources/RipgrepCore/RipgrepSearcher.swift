@@ -750,8 +750,18 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let canDirectCountIndependentLiterals = countMatchesOnly
             && allowDirectStdout
             && fastPathByteSet == nil
-            && canCountDarwinLiteralsIndependently(fastPath)
-        guard (!onlyMatching || fastPath.literals.count == 1 || fastPathByteSet != nil),
+            && canScanDarwinLiteralsIndependently(fastPath)
+        let canDirectWriteIndependentOnlyMatches = onlyMatching
+            && allowDirectStdout
+            && fastPathByteSet == nil
+            && !options.wantsLineNumber
+            && !options.byteOffset
+            && !options.column
+            && canScanDarwinLiteralsIndependently(fastPath)
+        guard (!onlyMatching
+                || fastPath.literals.count == 1
+                || fastPathByteSet != nil
+                || canDirectWriteIndependentOnlyMatches),
               (!countMatchesOnly
                 || fastPath.literals.count == 1
                 || fastPathByteSet != nil
@@ -935,6 +945,49 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         count: buffer.count - cursor
                     ))
                 }
+            }
+
+            if literals.count > 1,
+               fastPathByteSet == nil,
+               canDirectWriteIndependentOnlyMatches {
+                var searchOffset = 0
+                var newline = UInt8(ascii: "\n")
+                while searchOffset < data.count {
+                    var earliestMatchStart = Int.max
+                    var earliestLiteralLength = 0
+                    for literal in literals where literal.count <= data.count - searchOffset {
+                        let foundPointer = literal.withUnsafeBufferPointer { needle in
+                            rg_memmem_simple(
+                                baseAddress.advanced(by: searchOffset),
+                                data.count - searchOffset,
+                                needle.baseAddress,
+                                needle.count
+                            )
+                        }
+                        guard let rawFoundPointer = foundPointer else {
+                            continue
+                        }
+                        let matchStart = baseAddress.distance(to: rawFoundPointer)
+                        if matchStart < earliestMatchStart {
+                            earliestMatchStart = matchStart
+                            earliestLiteralLength = literal.count
+                        }
+                    }
+                    guard earliestMatchStart != Int.max else {
+                        break
+                    }
+                    totalMatchCount += 1
+                    matchedLineCount = 1
+                    writeBytes(UnsafeRawBufferPointer(
+                        start: rawBaseAddress.advanced(by: earliestMatchStart),
+                        count: earliestLiteralLength
+                    ))
+                    withUnsafeBytes(of: &newline) { buffer in
+                        writeBytes(buffer)
+                    }
+                    searchOffset = earliestMatchStart + earliestLiteralLength
+                }
+                return
             }
 
             if literals.count > 1,
@@ -3122,7 +3175,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         return true
     }
 
-    private func canCountDarwinLiteralsIndependently(_ fastPath: ByteLiteralFastPath) -> Bool {
+    private func canScanDarwinLiteralsIndependently(_ fastPath: ByteLiteralFastPath) -> Bool {
         guard !fastPath.caseInsensitiveASCII,
               !fastPath.wordASCII,
               fastPath.literals.count > 1 else {

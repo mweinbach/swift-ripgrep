@@ -167,6 +167,15 @@ versus 678.6 ms before and 39.4 ms for Rust. On the 67 MiB dense fixture,
 15-run checks measured `--count-matches 'needle|haystack'` at 104.2 ms versus
 1.933 s before and 249.0 ms for Rust.
 
+The same non-overlap proof now enables direct plain `-o` output for safe
+multi-literal alternations without line, byte-offset, or column prefixes.
+Output for a `bravo|delta` fixture, the subtitles `Sherlock|Watson` corpus,
+and neighboring prefixed `-n -o` mode matched the previous Swift checkpoint and
+the sibling Rust oracle; unsafe overlapping `a|ab` only-match output stayed on
+the existing fallback. On the 193 MiB subtitles corpus, three-run checks
+measured `-o 'Sherlock|Watson'` at 198.3 ms versus 16.230 s before and 39.4 ms
+for Rust.
+
 Direct executable byte-unit PCRE2 `--count-matches` now counts totals without
 matched-line bookkeeping while preserving the exact summary path for non-direct
 callers. Output for default Unicode `\C`, byte-mode `\C`, `\C+`, `\C{2}`, and
