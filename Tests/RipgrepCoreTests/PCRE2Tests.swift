@@ -1198,6 +1198,17 @@ struct PCRE2Tests {
         #expect(pythonOutput == angleOutput)
     }
 
+    @Test func pcre2LeadingUngreedyModeFlipsQuantifierDefaults() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("foofoo\nfoobaro\nfo\nfzzzo\n", to: "pcre.txt")
+
+        let lazyByDefault = try run(["-P", "-n", "-o", #"(?U)f.*o"#, temp.path("pcre.txt")])
+        let explicitLazyBecomesGreedy = try run(["-P", "-o", #"(?U)fo+?"#, temp.path("pcre.txt")])
+
+        #expect(lazyByDefault == ["1:fo", "1:fo", "2:fo", "3:fo", "4:fzzzo"])
+        #expect(explicitLazyBecomesGreedy == ["foo", "foo", "foo", "fo"])
+    }
+
     @Test func pcre2BranchResetAlternationPreservesCaptureNumbering() throws {
         let temp = try TemporaryDirectory()
         try temp.write("ab\ncd\nac\nfoofoo\nfoobar\nbarbar\n", to: "pcre.txt")

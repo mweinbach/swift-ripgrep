@@ -2531,6 +2531,7 @@ final class PCRE2CompiledPattern {
         captureCountBase: Int = 0,
         totalCaptureCountOverride: Int? = nil
     ) throws -> String {
+        let pattern = patternExpandingLeadingUngreedyMode(pattern)
         var output = ""
         var inClass = false
         var index = pattern.startIndex
@@ -2688,6 +2689,121 @@ final class PCRE2CompiledPattern {
             index = pattern.index(after: index)
         }
         return output
+    }
+
+    private static func patternExpandingLeadingUngreedyMode(_ pattern: String) -> String {
+        guard pattern.hasPrefix("(?U)") else {
+            return pattern
+        }
+        return transformUngreedyQuantifiers(in: String(pattern.dropFirst(4)))
+    }
+
+    private static func transformUngreedyQuantifiers(in pattern: String) -> String {
+        var output = ""
+        var escaped = false
+        var inClass = false
+        var quantifiableAtom = false
+        var index = pattern.startIndex
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                output.append("\\")
+                output.append(character)
+                escaped = false
+                quantifiableAtom = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                index = pattern.index(after: index)
+                continue
+            }
+            if inClass {
+                output.append(character)
+                if character == "]" {
+                    inClass = false
+                    quantifiableAtom = true
+                }
+                index = pattern.index(after: index)
+                continue
+            }
+            if character == "[" {
+                output.append(character)
+                inClass = true
+                quantifiableAtom = false
+                index = pattern.index(after: index)
+                continue
+            }
+            if quantifiableAtom, character == "*" || character == "+" || character == "?" {
+                output.append(character)
+                let next = pattern.index(after: index)
+                if next < pattern.endIndex, pattern[next] == "?" {
+                    index = pattern.index(after: next)
+                } else {
+                    output.append("?")
+                    index = next
+                }
+                quantifiableAtom = false
+                continue
+            }
+            if quantifiableAtom,
+               character == "{",
+               let close = repetitionQuantifierClose(openingAt: index, in: pattern) {
+                output += pattern[index...close]
+                let next = pattern.index(after: close)
+                if next < pattern.endIndex, pattern[next] == "?" {
+                    index = pattern.index(after: next)
+                } else {
+                    output.append("?")
+                    index = next
+                }
+                quantifiableAtom = false
+                continue
+            }
+
+            output.append(character)
+            switch character {
+            case "(", "|", "^":
+                quantifiableAtom = false
+            case ")":
+                quantifiableAtom = true
+            default:
+                quantifiableAtom = true
+            }
+            index = pattern.index(after: index)
+        }
+        if escaped {
+            output.append("\\")
+        }
+        return output
+    }
+
+    private static func repetitionQuantifierClose(
+        openingAt open: String.Index,
+        in pattern: String
+    ) -> String.Index? {
+        var index = pattern.index(after: open)
+        var sawDigit = false
+        var sawComma = false
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if character == "}" {
+                return sawDigit ? index : nil
+            }
+            if character == "," {
+                guard !sawComma else {
+                    return nil
+                }
+                sawComma = true
+            } else if character.isNumber {
+                sawDigit = true
+            } else {
+                return nil
+            }
+            index = pattern.index(after: index)
+        }
+        return nil
     }
 
     private static func asciiShorthandEscapePattern(_ marker: Character, inClass: Bool) -> String? {
