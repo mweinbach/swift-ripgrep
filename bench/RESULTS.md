@@ -167,6 +167,15 @@ single-byte `--count-matches 'A'` form effectively neutral at 64.2 ms versus
 529.5 ms before, while sparse `--count-matches 'Q|Z'` stayed neutral at
 61.5 ms versus 63.2 ms before.
 
+Fixed PCRE2 literal lookaround `--count-matches` also skips matched-line
+bookkeeping for direct executable output. Positive/negative lookaround,
+case-insensitive lookbehind, no-match backreference, and neighboring `-c`
+outputs matched the previous Swift checkpoint and the sibling Rust oracle. On
+the 193 MiB subtitles corpus, 20-run checks measured `-P --count-matches
+'(?<=Sherlock )Holmes'` at 72.1 ms versus 139.1 ms before and 214.5 ms for
+Rust PCRE2. The equivalent lookahead `-P --count-matches
+'Sherlock(?= Holmes)'` measured 64.2 ms versus 138.5 ms before.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Routing multi-literal full-line output through the existing line-by-line

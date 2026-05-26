@@ -562,7 +562,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 suffix: nil,
                 caseInsensitiveASCII: fixedLookbehindFastPath.caseInsensitiveASCII,
                 options: options,
-                writeBytes: writeBytes
+                writeBytes: writeBytes,
+                allowDirectStdout: allowDirectStdout
             )
         }
         if let fixedLookaheadFastPath {
@@ -587,7 +588,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 suffix: fixedLookaheadFastPath.suffix,
                 caseInsensitiveASCII: fixedLookaheadFastPath.caseInsensitiveASCII,
                 options: options,
-                writeBytes: writeBytes
+                writeBytes: writeBytes,
+                allowDirectStdout: allowDirectStdout
             )
         }
         if let fixedNegativeLookbehindFastPath {
@@ -613,7 +615,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 suffix: nil,
                 caseInsensitiveASCII: fixedNegativeLookbehindFastPath.caseInsensitiveASCII,
                 options: options,
-                writeBytes: writeBytes
+                writeBytes: writeBytes,
+                allowDirectStdout: allowDirectStdout
             )
         }
         if let fixedNegativeLookaheadFastPath {
@@ -639,7 +642,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 suffixShouldMatch: false,
                 caseInsensitiveASCII: fixedNegativeLookaheadFastPath.caseInsensitiveASCII,
                 options: options,
-                writeBytes: writeBytes
+                writeBytes: writeBytes,
+                allowDirectStdout: allowDirectStdout
             )
         }
         if let fixedResetStartFastPath {
@@ -682,7 +686,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 suffix: nil,
                 caseInsensitiveASCII: fixedBackreferenceFastPath.caseInsensitiveASCII,
                 options: options,
-                writeBytes: writeBytes
+                writeBytes: writeBytes,
+                allowDirectStdout: allowDirectStdout
             )
         }
         if let fixedConditionalFastPath {
@@ -1445,7 +1450,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
         suffixShouldMatch: Bool = true,
         caseInsensitiveASCII: Bool = false,
         options: RipgrepOptions,
-        writeBytes: (UnsafeRawBufferPointer) -> Void
+        writeBytes: (UnsafeRawBufferPointer) -> Void,
+        allowDirectStdout: Bool = false
     ) -> SearchResults? {
         var matchedLineCount = 0
         var totalMatchCount = 0
@@ -1496,6 +1502,54 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         let suffixBaseAddress = suffix == nil ? nil : suffixBytes.baseAddress
 
                         var searchOffset = 0
+                        if countMatchesOnly && allowDirectStdout {
+                            while searchOffset <= data.count - literalBytes.count {
+                                let foundPointer = caseInsensitiveASCII
+                                    ? caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
+                                        rg_memcasemem_ascii_prepared(
+                                            baseAddress.advanced(by: searchOffset),
+                                            data.count - searchOffset,
+                                            literalBaseAddress,
+                                            literalBytes.count,
+                                            shifts.baseAddress
+                                        )
+                                    }
+                                    : rg_memmem_simple(
+                                        baseAddress.advanced(by: searchOffset),
+                                        data.count - searchOffset,
+                                        literalBaseAddress,
+                                        literalBytes.count
+                                    )
+                                guard let foundPointer else {
+                                    break
+                                }
+
+                                let matchStart = baseAddress.distance(to: foundPointer)
+                                let matchEnd = matchStart + literalBytes.count
+                                if matchesFixedLookaround(
+                                    baseAddress: baseAddress,
+                                    dataCount: data.count,
+                                    matchStart: matchStart,
+                                    matchEnd: matchEnd,
+                                    prefixBytes: prefixBytes,
+                                    prefixBaseAddress: prefixBaseAddress,
+                                    prefixShouldMatch: prefixShouldMatch,
+                                    suffixBytes: suffixBytes,
+                                    suffixBaseAddress: suffixBaseAddress,
+                                    suffixShouldMatch: suffixShouldMatch,
+                                    caseInsensitiveASCII: caseInsensitiveASCII
+                                ) {
+                                    totalMatchCount += 1
+                                    if matchedLineCount == 0 {
+                                        matchedLineCount = 1
+                                    }
+                                }
+
+                                searchOffset = matchStart + max(literalBytes.count, 1)
+                            }
+                            return
+                        }
+
                         var shouldStop = false
                         while searchOffset <= data.count - literalBytes.count, !shouldStop {
                             let foundPointer = caseInsensitiveASCII
