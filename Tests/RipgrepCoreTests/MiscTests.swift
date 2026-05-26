@@ -413,6 +413,36 @@ struct MiscTests {
             "bravo|delta",
             root.path("letters.txt"),
         ], fixture: {})
+        let multiByteVimgrepOutput = try runExecutableData([
+            "--vimgrep",
+            "bravo|delta",
+            root.path("letters.txt"),
+        ], fixture: {})
+        let multiByteByteOffsetVimgrepOutput = try runExecutableData([
+            "--vimgrep",
+            "-b",
+            "bravo|delta",
+            root.path("letters.txt"),
+        ], fixture: {})
+        let multiByteNoFilenameVimgrepOutput = try runExecutableData([
+            "--vimgrep",
+            "--no-filename",
+            "bravo|delta",
+            root.path("letters.txt"),
+        ], fixture: {})
+        let multiByteNoFieldsVimgrepOutput = try runExecutableData([
+            "--vimgrep",
+            "-N",
+            "--no-column",
+            "bravo|delta",
+            root.path("letters.txt"),
+        ], fixture: {})
+        try root.write("aba\n", to: "repeat.txt")
+        let singleByteRepeatedVimgrepOutput = try runExecutableData([
+            "--vimgrep",
+            "a",
+            root.path("repeat.txt"),
+        ], fixture: {})
         let countMatchesOutput = try runExecutableData([
             "--count-matches",
             "b|d",
@@ -452,6 +482,11 @@ struct MiscTests {
         #expect(multiByteByteOffsetOnlyMatchingOutput == Data("6:bravo\n20:delta\n".utf8))
         #expect(multiByteColumnOnlyMatchingOutput == Data("2:1:bravo\n4:1:delta\n".utf8))
         #expect(multiByteLineColumnByteOnlyMatchingOutput == Data("2:1:6:bravo\n4:1:20:delta\n".utf8))
+        #expect(multiByteVimgrepOutput == Data("\(root.path("letters.txt")):2:1:bravo\n\(root.path("letters.txt")):4:1:delta\n".utf8))
+        #expect(multiByteByteOffsetVimgrepOutput == Data("\(root.path("letters.txt")):2:1:6:bravo\n\(root.path("letters.txt")):4:1:20:delta\n".utf8))
+        #expect(multiByteNoFilenameVimgrepOutput == Data("2:1:bravo\n4:1:delta\n".utf8))
+        #expect(multiByteNoFieldsVimgrepOutput == Data("\(root.path("letters.txt")):bravo\n\(root.path("letters.txt")):delta\n".utf8))
+        #expect(singleByteRepeatedVimgrepOutput == Data("\(root.path("repeat.txt")):1:1:aba\n\(root.path("repeat.txt")):1:3:aba\n".utf8))
         #expect(countMatchesOutput == Data("2\n".utf8))
         #expect(singleByteCountMatchesOutput == Data("5\n".utf8))
         #expect(singleByteIgnoreCaseCountMatchesOutput == Data("5\n".utf8))

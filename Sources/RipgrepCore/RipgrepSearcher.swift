@@ -755,6 +755,13 @@ public struct RipgrepSearcher: @unchecked Sendable {
             && allowDirectStdout
             && fastPathByteSet == nil
             && canScanDarwinLiteralsIndependently(fastPath)
+        let canDirectWriteVimgrep = options.vimgrep
+            && allowDirectStdout
+            && options.printMode == .matchingLines
+            && !onlyMatching
+            && options.maxCount == nil
+            && (fastPath.literals.count == 1
+                || (fastPathByteSet == nil && canScanDarwinLiteralsIndependently(fastPath)))
         guard (!onlyMatching
                 || fastPath.literals.count == 1
                 || fastPathByteSet != nil
@@ -763,9 +770,12 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 || fastPath.literals.count == 1
                 || fastPathByteSet != nil
                 || canDirectCountIndependentLiterals),
+              (!options.vimgrep || canDirectWriteVimgrep),
               (!options.byteOffset && !options.column
                 || (options.printMode == .matchingLines
-                    && (fastPath.literals.count == 1 || canDirectWriteIndependentOnlyMatches))),
+                    && (fastPath.literals.count == 1
+                        || canDirectWriteIndependentOnlyMatches
+                        || canDirectWriteVimgrep))),
               canWriteDarwinSimpleByteLiteralFastPath(fastPath) else {
             return nil
         }
@@ -913,7 +923,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             }
 
             func advanceLineNumber(to targetOffset: Int) {
-                guard wantsLineNumber, lineCountOffset < targetOffset else {
+                guard (wantsLineNumber || options.vimgrep), lineCountOffset < targetOffset else {
                     return
                 }
                 lineNumber += Int(rg_memcount_byte(
@@ -943,6 +953,161 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         count: buffer.count - cursor
                     ))
                 }
+            }
+
+            if canDirectWriteVimgrep {
+                let pathBytes = options.withFilename == false
+                    ? nil
+                    : Data(OutputPathFormatter(options: options).displayPath(for: fileURL).utf8)
+                var newline = UInt8(ascii: "\n")
+                var separator = UInt8(ascii: ":")
+                var lastMatchedLineStart: Int?
+
+                func vimgrepLineBounds(containing matchStart: Int) -> (lineStart: Int, lineEnd: Int) {
+                    var lineStart = matchStart
+                    while lineStart > 0, baseAddress[lineStart - 1] != UInt8(ascii: "\n") {
+                        lineStart -= 1
+                    }
+                    let newlinePointer = memchr(
+                        baseAddress.advanced(by: matchStart),
+                        Int32(UInt8(ascii: "\n")),
+                        data.count - matchStart
+                    )
+                    let lineEnd = newlinePointer.map {
+                        baseAddress.distance(to: $0.assumingMemoryBound(to: UInt8.self))
+                    } ?? data.count
+                    return (lineStart, lineEnd)
+                }
+
+                func writeVimgrepMatch(matchStart: Int) {
+                    let bounds = vimgrepLineBounds(containing: matchStart)
+                    advanceLineNumber(to: bounds.lineStart)
+                    if lastMatchedLineStart != bounds.lineStart {
+                        matchedLineCount += 1
+                        lastMatchedLineStart = bounds.lineStart
+                    }
+                    totalMatchCount += 1
+                    if let pathBytes {
+                        pathBytes.withUnsafeBytes { buffer in
+                            writeBytes(buffer)
+                        }
+                        withUnsafeBytes(of: &separator) { buffer in
+                            writeBytes(buffer)
+                        }
+                    }
+                    if !options.noLineNumber {
+                        writeDarwinLineNumberPrefix(lineNumber, writeBytes: writeBytes)
+                    }
+                    if !options.noColumn {
+                        writeDarwinLineNumberPrefix(matchStart - bounds.lineStart + 1, writeBytes: writeBytes)
+                    }
+                    if options.byteOffset {
+                        writeDarwinLineNumberPrefix(matchStart, writeBytes: writeBytes)
+                    }
+                    writeBytes(UnsafeRawBufferPointer(
+                        start: rawBaseAddress.advanced(by: bounds.lineStart),
+                        count: bounds.lineEnd - bounds.lineStart
+                    ))
+                    withUnsafeBytes(of: &newline) { buffer in
+                        writeBytes(buffer)
+                    }
+                }
+
+                if literals.count == 1,
+                   let literal = literals.first {
+                    var searchOffset = 0
+                    var foldedLiteral: [UInt8] = []
+                    var caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
+                    if fastPath.caseInsensitiveASCII {
+                        foldedLiteral = literal.map(asciiLowercase)
+                        if literal.count > 1 {
+                            for index in 0..<(foldedLiteral.count - 1) {
+                                caseInsensitiveShifts[Int(foldedLiteral[index])] = literal.count - 1 - index
+                            }
+                        }
+                    }
+                    while searchOffset < data.count {
+                        let foundPointer: UnsafePointer<UInt8>?
+                        if fastPath.caseInsensitiveASCII {
+                            foundPointer = foldedLiteral.withUnsafeBufferPointer { foldedNeedle in
+                                caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
+                                    rg_memcasemem_ascii_prepared(
+                                        baseAddress.advanced(by: searchOffset),
+                                        data.count - searchOffset,
+                                        foldedNeedle.baseAddress,
+                                        foldedNeedle.count,
+                                        shifts.baseAddress
+                                    )
+                                }
+                            }
+                        } else {
+                            foundPointer = literal.withUnsafeBufferPointer { needle in
+                                rg_memmem_simple(
+                                    baseAddress.advanced(by: searchOffset),
+                                    data.count - searchOffset,
+                                    needle.baseAddress,
+                                    needle.count
+                                )
+                            }
+                        }
+                        guard let rawFoundPointer = foundPointer else {
+                            break
+                        }
+                        let matchStart = baseAddress.distance(to: rawFoundPointer)
+                        if fastPath.wordASCII {
+                            let bounds = vimgrepLineBounds(containing: matchStart)
+                            switch asciiWordBoundaryState(
+                                bytes: byteBuffer,
+                                lineStart: bounds.lineStart,
+                                lineEnd: bounds.lineEnd,
+                                matchStart: matchStart,
+                                matchEnd: matchStart + literal.count
+                            ) {
+                            case .bounded:
+                                break
+                            case .notBounded:
+                                searchOffset = max(matchStart + 1, searchOffset + 1)
+                                continue
+                            case .needsDecodedFallback:
+                                needsDecodedFallback = true
+                                return
+                            }
+                        }
+                        writeVimgrepMatch(matchStart: matchStart)
+                        searchOffset = matchStart + literal.count
+                    }
+                    return
+                }
+
+                var searchOffset = 0
+                while searchOffset < data.count {
+                    var earliestMatchStart = Int.max
+                    var earliestLiteralLength = 0
+                    for literal in literals where literal.count <= data.count - searchOffset {
+                        let foundPointer = literal.withUnsafeBufferPointer { needle in
+                            rg_memmem_simple(
+                                baseAddress.advanced(by: searchOffset),
+                                data.count - searchOffset,
+                                needle.baseAddress,
+                                needle.count
+                            )
+                        }
+                        guard let rawFoundPointer = foundPointer else {
+                            continue
+                        }
+                        let matchStart = baseAddress.distance(to: rawFoundPointer)
+                        if matchStart < earliestMatchStart {
+                            earliestMatchStart = matchStart
+                            earliestLiteralLength = literal.count
+                        }
+                    }
+                    guard earliestMatchStart != Int.max else {
+                        break
+                    }
+                    writeVimgrepMatch(matchStart: earliestMatchStart)
+                    searchOffset = earliestMatchStart + earliestLiteralLength
+                }
+                return
             }
 
             if literals.count > 1,
@@ -3153,13 +3318,16 @@ public struct RipgrepSearcher: @unchecked Sendable {
               options.fieldMatchSeparator == ":",
               options.heading != true,
               !options.trim,
-              !options.vimgrep,
+              (!options.vimgrep
+                || (options.printMode == .matchingLines
+                    && !options.onlyMatching
+                    && options.maxCount == nil)),
               options.colorMode != .always,
               options.colorMode != .ansi,
               options.hyperlinkFormat.isEnabled == false,
               !options.nullPathTerminator,
               options.pathSeparator == nil,
-              options.withFilename != true,
+              (options.vimgrep || options.withFilename != true),
               options.globPatterns.isEmpty,
               options.caseInsensitiveGlobPatterns.isEmpty,
               options.preprocessor == nil,

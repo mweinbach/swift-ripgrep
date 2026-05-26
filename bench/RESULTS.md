@@ -186,6 +186,18 @@ subtitles corpus, three-run checks measured `-n -o 'Sherlock|Watson'` at
 measured 192.8 ms versus 15.827 s before and 40.2 ms for Rust. The column form
 measured 267.0 ms versus 16.001 s before and 43.6 ms for Rust.
 
+Plain executable `--vimgrep` output now has a direct byte-literal writer for
+single literals and safe multi-literal alternations. It emits one row per match
+with path, line, column and optional byte-offset fields while leaving
+replacement, context, max-column, only-matching and unsafe overlapping
+alternations on the existing formatted path. Output for literal, safe
+multi-literal, byte-offset and no-filename vimgrep forms matched the previous
+Swift checkpoint and the sibling Rust oracle on the 193 MiB subtitles corpus.
+Five-run checks measured `--vimgrep 'Sherlock Holmes'` at 139.3 ms versus
+10.840 s before and 31.8 ms for Rust. The safe multi-literal
+`--vimgrep 'Sherlock|Watson'` form measured 269.9 ms versus 16.119 s before
+and 44.3 ms for Rust.
+
 Direct executable byte-unit PCRE2 `--count-matches` now counts totals without
 matched-line bookkeeping while preserving the exact summary path for non-direct
 callers. Output for default Unicode `\C`, byte-mode `\C`, `\C+`, `\C{2}`, and
