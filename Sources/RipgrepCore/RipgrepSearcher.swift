@@ -2802,10 +2802,24 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     return true
                 }
             } else {
-                let found = literal.withUnsafeBufferPointer { needle in
-                    rg_memmem_simple(line, count, needle.baseAddress, needle.count)
+                let found = literal.withUnsafeBufferPointer { needle -> Bool in
+                    guard let needleBaseAddress = needle.baseAddress else {
+                        return false
+                    }
+                    #if canImport(CRipgrepPlatform)
+                    return rg_memmem_simple(line, count, needleBaseAddress, needle.count) != nil
+                    #else
+                    var offset = 0
+                    while offset <= count - needle.count {
+                        if memcmp(line.advanced(by: offset), needleBaseAddress, needle.count) == 0 {
+                            return true
+                        }
+                        offset += 1
+                    }
+                    return false
+                    #endif
                 }
-                if found != nil {
+                if found {
                     return true
                 }
             }

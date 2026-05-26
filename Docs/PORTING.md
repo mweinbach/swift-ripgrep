@@ -53,6 +53,12 @@ test suite that mirrors the Rust upstream split (`BinaryTests`, `FeatureTests`,
 `JSONTests`, `MiscTests`, `MultilineTests`, `RegressionTests`, plus
 `HaystackReaderTests`, `ParityHarnessTests` and `RipgrepTestSupport`).
 
+For portability and performance investigation, `SWIFT_RIPGREP_NO_C_SHIM=1`
+omits the `CRipgrepPlatform` target from the package graph. That no-shim build
+keeps the in-tree Swift PCRE2 compatibility engine available, but deliberately
+falls back from the Darwin mmap/NEON literal writers to the slower Swift search
+paths.
+
 The normal build has no package-manager or system-library dependency. Plain
 literals selected through PCRE-compatible flags (`-P`, `--pcre2`, `--engine`,
 `--auto-hybrid-regex` and their disabling/default forms) reuse the default

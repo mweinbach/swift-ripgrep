@@ -8,6 +8,37 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## No-C-shim checkpoint — 2026-05-26
+
+The package now supports a no-`CRipgrepPlatform` build with
+`SWIFT_RIPGREP_NO_C_SHIM=1 swift build -c release`. The no-shim build keeps
+the Swift byte-search fast paths active through Swift fallbacks for the shim's
+byte-scanning entrypoints, and returns `-2` from unavailable whole-output
+Darwin C entrypoints so the existing Swift path can take over. Both normal and
+no-shim test suites pass 163 tests, with the Rust parity harness skipped unless
+`SWIFT_RIPGREP_PARITY=1` is set.
+
+Same-machine release checks used separate build directories:
+`.build/c-shim/release/ripgrep` and `.build/no-c-shim/release/ripgrep`.
+Sorted `--files` output and the checked subtitles outputs were byte-identical
+between the C-shim and no-shim binaries.
+
+| Bench | Flags / corpus | rg | C-shim Swift | no-shim Swift | no-shim / C-shim |
+|---|---|---:|---:|---:|---:|
+| file listing | `--files /tmp/swift-rg-bench/linux` | 91.0 ms | 149.4 ms | 154.5 ms | **1.03x** |
+| no-match literal | `PM_RESUME` on 1.5 GiB subtitles | 171.0 ms | 167.0 ms | 218.0 ms | **1.31x** |
+| case-insensitive literal | `-i sherlock` on 1.5 GiB subtitles | 300.1 ms | 179.1 ms | 1.338 s | **7.47x** |
+| multi-literal regex | `Sherlock|Watson` on 1.5 GiB subtitles | 298.5 ms | 343.0 ms | 380.3 ms | **1.11x** |
+
+Bottom line: traversal/file-listing performance can effectively match the
+current build without the C shim, and case-sensitive literal scans are close
+enough to be plausible. The blocker is ASCII case-insensitive scanning: the
+shim's prepared/NEON scanner remains about 7-8x faster than the Swift fallback
+on the large subtitles corpus. Matching current overall performance without
+the shim would require a Swift SIMD implementation of the prepared
+case-insensitive scanner (and likely the byte-set scanner) rather than simply
+removing `CRipgrepPlatform`.
+
 ## Status — 2026-05-25 fast-path checkpoint
 
 After the Darwin C fast-path work, the hot single-file ASCII cases are now
@@ -415,6 +446,26 @@ The key improvements since the 2026-05-24 baseline are:
   `/tmp/swift-rg-bench/linux`. Exact Swift natural output remained
   byte-identical for default and no-ignore file listing, and quiet output
   remained empty with the same exit status.
+
+### No-C-shim investigation — 2026-05-26
+
+`SWIFT_RIPGREP_NO_C_SHIM=1` now builds and tests without the
+`CRipgrepPlatform` target, so the portability experiment is mechanically
+viable. It is not performance-competitive for the matcher hot path. Fresh
+release checks on the same M3 Ultra and `/tmp/swift-rg-bench` corpora measured:
+
+| Bench | Flags | c-shim Swift | no-c-shim Swift | no-c / c-shim |
+|---|---|---:|---:|---:|
+| literal, 193 MiB subtitles | `'Sherlock Holmes'` | 26.9 ms | 10.888 s | **405x slower** |
+| `--files`, Linux tree | `--files` | 147.0 ms | 212.9 ms | **1.45x slower** |
+
+The literal result confirms that removing the C shim gives up the NEON literal
+scanner and buffered mmap stdout writer that closed the original
+hundreds-of-times matcher gap. The file-listing result is much closer because
+that path is dominated by traversal, metadata and ignore processing rather than
+literal scanning. The raw hyperfine exports live under
+`/tmp/swift-rg-bench/no-c-shim-literal-warm-*.json` and
+`/tmp/swift-rg-bench/no-c-shim-files-warm-*.json`.
 
 ### Rejected A/B checks — 2026-05-25
 

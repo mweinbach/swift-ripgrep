@@ -1,5 +1,7 @@
-import CRipgrepPlatform
 import RipgrepCore
+#if canImport(CRipgrepPlatform)
+import CRipgrepPlatform
+#endif
 
 #if canImport(Darwin)
 import Darwin
@@ -14,7 +16,7 @@ import CRT
 @main
 struct RipgrepCommand {
     static func main() {
-        #if canImport(Darwin)
+        #if canImport(Darwin) && canImport(CRipgrepPlatform)
         if let exitCode = runDarwinLiteralPreflight(arguments: Array(CommandLine.arguments.dropFirst())) {
             exit(exitCode)
         }
@@ -40,7 +42,7 @@ struct RipgrepCommand {
         #endif
     }
 
-    #if canImport(Darwin)
+    #if canImport(Darwin) && canImport(CRipgrepPlatform)
     private static func runDarwinLiteralPreflight(arguments: [String]) -> Int32? {
         guard getenv("RIPGREP_CONFIG_PATH") == nil else {
             return nil

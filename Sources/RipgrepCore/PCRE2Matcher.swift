@@ -164,7 +164,6 @@ final class PCRE2CompiledPattern {
             return
         }
 
-        #if canImport(CRipgrepPlatform)
         let canUseFixedByteMatcher = !options.effectiveIgnoreCase || options.noUnicode
         let caseInsensitiveASCII = options.effectiveIgnoreCase && options.noUnicode
         if canUseFixedByteMatcher,
@@ -240,7 +239,6 @@ final class PCRE2CompiledPattern {
             )
             return
         }
-        #endif
 
         var regexOptions: NSRegularExpression.Options = []
         if options.effectiveIgnoreCase {
@@ -1570,7 +1568,6 @@ final class PCRE2CompiledPattern {
         caseInsensitiveASCII: Bool,
         in text: String
     ) -> [PCRE2Match] {
-        #if canImport(CRipgrepPlatform)
         var matches: [PCRE2Match] = []
         let originalText = text
         var utf8Text = text
@@ -1618,9 +1615,6 @@ final class PCRE2CompiledPattern {
             }
         }
         return matches
-        #else
-        return []
-        #endif
     }
 
     private static func fixedNegativeLookbehindMatches(
@@ -1629,7 +1623,6 @@ final class PCRE2CompiledPattern {
         caseInsensitiveASCII: Bool,
         in text: String
     ) -> [PCRE2Match] {
-        #if canImport(CRipgrepPlatform)
         var matches: [PCRE2Match] = []
         let originalText = text
         var utf8Text = text
@@ -1678,9 +1671,6 @@ final class PCRE2CompiledPattern {
             }
         }
         return matches
-        #else
-        return []
-        #endif
     }
 
     private static func fixedPositiveLookaheadMatches(
@@ -1689,7 +1679,6 @@ final class PCRE2CompiledPattern {
         caseInsensitiveASCII: Bool,
         in text: String
     ) -> [PCRE2Match] {
-        #if canImport(CRipgrepPlatform)
         var matches: [PCRE2Match] = []
         let originalText = text
         var utf8Text = text
@@ -1738,9 +1727,6 @@ final class PCRE2CompiledPattern {
             }
         }
         return matches
-        #else
-        return []
-        #endif
     }
 
     private static func fixedNegativeLookaheadMatches(
@@ -1749,7 +1735,6 @@ final class PCRE2CompiledPattern {
         caseInsensitiveASCII: Bool,
         in text: String
     ) -> [PCRE2Match] {
-        #if canImport(CRipgrepPlatform)
         var matches: [PCRE2Match] = []
         let originalText = text
         var utf8Text = text
@@ -1799,9 +1784,6 @@ final class PCRE2CompiledPattern {
             }
         }
         return matches
-        #else
-        return []
-        #endif
     }
 
     private static func fixedResetStartMatches(
@@ -1810,7 +1792,6 @@ final class PCRE2CompiledPattern {
         caseInsensitiveASCII: Bool,
         in text: String
     ) -> [PCRE2Match] {
-        #if canImport(CRipgrepPlatform)
         let needle = prefix + literal
         guard !needle.isEmpty else {
             return []
@@ -1853,9 +1834,6 @@ final class PCRE2CompiledPattern {
             }
         }
         return matches
-        #else
-        return []
-        #endif
     }
 
     private static func literalPrefixResetStartRegexMatches(
@@ -2170,7 +2148,6 @@ final class PCRE2CompiledPattern {
         caseInsensitiveASCII: Bool,
         in text: String
     ) -> [PCRE2Match] {
-        #if canImport(CRipgrepPlatform)
         var matches: [PCRE2Match] = []
         let originalText = text
         var utf8Text = text
@@ -2221,9 +2198,6 @@ final class PCRE2CompiledPattern {
             }
         }
         return matches
-        #else
-        return []
-        #endif
     }
 
     private static func fixedAssertionConditionalMatches(
@@ -2233,7 +2207,6 @@ final class PCRE2CompiledPattern {
         caseInsensitiveASCII: Bool,
         in text: String
     ) -> [PCRE2Match] {
-        #if canImport(CRipgrepPlatform)
         enum ConditionKind {
             case positiveLookahead
             case negativeLookahead
@@ -2344,9 +2317,6 @@ final class PCRE2CompiledPattern {
             }
         }
         return matches
-        #else
-        return []
-        #endif
     }
 
     private static func byteUnitMatches(
@@ -2502,7 +2472,6 @@ final class PCRE2CompiledPattern {
         byte & 0xC0 == 0x80
     }
 
-    #if canImport(CRipgrepPlatform)
     private static func findLiteral(
         _ haystack: UnsafePointer<UInt8>,
         _ haystackLength: Int,
@@ -2510,10 +2479,29 @@ final class PCRE2CompiledPattern {
         _ literalLength: Int,
         caseInsensitiveASCII: Bool
     ) -> UnsafePointer<UInt8>? {
+        #if canImport(CRipgrepPlatform)
         if caseInsensitiveASCII {
             return rg_memcasemem_ascii(haystack, haystackLength, literal, literalLength)
         }
         return rg_memmem_simple(haystack, haystackLength, literal, literalLength)
+        #else
+        guard literalLength > 0, haystackLength >= literalLength else {
+            return nil
+        }
+        var offset = 0
+        while offset <= haystackLength - literalLength {
+            if bytesEqual(
+                haystack.advanced(by: offset),
+                literal,
+                literalLength,
+                caseInsensitiveASCII: caseInsensitiveASCII
+            ) {
+                return haystack.advanced(by: offset)
+            }
+            offset += 1
+        }
+        return nil
+        #endif
     }
 
     private static func bytesEqual(
@@ -2536,7 +2524,6 @@ final class PCRE2CompiledPattern {
     private static func asciiLowercase(_ byte: UInt8) -> UInt8 {
         (UInt8(ascii: "A")...UInt8(ascii: "Z")).contains(byte) ? byte + 32 : byte
     }
-    #endif
 
     private static func stringRange(startByte: Int, endByte: Int, in text: String) -> Range<String.Index>? {
         let lowerUTF8 = text.utf8.index(text.utf8.startIndex, offsetBy: startByte)
