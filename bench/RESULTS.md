@@ -176,6 +176,15 @@ the existing fallback. On the 193 MiB subtitles corpus, three-run checks
 measured `-o 'Sherlock|Watson'` at 198.3 ms versus 16.230 s before and 39.4 ms
 for Rust.
 
+Line-number and byte-offset prefixes now use that same direct safe
+multi-literal only-match writer, while column output still falls back to the
+decoded path. Output for `-n -o`, `-b -o`, combined `-n -b -o`, plain `-o`,
+column fallback, and unsafe overlapping fallback matched the previous Swift
+checkpoint; safe prefixed forms also matched the sibling Rust oracle. On the
+193 MiB subtitles corpus, three-run checks measured `-n -o 'Sherlock|Watson'`
+at 278.6 ms versus 15.935 s before and 43.3 ms for Rust. The byte-offset form
+measured 192.8 ms versus 15.827 s before and 40.2 ms for Rust.
+
 Direct executable byte-unit PCRE2 `--count-matches` now counts totals without
 matched-line bookkeeping while preserving the exact summary path for non-direct
 callers. Output for default Unicode `\C`, byte-mode `\C`, `\C+`, `\C{2}`, and

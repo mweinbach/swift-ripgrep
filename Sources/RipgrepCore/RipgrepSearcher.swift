@@ -754,8 +754,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let canDirectWriteIndependentOnlyMatches = onlyMatching
             && allowDirectStdout
             && fastPathByteSet == nil
-            && !options.wantsLineNumber
-            && !options.byteOffset
             && !options.column
             && canScanDarwinLiteralsIndependently(fastPath)
         guard (!onlyMatching
@@ -767,7 +765,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 || fastPathByteSet != nil
                 || canDirectCountIndependentLiterals),
               (!options.byteOffset && !options.column
-                || (options.printMode == .matchingLines && fastPath.literals.count == 1)),
+                || (options.printMode == .matchingLines
+                    && (fastPath.literals.count == 1 || canDirectWriteIndependentOnlyMatches))),
               canWriteDarwinSimpleByteLiteralFastPath(fastPath) else {
             return nil
         }
@@ -978,6 +977,16 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     }
                     totalMatchCount += 1
                     matchedLineCount = 1
+                    if wantsLineNumber || options.byteOffset {
+                        advanceLineNumber(to: earliestMatchStart)
+                        writeDarwinOnlyMatchingPrefixes(
+                            lineNumber: lineNumber,
+                            column: 1,
+                            byteOffset: earliestMatchStart,
+                            options: options,
+                            writeBytes: writeBytes
+                        )
+                    }
                     writeBytes(UnsafeRawBufferPointer(
                         start: rawBaseAddress.advanced(by: earliestMatchStart),
                         count: earliestLiteralLength

@@ -387,6 +387,18 @@ struct MiscTests {
             "bravo|delta",
             root.path("letters.txt"),
         ], fixture: {})
+        let multiByteLineNumberOnlyMatchingOutput = try runExecutableData([
+            "-n",
+            "-o",
+            "bravo|delta",
+            root.path("letters.txt"),
+        ], fixture: {})
+        let multiByteByteOffsetOnlyMatchingOutput = try runExecutableData([
+            "-b",
+            "-o",
+            "bravo|delta",
+            root.path("letters.txt"),
+        ], fixture: {})
         let countMatchesOutput = try runExecutableData([
             "--count-matches",
             "b|d",
@@ -422,6 +434,8 @@ struct MiscTests {
 
         #expect(onlyMatchingOutput == Data("b\nd\n".utf8))
         #expect(multiByteOnlyMatchingOutput == Data("bravo\ndelta\n".utf8))
+        #expect(multiByteLineNumberOnlyMatchingOutput == Data("2:bravo\n4:delta\n".utf8))
+        #expect(multiByteByteOffsetOnlyMatchingOutput == Data("6:bravo\n20:delta\n".utf8))
         #expect(countMatchesOutput == Data("2\n".utf8))
         #expect(singleByteCountMatchesOutput == Data("5\n".utf8))
         #expect(singleByteIgnoreCaseCountMatchesOutput == Data("5\n".utf8))
