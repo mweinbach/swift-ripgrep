@@ -62,6 +62,19 @@ struct RipgrepCommand {
             mode = .mmap
             pattern = arguments[0]
             path = arguments[1]
+        } else if arguments.count == 3,
+                  arguments[0] == "-P"
+                    || arguments[0] == "--pcre2"
+                    || arguments[0] == "--engine=pcre2" {
+            mode = .mmap
+            pattern = arguments[1]
+            path = arguments[2]
+        } else if arguments.count == 4,
+                  arguments[0] == "--engine",
+                  arguments[1] == "pcre2" {
+            mode = .mmap
+            pattern = arguments[2]
+            path = arguments[3]
         } else if arguments.count == 3, arguments[0] == "--no-mmap" {
             mode = .noMmap
             pattern = arguments[1]

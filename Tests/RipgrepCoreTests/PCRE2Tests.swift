@@ -33,6 +33,17 @@ struct PCRE2Tests {
         #expect(output == ["Sherlock"])
     }
 
+    @Test func pcre2PlainLiteralExecutablePreflightOutput() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("Sherlock Holmes\nMycroft Holmes\n", to: "pcre.txt")
+
+        let shortFlagOutput = try runExecutableData(["-P", "Sherlock", temp.path("pcre.txt")]) {}
+        let engineFlagOutput = try runExecutableData(["--engine=pcre2", "Sherlock", temp.path("pcre.txt")]) {}
+
+        #expect(shortFlagOutput == Data("Sherlock Holmes\n".utf8))
+        #expect(engineFlagOutput == Data("Sherlock Holmes\n".utf8))
+    }
+
     @Test func pcre2FixedLookbehindLiteralOnlyMatchesAfterPrefix() throws {
         let temp = try TemporaryDirectory()
         try temp.write("Sherlock Holmes\nMycroft Holmes\nSherlock Holmes\n", to: "pcre.txt")
