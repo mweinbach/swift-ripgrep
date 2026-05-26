@@ -86,6 +86,28 @@ Rust. For `-m 1 'Sherlock|Watson'` on the subtitles corpus, a 30-run A/B
 measured Swift at 49.7 ms versus 319.4 ms before and 6.0 ms for Rust; the
 line-numbered `-n -m 1` form measured the same 49.7 ms versus 320.6 ms before.
 
+Rejected Swift-only probes from the same checkpoint:
+
+- Routing multi-literal full-line output through the existing line-by-line
+  checker preserved output but regressed `Sherlock|Watson` on the 1.5 GiB
+  subtitles corpus to 7.275 s versus 334.2 ms for the current per-literal
+  scanner and 307.4 ms for Rust.
+- A cross-literal interval skip helped the dense duplicated-line corpus
+  (164.3 ms to 101.9 ms) but slowed the representative subtitles corpus
+  (336.2 ms to 340.4 ms), and an adaptive probe still measured slower on that
+  corpus (338.4 ms to 351.5 ms).
+- A stdout byte-chunk writer for ignore-aware `--files` preserved current Swift
+  ordering and sorted Rust content, but slowed default Linux-tree listing from
+  149.7 ms to 168.3 ms.
+- Replacing the Swift SIMD fallback with Foundation `Data.range(of:)` or libc
+  `memmem` was much slower on the literal subtitles scan: `Data.range(of:)`
+  measured 633.7 ms and libc `memmem` measured 1.046 s, versus about 213 ms
+  for the current Swift scanner and about 192 ms for Rust.
+- Streaming single-literal `-m 1` through the existing line-by-line path
+  preserved output on spot checks, but was slow enough on the large subtitles
+  corpus that the 60-run benchmark was terminated after the mmap baseline
+  completed at 50.1 ms.
+
 ## Status — 2026-05-25 fast-path checkpoint
 
 After the Darwin C fast-path work, the hot single-file ASCII cases are now
