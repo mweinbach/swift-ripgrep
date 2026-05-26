@@ -924,24 +924,27 @@ public struct RipgrepSearcher: @unchecked Sendable {
                fastPathByteSet == nil,
                !countMatchesOnly,
                !onlyMatching {
-                if maxCount == 1 {
-                    var earliestMatchStart = Int.max
-                    for literal in literals where literal.count <= data.count {
-                        let foundPointer = literal.withUnsafeBufferPointer { needle in
-                            rg_memmem_simple(
-                                baseAddress,
-                                data.count,
-                                needle.baseAddress,
-                                needle.count
-                            )
+                if maxCount <= 128 {
+                    var searchOffset = 0
+                    while searchOffset < data.count, matchedLineCount < maxCount {
+                        var earliestMatchStart = Int.max
+                        for literal in literals where literal.count <= data.count - searchOffset {
+                            let foundPointer = literal.withUnsafeBufferPointer { needle in
+                                rg_memmem_simple(
+                                    baseAddress.advanced(by: searchOffset),
+                                    data.count - searchOffset,
+                                    needle.baseAddress,
+                                    needle.count
+                                )
+                            }
+                            guard let rawFoundPointer = foundPointer else {
+                                continue
+                            }
+                            earliestMatchStart = min(earliestMatchStart, baseAddress.distance(to: rawFoundPointer))
                         }
-                        guard let rawFoundPointer = foundPointer else {
-                            continue
+                        guard earliestMatchStart != Int.max else {
+                            break
                         }
-                        earliestMatchStart = min(earliestMatchStart, baseAddress.distance(to: rawFoundPointer))
-                    }
-
-                    if earliestMatchStart != Int.max {
                         var lineStart = earliestMatchStart
                         while lineStart > 0, baseAddress[lineStart - 1] != UInt8(ascii: "\n") {
                             lineStart -= 1
@@ -959,7 +962,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         } else {
                             outputEnd = data.count
                         }
-                        matchedLineCount = 1
+                        matchedLineCount += 1
                         bytesSearched = outputEnd
                         if !countOnly {
                             writeLineNumberPrefix(for: lineStart)
@@ -974,6 +977,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                                 }
                             }
                         }
+                        searchOffset = outputEnd
                     }
                     return
                 }

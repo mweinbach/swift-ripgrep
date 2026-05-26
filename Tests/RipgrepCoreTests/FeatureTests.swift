@@ -398,8 +398,16 @@ struct FeatureTests {
 
         try root.write("first alpha\nsecond beta\nthird alpha beta\n", to: "alternation.txt")
         #expect(try run(["-m1", "beta|alpha", root.path("alternation.txt")]) == ["first alpha"])
+        #expect(try run(["-m2", "beta|alpha", root.path("alternation.txt")]) == ["first alpha", "second beta"])
         #expect(try run(["-n", "-m1", "beta|alpha", root.path("alternation.txt")]) == ["1:first alpha"])
+        #expect(try run(["-n", "-m2", "beta|alpha", root.path("alternation.txt")]) == [
+            "1:first alpha",
+            "2:second beta",
+        ])
         #expect(try run(["-c", "-m1", "beta|alpha", root.path("alternation.txt")]) == ["1"])
+        #expect(try run(["-c", "-m2", "beta|alpha", root.path("alternation.txt")]) == ["2"])
+        let executableAlternationM2 = try runExecutableData(["-m2", "beta|alpha", root.path("alternation.txt")]) {}
+        #expect(String(decoding: executableAlternationM2, as: UTF8.self) == "first alpha\nsecond beta\n")
 
         var output: [String] = []
         var errors: [String] = []
