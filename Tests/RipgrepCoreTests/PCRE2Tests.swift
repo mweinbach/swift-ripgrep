@@ -519,6 +519,24 @@ struct PCRE2Tests {
         #expect(autoOnlyMatchingOutput == ["bar"])
     }
 
+    @Test func pcre2AbsoluteStartLiteralOnlyMatchingPreservesLaterLines() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("foo\nfoobar\nbarfoo\n", to: "pcre.txt")
+        let expectedOnlyMatching = ["1:foo", "2:foobar"]
+
+        let pcreOnlyMatching = try run(["-P", "-n", "-o", #"\Afoo"#, temp.path("pcre.txt")])
+        let autoOnlyMatching = try run(["--engine=auto", "-n", "-o", #"\Afoo"#, temp.path("pcre.txt")])
+        let defaultOnlyMatching = try run(["--engine=default", "-n", "-o", #"\Afoo"#, temp.path("pcre.txt")])
+        let replacement = try run(["-P", #"\Afoo"#, "-r", "X", temp.path("pcre.txt")])
+        let countMatches = try run(["-P", "--count-matches", #"\Afoo"#, temp.path("pcre.txt")])
+
+        #expect(pcreOnlyMatching == expectedOnlyMatching)
+        #expect(autoOnlyMatching == expectedOnlyMatching)
+        #expect(defaultOnlyMatching == expectedOnlyMatching)
+        #expect(replacement == ["X", "foobar"])
+        #expect(countMatches == ["2"])
+    }
+
     @Test func pcre2ResetStartReplacementUsesResetMatchRange() throws {
         let temp = try TemporaryDirectory()
         try temp.write("foobar\nfooqux\nbar\n", to: "pcre.txt")

@@ -6449,6 +6449,11 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !spans.isEmpty else {
             return (spans, false)
         }
+        if options.effectivePatterns.count == 1,
+           let pattern = options.effectivePatterns.first,
+           isSimpleAbsoluteStartLiteralPattern(pattern) {
+            return ([], true)
+        }
         let filtered = spans.filter {
             !($0.startByte == 0 && $0.endByte == 0 && $0.text.isEmpty)
         }
@@ -6500,6 +6505,24 @@ public struct RipgrepSearcher: @unchecked Sendable {
             }
         }
         return false
+    }
+
+    private func isSimpleAbsoluteStartLiteralPattern(_ pattern: String) -> Bool {
+        var pattern = pattern
+        if pattern.hasPrefix("(?-u)") {
+            pattern.removeFirst("(?-u)".count)
+        }
+        guard pattern.hasPrefix(#"\A"#) else {
+            return false
+        }
+        let literalPattern = String(pattern.dropFirst(#"\A"#.count))
+        guard let literal = RegexLiteralParser.literal(
+            fromPlainRegexPattern: literalPattern,
+            allowPCREQuotedLiterals: true
+        ) else {
+            return false
+        }
+        return !literal.isEmpty
     }
 
     private func containsLineStartAnchor(_ pattern: String) -> Bool {
