@@ -41,6 +41,27 @@ file` invocations. That cuts the original no-shim `-i sherlock` result from
 effectively tied with the C-shim
 preflight, while user time remains about 27 ms higher on this corpus.
 
+### Swift-only follow-up — 2026-05-26
+
+The Swift-only Darwin literal preflight now skips directly to the end of a line
+after emitting it. This preserves ripgrep's one-line-per-matching-line output
+while avoiding repeated same-line rescans on dense literal lines. On a 33 MiB
+synthetic corpus with ten `needle` hits per line, output was byte-identical to
+both the previous Swift binary and the sibling Rust oracle; 10-run hyperfine
+checks measured the case-sensitive form at 39.8 ms versus 228.3 ms for the
+previous Swift-only checkpoint and 49.2 ms for Rust, while `-i NEEDLE` dropped
+from 128.4 ms to about 10 ms in manual `/usr/bin/time` checks. The normal 1.5
+GiB subtitles literal/no-match/case-insensitive/multi-literal smoke cases
+remained neutral.
+
+Quiet file-listing probes also got a small traversal cleanup. The no-ignore
+existence walker now keeps recursive paths in byte buffers, and the
+ignore-aware existence probe reuses the fast directory contents scan instead
+of doing a marker-only scan before reading entries again. A 50-run recheck on
+`/tmp/swift-rg-bench/linux` measured default `--quiet --files` at 11.1 ms
+versus 11.7 ms for the previous Swift-only checkpoint; `--no-ignore --hidden
+--quiet --files` stayed effectively tied at 9.1 ms.
+
 ## Status — 2026-05-25 fast-path checkpoint
 
 After the Darwin C fast-path work, the hot single-file ASCII cases are now
