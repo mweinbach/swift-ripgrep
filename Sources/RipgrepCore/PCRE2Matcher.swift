@@ -168,7 +168,10 @@ final class PCRE2CompiledPattern {
             regexOptions.insert(.dotMatchesLineSeparators)
         }
 
-        var regexPattern = try Self.regexPatternExpandingPCREQuotedLiterals(pattern)
+        var regexPattern = try Self.regexPatternExpandingPCREQuotedLiterals(
+            pattern,
+            asciiShorthandEscapes: options.noUnicode
+        )
         if regexPattern.isEmpty {
             regexPattern = "(?:)"
         }
@@ -1252,7 +1255,10 @@ final class PCRE2CompiledPattern {
         """
     }
 
-    private static func regexPatternExpandingPCREQuotedLiterals(_ pattern: String) throws -> String {
+    private static func regexPatternExpandingPCREQuotedLiterals(
+        _ pattern: String,
+        asciiShorthandEscapes: Bool = false
+    ) throws -> String {
         var output = ""
         var inClass = false
         var index = pattern.startIndex
@@ -1309,6 +1315,12 @@ final class PCRE2CompiledPattern {
                         index = backreference.end
                         continue
                     }
+                    if asciiShorthandEscapes,
+                       let shorthand = asciiShorthandEscapePattern(pattern[marker], inClass: inClass) {
+                        output += shorthand
+                        index = pattern.index(after: marker)
+                        continue
+                    }
                     output.append(character)
                     output.append(pattern[marker])
                     index = pattern.index(after: marker)
@@ -1316,7 +1328,11 @@ final class PCRE2CompiledPattern {
                 }
             }
             if !inClass, character == "(" {
-                if let conditional = try pcreConditionalAssertionSyntax(at: index, in: pattern) {
+                if let conditional = try pcreConditionalAssertionSyntax(
+                    at: index,
+                    in: pattern,
+                    asciiShorthandEscapes: asciiShorthandEscapes
+                ) {
                     output += conditional.pattern
                     index = conditional.end
                     continue
@@ -1338,9 +1354,29 @@ final class PCRE2CompiledPattern {
         return output
     }
 
+    private static func asciiShorthandEscapePattern(_ marker: Character, inClass: Bool) -> String? {
+        switch marker {
+        case "w":
+            return inClass ? "A-Za-z0-9_" : "[A-Za-z0-9_]"
+        case "W":
+            return inClass ? nil : "[^A-Za-z0-9_]"
+        case "d":
+            return inClass ? "0-9" : "[0-9]"
+        case "D":
+            return inClass ? nil : "[^0-9]"
+        case "s":
+            return inClass ? " \\t\\n\\r\\f\\v" : "[ \\t\\n\\r\\f\\v]"
+        case "S":
+            return inClass ? nil : "[^ \\t\\n\\r\\f\\v]"
+        default:
+            return nil
+        }
+    }
+
     private static func pcreConditionalAssertionSyntax(
         at index: String.Index,
-        in pattern: String
+        in pattern: String,
+        asciiShorthandEscapes: Bool = false
     ) throws -> (pattern: String, end: String.Index)? {
         guard pattern[index...].hasPrefix("(?(") else {
             return nil
@@ -1352,9 +1388,18 @@ final class PCRE2CompiledPattern {
         }
         let rawTrueBranch = String(pattern[assertion.end..<branches.separator])
         let rawFalseBranch = branches.falseBranchStart.map { String(pattern[$0..<branches.close]) } ?? ""
-        let condition = try regexPatternExpandingPCREQuotedLiterals(assertion.body)
-        let trueBranch = try regexPatternExpandingPCREQuotedLiterals(rawTrueBranch)
-        let falseBranch = try regexPatternExpandingPCREQuotedLiterals(rawFalseBranch)
+        let condition = try regexPatternExpandingPCREQuotedLiterals(
+            assertion.body,
+            asciiShorthandEscapes: asciiShorthandEscapes
+        )
+        let trueBranch = try regexPatternExpandingPCREQuotedLiterals(
+            rawTrueBranch,
+            asciiShorthandEscapes: asciiShorthandEscapes
+        )
+        let falseBranch = try regexPatternExpandingPCREQuotedLiterals(
+            rawFalseBranch,
+            asciiShorthandEscapes: asciiShorthandEscapes
+        )
         return (
             "(?:\(assertion.truePrefix)\(condition))\(trueBranch)|\(assertion.falsePrefix)\(condition))\(falseBranch))",
             pattern.index(after: branches.close)

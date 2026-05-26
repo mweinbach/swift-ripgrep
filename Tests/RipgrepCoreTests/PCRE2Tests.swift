@@ -425,6 +425,21 @@ struct PCRE2Tests {
         #expect(output == Data("1:holmes\n2:HOLMES\n3:Holmes\n".utf8))
     }
 
+    @Test func pcre2NoUnicodeShorthandClassesUseASCII() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("café\nabc_123\n٣ 3\n", to: "pcre.txt")
+
+        let asciiWords = try run(["-P", "--no-pcre2-unicode", "-o", #"\w+"#, temp.path("pcre.txt")])
+        let unicodeWords = try run(["-P", "--pcre2-unicode", "-o", #"\w+"#, temp.path("pcre.txt")])
+        let asciiDigits = try run(["-P", "--no-pcre2-unicode", "-o", #"\d+"#, temp.path("pcre.txt")])
+        let unicodeDigits = try run(["-P", "--pcre2-unicode", "-o", #"\d+"#, temp.path("pcre.txt")])
+
+        #expect(asciiWords == ["caf", "abc_123", "3"])
+        #expect(unicodeWords == ["café", "abc_123", "٣", "3"])
+        #expect(asciiDigits == ["123", "3"])
+        #expect(unicodeDigits == ["123", "٣", "3"])
+    }
+
     @Test func pcre2FixedLookbehindExecutableFastPathLineNumberOnlyMatchingOutput() throws {
         let temp = try TemporaryDirectory()
         try temp.write("Mycroft Holmes\nSherlock Holmes and Sherlock Holmes\n", to: "pcre.txt")
