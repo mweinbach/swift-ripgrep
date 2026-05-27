@@ -867,6 +867,20 @@ remained byte-identical to sibling Rust `rg`; a nine-run direct check measured
 `subtitles_en_literal_word` harness measured 214.23 ms median versus
 194.86 ms for Rust.
 
+Line-numbered Unicode word literals now have the same Swift-only executable
+preflight when the literal starts and ends with ASCII word bytes. The scanner
+buffers line ranges until it knows no candidate needs Unicode decoding, so
+non-ASCII-adjacent candidates fall back before any stdout is written. That also
+keeps the full searcher direct-stdout path from partially writing word-boundary
+literal output before Unicode fallback. Output for `-nw 'Sherlock Holmes'`,
+`-n -w 'Sherlock Holmes'`, and the Unicode-adjacent fallback fixture matched
+sibling Rust `rg`; on the 1.5 GiB subtitles corpus, `-nw 'Sherlock Holmes'`
+matched Rust byte-for-byte (830 lines). Nine-run direct checks measured Swift
+`-nw` at 215.7 ms versus Rust at 197.3 ms, with the explicit ASCII boundary
+regex at 215.8 ms. The focused upstream `subtitles_en_literal_word` harness
+now measures both Unicode and ASCII labels in the same band: Unicode
+214.52 ms versus Rust 198.16 ms, and ASCII 215.91 ms versus Rust 197.59 ms.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Raising the no-mmap stream read size to 4 MiB preserved output but regressed
@@ -951,6 +965,12 @@ Rejected Swift-only probes from the same checkpoint:
   measured 183.34 ms, versus the retained 182.8/182.6 ms band. The `-n` median
   moved only from 213.45 ms to 212.70 ms, so the broader single-literal route
   stayed out.
+- Scanning only the last word of a multi-word literal in the executable
+  preflight, then verifying the full literal before output, preserved
+  byte-identical output for plain and `-n 'Sherlock Holmes'`, but lost the
+  representative single-literal check: plain output measured 186.6 ms versus
+  the retained 184 ms band, and `-n` measured 216.9 ms versus the retained
+  215 ms band. The full-literal SIMD first/tail scan stays in place.
 - Extending the finite multi-literal cutoff all the way to 4096 preserved
   output, but the repeated earliest-match scans overtook the collect/sort path:
   `-m 2048 'Sherlock|Watson'` measured 414.9 ms versus 309.7 ms before, and

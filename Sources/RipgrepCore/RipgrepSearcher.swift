@@ -894,7 +894,10 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         || canDirectWriteOnlyMatchingLiteralReplacement
                         || canDirectWriteVimgrep
                         || canDirectWriteVimgrepLiteralReplacement))),
-              canWriteDarwinSimpleByteLiteralFastPath(fastPath)
+              canWriteDarwinSimpleByteLiteralFastPath(
+                fastPath,
+                allowDirectStdout: allowDirectStdout
+              )
                 || canDirectWriteTransformedMultiLiteralLines else {
             return nil
         }
@@ -5232,14 +5235,18 @@ public struct RipgrepSearcher: @unchecked Sendable {
         return options.effectivePatterns.allSatisfy { !$0.isEmpty }
     }
 
-    private func canWriteDarwinSimpleByteLiteralFastPath(_ fastPath: ByteLiteralFastPath) -> Bool {
+    private func canWriteDarwinSimpleByteLiteralFastPath(
+        _ fastPath: ByteLiteralFastPath,
+        allowDirectStdout: Bool
+    ) -> Bool {
         if fastPath.caseInsensitiveASCII {
             return !fastPath.wordASCII && fastPath.literals.count == 1 && fastPath.literals.allSatisfy { literal in
                 literal.allSatisfy { $0 < 0x80 }
             }
         }
         if fastPath.wordASCII {
-            return fastPath.literals.count == 1 && fastPath.literals.allSatisfy { literal in
+            // Unicode word-boundary fallback must happen before any direct stdout writes.
+            return !allowDirectStdout && fastPath.literals.count == 1 && fastPath.literals.allSatisfy { literal in
                 literal.allSatisfy { $0 < 0x80 }
             }
         }

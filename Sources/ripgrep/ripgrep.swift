@@ -275,6 +275,7 @@ struct RipgrepCommand {
         let noMmap: Bool
         let pattern: String
         let path: String
+        let wordRegexp: Bool
         func isIgnoreCaseFlag(_ argument: String) -> Bool {
             argument == "-i" || argument == "--ignore-case"
         }
@@ -284,12 +285,18 @@ struct RipgrepCommand {
         var parsedIgnoreCase = false
         var parsedLineNumber = false
         var parsedNoMmap = false
+        var parsedWordRegexp = false
         var valueArguments: [String] = []
         for argument in arguments {
             if isIgnoreCaseFlag(argument) {
                 parsedIgnoreCase = true
             } else if isLineNumberFlag(argument) {
                 parsedLineNumber = true
+            } else if argument == "-nw" || argument == "-wn" {
+                parsedLineNumber = true
+                parsedWordRegexp = true
+            } else if argument == "-w" || argument == "--word-regexp" {
+                parsedWordRegexp = true
             } else if argument == "--no-mmap" {
                 parsedNoMmap = true
             } else {
@@ -302,6 +309,7 @@ struct RipgrepCommand {
         asciiCaseInsensitive = parsedIgnoreCase
         lineNumber = parsedLineNumber
         noMmap = parsedNoMmap
+        wordRegexp = parsedWordRegexp
         pattern = valueArguments[0]
         path = valueArguments[1]
 
@@ -326,6 +334,18 @@ struct RipgrepCommand {
         guard !literal.isEmpty,
               !asciiCaseInsensitive || literal.allSatisfy({ $0 < 0x80 }) else {
             return nil
+        }
+        if wordRegexp {
+            guard lineNumber,
+                  !asciiCaseInsensitive,
+                  !noMmap,
+                  !asciiBoundary else {
+                return nil
+            }
+            return SwiftDarwinLiteralPreflight.wordLineNumberExitCode(
+                path: path,
+                literal: literal
+            )
         }
         if noMmap {
             // This executable preflight is output-only; prefer the faster mapped

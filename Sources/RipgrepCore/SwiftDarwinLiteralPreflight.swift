@@ -85,6 +85,62 @@ public enum SwiftDarwinLiteralPreflight {
         )
     }
 
+    public static func wordLineNumberExitCode(
+        path: String,
+        literal: [UInt8]
+    ) -> Int32? {
+        guard !literal.isEmpty,
+              !literal.contains(UInt8(ascii: "\n")),
+              let first = literal.first,
+              let last = literal.last,
+              rgSwiftIsASCIIRegexWordByte(first),
+              rgSwiftIsASCIIRegexWordByte(last) else {
+            return nil
+        }
+
+        let fd = path.withCString { Darwin.open($0, O_RDONLY) }
+        guard fd >= 0 else {
+            return nil
+        }
+        defer {
+            Darwin.close(fd)
+        }
+
+        var fileStat = stat()
+        guard Darwin.fstat(fd, &fileStat) == 0 else {
+            return nil
+        }
+        guard (fileStat.st_mode & S_IFMT) == S_IFREG else {
+            return nil
+        }
+        guard fileStat.st_size > 0 else {
+            return 1
+        }
+        guard UInt64(fileStat.st_size) <= UInt64(Int.max) else {
+            return nil
+        }
+
+        let haystackLength = Int(fileStat.st_size)
+        guard let mapped = Darwin.mmap(nil, haystackLength, PROT_READ, MAP_PRIVATE, fd, 0),
+              mapped != MAP_FAILED else {
+            return nil
+        }
+        defer {
+            Darwin.munmap(mapped, haystackLength)
+        }
+
+        guard let matchedLineCount = literal.withUnsafeBufferPointer({ literalBuffer in
+            rgSwiftDarwinWriteWordLiteralLineNumberBytes(
+                UnsafeRawPointer(mapped).assumingMemoryBound(to: UInt8.self),
+                haystackLength: haystackLength,
+                literal: literalBuffer
+            )
+        }) else {
+            return nil
+        }
+        return matchedLineCount > 0 ? 0 : 1
+    }
+
     private static func streamingLiteralExitCode(
         path: String,
         literal: [UInt8],
@@ -548,20 +604,12 @@ private func rgSwiftDarwinWriteLiteralBytes(
     var writeFailed = false
 
     @inline(__always)
-    func isASCIIRegexWordByte(_ byte: UInt8) -> Bool {
-        (byte >= UInt8(ascii: "a") && byte <= UInt8(ascii: "z"))
-            || (byte >= UInt8(ascii: "A") && byte <= UInt8(ascii: "Z"))
-            || (byte >= UInt8(ascii: "0") && byte <= UInt8(ascii: "9"))
-            || byte == UInt8(ascii: "_")
-    }
-
-    @inline(__always)
     func isASCIIBoundaryMatch(matchStart: Int, lineStart: Int, lineEnd: Int) -> Bool {
-        if matchStart > lineStart, isASCIIRegexWordByte(base[matchStart - 1]) {
+        if matchStart > lineStart, rgSwiftIsASCIIRegexWordByte(base[matchStart - 1]) {
             return false
         }
         let matchEnd = matchStart + literal.count
-        if matchEnd < lineEnd, isASCIIRegexWordByte(base[matchEnd]) {
+        if matchEnd < lineEnd, rgSwiftIsASCIIRegexWordByte(base[matchEnd]) {
             return false
         }
         return true
@@ -693,6 +741,147 @@ private func rgSwiftDarwinWriteLiteralBytes(
         return nil
     }
     return matchedLineCount
+}
+
+private func rgSwiftDarwinWriteWordLiteralLineNumberBytes(
+    _ base: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    literal: UnsafeBufferPointer<UInt8>
+) -> Int? {
+    guard let literalBase = literal.baseAddress, literal.count > 0 else {
+        return nil
+    }
+    if haystackLength >= 3,
+       base[0] == 0xEF,
+       base[1] == 0xBB,
+       base[2] == 0xBF {
+        return nil
+    }
+    if haystackLength >= 2,
+       (base[0] == 0xFF && base[1] == 0xFE
+        || base[0] == 0xFE && base[1] == 0xFF) {
+        return nil
+    }
+    if memchr(base, 0, min(haystackLength, 64 * 1024)) != nil {
+        return nil
+    }
+
+    enum WordBoundaryState {
+        case bounded
+        case notBounded
+        case needsDecodedFallback
+    }
+
+    struct PendingLine {
+        let number: Int
+        let start: Int
+        let outputEnd: Int
+        let needsFinalNewline: Bool
+    }
+
+    @inline(__always)
+    func wordBoundaryState(matchStart: Int, matchEnd: Int) -> WordBoundaryState {
+        if matchStart > 0 {
+            let before = base[matchStart - 1]
+            if before >= 0x80 {
+                return .needsDecodedFallback
+            }
+            if rgSwiftIsASCIIRegexWordByte(before) {
+                return .notBounded
+            }
+        }
+        if matchEnd < haystackLength {
+            let after = base[matchEnd]
+            if after >= 0x80 {
+                return .needsDecodedFallback
+            }
+            if rgSwiftIsASCIIRegexWordByte(after) {
+                return .notBounded
+            }
+        }
+        return .bounded
+    }
+
+    var pendingLines: [PendingLine] = []
+    pendingLines.reserveCapacity(1024)
+    let maxBufferedLines = 16_384
+    var lineNumberAtSearchOffset = 1
+    var searchOffset = 0
+    var lastEmittedLineStart = -1
+
+    while searchOffset < haystackLength {
+        let result = rg_memmem_count_byte_before(
+            base.advanced(by: searchOffset),
+            haystackLength - searchOffset,
+            literalBase,
+            literal.count,
+            UInt8(ascii: "\n")
+        )
+        guard let found = result.match else {
+            break
+        }
+
+        let matchStart = base.distance(to: found)
+        let matchEnd = matchStart + literal.count
+        let matchedLineNumber = lineNumberAtSearchOffset + Int(result.count)
+        switch wordBoundaryState(matchStart: matchStart, matchEnd: matchEnd) {
+        case .bounded:
+            break
+        case .notBounded:
+            lineNumberAtSearchOffset = matchedLineNumber
+            searchOffset = max(matchStart + 1, searchOffset + 1)
+            continue
+        case .needsDecodedFallback:
+            return nil
+        }
+
+        var lineStart = matchStart
+        while lineStart > 0, base[lineStart - 1] != UInt8(ascii: "\n") {
+            lineStart -= 1
+        }
+        let newline = memchr(found, Int32(UInt8(ascii: "\n")), haystackLength - matchStart)
+        let outputEnd = newline.map {
+            base.distance(to: $0.assumingMemoryBound(to: UInt8.self)) + 1
+        } ?? haystackLength
+
+        if lineStart != lastEmittedLineStart {
+            guard pendingLines.count < maxBufferedLines else {
+                return nil
+            }
+            pendingLines.append(PendingLine(
+                number: matchedLineNumber,
+                start: lineStart,
+                outputEnd: outputEnd,
+                needsFinalNewline: newline == nil
+            ))
+            lastEmittedLineStart = lineStart
+        }
+        lineNumberAtSearchOffset = newline == nil ? matchedLineNumber : matchedLineNumber + 1
+        searchOffset = outputEnd
+    }
+
+    guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+        return nil
+    }
+    defer {
+        output.deallocate()
+    }
+
+    for line in pendingLines {
+        guard output.writeLineNumberPrefix(line.number),
+              output.write(base.advanced(by: line.start), count: line.outputEnd - line.start) else {
+            return nil
+        }
+        if line.needsFinalNewline,
+           !output.writeByte(UInt8(ascii: "\n")) {
+            return nil
+        }
+    }
+
+    guard output.flush() else {
+        return nil
+    }
+    return pendingLines.count
 }
 
 private func rgSwiftDarwinWriteMultiLiteralLines(
@@ -980,5 +1169,13 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
         total_match_count: 0,
         bytes_searched: bytesSearched
     )
+}
+
+@inline(__always)
+private func rgSwiftIsASCIIRegexWordByte(_ byte: UInt8) -> Bool {
+    (byte >= UInt8(ascii: "a") && byte <= UInt8(ascii: "z"))
+        || (byte >= UInt8(ascii: "A") && byte <= UInt8(ascii: "Z"))
+        || (byte >= UInt8(ascii: "0") && byte <= UInt8(ascii: "9"))
+        || byte == UInt8(ascii: "_")
 }
 #endif

@@ -183,6 +183,62 @@ struct MiscTests {
         """)
     }
 
+    @Test("executable word literal preflight preserves Unicode fallback output")
+    func executableWordLiteralPreflightPreservesUnicodeFallbackOutput() throws {
+        let root = try TemporaryDirectory()
+        try root.write("""
+        Sherlock Holmes
+        xSherlock Holmes
+        Sherlock Holmesx
+        Sherlock Holmes again
+        """, to: "ascii-word-literal.txt")
+
+        let compactFlagOutput = try runExecutableData([
+            "-nw",
+            "Sherlock Holmes",
+            root.path("ascii-word-literal.txt"),
+        ], fixture: {})
+        #expect(String(decoding: compactFlagOutput, as: UTF8.self) == """
+        1:Sherlock Holmes
+        4:Sherlock Holmes again
+
+        """)
+
+        let splitFlagOutput = try runExecutableData([
+            "-w",
+            "-n",
+            "Sherlock Holmes",
+            root.path("ascii-word-literal.txt"),
+        ], fixture: {})
+        #expect(splitFlagOutput == compactFlagOutput)
+
+        try root.write("Sherlock Holmes", to: "word-literal-no-final-newline.txt")
+        let noFinalNewlineOutput = try runExecutableData([
+            "-nw",
+            "Sherlock Holmes",
+            root.path("word-literal-no-final-newline.txt"),
+        ], fixture: {})
+        #expect(noFinalNewlineOutput == Data("1:Sherlock Holmes\n".utf8))
+
+        try root.write("""
+        Sherlock Holmes
+        éSherlock Holmes
+        Sherlock Holmesé
+        Sherlock Holmes again
+        """, to: "unicode-word-literal.txt")
+        let unicodeBoundaryOutput = try runExecutableData([
+            "-n",
+            "-w",
+            "Sherlock Holmes",
+            root.path("unicode-word-literal.txt"),
+        ], fixture: {})
+        #expect(String(decoding: unicodeBoundaryOutput, as: UTF8.self) == """
+        1:Sherlock Holmes
+        4:Sherlock Holmes again
+
+        """)
+    }
+
     @Test("ASCII boundary literal regex preserves byte boundary output")
     func asciiBoundaryLiteralRegexPreservesByteBoundaryOutput() throws {
         let root = try TemporaryDirectory()
