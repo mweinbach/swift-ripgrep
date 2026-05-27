@@ -957,6 +957,12 @@ Rejected Swift-only probes from the same checkpoint:
   at 184.54 ms versus 183.39 ms before, plain `Sherlock Holmes` at 187.65 ms
   versus 186.42 ms before, and `-n` at 216.82 ms versus 219.04 ms before. The
   mixed result is too noisy to keep.
+- Replacing the recursive case-insensitive multi-literal path's
+  `bytes.contains(where:)` non-ASCII guard with a Swift SIMD high-bit scan
+  preserved sorted Linux output and subtitle `-n -i` output, but slowed the
+  exact target. A direct seven-run A/B on
+  `ERR_SYS|PME_TURN_OFF|LINK_REQ_RST|CFG_BME_EVT` measured 2.936 s versus
+  2.758 s for the retained guard, so the standard collection scan stays.
 - A broader default-Unicode executable surrounding-word preflight preserved
   byte output by buffering matches and falling back on whole non-ASCII
   candidate lines, but that fallback double-scanned the representative corpus.
