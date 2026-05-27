@@ -625,8 +625,23 @@ plain `--no-mmap` at 294.3 ms versus a previous Swift error and 164.5 ms for
 Rust; `--no-mmap -n` measured 378.7 ms versus the same previous error and
 195.8 ms for Rust.
 
+The no-mmap streaming preflight now keeps a logical start offset into its
+`Data` buffer and compacts only after several consumed chunks, avoiding a
+`removeSubrange` copy after every emitted or skipped slice. Output for plain,
+`-n`, `-i`, and `-n -i` `--no-mmap 'Sherlock Holmes'` on the 1.5 GiB subtitles
+corpus matched sibling Rust `rg`. Seven-run A/B checks measured plain output at
+284.0 ms versus 294.9 ms before and 166.3 ms for Rust; `-n` at 352.4 ms
+versus 363.0 ms before and 197.5 ms for Rust. Five-run case-insensitive guards
+measured `-i` at 362.8 ms versus 372.5 ms before and 279.9 ms for Rust, and
+`-n -i` at 425.1 ms versus 437.8 ms before and 310.7 ms for Rust.
+
 Rejected Swift-only probes from the same checkpoint:
 
+- Delaying no-mmap stream compaction until a full 8 MiB consumed prefix,
+  without the half-buffer trigger, preserved the same output shape but regressed
+  plain `--no-mmap 'Sherlock Holmes'` to 301.7 ms and raised peak memory versus
+  the 284.0 ms half-buffer/8 MiB hybrid, so the hybrid compaction trigger
+  stayed in place.
 - Routing multi-literal full-line output through the existing line-by-line
   checker preserved output but regressed `Sherlock|Watson` on the 1.5 GiB
   subtitles corpus to 7.275 s versus 334.2 ms for the current per-literal

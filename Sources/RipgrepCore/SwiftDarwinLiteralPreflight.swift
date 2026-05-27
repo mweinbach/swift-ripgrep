@@ -107,6 +107,7 @@ public enum SwiftDarwinLiteralPreflight {
         var matchedLineCount = 0
         var currentLineNumber = 1
         var buffer = Data()
+        var bufferStart = 0
         var bytesCheckedForNUL = 0
         var isFirstChunk = true
         var writeFailed = false
@@ -148,8 +149,28 @@ public enum SwiftDarwinLiteralPreflight {
             matchedLineCount += 1
         }
 
+        func activeBufferCount() -> Int {
+            buffer.count - bufferStart
+        }
+
+        func compactBuffer(force: Bool = false) {
+            guard bufferStart > 0,
+                  force || bufferStart >= 8 * 1024 * 1024 || bufferStart > buffer.count / 2 else {
+                return
+            }
+            if bufferStart == buffer.count {
+                buffer.removeAll(keepingCapacity: true)
+            } else {
+                buffer.removeSubrange(..<bufferStart)
+            }
+            bufferStart = 0
+        }
+
         func appendBuffer(_ chunk: Data) -> Bool {
-            guard buffer.count + chunk.count <= HaystackReader.defaultMaxBufferBytes else {
+            if activeBufferCount() + chunk.count > HaystackReader.defaultMaxBufferBytes {
+                compactBuffer(force: true)
+            }
+            guard activeBufferCount() + chunk.count <= HaystackReader.defaultMaxBufferBytes else {
                 rejected = true
                 return false
             }
@@ -223,12 +244,12 @@ public enum SwiftDarwinLiteralPreflight {
         }
 
         while !writeFailed, !rejected {
-            if buffer.isEmpty || (!reachedEOF && buffer.count < literal.count) {
+            if activeBufferCount() == 0 || (!reachedEOF && activeBufferCount() < literal.count) {
                 guard readNextChunk() else {
                     break
                 }
             }
-            if buffer.isEmpty, reachedEOF {
+            if activeBufferCount() == 0, reachedEOF {
                 break
             }
 
@@ -240,8 +261,8 @@ public enum SwiftDarwinLiteralPreflight {
                       let rawBase = rawBuffer.baseAddress else {
                     return
                 }
-                let base = rawBase.assumingMemoryBound(to: UInt8.self)
-                let bufferCount = rawBuffer.count
+                let base = rawBase.assumingMemoryBound(to: UInt8.self).advanced(by: bufferStart)
+                let bufferCount = rawBuffer.count - bufferStart
                 let searchableCount = reachedEOF
                     ? bufferCount
                     : max(0, bufferCount - max(literal.count - 1, 0))
@@ -325,7 +346,8 @@ public enum SwiftDarwinLiteralPreflight {
             }
 
             if consumedBytes > 0 {
-                buffer.removeSubrange(..<consumedBytes)
+                bufferStart += consumedBytes
+                compactBuffer()
                 continue
             }
             if needsMoreData {
