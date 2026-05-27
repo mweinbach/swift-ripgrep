@@ -789,8 +789,8 @@ public struct FileWalker: @unchecked Sendable {
         var diagnostics = rootDiagnostics
         var filtered = rootFiltered
         for chunk in chunks {
+            emittedCount += chunk.lines.count
             for line in chunk.lines {
-                emittedCount += 1
                 emit(line)
             }
             messages.append(contentsOf: chunk.messages)

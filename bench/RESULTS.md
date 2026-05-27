@@ -89,6 +89,13 @@ parallel walk, marker-name checks only run for hidden directory entries, and
 / 143.6 ms median; the same run measured the sibling Rust release at 93.3 ms
 mean / 90.0 ms median.
 
+The ordered parallel file-listing merge now counts each completed chunk in bulk
+while preserving per-line emission order. A 100-run A/B on the same Linux tree
+preserved exact Swift output and measured default `--files` at 134.0 ms mean /
+128.3 ms median versus the previous checkpoint at 137.1 ms mean / 133.7 ms
+median; `--hidden --files` measured 134.3 ms mean / 130.6 ms median versus
+135.7 ms mean / 133.3 ms median.
+
 The Swift multi-literal full-line writer now skips to a matched line's output
 end after recording it, caching line ends so later literals do not rescan
 duplicate lines for newline boundaries. It also special-cases `-m 1` by finding
