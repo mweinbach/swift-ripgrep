@@ -239,6 +239,16 @@ measured `-S Sherlock` at 203.8 ms versus 327.9 ms before and 284.8 ms for
 Rust; the lowercase smart-case form measured 212.1 ms versus 318.0 ms before
 and 366.8 ms for Rust.
 
+Explicit `--mmap` now stays eligible for the executable preflight as an ordered
+inverse of `--no-mmap`, so regular-file single-literal searches avoid falling
+back to full CLI setup just because mapped mode was requested explicitly.
+Output for `--mmap Sherlock`, `--mmap -n -i Sherlock`,
+`--no-mmap --mmap Sherlock`, and `--mmap --no-mmap Sherlock` on the 252 MiB
+dense fixture matched both the previous Swift binary and Rust. A ten-run check
+measured `--mmap Sherlock` at 206.9 ms versus 321.4 ms before and 298.6 ms for
+Rust; `--mmap -n -i Sherlock` measured 285.3 ms versus 443.0 ms before and
+563.4 ms for Rust.
+
 The Swift-only Darwin mmap/stdout preflight now also covers line-numbered
 medium bounded multi-literal output when no filename, byte-offset, column,
 replacement, only-matching, or vimgrep formatting is requested. Output for

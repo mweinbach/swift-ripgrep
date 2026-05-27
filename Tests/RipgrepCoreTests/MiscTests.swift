@@ -1366,6 +1366,38 @@ struct MiscTests {
         ], fixture: {})
         #expect(orderedIgnoreCaseOutput == ignoreCaseOutput)
 
+        let mmapOutput = try runExecutableData([
+            "--mmap",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(mmapOutput == output)
+
+        let mmapLineNumberIgnoreCaseOutput = try runExecutableData([
+            "--mmap",
+            "-n",
+            "-i",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(mmapLineNumberIgnoreCaseOutput == lineNumberIgnoreCaseOutput)
+
+        let mmapOverridesNoMmapOutput = try runExecutableData([
+            "--no-mmap",
+            "--mmap",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(mmapOverridesNoMmapOutput == output)
+
+        let noMmapOverridesMmapOutput = try runExecutableData([
+            "--mmap",
+            "--no-mmap",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(noMmapOverridesMmapOutput == output)
+
         let noMmapOutput = try runExecutableData([
             "--no-mmap",
             "needle",

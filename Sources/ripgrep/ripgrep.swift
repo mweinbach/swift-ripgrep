@@ -296,6 +296,9 @@ struct RipgrepCommand {
         func isNoLineNumberFlag(_ argument: String) -> Bool {
             argument == "-N" || argument == "--no-line-number"
         }
+        func isMmapFlag(_ argument: String) -> Bool {
+            argument == "--mmap"
+        }
         func isOutputNeutralSingleFileFlag(_ argument: String) -> Bool {
             switch argument {
             case "--no-heading",
@@ -360,6 +363,8 @@ struct RipgrepCommand {
                 parsedWordRegexp = true
             } else if argument == "--no-mmap" {
                 parsedNoMmap = true
+            } else if isMmapFlag(argument) {
+                parsedNoMmap = false
             } else if isOutputNeutralSingleFileFlag(argument) {
                 continue
             } else if let cluster = shortFlagCluster(argument) {
