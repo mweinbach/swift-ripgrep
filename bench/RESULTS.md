@@ -353,6 +353,18 @@ versus 16.041 s before and 39.5 ms for Rust; and `--with-filename -n --column
 --byte-offset -r X 'Sherlock|Watson'` at 106.2 ms versus 17.234 s before and
 44.7 ms for Rust.
 
+Plain literal `--with-filename` output now uses the direct Swift writer too,
+covering single-literal, safe multi-literal, only-matching, and line/column/
+byte-offset field forms while keeping PCRE-derived literal fast paths on their
+existing fallback unless they already format paths themselves. Output on the
+193 MiB subtitles corpus matched both the previous Swift checkpoint and the
+sibling Rust oracle, including a large byte-set only-matching smoke. Five-run
+A/B checks measured `--with-filename 'Sherlock|Watson'` at 74.9 ms versus
+524.8 ms before and 39.7 ms for Rust; `--with-filename -o 'Sherlock|Watson'`
+at 67.3 ms versus 15.865 s before and 39.2 ms for Rust; and
+`--with-filename -n --column --byte-offset 'Sherlock|Watson'` at 80.2 ms
+versus 15.853 s before and 43.5 ms for Rust.
+
 Safe multi-literal only-match and vimgrep output now merge each literal's next
 match stream instead of re-scanning every literal from the current global
 offset. Interleaved same-line fixtures and representative subtitles cases

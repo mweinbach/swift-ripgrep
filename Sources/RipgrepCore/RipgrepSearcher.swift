@@ -511,6 +511,22 @@ public struct RipgrepSearcher: @unchecked Sendable {
            !canWriteDarwinFixedPCREFastPath(options: options) {
             return nil
         }
+        if options.withFilename == true,
+           options.replacement == nil,
+           !options.vimgrep {
+            guard byteLiteralFastPath != nil,
+                  fixedLookbehindFastPath == nil,
+                  fixedLookaheadFastPath == nil,
+                  fixedNegativeLookbehindFastPath == nil,
+                  fixedNegativeLookaheadFastPath == nil,
+                  fixedResetStartFastPath == nil,
+                  !bareResetStartFastPath,
+                  fixedBackreferenceFastPath == nil,
+                  fixedConditionalFastPath == nil,
+                  byteUnitFastPath == nil else {
+                return nil
+            }
+        }
 
         var isDirectory: ObjCBool = false
         guard fileManager.fileExists(atPath: fileURL.path, isDirectory: &isDirectory),
@@ -755,6 +771,13 @@ public struct RipgrepSearcher: @unchecked Sendable {
             && allowDirectStdout
             && fastPathByteSet == nil
             && canScanDarwinLiteralsIndependently(fastPath)
+        let canDirectWriteIndependentMatchingLines = !onlyMatching
+            && allowDirectStdout
+            && options.printMode == .matchingLines
+            && options.replacement == nil
+            && !options.vimgrep
+            && fastPathByteSet == nil
+            && canScanDarwinLiteralsIndependently(fastPath)
         let directLiteralReplacementBytes = options.replacement.flatMap(darwinLiteralReplacementBytes)
         let canDirectWriteVimgrep = options.vimgrep
             && options.replacement == nil
@@ -808,6 +831,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 || (options.printMode == .matchingLines
                     && (fastPath.literals.count == 1
                         || canDirectWriteIndependentOnlyMatches
+                        || canDirectWriteIndependentMatchingLines
                         || canDirectWriteLiteralReplacement
                         || canDirectWriteOnlyMatchingLiteralReplacement
                         || canDirectWriteVimgrep
@@ -984,23 +1008,26 @@ public struct RipgrepSearcher: @unchecked Sendable {
             }
 
             func writeLineNumberPrefix(for lineStart: Int) {
-                guard wantsLineNumber else {
+                guard pathPrefixBytes != nil || wantsLineNumber else {
                     return
                 }
-                advanceLineNumber(to: lineStart)
-                withUnsafeTemporaryAllocation(of: UInt8.self, capacity: 32) { buffer in
-                    var cursor = buffer.count - 1
-                    buffer[cursor] = UInt8(ascii: ":")
-                    var number = lineNumber
-                    repeat {
-                        cursor -= 1
-                        buffer[cursor] = UInt8(number % 10) + UInt8(ascii: "0")
-                        number /= 10
-                    } while number > 0
-                    writeBytes(UnsafeRawBufferPointer(
-                        start: buffer.baseAddress?.advanced(by: cursor),
-                        count: buffer.count - cursor
-                    ))
+                writePathPrefixIfNeeded()
+                if wantsLineNumber {
+                    advanceLineNumber(to: lineStart)
+                    withUnsafeTemporaryAllocation(of: UInt8.self, capacity: 32) { buffer in
+                        var cursor = buffer.count - 1
+                        buffer[cursor] = UInt8(ascii: ":")
+                        var number = lineNumber
+                        repeat {
+                            cursor -= 1
+                            buffer[cursor] = UInt8(number % 10) + UInt8(ascii: "0")
+                            number /= 10
+                        } while number > 0
+                        writeBytes(UnsafeRawBufferPointer(
+                            start: buffer.baseAddress?.advanced(by: cursor),
+                            count: buffer.count - cursor
+                        ))
+                    }
                 }
             }
 
@@ -1767,7 +1794,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 while let match = popNextIndependentLiteralMatch(from: &candidates) {
                     totalMatchCount += 1
                     matchedLineCount = 1
-                    if wantsLineNumber || options.column || options.byteOffset {
+                    if pathPrefixBytes != nil || wantsLineNumber || options.column || options.byteOffset {
                         advanceLineNumber(to: match.start)
                         var column = 1
                         if options.column {
@@ -1777,6 +1804,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                             }
                             column = match.start - lineStart + 1
                         }
+                        writePathPrefixIfNeeded()
                         writeDarwinOnlyMatchingPrefixes(
                             lineNumber: lineNumber,
                             column: column,
@@ -1872,7 +1900,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         matchedLineCount += 1
                         bytesSearched = outputEnd
                         if !countOnly {
-                            writeLineNumberPrefix(for: lineStart)
+                            writeMatchingLinePrefixes(lineStart: lineStart, matchStart: earliestMatchStart)
                             writeBytes(UnsafeRawBufferPointer(
                                 start: rawBaseAddress.advanced(by: lineStart),
                                 count: outputEnd - lineStart
@@ -1889,15 +1917,18 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     return
                 }
 
-                var seenLineEndsByStart: [Int: Int] = [:]
-                var matchedLineBounds: [(start: Int, outputEnd: Int, hasNewline: Bool)] = []
+                var seenLineIndexesByStart: [Int: Int] = [:]
+                var matchedLineBounds: [(start: Int, outputEnd: Int, hasNewline: Bool, firstMatchStart: Int)] = []
                 func recordMatchLine(containing matchStart: Int) -> Int {
                     var lineStart = matchStart
                     while lineStart > 0, baseAddress[lineStart - 1] != UInt8(ascii: "\n") {
                         lineStart -= 1
                     }
-                    if let outputEnd = seenLineEndsByStart[lineStart] {
-                        return outputEnd
+                    if let lineIndex = seenLineIndexesByStart[lineStart] {
+                        if matchStart < matchedLineBounds[lineIndex].firstMatchStart {
+                            matchedLineBounds[lineIndex].firstMatchStart = matchStart
+                        }
+                        return matchedLineBounds[lineIndex].outputEnd
                     }
                     let newlinePointer = memchr(
                         baseAddress.advanced(by: matchStart),
@@ -1915,11 +1946,12 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         outputEnd = data.count
                         hasNewline = false
                     }
-                    seenLineEndsByStart[lineStart] = outputEnd
+                    seenLineIndexesByStart[lineStart] = matchedLineBounds.count
                     matchedLineBounds.append((
                         start: lineStart,
                         outputEnd: outputEnd,
-                        hasNewline: hasNewline
+                        hasNewline: hasNewline,
+                        firstMatchStart: matchStart
                     ))
                     return outputEnd
                 }
@@ -1954,7 +1986,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 }
                 if !countOnly {
                     for line in selectedLineBounds {
-                        writeLineNumberPrefix(for: line.start)
+                        writeMatchingLinePrefixes(lineStart: line.start, matchStart: line.firstMatchStart)
                         writeBytes(UnsafeRawBufferPointer(
                             start: rawBaseAddress.advanced(by: line.start),
                             count: line.outputEnd - line.start
@@ -1971,9 +2003,10 @@ public struct RipgrepSearcher: @unchecked Sendable {
             }
 
             func writeMatchingLinePrefixes(lineStart: Int, matchStart: Int) {
-                guard wantsLineNumber || options.column || options.byteOffset else {
+                guard pathPrefixBytes != nil || wantsLineNumber || options.column || options.byteOffset else {
                     return
                 }
+                writePathPrefixIfNeeded()
                 advanceLineNumber(to: lineStart)
                 writeDarwinOnlyMatchingPrefixes(
                     lineNumber: lineNumber,
@@ -2129,6 +2162,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                             if onlyMatching {
                                 advanceLineNumber(to: lineStart)
                                 if literal.count == 1 {
+                                    writePathPrefixIfNeeded()
                                     if options.wantsLineNumber && !options.column && !options.byteOffset {
                                         writeDarwinLineNumberedOneByteOnlyMatchingOutput(
                                             lineNumber: lineNumber,
@@ -2149,6 +2183,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                                         }
                                     }
                                 } else {
+                                    writePathPrefixIfNeeded()
                                     writeDarwinOnlyMatchingPrefixes(
                                         lineNumber: lineNumber,
                                         column: matchStart - lineStart + 1,
@@ -2243,6 +2278,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         }
                         if onlyMatching {
                             advanceLineNumber(to: lineStart)
+                            writePathPrefixIfNeeded()
                             if options.wantsLineNumber && !options.column && !options.byteOffset {
                                 writeDarwinLineNumberedOneByteOnlyMatchingOutput(
                                     lineNumber: lineNumber,
@@ -3990,7 +4026,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
               options.hyperlinkFormat.isEnabled == false,
               !options.nullPathTerminator,
               options.pathSeparator == nil,
-              (options.vimgrep || options.withFilename != true || options.replacement != nil),
+              (options.vimgrep
+                || options.withFilename != true
+                || options.printMode == .matchingLines),
               options.globPatterns.isEmpty,
               options.caseInsensitiveGlobPatterns.isEmpty,
               options.preprocessor == nil,
