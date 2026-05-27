@@ -863,6 +863,11 @@ Rejected Swift-only probes from the same checkpoint:
   form drifted from 577.1 ms to 583.9 ms in the original probe. The retained
   version is therefore limited to line-numbered output, where the suffix scan
   has a measured win.
+- Rechecking that same plain suffix route after the retained parallel
+  collect/sort literal scanner also preserved output but stayed neutral to
+  slower: on the 1.5 GiB subtitles corpus the plain five-name alternation
+  measured 347.1 ms versus 338.1 ms before and 279.2 ms for Rust, while `-n`
+  measured 405.8 ms versus 398.1 ms before and 313.2 ms for Rust.
 - A one-pass first-byte line scanner for the same five-literal alternation also
   preserved output, but regressed the representative subtitles corpus to
   980.8 ms for `-n` and 917.6 ms for plain output, versus Rust at about
