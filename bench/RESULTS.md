@@ -909,6 +909,18 @@ focused upstream harness measured the same route at 272.54 ms versus Rust at
 200.76 ms. The ASCII form stayed in the executable-preflight band at 217.4 ms
 versus Rust at 197.3 ms.
 
+ASCII case-insensitive literal scanning now adds a middle-byte SIMD filter for
+literals of at least eight bytes, keeping the existing first/tail filter but
+avoiding many false candidate verifications on longer folded literals. Single
+file subtitle output for `-i 'Sherlock Holmes'` and
+`-n -i 'Sherlock Holmes'` matched sibling Rust `rg` byte-for-byte (871 lines).
+The focused harness measured `subtitles_en_literal_casei` at 215.93 ms versus
+the current-map 253.72 ms band, and the line-numbered form at 269.82 ms versus
+298.79 ms. The same scanner also improved `subtitles_en_alternate_casei` from
+304.57 ms to 279.65 ms. On the recursive Linux case-insensitive alternation,
+Swift's traversal order still differs from Rust's, but sorted output content
+matched and the harness improved from 4.717 s to 4.146 s.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - A broader default-Unicode executable surrounding-word preflight preserved
@@ -929,6 +941,11 @@ Rejected Swift-only probes from the same checkpoint:
   scanner: the focused harness measured 567.16 ms for plain output and
   567.36 ms for the `--no-mmap` output-equivalent path, versus the retained
   roughly 187 ms/184 ms bands.
+- Adding a third middle-byte SIMD filter to the first/tail literal scanner also
+  preserved output, but the extra load did not pay for the representative
+  phrase literal. The focused subtitles harness measured 204.39 ms plain,
+  206.58 ms for `--no-mmap`, and 244.61 ms for `-n`, worse than the retained
+  current-map bands at 187.16 ms, 184.24 ms, and 215.27 ms.
 - Raising the no-mmap stream read size to 4 MiB preserved output but regressed
   both representative checks: plain output measured 293.0 ms versus 288.3 ms
   before in that run, and `-n` measured 355.3 ms versus 352.9 ms before. The

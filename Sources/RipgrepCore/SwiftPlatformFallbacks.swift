@@ -185,10 +185,17 @@ private func rgMemcaseMemASCII_SIMD16(
 ) -> UnsafePointer<UInt8>? {
     let first = foldedNeedle[0]
     let tail = foldedNeedle[needleLength - 1]
+    let middleIndex = needleLength / 2
+    let useMiddle = needleLength >= 8
+        && middleIndex > 0
+        && middleIndex < needleLength - 1
+    let middle = foldedNeedle[middleIndex]
     let firstIsAlpha = rgASCIIIsAlpha(first)
     let tailIsAlpha = rgASCIIIsAlpha(tail)
+    let middleIsAlpha = rgASCIIIsAlpha(middle)
     let firstVector = SIMD16<UInt8>(repeating: first)
     let tailVector = SIMD16<UInt8>(repeating: tail)
+    let middleVector = SIMD16<UInt8>(repeating: middle)
 
     var cursor = 0
     let vectorLimit = haystackLength >= needleLength + 15
@@ -203,7 +210,15 @@ private func rgMemcaseMemASCII_SIMD16(
             UnsafeRawPointer(haystack.advanced(by: cursor + needleLength - 1)).loadUnaligned(as: SIMD16<UInt8>.self),
             isAlpha: tailIsAlpha
         )
-        let candidateStorage = ((firstBytes .== firstVector) .& (tailBytes .== tailVector))._storage
+        var candidateMask = (firstBytes .== firstVector) .& (tailBytes .== tailVector)
+        if useMiddle {
+            let middleBytes = rgSIMDFoldASCIIForCompare(
+                UnsafeRawPointer(haystack.advanced(by: cursor + middleIndex)).loadUnaligned(as: SIMD16<UInt8>.self),
+                isAlpha: middleIsAlpha
+            )
+            candidateMask = candidateMask .& (middleBytes .== middleVector)
+        }
+        let candidateStorage = candidateMask._storage
         if candidateStorage.min() < 0 {
             for lane in 0..<16 where candidateStorage[lane] != 0 {
                 let candidate = haystack.advanced(by: cursor + lane)
@@ -223,6 +238,7 @@ private func rgMemcaseMemASCII_SIMD16(
     while cursor < maxStart {
         if rgASCIILower(haystack[cursor]) == first,
            rgASCIILower(haystack[cursor + needleLength - 1]) == tail,
+           (!useMiddle || rgASCIILower(haystack[cursor + middleIndex]) == middle),
            rgCaseInsensitiveMiddleMatches(
             candidate: haystack.advanced(by: cursor),
             foldedNeedle: foldedNeedle,
@@ -251,10 +267,17 @@ func rg_memcasemem_ascii_count_byte_before(
 
     let first = foldedNeedle[0]
     let tail = foldedNeedle[needleLength - 1]
+    let middleIndex = needleLength / 2
+    let useMiddle = needleLength >= 8
+        && middleIndex > 0
+        && middleIndex < needleLength - 1
+    let middle = foldedNeedle[middleIndex]
     let firstIsAlpha = rgASCIIIsAlpha(first)
     let tailIsAlpha = rgASCIIIsAlpha(tail)
+    let middleIsAlpha = rgASCIIIsAlpha(middle)
     let firstVector = SIMD16<UInt8>(repeating: first)
     let tailVector = SIMD16<UInt8>(repeating: tail)
+    let middleVector = SIMD16<UInt8>(repeating: middle)
     let countVector = SIMD16<UInt8>(repeating: byte)
 
     var count = 0
@@ -271,7 +294,16 @@ func rg_memcasemem_ascii_count_byte_before(
                 .loadUnaligned(as: SIMD16<UInt8>.self),
             isAlpha: tailIsAlpha
         )
-        let candidateStorage = ((firstBytes .== firstVector) .& (tailBytes .== tailVector))._storage
+        var candidateMask = (firstBytes .== firstVector) .& (tailBytes .== tailVector)
+        if useMiddle {
+            let middleBytes = rgSIMDFoldASCIIForCompare(
+                UnsafeRawPointer(haystack.advanced(by: cursor + middleIndex))
+                    .loadUnaligned(as: SIMD16<UInt8>.self),
+                isAlpha: middleIsAlpha
+            )
+            candidateMask = candidateMask .& (middleBytes .== middleVector)
+        }
+        let candidateStorage = candidateMask._storage
         if candidateStorage.min() < 0 {
             for lane in 0..<16 where candidateStorage[lane] != 0 {
                 let candidate = haystack.advanced(by: cursor + lane)
@@ -295,6 +327,7 @@ func rg_memcasemem_ascii_count_byte_before(
     while cursor < maxStart {
         if rgASCIILower(haystack[cursor]) == first,
            rgASCIILower(haystack[cursor + needleLength - 1]) == tail,
+           (!useMiddle || rgASCIILower(haystack[cursor + middleIndex]) == middle),
            rgCaseInsensitiveMiddleMatches(
             candidate: haystack.advanced(by: cursor),
             foldedNeedle: foldedNeedle,
