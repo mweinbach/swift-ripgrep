@@ -733,6 +733,17 @@ the earlier 282.2 ms retained path and 163.2 ms for Rust, while `-n` measured
 `-i` no-mmap check stayed in its existing band at 362.2 ms versus 279.7 ms for
 Rust.
 
+ASCII ignore-case no-mmap single-literal output now reuses that complete-line
+chunk path too, instead of the older rolling `Data` buffer. The path folds the
+literal once, carries only the trailing partial line across 2 MiB reads, and
+keeps the existing line-number accounting for `-n -i`. Output for
+`--no-mmap -i 'Sherlock Holmes'` and
+`--no-mmap -n -i 'Sherlock Holmes'` on the 1.5 GiB subtitles corpus matched
+sibling Rust `rg`; a nine-run previous/current/Rust A/B measured `-i` at
+359.9 ms versus 361.1 ms before and 281.6 ms for Rust, while `-n -i` measured
+424.5 ms versus 426.8 ms before and 317.1 ms for Rust. Split-chunk ignore-case
+boundary regressions cover both plain and line-numbered output.
+
 Line-numbered five-name subtitles alternations now use a Swift-only unique
 last-word suffix scan. The path scans suffixes such as `Holmes`, `Watson`, and
 `Moriarty`, verifies the full literal at the computed start offset, and is
@@ -766,6 +777,10 @@ Rejected Swift-only probes from the same checkpoint:
   and regressed the line-numbered control: plain output measured 586.8 ms and
   `-n` measured 654.5 ms, versus the retained collect/sort suffix
   line-numbered path's 618.7 ms band.
+- Fusing complete-line no-mmap line-number counting into the literal search
+  preserved output after the split-chunk edge was fixed, but regressed
+  `--no-mmap -n -i 'Sherlock Holmes'` to 474.6 ms versus the retained 424 ms
+  band, so the separate chunk-level newline accounting remains in place.
 - Delaying no-mmap stream compaction until a full 8 MiB consumed prefix,
   without the half-buffer trigger, preserved the same output shape but regressed
   plain `--no-mmap 'Sherlock Holmes'` to 301.7 ms and raised peak memory versus

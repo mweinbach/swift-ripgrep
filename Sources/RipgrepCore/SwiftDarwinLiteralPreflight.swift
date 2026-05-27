@@ -75,302 +75,20 @@ public enum SwiftDarwinLiteralPreflight {
         if asciiCaseInsensitive, literal.contains(where: { $0 >= 0x80 }) {
             return nil
         }
-        if !asciiCaseInsensitive {
-            return streamingPlainExitCode(path: path, literal: literal, lineNumber: lineNumber)
-        }
-
-        guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
-            return nil
-        }
-        defer {
-            output.deallocate()
-        }
-
-        let handle: FileHandle
-        do {
-            handle = try FileHandle(forReadingFrom: URL(fileURLWithPath: path))
-        } catch {
-            return nil
-        }
-        defer {
-            try? handle.close()
-        }
-
-        var foldedLiteral: [UInt8] = []
-        var caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
-        if asciiCaseInsensitive {
-            foldedLiteral = literal.map(rgSwiftASCIILower)
-            if foldedLiteral.count > 1 {
-                for index in 0..<(foldedLiteral.count - 1) {
-                    caseInsensitiveShifts[Int(foldedLiteral[index])] = literal.count - 1 - index
-                }
-            }
-        }
-
-        var matchedLineCount = 0
-        var currentLineNumber = 1
-        var buffer = Data()
-        var bufferStart = 0
-        var bytesCheckedForNUL = 0
-        var isFirstChunk = true
-        var writeFailed = false
-        var rejected = false
-        var reachedEOF = false
-
-        func findLiteral(_ bytes: UnsafePointer<UInt8>, count: Int) -> UnsafePointer<UInt8>? {
-            if asciiCaseInsensitive {
-                return foldedLiteral.withUnsafeBufferPointer { foldedNeedle in
-                    caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
-                        rg_memcasemem_ascii_prepared(
-                            bytes,
-                            count,
-                            foldedNeedle.baseAddress,
-                            foldedNeedle.count,
-                            shifts.baseAddress
-                        )
-                    }
-                }
-            }
-            return literal.withUnsafeBufferPointer { needle in
-                rg_memmem_simple(bytes, count, needle.baseAddress, needle.count)
-            }
-        }
-
-        func emitLine(_ line: UnsafePointer<UInt8>, outputCount: Int, hasNewline: Bool) {
-            if lineNumber, !output.writeLineNumberPrefix(currentLineNumber) {
-                writeFailed = true
-                return
-            }
-            guard output.write(line, count: outputCount) else {
-                writeFailed = true
-                return
-            }
-            if !hasNewline, !output.writeByte(UInt8(ascii: "\n")) {
-                writeFailed = true
-                return
-            }
-            matchedLineCount += 1
-        }
-
-        func activeBufferCount() -> Int {
-            buffer.count - bufferStart
-        }
-
-        func compactBuffer(force: Bool = false) {
-            guard bufferStart > 0,
-                  force || bufferStart >= 8 * 1024 * 1024 || bufferStart > buffer.count / 2 else {
-                return
-            }
-            if bufferStart == buffer.count {
-                buffer.removeAll(keepingCapacity: true)
-            } else {
-                buffer.removeSubrange(..<bufferStart)
-            }
-            bufferStart = 0
-        }
-
-        func appendBuffer(_ chunk: Data) -> Bool {
-            if activeBufferCount() + chunk.count > HaystackReader.defaultMaxBufferBytes {
-                compactBuffer(force: true)
-            }
-            guard activeBufferCount() + chunk.count <= HaystackReader.defaultMaxBufferBytes else {
-                rejected = true
-                return false
-            }
-            buffer.append(chunk)
-            return true
-        }
-
-        func lastNewlineOffset(before endOffset: Int, in base: UnsafePointer<UInt8>) -> Int? {
-            guard endOffset > 0 else {
-                return nil
-            }
-            var offset = endOffset - 1
-            while offset >= 0 {
-                if base[offset] == UInt8(ascii: "\n") {
-                    return offset
-                }
-                if offset == 0 {
-                    break
-                }
-                offset -= 1
-            }
-            return nil
-        }
-
-        func readNextChunk() -> Bool {
-            let chunk = handle.readData(ofLength: 2 * 1024 * 1024)
-            guard !chunk.isEmpty else {
-                reachedEOF = true
-                return true
-            }
-            let accepted = chunk.withUnsafeBytes { rawChunk -> Bool in
-                guard let rawBase = rawChunk.baseAddress else {
-                    return true
-                }
-                let base = rawBase.assumingMemoryBound(to: UInt8.self)
-                let chunkCount = rawChunk.count
-                if isFirstChunk {
-                    isFirstChunk = false
-                    if chunkCount >= 3,
-                       base[0] == 0xEF,
-                       base[1] == 0xBB,
-                       base[2] == 0xBF {
-                        rejected = true
-                        return false
-                    }
-                    if chunkCount >= 2,
-                       (base[0] == 0xFF && base[1] == 0xFE
-                        || base[0] == 0xFE && base[1] == 0xFF) {
-                        rejected = true
-                        return false
-                    }
-                }
-                if bytesCheckedForNUL < 64 * 1024 {
-                    let checkCount = min(chunkCount, 64 * 1024 - bytesCheckedForNUL)
-                    if memchr(base, 0, checkCount) != nil {
-                        rejected = true
-                        return false
-                    }
-                    bytesCheckedForNUL += checkCount
-                }
-                return true
-            }
-            guard accepted else {
-                return false
-            }
-            return appendBuffer(chunk)
-        }
-
-        while !writeFailed, !rejected {
-            if activeBufferCount() == 0 || (!reachedEOF && activeBufferCount() < literal.count) {
-                guard readNextChunk() else {
-                    break
-                }
-            }
-            if activeBufferCount() == 0, reachedEOF {
-                break
-            }
-
-            var consumedBytes = 0
-            var needsMoreData = false
-            buffer.withUnsafeBytes { rawBuffer in
-                guard !writeFailed,
-                      !rejected,
-                      let rawBase = rawBuffer.baseAddress else {
-                    return
-                }
-                let base = rawBase.assumingMemoryBound(to: UInt8.self).advanced(by: bufferStart)
-                let bufferCount = rawBuffer.count - bufferStart
-                let searchableCount = reachedEOF
-                    ? bufferCount
-                    : max(0, bufferCount - max(literal.count - 1, 0))
-                guard searchableCount >= literal.count else {
-                    needsMoreData = !reachedEOF
-                    if reachedEOF {
-                        consumedBytes = bufferCount
-                    }
-                    return
-                }
-
-                guard let found = findLiteral(base, count: searchableCount) else {
-                    if let newlineOffset = lastNewlineOffset(before: searchableCount, in: base) {
-                        consumedBytes = newlineOffset + 1
-                        if lineNumber {
-                            currentLineNumber += rg_memcount_byte(
-                                base,
-                                consumedBytes,
-                                UInt8(ascii: "\n")
-                            )
-                        }
-                    } else if reachedEOF {
-                        consumedBytes = bufferCount
-                    } else {
-                        needsMoreData = true
-                    }
-                    return
-                }
-
-                let matchStart = base.distance(to: found)
-                guard let newlinePointer = memchr(
-                    found,
-                    Int32(UInt8(ascii: "\n")),
-                    bufferCount - matchStart
-                ) else {
-                    if reachedEOF {
-                        var lineStart = matchStart
-                        while lineStart > 0, base[lineStart - 1] != UInt8(ascii: "\n") {
-                            lineStart -= 1
-                        }
-                        if lineNumber {
-                            currentLineNumber += rg_memcount_byte(
-                                base,
-                                lineStart,
-                                UInt8(ascii: "\n")
-                            )
-                        }
-                        emitLine(
-                            base.advanced(by: lineStart),
-                            outputCount: bufferCount - lineStart,
-                            hasNewline: false
-                        )
-                        consumedBytes = bufferCount
-                    } else {
-                        needsMoreData = true
-                    }
-                    return
-                }
-
-                let newlineOffset = base.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self))
-                var lineStart = matchStart
-                while lineStart > 0, base[lineStart - 1] != UInt8(ascii: "\n") {
-                    lineStart -= 1
-                }
-                if lineNumber {
-                    currentLineNumber += rg_memcount_byte(
-                        base,
-                        lineStart,
-                        UInt8(ascii: "\n")
-                    )
-                }
-                emitLine(
-                    base.advanced(by: lineStart),
-                    outputCount: newlineOffset - lineStart + 1,
-                    hasNewline: true
-                )
-                consumedBytes = newlineOffset + 1
-                if lineNumber {
-                    currentLineNumber += 1
-                }
-            }
-
-            if consumedBytes > 0 {
-                bufferStart += consumedBytes
-                compactBuffer()
-                continue
-            }
-            if needsMoreData {
-                guard !reachedEOF else {
-                    break
-                }
-                guard readNextChunk() else {
-                    break
-                }
-                continue
-            }
-            break
-        }
-
-        guard !rejected else {
-            return nil
-        }
-        guard !writeFailed, output.flush() else {
-            return nil
-        }
-        return matchedLineCount > 0 ? 0 : 1
+        return streamingLiteralExitCode(
+            path: path,
+            literal: literal,
+            asciiCaseInsensitive: asciiCaseInsensitive,
+            lineNumber: lineNumber
+        )
     }
 
-    private static func streamingPlainExitCode(path: String, literal: [UInt8], lineNumber: Bool) -> Int32? {
+    private static func streamingLiteralExitCode(
+        path: String,
+        literal: [UInt8],
+        asciiCaseInsensitive: Bool,
+        lineNumber: Bool
+    ) -> Int32? {
         guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
             return nil
         }
@@ -396,6 +114,13 @@ public enum SwiftDarwinLiteralPreflight {
         var writeFailed = false
         var currentLineNumber = 1
         let newlineByte = UInt8(ascii: "\n")
+        let foldedLiteral = asciiCaseInsensitive ? literal.map(rgSwiftASCIILower) : []
+        var caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
+        if asciiCaseInsensitive, foldedLiteral.count > 1 {
+            for index in 0..<(foldedLiteral.count - 1) {
+                caseInsensitiveShifts[Int(foldedLiteral[index])] = literal.count - 1 - index
+            }
+        }
 
         func appendCarry(_ bytes: UnsafePointer<UInt8>, count: Int) {
             guard count > 0 else {
@@ -453,6 +178,38 @@ public enum SwiftDarwinLiteralPreflight {
             return true
         }
 
+        func findLiteral(
+            in base: UnsafePointer<UInt8>,
+            from searchOffset: Int,
+            count: Int
+        ) -> UnsafePointer<UInt8>? {
+            let remainingCount = count - searchOffset
+            guard remainingCount >= literal.count else {
+                return nil
+            }
+            if asciiCaseInsensitive {
+                return foldedLiteral.withUnsafeBufferPointer { foldedNeedle in
+                    caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
+                        rg_memcasemem_ascii_prepared(
+                            base.advanced(by: searchOffset),
+                            remainingCount,
+                            foldedNeedle.baseAddress,
+                            foldedNeedle.count,
+                            shifts.baseAddress
+                        )
+                    }
+                }
+            }
+            return literal.withUnsafeBufferPointer { needle in
+                rg_memmem_simple(
+                    base.advanced(by: searchOffset),
+                    remainingCount,
+                    needle.baseAddress,
+                    needle.count
+                )
+            }
+        }
+
         func emitMatches(
             in base: UnsafePointer<UInt8>,
             count: Int,
@@ -463,65 +220,58 @@ public enum SwiftDarwinLiteralPreflight {
             }
             var lineNumberCursor = currentLineNumber
             var lineCountOffset = 0
-            literal.withUnsafeBufferPointer { needle in
-                var searchOffset = 0
-                var lastEmittedLineStart = -1
-                while searchOffset < count {
-                    guard let found = rg_memmem_simple(
-                        base.advanced(by: searchOffset),
-                        count - searchOffset,
-                        needle.baseAddress,
-                        needle.count
-                    ) else {
-                        return
-                    }
-                    let matchStart = base.distance(to: found)
-                    var lineStart = matchStart
-                    while lineStart > 0, base[lineStart - 1] != newlineByte {
-                        lineStart -= 1
-                    }
-                    if lineStart == lastEmittedLineStart {
-                        searchOffset = matchStart + literal.count
-                        continue
-                    }
-
-                    let newline = memchr(found, Int32(newlineByte), count - matchStart)
-                    let outputEnd: Int
-                    let hasNewline: Bool
-                    if let newline {
-                        outputEnd = base.distance(to: newline.assumingMemoryBound(to: UInt8.self)) + 1
-                        hasNewline = true
-                    } else if allowUnterminatedFinalLine {
-                        outputEnd = count
-                        hasNewline = false
-                    } else {
-                        return
-                    }
-
-                    if lineNumber {
-                        lineNumberCursor += Int(rg_memcount_byte(
-                            base.advanced(by: lineCountOffset),
-                            lineStart - lineCountOffset,
-                            newlineByte
-                        ))
-                        lineCountOffset = lineStart
-                        guard output.writeLineNumberPrefix(lineNumberCursor) else {
-                            writeFailed = true
-                            return
-                        }
-                    }
-                    guard output.write(base.advanced(by: lineStart), count: outputEnd - lineStart) else {
-                        writeFailed = true
-                        return
-                    }
-                    if !hasNewline, !output.writeByte(newlineByte) {
-                        writeFailed = true
-                        return
-                    }
-                    matchedLineCount += 1
-                    lastEmittedLineStart = lineStart
-                    searchOffset = outputEnd
+            var searchOffset = 0
+            var lastEmittedLineStart = -1
+            while searchOffset < count {
+                guard let found = findLiteral(in: base, from: searchOffset, count: count) else {
+                    return (lineNumberCursor, lineCountOffset)
                 }
+                let matchStart = base.distance(to: found)
+                var lineStart = matchStart
+                while lineStart > 0, base[lineStart - 1] != newlineByte {
+                    lineStart -= 1
+                }
+                if lineStart == lastEmittedLineStart {
+                    searchOffset = matchStart + literal.count
+                    continue
+                }
+
+                let newline = memchr(found, Int32(newlineByte), count - matchStart)
+                let outputEnd: Int
+                let hasNewline: Bool
+                if let newline {
+                    outputEnd = base.distance(to: newline.assumingMemoryBound(to: UInt8.self)) + 1
+                    hasNewline = true
+                } else if allowUnterminatedFinalLine {
+                    outputEnd = count
+                    hasNewline = false
+                } else {
+                    return (lineNumberCursor, lineCountOffset)
+                }
+
+                if lineNumber {
+                    lineNumberCursor += Int(rg_memcount_byte(
+                        base.advanced(by: lineCountOffset),
+                        lineStart - lineCountOffset,
+                        newlineByte
+                    ))
+                    lineCountOffset = lineStart
+                    guard output.writeLineNumberPrefix(lineNumberCursor) else {
+                        writeFailed = true
+                        return (lineNumberCursor, lineCountOffset)
+                    }
+                }
+                guard output.write(base.advanced(by: lineStart), count: outputEnd - lineStart) else {
+                    writeFailed = true
+                    return (lineNumberCursor, lineCountOffset)
+                }
+                if !hasNewline, !output.writeByte(newlineByte) {
+                    writeFailed = true
+                    return (lineNumberCursor, lineCountOffset)
+                }
+                matchedLineCount += 1
+                lastEmittedLineStart = lineStart
+                searchOffset = outputEnd
             }
             return (lineNumberCursor, lineCountOffset)
         }
