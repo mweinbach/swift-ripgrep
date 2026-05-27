@@ -755,13 +755,21 @@ public struct RipgrepSearcher: @unchecked Sendable {
             && allowDirectStdout
             && fastPathByteSet == nil
             && canScanDarwinLiteralsIndependently(fastPath)
+        let directLiteralReplacementBytes = options.replacement.flatMap(darwinLiteralReplacementBytes)
         let canDirectWriteVimgrep = options.vimgrep
+            && options.replacement == nil
             && allowDirectStdout
             && options.printMode == .matchingLines
             && options.maxCount == nil
             && (fastPath.literals.count == 1
                 || (fastPathByteSet == nil && canScanDarwinLiteralsIndependently(fastPath)))
-        let directLiteralReplacementBytes = options.replacement.flatMap(darwinLiteralReplacementBytes)
+        let canDirectWriteVimgrepLiteralReplacement = directLiteralReplacementBytes != nil
+            && options.vimgrep
+            && allowDirectStdout
+            && options.printMode == .matchingLines
+            && fastPath.literals.count == 1
+            && fastPathByteSet == nil
+            && !fastPath.wordASCII
         let canDirectWriteLiteralReplacement = directLiteralReplacementBytes != nil
             && allowDirectStdout
             && options.printMode == .matchingLines
@@ -788,15 +796,17 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 || fastPath.literals.count == 1
                 || fastPathByteSet != nil
                 || canDirectCountIndependentLiterals),
-              (!options.vimgrep || canDirectWriteVimgrep),
+              (!options.vimgrep || canDirectWriteVimgrep || canDirectWriteVimgrepLiteralReplacement),
               (options.replacement == nil
                 || canDirectWriteLiteralReplacement
-                || canDirectWriteOnlyMatchingLiteralReplacement),
+                || canDirectWriteOnlyMatchingLiteralReplacement
+                || canDirectWriteVimgrepLiteralReplacement),
               (!options.byteOffset && !options.column
                 || (options.printMode == .matchingLines
                     && (fastPath.literals.count == 1
                         || canDirectWriteIndependentOnlyMatches
-                        || canDirectWriteVimgrep))),
+                        || canDirectWriteVimgrep
+                        || canDirectWriteVimgrepLiteralReplacement))),
               canWriteDarwinSimpleByteLiteralFastPath(fastPath) else {
             return nil
         }
@@ -1169,7 +1179,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 return
             }
 
-            if canDirectWriteVimgrep {
+            if canDirectWriteVimgrep || canDirectWriteVimgrepLiteralReplacement {
                 let pathBytes = options.withFilename == false
                     ? nil
                     : Data(OutputPathFormatter(options: options).displayPath(for: fileURL).utf8)
@@ -1193,14 +1203,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     return (lineStart, lineEnd)
                 }
 
-                func writeVimgrepMatch(matchStart: Int, length: Int) {
-                    let bounds = vimgrepLineBounds(containing: matchStart)
-                    advanceLineNumber(to: bounds.lineStart)
-                    if lastMatchedLineStart != bounds.lineStart {
-                        matchedLineCount += 1
-                        lastMatchedLineStart = bounds.lineStart
-                    }
-                    totalMatchCount += 1
+                func writeVimgrepPrefixes(lineNumber: Int, column: Int, byteOffset: Int) {
                     if let pathBytes {
                         pathBytes.withUnsafeBytes { buffer in
                             writeBytes(buffer)
@@ -1213,11 +1216,26 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         writeDarwinLineNumberPrefix(lineNumber, writeBytes: writeBytes)
                     }
                     if !options.noColumn {
-                        writeDarwinLineNumberPrefix(matchStart - bounds.lineStart + 1, writeBytes: writeBytes)
+                        writeDarwinLineNumberPrefix(column, writeBytes: writeBytes)
                     }
                     if options.byteOffset {
-                        writeDarwinLineNumberPrefix(matchStart, writeBytes: writeBytes)
+                        writeDarwinLineNumberPrefix(byteOffset, writeBytes: writeBytes)
                     }
+                }
+
+                func writeVimgrepMatch(matchStart: Int, length: Int) {
+                    let bounds = vimgrepLineBounds(containing: matchStart)
+                    advanceLineNumber(to: bounds.lineStart)
+                    if lastMatchedLineStart != bounds.lineStart {
+                        matchedLineCount += 1
+                        lastMatchedLineStart = bounds.lineStart
+                    }
+                    totalMatchCount += 1
+                    writeVimgrepPrefixes(
+                        lineNumber: lineNumber,
+                        column: matchStart - bounds.lineStart + 1,
+                        byteOffset: matchStart
+                    )
                     let outputStart = onlyMatching ? matchStart : bounds.lineStart
                     let outputEnd = onlyMatching ? matchStart + length : bounds.lineEnd
                     writeBytes(UnsafeRawBufferPointer(
@@ -1227,6 +1245,112 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     withUnsafeBytes(of: &newline) { buffer in
                         writeBytes(buffer)
                     }
+                }
+
+                if canDirectWriteVimgrepLiteralReplacement,
+                   let replacementBytes = directLiteralReplacementBytes,
+                   let literal = literals.first {
+                    var searchOffset = 0
+                    var foldedLiteral: [UInt8] = []
+                    var caseInsensitiveShifts: [Int] = []
+                    if fastPath.caseInsensitiveASCII {
+                        foldedLiteral = literal.map(asciiLowercase)
+                        caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
+                        if literal.count > 1 {
+                            for index in 0..<(foldedLiteral.count - 1) {
+                                caseInsensitiveShifts[Int(foldedLiteral[index])] = literal.count - 1 - index
+                            }
+                        }
+                    }
+                    func findReplacementLiteral(from offset: Int, count: Int) -> UnsafePointer<UInt8>? {
+                        if fastPath.caseInsensitiveASCII {
+                            return foldedLiteral.withUnsafeBufferPointer { foldedNeedle in
+                                caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
+                                    rg_memcasemem_ascii_prepared(
+                                        baseAddress.advanced(by: offset),
+                                        count,
+                                        foldedNeedle.baseAddress,
+                                        foldedNeedle.count,
+                                        shifts.baseAddress
+                                    )
+                                }
+                            }
+                        }
+                        return literal.withUnsafeBufferPointer { needle in
+                            rg_memmem_simple(
+                                baseAddress.advanced(by: offset),
+                                count,
+                                needle.baseAddress,
+                                needle.count
+                            )
+                        }
+                    }
+                    while searchOffset < data.count, matchedLineCount < maxCount {
+                        let foundPointer = findReplacementLiteral(
+                            from: searchOffset,
+                            count: data.count - searchOffset
+                        )
+                        guard let rawFoundPointer = foundPointer else {
+                            break
+                        }
+                        let matchStart = baseAddress.distance(to: rawFoundPointer)
+                        let bounds = vimgrepLineBounds(containing: matchStart)
+                        var lineSearchOffset = bounds.lineStart
+                        var cursor = bounds.lineStart
+                        var replacementDelta = 0
+                        var replacementStarts: [Int] = []
+                        var replacedLine = Data()
+                        replacedLine.reserveCapacity(bounds.lineEnd - bounds.lineStart)
+                        while lineSearchOffset < bounds.lineEnd {
+                            let lineFoundPointer = findReplacementLiteral(
+                                from: lineSearchOffset,
+                                count: bounds.lineEnd - lineSearchOffset
+                            )
+                            guard let rawLineFoundPointer = lineFoundPointer else {
+                                break
+                            }
+                            let lineMatchStart = baseAddress.distance(to: rawLineFoundPointer)
+                            let replacementStart = lineMatchStart - bounds.lineStart + replacementDelta
+                            replacementStarts.append(replacementStart)
+                            replacedLine.append(
+                                rawBaseAddress.assumingMemoryBound(to: UInt8.self).advanced(by: cursor),
+                                count: lineMatchStart - cursor
+                            )
+                            replacedLine.append(contentsOf: replacementBytes)
+                            replacementDelta += replacementBytes.count - literal.count
+                            cursor = lineMatchStart + literal.count
+                            lineSearchOffset = cursor
+                        }
+                        replacedLine.append(
+                            rawBaseAddress.assumingMemoryBound(to: UInt8.self).advanced(by: cursor),
+                            count: bounds.lineEnd - cursor
+                        )
+                        advanceLineNumber(to: bounds.lineStart)
+                        matchedLineCount += 1
+                        totalMatchCount += replacementStarts.count
+                        for replacementStart in replacementStarts {
+                            writeVimgrepPrefixes(
+                                lineNumber: lineNumber,
+                                column: replacementStart + 1,
+                                byteOffset: bounds.lineStart + replacementStart
+                            )
+                            if onlyMatching {
+                                replacementBytes.withUnsafeBytes { buffer in
+                                    writeBytes(buffer)
+                                }
+                            } else {
+                                replacedLine.withUnsafeBytes { buffer in
+                                    writeBytes(buffer)
+                                }
+                            }
+                            withUnsafeBytes(of: &newline) { buffer in
+                                writeBytes(buffer)
+                            }
+                        }
+                        searchOffset = bounds.lineEnd == data.count ? data.count : bounds.lineEnd + 1
+                        bytesSearched = searchOffset
+                    }
+                    return
                 }
 
                 if literals.count == 1,
@@ -3528,7 +3652,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !options.trim,
               (!options.vimgrep
                 || (options.printMode == .matchingLines
-                    && options.maxCount == nil)),
+                    && (options.maxCount == nil || options.replacement != nil))),
               options.colorMode != .always,
               options.colorMode != .ansi,
               options.hyperlinkFormat.isEnabled == false,

@@ -2633,6 +2633,37 @@ struct FeatureTests {
             "\(root.path("vimgrep-replace.txt")):1:1:X X",
             "\(root.path("vimgrep-replace.txt")):1:3:X X",
         ])
+        try root.write("foo foo\nFoo foo\n", to: "vimgrep-literal-replace.txt")
+        #expect(try run(["--vimgrep", "--replace", "XX", "foo", root.path("vimgrep-literal-replace.txt")]) == [
+            "\(root.path("vimgrep-literal-replace.txt")):1:1:XX XX",
+            "\(root.path("vimgrep-literal-replace.txt")):1:4:XX XX",
+            "\(root.path("vimgrep-literal-replace.txt")):2:5:Foo XX",
+        ])
+        #expect(try run([
+            "--vimgrep",
+            "-o",
+            "--byte-offset",
+            "--replace",
+            "",
+            "foo",
+            root.path("vimgrep-literal-replace.txt"),
+        ]) == [
+            "\(root.path("vimgrep-literal-replace.txt")):1:1:0:",
+            "\(root.path("vimgrep-literal-replace.txt")):1:2:1:",
+            "\(root.path("vimgrep-literal-replace.txt")):2:5:12:",
+        ])
+        #expect(try run([
+            "--vimgrep",
+            "-m1",
+            "-o",
+            "--replace",
+            "X",
+            "foo",
+            root.path("vimgrep-literal-replace.txt"),
+        ]) == [
+            "\(root.path("vimgrep-literal-replace.txt")):1:1:X",
+            "\(root.path("vimgrep-literal-replace.txt")):1:3:X",
+        ])
         #expect(try run([
             "--vimgrep",
             "--byte-offset",

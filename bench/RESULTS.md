@@ -281,6 +281,21 @@ sibling Rust oracle. Five-run A/B checks measured `-m1 -r Holmes
 11.2 ms for Rust; and `-m1 -n -o --column --byte-offset -r Holmes
 'Sherlock Holmes'` at 65.0 ms versus 10.937 s before and 13.3 ms for Rust.
 
+Literal-only `--vimgrep --replace` output now uses a direct Swift writer for
+single-literal whole-line and only-matching replacement forms, including
+filename, line, column, byte-offset, ignore-case, no-column, no-filename, empty
+replacement and finite max-count field combinations. Replacement coordinates
+follow ripgrep's replaced-line positions while max-count still counts matching
+lines. Output on the 193 MiB subtitles corpus matched both the previous Swift
+checkpoint and the sibling Rust oracle. Five-run A/B checks measured
+`--vimgrep -r Holmes 'Sherlock Holmes'` at 73.8 ms versus 10.970 s before and
+28.4 ms for Rust; `--vimgrep -o -r Holmes 'Sherlock Holmes'` at 72.7 ms versus
+10.768 s before and 28.8 ms for Rust; `--vimgrep --byte-offset -r Holmes
+'Sherlock Holmes'` at 72.0 ms versus 10.813 s before; `--vimgrep -m1 -r
+Holmes 'Sherlock Holmes'` at 58.3 ms versus 10.799 s before and 13.4 ms for
+Rust; and `--vimgrep -m1 -o -r Holmes 'Sherlock Holmes'` at 57.2 ms versus
+10.822 s before and 12.5 ms for Rust.
+
 Safe multi-literal only-match and vimgrep output now merge each literal's next
 match stream instead of re-scanning every literal from the current global
 offset. Interleaved same-line fixtures and representative subtitles cases
