@@ -934,6 +934,13 @@ struct MiscTests {
             root.path("no-mmap-boundary.txt"),
         ], fixture: {})
         #expect(noMmapBoundaryOutput == Data("needle across boundary\n".utf8))
+        let noMmapBoundaryLineNumberOutput = try runExecutableData([
+            "--no-mmap",
+            "-n",
+            "needle",
+            root.path("no-mmap-boundary.txt"),
+        ], fixture: {})
+        #expect(noMmapBoundaryLineNumberOutput == Data("2:needle across boundary\n".utf8))
 
         let noMmapLineNumberIgnoreCaseOutput = try runExecutableData([
             "--no-mmap",

@@ -75,8 +75,8 @@ public enum SwiftDarwinLiteralPreflight {
         if asciiCaseInsensitive, literal.contains(where: { $0 >= 0x80 }) {
             return nil
         }
-        if !asciiCaseInsensitive, !lineNumber {
-            return streamingPlainExitCode(path: path, literal: literal)
+        if !asciiCaseInsensitive {
+            return streamingPlainExitCode(path: path, literal: literal, lineNumber: lineNumber)
         }
 
         guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
@@ -199,51 +199,47 @@ public enum SwiftDarwinLiteralPreflight {
         }
 
         func readNextChunk() -> Bool {
-            do {
-                guard let chunk = try handle.read(upToCount: 2 * 1024 * 1024),
-                      !chunk.isEmpty else {
-                    reachedEOF = true
+            let chunk = handle.readData(ofLength: 2 * 1024 * 1024)
+            guard !chunk.isEmpty else {
+                reachedEOF = true
+                return true
+            }
+            let accepted = chunk.withUnsafeBytes { rawChunk -> Bool in
+                guard let rawBase = rawChunk.baseAddress else {
                     return true
                 }
-                let accepted = chunk.withUnsafeBytes { rawChunk -> Bool in
-                    guard let rawBase = rawChunk.baseAddress else {
-                        return true
+                let base = rawBase.assumingMemoryBound(to: UInt8.self)
+                let chunkCount = rawChunk.count
+                if isFirstChunk {
+                    isFirstChunk = false
+                    if chunkCount >= 3,
+                       base[0] == 0xEF,
+                       base[1] == 0xBB,
+                       base[2] == 0xBF {
+                        rejected = true
+                        return false
                     }
-                    let base = rawBase.assumingMemoryBound(to: UInt8.self)
-                    let chunkCount = rawChunk.count
-                    if isFirstChunk {
-                        isFirstChunk = false
-                        if chunkCount >= 3,
-                           base[0] == 0xEF,
-                           base[1] == 0xBB,
-                           base[2] == 0xBF {
-                            rejected = true
-                            return false
-                        }
-                        if chunkCount >= 2,
-                           (base[0] == 0xFF && base[1] == 0xFE
-                            || base[0] == 0xFE && base[1] == 0xFF) {
-                            rejected = true
-                            return false
-                        }
+                    if chunkCount >= 2,
+                       (base[0] == 0xFF && base[1] == 0xFE
+                        || base[0] == 0xFE && base[1] == 0xFF) {
+                        rejected = true
+                        return false
                     }
-                    if bytesCheckedForNUL < 64 * 1024 {
-                        let checkCount = min(chunkCount, 64 * 1024 - bytesCheckedForNUL)
-                        if memchr(base, 0, checkCount) != nil {
-                            rejected = true
-                            return false
-                        }
-                        bytesCheckedForNUL += checkCount
-                    }
-                    return true
                 }
-                guard accepted else {
-                    return false
+                if bytesCheckedForNUL < 64 * 1024 {
+                    let checkCount = min(chunkCount, 64 * 1024 - bytesCheckedForNUL)
+                    if memchr(base, 0, checkCount) != nil {
+                        rejected = true
+                        return false
+                    }
+                    bytesCheckedForNUL += checkCount
                 }
-                return appendBuffer(chunk)
-            } catch {
+                return true
+            }
+            guard accepted else {
                 return false
             }
+            return appendBuffer(chunk)
         }
 
         while !writeFailed, !rejected {
@@ -374,7 +370,7 @@ public enum SwiftDarwinLiteralPreflight {
         return matchedLineCount > 0 ? 0 : 1
     }
 
-    private static func streamingPlainExitCode(path: String, literal: [UInt8]) -> Int32? {
+    private static func streamingPlainExitCode(path: String, literal: [UInt8], lineNumber: Bool) -> Int32? {
         guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
             return nil
         }
@@ -398,6 +394,7 @@ public enum SwiftDarwinLiteralPreflight {
         var isFirstChunk = true
         var rejected = false
         var writeFailed = false
+        var currentLineNumber = 1
         let newlineByte = UInt8(ascii: "\n")
 
         func appendCarry(_ bytes: UnsafePointer<UInt8>, count: Int) {
@@ -456,10 +453,16 @@ public enum SwiftDarwinLiteralPreflight {
             return true
         }
 
-        func emitMatches(in base: UnsafePointer<UInt8>, count: Int, allowUnterminatedFinalLine: Bool) {
+        func emitMatches(
+            in base: UnsafePointer<UInt8>,
+            count: Int,
+            allowUnterminatedFinalLine: Bool
+        ) -> (lineNumber: Int, countedOffset: Int) {
             guard !writeFailed else {
-                return
+                return (currentLineNumber, 0)
             }
+            var lineNumberCursor = currentLineNumber
+            var lineCountOffset = 0
             literal.withUnsafeBufferPointer { needle in
                 var searchOffset = 0
                 var lastEmittedLineStart = -1
@@ -495,6 +498,18 @@ public enum SwiftDarwinLiteralPreflight {
                         return
                     }
 
+                    if lineNumber {
+                        lineNumberCursor += Int(rg_memcount_byte(
+                            base.advanced(by: lineCountOffset),
+                            lineStart - lineCountOffset,
+                            newlineByte
+                        ))
+                        lineCountOffset = lineStart
+                        guard output.writeLineNumberPrefix(lineNumberCursor) else {
+                            writeFailed = true
+                            return
+                        }
+                    }
                     guard output.write(base.advanced(by: lineStart), count: outputEnd - lineStart) else {
                         writeFailed = true
                         return
@@ -508,6 +523,7 @@ public enum SwiftDarwinLiteralPreflight {
                     searchOffset = outputEnd
                 }
             }
+            return (lineNumberCursor, lineCountOffset)
         }
 
         func processBuffer(_ base: UnsafePointer<UInt8>, count: Int) -> Data? {
@@ -520,7 +536,14 @@ public enum SwiftDarwinLiteralPreflight {
             }
 
             let completeCount = lastNewline + 1
-            emitMatches(in: base, count: completeCount, allowUnterminatedFinalLine: false)
+            let emittedLineState = emitMatches(in: base, count: completeCount, allowUnterminatedFinalLine: false)
+            if lineNumber {
+                currentLineNumber = emittedLineState.lineNumber + Int(rg_memcount_byte(
+                    base.advanced(by: emittedLineState.countedOffset),
+                    completeCount - emittedLineState.countedOffset,
+                    newlineByte
+                ))
+            }
             let tailCount = count - completeCount
             return tailCount > 0
                 ? Data(bytes: base.advanced(by: completeCount), count: tailCount)
@@ -528,15 +551,9 @@ public enum SwiftDarwinLiteralPreflight {
         }
 
         while !rejected, !writeFailed {
-            let chunk: Data
-            do {
-                guard let nextChunk = try handle.read(upToCount: 2 * 1024 * 1024),
-                      !nextChunk.isEmpty else {
-                    break
-                }
-                chunk = nextChunk
-            } catch {
-                return nil
+            let chunk = handle.readData(ofLength: 2 * 1024 * 1024)
+            guard !chunk.isEmpty else {
+                break
             }
 
             chunk.withUnsafeBytes { rawChunk in
@@ -575,7 +592,7 @@ public enum SwiftDarwinLiteralPreflight {
                 guard let rawBase = rawCarry.baseAddress else {
                     return
                 }
-                emitMatches(
+                _ = emitMatches(
                     in: rawBase.assumingMemoryBound(to: UInt8.self),
                     count: rawCarry.count,
                     allowUnterminatedFinalLine: true

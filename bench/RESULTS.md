@@ -722,6 +722,17 @@ seven-run check measured 282.2 ms versus a same-turn general-path check at
 split across the retained 2 MiB read edge, and the unterminated-final-line
 case remains covered.
 
+The same complete-line no-mmap path now covers case-sensitive line-numbered
+output and uses `FileHandle.readData(ofLength:)` for chunk reads. It advances
+line numbers across each completed chunk while counting each chunk at most
+once, leaving ignore-case on the general streaming path. Output for plain and
+`-n` `--no-mmap 'Sherlock Holmes'` on the 1.5 GiB subtitles corpus matched
+sibling Rust `rg`; nine-run checks measured plain output at 279.5 ms versus
+the earlier 282.2 ms retained path and 163.2 ms for Rust, while `-n` measured
+346.3 ms versus the previous 346.6 ms band and 193.9 ms for Rust. A neighboring
+`-i` no-mmap check stayed in its existing band at 362.2 ms versus 279.7 ms for
+Rust.
+
 Line-numbered five-name subtitles alternations now use a Swift-only unique
 last-word suffix scan. The path scans suffixes such as `Holmes`, `Watson`, and
 `Moriarty`, verifies the full literal at the computed start offset, and is
@@ -746,6 +757,15 @@ Rejected Swift-only probes from the same checkpoint:
   first-byte candidate scan preserved focused output but regressed the 1.5 GiB
   subtitles check to 377.5 ms versus the fallback path's same-turn 308.4 ms
   and 276.3 ms for Rust, so unlimited output stays on the existing path.
+- Routing the five-name unbounded subtitles alternation through the bounded
+  mmap/stdout writer's exact-candidate path also preserved output but regressed
+  plain output to 622.6 ms and `-n` to 670.5 ms, versus the current focused
+  bands at 591.4 ms and 624.3 ms.
+- Emitting unique last-word suffix candidates directly in line order avoided
+  collecting and sorting line bounds, but produced no clear plain-output win
+  and regressed the line-numbered control: plain output measured 586.8 ms and
+  `-n` measured 654.5 ms, versus the retained collect/sort suffix
+  line-numbered path's 618.7 ms band.
 - Delaying no-mmap stream compaction until a full 8 MiB consumed prefix,
   without the half-buffer trigger, preserved the same output shape but regressed
   plain `--no-mmap 'Sherlock Holmes'` to 301.7 ms and raised peak memory versus
