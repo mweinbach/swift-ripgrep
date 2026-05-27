@@ -1097,6 +1097,13 @@ Rejected Swift-only probes from the same checkpoint:
   143.6 ms median versus 146.9 ms / 141.2 ms before, while `--hidden --files`
   measured 132.2 ms mean / 132.1 ms median versus 135.6 ms / 135.6 ms before.
   The existing root async group scheduling stays.
+- Making `GlobMatcher.Rule.actualPattern` lazy/computed avoided normal-mode
+  debug-pattern string storage and preserved exact Swift output plus sorted Rust
+  parity, but did not improve the primary listing. A 100-run A/B measured
+  default `--files` at 135.3 ms mean / 133.2 ms median versus 134.0 ms /
+  131.8 ms before; `--hidden --files` was neutral at 132.9 ms mean /
+  131.2 ms median versus 136.2 ms / 131.4 ms before. The stored debug pattern
+  stays.
 - A count-only multi-literal path that skipped line-bound storage and sorting
   preserved output, but measured neutral to slightly slower on
   `-c 'Sherlock|Watson'` over the 1.5 GiB subtitles corpus: 327.0 ms versus
