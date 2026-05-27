@@ -1082,6 +1082,13 @@ Rejected Swift-only probes from the same checkpoint:
   mean / 383.0 ms median versus 383.5 ms / 363.2 ms before, and probe hidden
   listing at 258.2 ms mean / 231.0 ms median versus 214.6 ms / 206.8 ms before.
   The simpler reversed matcher loop stays.
+- Replacing the root ignore-aware `--files` `DispatchGroup` scheduling with
+  `DispatchQueue.concurrentPerform` preserved exact Swift output and sorted Rust
+  parity, but regressed the primary default listing while only improving the
+  hidden control. An 80-run A/B measured default `--files` at 150.3 ms mean /
+  143.6 ms median versus 146.9 ms / 141.2 ms before, while `--hidden --files`
+  measured 132.2 ms mean / 132.1 ms median versus 135.6 ms / 135.6 ms before.
+  The existing root async group scheduling stays.
 - A count-only multi-literal path that skipped line-bound storage and sorting
   preserved output, but measured neutral to slightly slower on
   `-c 'Sherlock|Watson'` over the 1.5 GiB subtitles corpus: 327.0 ms versus
