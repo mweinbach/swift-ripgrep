@@ -461,6 +461,12 @@ struct FeatureTests {
 
         #expect(try run(["-c", "needle", root.path("many.txt")]) == ["2"])
         #expect(try run(["--count-matches", "needle", root.path("many.txt")]) == ["3"])
+        #expect(try run(["-H", "-c", "needle|no", root.path("many.txt")]) == [
+            "\(root.path("many.txt")):3",
+        ])
+        #expect(try run(["-H", "--count-matches", "needle|no", root.path("many.txt")]) == [
+            "\(root.path("many.txt")):4",
+        ])
         #expect(pathBasenames(try run(["--count-matches", "needle", root.url.path])) == ["many.txt"])
         #expect(try runAllowingNoMatch(["-c", "needle", root.path("none.txt")]) == [])
 
@@ -494,6 +500,14 @@ struct FeatureTests {
         )
         #expect(exitCode == 1)
         #expect(output == ["0"])
+
+        output = []
+        let filenameZeroExitCode = RipgrepCLI.run(
+            arguments: ["-H", "--count-matches", "--include-zero", "absent", root.path("none.txt")],
+            stdout: { output.append($0) }
+        )
+        #expect(filenameZeroExitCode == 1)
+        #expect(output == ["\(root.path("none.txt")):0"])
     }
 
     @Test("omits long matching lines after max columns")

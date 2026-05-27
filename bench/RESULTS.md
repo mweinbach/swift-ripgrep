@@ -365,6 +365,17 @@ at 67.3 ms versus 15.865 s before and 39.2 ms for Rust; and
 `--with-filename -n --column --byte-offset 'Sherlock|Watson'` at 80.2 ms
 versus 15.853 s before and 43.5 ms for Rust.
 
+Filename-prefixed literal count output now also stays on the direct Swift
+writer for `-c` and `--count-matches`, including `--include-zero path:0`
+semantics. Output and exit status for matching, no-match, include-zero,
+single-literal, safe multi-literal, and byte-set count forms matched both the
+previous Swift checkpoint and the sibling Rust oracle. Five-run A/B checks on
+the 193 MiB subtitles corpus measured `--with-filename -c 'Sherlock|Watson'`
+at 72.0 ms versus 705.3 ms before and 40.6 ms for Rust; `--with-filename
+--count-matches 'Sherlock|Watson'` at 94.9 ms versus 706.4 ms before and
+39.6 ms for Rust; and `--with-filename --count-matches 'A|B|C|D|E'` at
+75.6 ms versus 1.959 s before and 170.3 ms for Rust.
+
 Safe multi-literal only-match and vimgrep output now merge each literal's next
 match stream instead of re-scanning every literal from the current global
 offset. Interleaved same-line fixtures and representative subtitles cases

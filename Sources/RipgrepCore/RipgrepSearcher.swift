@@ -860,6 +860,15 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let filesWithoutMatch = options.printMode == .filesWithoutMatch
         let pathOnly = filesWithMatches || filesWithoutMatch
         var totalMatchCount = 0
+        func writePathPrefixIfNeeded() {
+            pathPrefixBytes?.withUnsafeBytes { buffer in
+                writeBytes(buffer)
+            }
+        }
+        func writeCountLine(_ value: Int) {
+            writePathPrefixIfNeeded()
+            writeDarwinDecimalLine(value, writeBytes: writeBytes)
+        }
 
         data.withUnsafeBytes { rawBytes in
             guard let rawBaseAddress = rawBytes.baseAddress else {
@@ -869,11 +878,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
             let byteBuffer = UnsafeBufferPointer(start: baseAddress, count: data.count)
             var lineNumber = 1
             var lineCountOffset = 0
-            func writePathPrefixIfNeeded() {
-                pathPrefixBytes?.withUnsafeBytes { buffer in
-                    writeBytes(buffer)
-                }
-            }
 
             if options.quiet || pathOnly {
                 if literals.count == 1,
@@ -2371,10 +2375,10 @@ public struct RipgrepSearcher: @unchecked Sendable {
             return nil
         }
         if !options.quiet {
-            if countMatchesOnly && totalMatchCount > 0 {
-                writeDarwinDecimalLine(totalMatchCount, writeBytes: writeBytes)
-            } else if countOnly && matchedLineCount > 0 {
-                writeDarwinDecimalLine(matchedLineCount, writeBytes: writeBytes)
+            if countMatchesOnly && (totalMatchCount > 0 || options.includeZero) {
+                writeCountLine(totalMatchCount)
+            } else if countOnly && (matchedLineCount > 0 || options.includeZero) {
+                writeCountLine(matchedLineCount)
             } else if (filesWithMatches && matchedLineCount > 0) || (filesWithoutMatch && matchedLineCount == 0) {
                 writeDarwinPathLine(fileURL.path, writeBytes: writeBytes)
             }
@@ -4028,7 +4032,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
               options.pathSeparator == nil,
               (options.vimgrep
                 || options.withFilename != true
-                || options.printMode == .matchingLines),
+                || options.printMode == .matchingLines
+                || options.printMode == .count
+                || options.printMode == .countMatches),
               options.globPatterns.isEmpty,
               options.caseInsensitiveGlobPatterns.isEmpty,
               options.preprocessor == nil,
