@@ -264,6 +264,35 @@ Rust; `-Fi sherlock` at 226.9 ms versus 340.9 ms before and 412.5 ms for Rust;
 `-e Sherlock` at 207.9 ms versus 336.0 ms before and 289.5 ms for Rust; and
 `-n -i -e Sherlock` at 281.4 ms versus 458.5 ms before and 572.1 ms for Rust.
 
+Traversal-only flags that do not affect an explicit regular file now stay
+eligible for the executable preflight. The parser treats hidden, ignore-family,
+require-git, and one-file-system toggles as neutral only in this single-path
+preflight shape. Dense-fixture output for `--hidden --no-ignore Sherlock`,
+`--no-hidden --ignore Sherlock`, `-. -F Sherlock`, ignore-family toggles, and
+one-file-system toggles matched both the previous Swift binary and Rust, with
+matching exit status; focused fixtures also cover explicit hidden and ignored
+files. Ten-run checks measured `--hidden --no-ignore Sherlock` at 211.7 ms
+versus 336.9 ms before and 288.9 ms for Rust; the
+`--ignore-dot --ignore-vcs --require-git Sherlock` form measured 235.2 ms
+versus 383.6 ms before and 307.0 ms for Rust.
+
+Output-neutral formatting disables and explicit block-buffering are parsed
+conservatively in the same preflight. The parser tracks ordered formatting
+toggles and only dispatches when the final state does not request filenames,
+headings, byte offsets, columns, trimming, or color; explicit
+`--line-buffered` remains on the full CLI path because it changes flush
+semantics. Dense-fixture output and exit status for `--messages`,
+`--block-buffered`, `--no-line-buffered`, `--no-byte-offset`, `--no-column`,
+`--no-trim`, `--color=never`, `--with-filename --no-filename`,
+`--heading --no-heading`, `--column --no-column`,
+`--byte-offset --no-byte-offset`, `--trim --no-trim`, and
+`--color=always --color=never` matched both the previous Swift binary and
+Rust. Ten-run checks on the 252 MiB dense fixture measured the combined
+neutral-format form at 258.3 ms versus 359.7 ms before and 329.1 ms for Rust;
+`--block-buffered --messages Sherlock` measured 265.3 ms versus 355.6 ms
+before and 308.7 ms for Rust; `--no-line-buffered Sherlock` measured 235.1 ms
+versus 349.6 ms before and 335.7 ms for Rust.
+
 The Swift-only Darwin mmap/stdout preflight now also covers line-numbered
 medium bounded multi-literal output when no filename, byte-offset, column,
 replacement, only-matching, or vimgrep formatting is requested. Output for

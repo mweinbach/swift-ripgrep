@@ -306,6 +306,52 @@ struct RipgrepCommand {
         func isMmapFlag(_ argument: String) -> Bool {
             argument == "--mmap"
         }
+        func isByteOffsetFlag(_ argument: String) -> Bool {
+            argument == "-b" || argument == "--byte-offset"
+        }
+        func isNoByteOffsetFlag(_ argument: String) -> Bool {
+            argument == "--no-byte-offset"
+        }
+        func isColumnFlag(_ argument: String) -> Bool {
+            argument == "--column"
+        }
+        func isNoColumnFlag(_ argument: String) -> Bool {
+            argument == "--no-column"
+        }
+        func isHeadingFlag(_ argument: String) -> Bool {
+            argument == "--heading"
+        }
+        func isNoHeadingFlag(_ argument: String) -> Bool {
+            argument == "--no-heading"
+        }
+        func isWithFilenameFlag(_ argument: String) -> Bool {
+            argument == "-H" || argument == "--with-filename"
+        }
+        func isNoFilenameFlag(_ argument: String) -> Bool {
+            argument == "-I" || argument == "--no-filename"
+        }
+        func isTrimFlag(_ argument: String) -> Bool {
+            argument == "--trim"
+        }
+        func isNoTrimFlag(_ argument: String) -> Bool {
+            argument == "--no-trim"
+        }
+        func isBufferingFlag(_ argument: String) -> Bool {
+            argument == "--block-buffered" || argument == "--no-line-buffered"
+        }
+        func isMessageFlag(_ argument: String) -> Bool {
+            argument == "--no-messages" || argument == "--messages"
+        }
+        func colorModeMayEmitForPreflight(_ value: String) -> Bool? {
+            switch value {
+            case "never":
+                return false
+            case "always", "ansi", "auto":
+                return true
+            default:
+                return nil
+            }
+        }
         func inlineRegexpPattern(_ argument: String) -> String? {
             if argument.hasPrefix("--regexp=") {
                 return String(argument.dropFirst("--regexp=".count))
@@ -317,13 +363,35 @@ struct RipgrepCommand {
         }
         func isOutputNeutralSingleFileFlag(_ argument: String) -> Bool {
             switch argument {
-            case "--no-heading",
-                 "--no-filename",
-                 "--no-messages",
-                 "--no-config":
+            case "-.",
+                 "--hidden",
+                 "--ignore",
+                 "--ignore-dot",
+                 "--ignore-exclude",
+                 "--ignore-file-case-insensitive",
+                 "--ignore-files",
+                 "--ignore-global",
+                 "--ignore-messages",
+                 "--ignore-parent",
+                 "--ignore-vcs",
+                 "--no-hidden",
+                 "--no-ignore",
+                 "--no-ignore-dot",
+                 "--no-ignore-exclude",
+                 "--no-ignore-file-case-insensitive",
+                 "--no-ignore-files",
+                 "--no-ignore-global",
+                 "--no-ignore-messages",
+                 "--no-ignore-parent",
+                 "--no-ignore-vcs",
+                 "--no-config",
+                 "--no-one-file-system",
+                 "--no-require-git",
+                 "--one-file-system",
+                 "--require-git":
                 return true
             default:
-                return false
+                return isBufferingFlag(argument) || isMessageFlag(argument)
             }
         }
         func shortFlagCluster(
@@ -363,9 +431,15 @@ struct RipgrepCommand {
             return (caseMode, lineNumber, wordRegexp, fixedStrings)
         }
         var parsedCaseMode = CaseMode.sensitive
+        var parsedByteOffset = false
+        var parsedColumn = false
+        var parsedColorMayEmit = false
         var parsedFixedStrings = false
+        var parsedHeading = false
         var parsedLineNumber = false
         var parsedNoMmap = false
+        var parsedTrim = false
+        var parsedWithFilename = false
         var parsedWordRegexp = false
         var parsedRegexpPattern: String?
         var patternCanStartWithDash = false
@@ -388,6 +462,26 @@ struct RipgrepCommand {
                 parsedFixedStrings = true
             } else if isNoFixedStringsFlag(argument) {
                 parsedFixedStrings = false
+            } else if isByteOffsetFlag(argument) {
+                parsedByteOffset = true
+            } else if isNoByteOffsetFlag(argument) {
+                parsedByteOffset = false
+            } else if isColumnFlag(argument) {
+                parsedColumn = true
+            } else if isNoColumnFlag(argument) {
+                parsedColumn = false
+            } else if isHeadingFlag(argument) {
+                parsedHeading = true
+            } else if isNoHeadingFlag(argument) {
+                parsedHeading = false
+            } else if isWithFilenameFlag(argument) {
+                parsedWithFilename = true
+            } else if isNoFilenameFlag(argument) {
+                parsedWithFilename = false
+            } else if isTrimFlag(argument) {
+                parsedTrim = true
+            } else if isNoTrimFlag(argument) {
+                parsedTrim = false
             } else if argument == "-nw" || argument == "-wn" {
                 parsedLineNumber = true
                 parsedWordRegexp = true
@@ -411,6 +505,19 @@ struct RipgrepCommand {
                 }
                 parsedRegexpPattern = inlineRegexp
                 patternCanStartWithDash = true
+            } else if argument == "--color" {
+                guard argumentIndex < arguments.count,
+                      let mayEmit = colorModeMayEmitForPreflight(arguments[argumentIndex]) else {
+                    return nil
+                }
+                parsedColorMayEmit = mayEmit
+                argumentIndex += 1
+            } else if argument.hasPrefix("--color=") {
+                let raw = String(argument.dropFirst("--color=".count))
+                guard let mayEmit = colorModeMayEmitForPreflight(raw) else {
+                    return nil
+                }
+                parsedColorMayEmit = mayEmit
             } else if isOutputNeutralSingleFileFlag(argument) {
                 continue
             } else if let cluster = shortFlagCluster(argument) {
@@ -455,6 +562,14 @@ struct RipgrepCommand {
         noMmap = parsedNoMmap
         wordRegexp = parsedWordRegexp
         fixedStrings = parsedFixedStrings
+        guard !parsedByteOffset,
+              !parsedColumn,
+              !parsedColorMayEmit,
+              !parsedHeading,
+              !parsedTrim,
+              !parsedWithFilename else {
+            return nil
+        }
 
         if !fixedStrings,
            (patternCanStartWithDash || !pattern.hasPrefix("-")),

@@ -1179,6 +1179,9 @@ struct MiscTests {
         -needle
         needle
         """, to: "dash-pattern.txt")
+        try root.write("needle\n", to: ".hidden.txt")
+        try root.write("*.txt\n", to: ".ignore")
+        try root.write("needle\n", to: "ignored.txt")
 
         let output = try runExecutableData([
             "needle",
@@ -1249,6 +1252,174 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(noMessagesOutput == output)
+
+        let messagesOutput = try runExecutableData([
+            "--messages",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(messagesOutput == output)
+
+        let noLineBufferedOutput = try runExecutableData([
+            "--no-line-buffered",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(noLineBufferedOutput == output)
+
+        let blockBufferedOutput = try runExecutableData([
+            "--block-buffered",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(blockBufferedOutput == output)
+
+        let noColumnOutput = try runExecutableData([
+            "--no-column",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(noColumnOutput == output)
+
+        let noByteOffsetOutput = try runExecutableData([
+            "--no-byte-offset",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(noByteOffsetOutput == output)
+
+        let noTrimOutput = try runExecutableData([
+            "--no-trim",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(noTrimOutput == output)
+
+        let colorNeverOutput = try runExecutableData([
+            "--color=never",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(colorNeverOutput == output)
+
+        let separateColorNeverOutput = try runExecutableData([
+            "--color",
+            "never",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(separateColorNeverOutput == output)
+
+        let orderedNoColumnOutput = try runExecutableData([
+            "--column",
+            "--no-column",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(orderedNoColumnOutput == output)
+
+        let orderedNoByteOffsetOutput = try runExecutableData([
+            "--byte-offset",
+            "--no-byte-offset",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(orderedNoByteOffsetOutput == output)
+
+        let orderedNoTrimOutput = try runExecutableData([
+            "--trim",
+            "--no-trim",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(orderedNoTrimOutput == output)
+
+        let orderedNoFilenameOutput = try runExecutableData([
+            "--with-filename",
+            "--no-filename",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(orderedNoFilenameOutput == output)
+
+        let shortNoFilenameOutput = try runExecutableData([
+            "-I",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(shortNoFilenameOutput == output)
+
+        let orderedNoHeadingOutput = try runExecutableData([
+            "--heading",
+            "--no-heading",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(orderedNoHeadingOutput == output)
+
+        let orderedColorNeverOutput = try runExecutableData([
+            "--color=always",
+            "--color=never",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(orderedColorNeverOutput == output)
+
+        let hiddenFlagOutput = try runExecutableData([
+            "--hidden",
+            "--no-ignore",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(hiddenFlagOutput == output)
+
+        let noHiddenExplicitFileOutput = try runExecutableData([
+            "--no-hidden",
+            "needle",
+            root.path(".hidden.txt"),
+        ], fixture: {})
+        #expect(noHiddenExplicitFileOutput == Data("needle\n".utf8))
+
+        let shortHiddenExplicitFileOutput = try runExecutableData([
+            "-.",
+            "needle",
+            root.path(".hidden.txt"),
+        ], fixture: {})
+        #expect(shortHiddenExplicitFileOutput == noHiddenExplicitFileOutput)
+
+        let ignoreExplicitFileOutput = try runExecutableData([
+            "--ignore",
+            "needle",
+            root.path("ignored.txt"),
+        ], fixture: {})
+        #expect(ignoreExplicitFileOutput == Data("needle\n".utf8))
+
+        let noIgnoreExplicitFileOutput = try runExecutableData([
+            "--no-ignore",
+            "needle",
+            root.path("ignored.txt"),
+        ], fixture: {})
+        #expect(noIgnoreExplicitFileOutput == ignoreExplicitFileOutput)
+
+        let neutralFormattingOutput = try runExecutableData([
+            "--no-byte-offset",
+            "--no-column",
+            "--no-heading",
+            "--no-filename",
+            "--no-trim",
+            "--color=never",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(neutralFormattingOutput == output)
+
+        let neutralRuntimeOutput = try runExecutableData([
+            "--block-buffered",
+            "--messages",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(neutralRuntimeOutput == output)
 
         let orderedCaseSensitiveOutput = try runExecutableData([
             "-i",
