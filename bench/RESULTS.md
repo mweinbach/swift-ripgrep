@@ -584,6 +584,17 @@ sibling Rust oracle (871 lines). A seven-run A/B measured Swift at 333.1 ms
 versus 346.0 ms before and 312.0 ms for Rust; the neighboring no-line-number
 case stayed effectively unchanged at 252.6 ms versus 250.8 ms before.
 
+Line-numbered unlimited two-word multi-literal output now scans unique suffix
+candidate literals such as last names, then verifies the full alternatives on
+candidate lines before emitting. This keeps plain non-line-numbered output on
+the existing full-literal scanner. Output for `-n 'Sherlock Holmes|John
+Watson|Irene Adler|Inspector Lestrade|Professor Moriarty'` on the 1.5 GiB
+subtitles corpus matched both the previous Swift checkpoint and sibling Rust
+oracle (1,094 lines). A seven-run A/B measured the line-numbered form at
+625.0 ms versus 648.6 ms before and 311.7 ms for Rust; a 10-run guard measured
+the neighboring plain form effectively neutral at 580.2 ms versus 578.9 ms
+before.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Routing multi-literal full-line output through the existing line-by-line

@@ -1949,8 +1949,49 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     return
                 }
 
+                let candidateLiterals: [[UInt8]] = {
+                    guard wantsLineNumber, !options.column, !options.byteOffset else {
+                        return literals
+                    }
+                    var suffixes: [[UInt8]] = []
+                    suffixes.reserveCapacity(literals.count)
+                    for literal in literals {
+                        guard let separatorIndex = literal.lastIndex(of: UInt8(ascii: " ")),
+                              separatorIndex + 1 < literal.count else {
+                            return literals
+                        }
+                        let suffix = Array(literal[(separatorIndex + 1)...])
+                        guard suffix.count >= 4, suffix.count < literal.count else {
+                            return literals
+                        }
+                        if !suffixes.contains(suffix) {
+                            suffixes.append(suffix)
+                        }
+                    }
+                    return suffixes
+                }()
+                let shouldVerifyCandidateLines = candidateLiterals != literals
                 var seenLineIndexesByStart: [Int: Int] = [:]
                 var matchedLineBounds: [(start: Int, outputEnd: Int, hasNewline: Bool, firstMatchStart: Int)] = []
+
+                func lineContainsFullLiteral(start lineStart: Int, end lineEnd: Int) -> Bool {
+                    let lineLength = lineEnd - lineStart
+                    for literal in literals where literal.count <= lineLength {
+                        let foundPointer = literal.withUnsafeBufferPointer { needle in
+                            rg_memmem_simple(
+                                baseAddress.advanced(by: lineStart),
+                                lineLength,
+                                needle.baseAddress,
+                                needle.count
+                            )
+                        }
+                        if foundPointer != nil {
+                            return true
+                        }
+                    }
+                    return false
+                }
+
                 func recordMatchLine(containing matchStart: Int) -> Int {
                     var lineStart = matchStart
                     while lineStart > 0, baseAddress[lineStart - 1] != UInt8(ascii: "\n") {
@@ -1978,6 +2019,10 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         outputEnd = data.count
                         hasNewline = false
                     }
+                    if shouldVerifyCandidateLines,
+                       !lineContainsFullLiteral(start: lineStart, end: hasNewline ? outputEnd - 1 : outputEnd) {
+                        return outputEnd
+                    }
                     seenLineIndexesByStart[lineStart] = matchedLineBounds.count
                     matchedLineBounds.append((
                         start: lineStart,
@@ -1988,7 +2033,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     return outputEnd
                 }
 
-                for literal in literals where literal.count <= data.count {
+                for literal in candidateLiterals where literal.count <= data.count {
                     var searchOffset = 0
                     literal.withUnsafeBufferPointer { needle in
                         guard let needleBaseAddress = needle.baseAddress else {

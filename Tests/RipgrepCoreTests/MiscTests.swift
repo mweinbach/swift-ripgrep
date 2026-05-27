@@ -450,6 +450,14 @@ struct MiscTests {
 
         #expect(String(decoding: multiByteOutput, as: UTF8.self) == "2:bravo\n4:delta\n")
 
+        try root.write("Mycroft Holmes\nSherlock Holmes\nMary Watson\nJohn Watson\n", to: "names.txt")
+        let verifiedSuffixMultiByteOutput = try runExecutableData([
+            "-n",
+            "Sherlock Holmes|John Watson",
+            root.path("names.txt"),
+        ], fixture: {})
+        #expect(String(decoding: verifiedSuffixMultiByteOutput, as: UTF8.self) == "2:Sherlock Holmes\n4:John Watson\n")
+
         let ignoreCaseMultiByteOutput = try runExecutableData([
             "-i",
             "BRAVO|DELTA",
