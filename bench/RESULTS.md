@@ -1038,6 +1038,13 @@ Rejected Swift-only probes from the same checkpoint:
 - A stdout byte-chunk writer for ignore-aware `--files` preserved current Swift
   ordering and sorted Rust content, but slowed default Linux-tree listing from
   149.7 ms to 168.3 ms.
+- Replacing indexed ignore prefix/suffix `String.hasPrefix`/`hasSuffix` checks
+  with ASCII-only UTF-8 byte comparisons, plus a rule-index prefilter for
+  candidates that could not beat the current match, preserved sorted Rust
+  output for default, hidden, and no-ignore file listings and preserved quiet
+  exit/output. It regressed the hot default listing badly in a same-machine
+  30-run A/B: probe `--files` measured 217.77 ms median versus 153.96 ms before,
+  with Rust at 96.97 ms. The existing String prefix/suffix checks stay.
 - A count-only multi-literal path that skipped line-bound storage and sorting
   preserved output, but measured neutral to slightly slower on
   `-c 'Sherlock|Watson'` over the 1.5 GiB subtitles corpus: 327.0 ms versus
