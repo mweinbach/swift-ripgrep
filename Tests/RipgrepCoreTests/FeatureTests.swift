@@ -2392,6 +2392,21 @@ struct FeatureTests {
             "1:1:0:X",
             "1:7:6:X",
         ])
+        try root.write("Watson Sherlock\nSherlock Watson\n", to: "multi-literal-replace.txt")
+        #expect(try run(["--replace", "X", "Sherlock|Watson", root.path("multi-literal-replace.txt")]) == [
+            "X X",
+            "X X",
+        ])
+        #expect(try run(["-n", "--column", "--byte-offset", "--replace", "XX", "Sherlock|Watson", root.path("multi-literal-replace.txt")]) == [
+            "1:1:0:XX XX",
+            "2:1:16:XX XX",
+        ])
+        #expect(try run(["-n", "-o", "--column", "--byte-offset", "--replace", "", "Sherlock|Watson", root.path("multi-literal-replace.txt")]) == [
+            "1:1:0:",
+            "1:2:1:",
+            "2:1:16:",
+            "2:2:17:",
+        ])
         #expect(try run(["-o", "--replace", "[$1]", #"([a-z]+)\d+"#, root.path("replace.txt")]) == [
             "[abc]",
             "[def]",

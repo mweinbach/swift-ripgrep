@@ -329,6 +329,17 @@ checkpoint and the sibling Rust oracle. Five-run A/B checks measured
 15.975 s before and 45.9 ms for Rust; and `--vimgrep -m1 -r X
 'Sherlock|Watson'` at 43.8 ms versus 15.992 s before and 5.1 ms for Rust.
 
+Non-vimgrep safe multi-literal replacement now uses the same direct Swift
+writer strategy. It merges independent literal streams in byte order, builds
+each replaced line once, and emits only-matching replacement coordinates after
+prior replacements on that line. Output for full-line, only-matching,
+byte-offset, combined line/column/byte-offset, empty replacement, and bounded
+forms on the 193 MiB subtitles corpus matched both the previous Swift
+checkpoint and the sibling Rust oracle. Five-run A/B checks measured `-r X
+'Sherlock|Watson'` at 83.1 ms versus 15.995 s before and 40.9 ms for Rust;
+`-o -r X 'Sherlock|Watson'` at 74.9 ms versus 16.287 s before and 41.3 ms for
+Rust; and `-m1 -r X 'Sherlock|Watson'` at 47.9 ms versus 16.033 s before.
+
 Safe multi-literal only-match and vimgrep output now merge each literal's next
 match stream instead of re-scanning every literal from the current global
 offset. Interleaved same-line fixtures and representative subtitles cases

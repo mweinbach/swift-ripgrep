@@ -778,16 +778,18 @@ public struct RipgrepSearcher: @unchecked Sendable {
             && options.printMode == .matchingLines
             && !onlyMatching
             && !options.vimgrep
-            && fastPath.literals.count == 1
+            && (fastPath.literals.count == 1
+                || (fastPathByteSet == nil && canScanDarwinLiteralsIndependently(fastPath)))
             && fastPathByteSet == nil
             && !fastPath.wordASCII
             && options.withFilename != true
-        let canDirectWriteOnlyMatchingLiteralReplacement = directLiteralReplacementBytes?.isEmpty == false
+        let canDirectWriteOnlyMatchingLiteralReplacement = directLiteralReplacementBytes != nil
             && allowDirectStdout
             && options.printMode == .matchingLines
             && onlyMatching
             && !options.vimgrep
-            && fastPath.literals.count == 1
+            && (fastPath.literals.count == 1
+                || (fastPathByteSet == nil && canScanDarwinLiteralsIndependently(fastPath)))
             && fastPathByteSet == nil
             && !fastPath.wordASCII
             && options.withFilename != true
@@ -1052,6 +1054,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
 
             if (canDirectWriteLiteralReplacement || canDirectWriteOnlyMatchingLiteralReplacement),
                let replacementBytes = directLiteralReplacementBytes,
+               literals.count == 1,
                let literal = literals.first {
                 var searchOffset = 0
                 var newline = UInt8(ascii: "\n")
@@ -1178,6 +1181,120 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     totalMatchCount += lineMatchCount
                     searchOffset = newlinePointer == nil ? data.count : lineEnd + 1
                     bytesSearched = searchOffset
+                }
+                return
+            }
+
+            if (canDirectWriteLiteralReplacement || canDirectWriteOnlyMatchingLiteralReplacement),
+               let replacementBytes = directLiteralReplacementBytes {
+                var newline = UInt8(ascii: "\n")
+                var candidates = initialIndependentLiteralCandidates()
+
+                func earliestReplacementCandidateIndex(before endOffset: Int = Int.max) -> Int? {
+                    var selectedCandidateIndex: Int?
+                    var selectedStart = Int.max
+                    for candidateIndex in candidates.indices
+                        where candidates[candidateIndex].start < selectedStart
+                            && candidates[candidateIndex].start < endOffset {
+                        selectedStart = candidates[candidateIndex].start
+                        selectedCandidateIndex = candidateIndex
+                    }
+                    return selectedCandidateIndex
+                }
+
+                func advanceReplacementCandidate(at candidateIndex: Int) {
+                    let selected = candidates[candidateIndex]
+                    if let nextMatch = nextIndependentLiteralMatch(
+                        literalIndex: selected.literalIndex,
+                        from: selected.start + selected.length
+                    ) {
+                        candidates[candidateIndex] = (
+                            nextMatch.start,
+                            nextMatch.length,
+                            selected.literalIndex
+                        )
+                    } else {
+                        candidates[candidateIndex] = (Int.max, 0, selected.literalIndex)
+                    }
+                }
+
+                while matchedLineCount < maxCount,
+                      let firstCandidateIndex = earliestReplacementCandidateIndex() {
+                    let firstCandidate = candidates[firstCandidateIndex]
+                    var lineStart = firstCandidate.start
+                    while lineStart > 0, baseAddress[lineStart - 1] != UInt8(ascii: "\n") {
+                        lineStart -= 1
+                    }
+                    let newlinePointer = memchr(
+                        baseAddress.advanced(by: firstCandidate.start),
+                        Int32(UInt8(ascii: "\n")),
+                        data.count - firstCandidate.start
+                    )
+                    let lineEnd = newlinePointer.map {
+                        baseAddress.distance(to: $0.assumingMemoryBound(to: UInt8.self))
+                    } ?? data.count
+                    var cursor = lineStart
+                    var replacementDelta = 0
+                    var replacementStarts: [Int] = []
+                    var replacedLine = Data()
+                    replacedLine.reserveCapacity(lineEnd - lineStart)
+
+                    while let candidateIndex = earliestReplacementCandidateIndex(before: lineEnd) {
+                        let selected = candidates[candidateIndex]
+                        let replacementStart = selected.start - lineStart + replacementDelta
+                        replacementStarts.append(replacementStart)
+                        replacedLine.append(
+                            rawBaseAddress.assumingMemoryBound(to: UInt8.self).advanced(by: cursor),
+                            count: selected.start - cursor
+                        )
+                        replacedLine.append(contentsOf: replacementBytes)
+                        replacementDelta += replacementBytes.count - selected.length
+                        cursor = selected.start + selected.length
+                        advanceReplacementCandidate(at: candidateIndex)
+                    }
+
+                    replacedLine.append(
+                        rawBaseAddress.assumingMemoryBound(to: UInt8.self).advanced(by: cursor),
+                        count: lineEnd - cursor
+                    )
+                    advanceLineNumber(to: lineStart)
+                    if onlyMatching {
+                        for replacementStart in replacementStarts {
+                            writeDarwinOnlyMatchingPrefixes(
+                                lineNumber: lineNumber,
+                                column: replacementStart + 1,
+                                byteOffset: lineStart + replacementStart,
+                                options: options,
+                                writeBytes: writeBytes
+                            )
+                            replacementBytes.withUnsafeBytes { buffer in
+                                writeBytes(buffer)
+                            }
+                            withUnsafeBytes(of: &newline) { buffer in
+                                writeBytes(buffer)
+                            }
+                        }
+                    } else {
+                        if let firstReplacementStart = replacementStarts.first,
+                           wantsLineNumber || options.column || options.byteOffset {
+                            writeDarwinOnlyMatchingPrefixes(
+                                lineNumber: lineNumber,
+                                column: firstReplacementStart + 1,
+                                byteOffset: lineStart,
+                                options: options,
+                                writeBytes: writeBytes
+                            )
+                        }
+                        replacedLine.withUnsafeBytes { buffer in
+                            writeBytes(buffer)
+                        }
+                        withUnsafeBytes(of: &newline) { buffer in
+                            writeBytes(buffer)
+                        }
+                    }
+                    matchedLineCount += 1
+                    totalMatchCount += replacementStarts.count
+                    bytesSearched = newlinePointer == nil ? data.count : lineEnd + 1
                 }
                 return
             }
