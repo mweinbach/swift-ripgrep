@@ -770,6 +770,31 @@ struct MiscTests {
         tail needle
 
         """.utf8))
+
+        let lineNumberOutput = try runExecutableData([
+            "-n",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(lineNumberOutput == Data("""
+        1:needle needle needle
+        3:NEEDLE needle Needle
+        4:tail needle
+
+        """.utf8))
+
+        let lineNumberIgnoreCaseOutput = try runExecutableData([
+            "-n",
+            "-i",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(lineNumberIgnoreCaseOutput == Data("""
+        1:needle needle needle
+        3:NEEDLE needle Needle
+        4:tail needle
+
+        """.utf8))
         #endif
     }
 

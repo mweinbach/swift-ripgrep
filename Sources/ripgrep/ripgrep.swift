@@ -271,17 +271,46 @@ struct RipgrepCommand {
         )
         let arguments = preflightArguments.arguments
         let asciiCaseInsensitive: Bool
+        let lineNumber: Bool
         let pattern: String
         let path: String
+        func isIgnoreCaseFlag(_ argument: String) -> Bool {
+            argument == "-i" || argument == "--ignore-case"
+        }
+        func isLineNumberFlag(_ argument: String) -> Bool {
+            argument == "-n" || argument == "--line-number"
+        }
         if arguments.count == 2 {
             asciiCaseInsensitive = false
+            lineNumber = false
             pattern = arguments[0]
             path = arguments[1]
         } else if arguments.count == 3,
-                  arguments[0] == "-i" || arguments[0] == "--ignore-case" {
+                  isIgnoreCaseFlag(arguments[0]) {
             asciiCaseInsensitive = true
+            lineNumber = false
             pattern = arguments[1]
             path = arguments[2]
+        } else if arguments.count == 3,
+                  isLineNumberFlag(arguments[0]) {
+            asciiCaseInsensitive = false
+            lineNumber = true
+            pattern = arguments[1]
+            path = arguments[2]
+        } else if arguments.count == 4,
+                  isLineNumberFlag(arguments[0]),
+                  isIgnoreCaseFlag(arguments[1]) {
+            asciiCaseInsensitive = true
+            lineNumber = true
+            pattern = arguments[2]
+            path = arguments[3]
+        } else if arguments.count == 4,
+                  isIgnoreCaseFlag(arguments[0]),
+                  isLineNumberFlag(arguments[1]) {
+            asciiCaseInsensitive = true
+            lineNumber = true
+            pattern = arguments[2]
+            path = arguments[3]
         } else {
             return nil
         }
@@ -303,7 +332,8 @@ struct RipgrepCommand {
         return SwiftDarwinLiteralPreflight.exitCode(
             path: path,
             literal: literal,
-            asciiCaseInsensitive: asciiCaseInsensitive
+            asciiCaseInsensitive: asciiCaseInsensitive,
+            lineNumber: lineNumber
         )
     }
     #endif

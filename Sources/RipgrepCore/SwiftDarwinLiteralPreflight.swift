@@ -7,7 +7,8 @@ public enum SwiftDarwinLiteralPreflight {
     public static func exitCode(
         path: String,
         literal: [UInt8],
-        asciiCaseInsensitive: Bool
+        asciiCaseInsensitive: Bool,
+        lineNumber: Bool = false
     ) -> Int32? {
         guard !literal.isEmpty else {
             return nil
@@ -52,7 +53,8 @@ public enum SwiftDarwinLiteralPreflight {
                 UnsafeRawPointer(mapped).assumingMemoryBound(to: UInt8.self),
                 haystackLength: haystackLength,
                 literal: literalBuffer,
-                asciiCaseInsensitive: asciiCaseInsensitive
+                asciiCaseInsensitive: asciiCaseInsensitive,
+                lineNumber: lineNumber
             )
         }) else {
             return nil
@@ -218,7 +220,8 @@ private func rgSwiftDarwinWriteLiteralBytes(
     _ base: UnsafePointer<UInt8>,
     haystackLength: Int,
     literal: UnsafeBufferPointer<UInt8>,
-    asciiCaseInsensitive: Bool
+    asciiCaseInsensitive: Bool,
+    lineNumber: Bool
 ) -> Int? {
     guard let literalBase = literal.baseAddress, literal.count > 0 else {
         return nil
@@ -257,11 +260,12 @@ private func rgSwiftDarwinWriteLiteralBytes(
     }
 
     var matchedLineCount = 0
+    var lineNumberAtSearchOffset = 1
     var searchOffset = 0
     var lastEmittedLineStart = -1
     var writeFailed = false
 
-    func emitMatchedLine(found: UnsafePointer<UInt8>) -> Bool {
+    func emitMatchedLine(found: UnsafePointer<UInt8>, newlinesBeforeMatch: Int) -> Bool {
         let matchStart = base.distance(to: found)
         var lineStart = matchStart
         while lineStart > 0, base[lineStart - 1] != UInt8(ascii: "\n") {
@@ -273,6 +277,16 @@ private func rgSwiftDarwinWriteLiteralBytes(
             let outputEnd = newline.map {
                 base.distance(to: $0.assumingMemoryBound(to: UInt8.self)) + 1
             } ?? haystackLength
+            if lineNumber {
+                let matchedLineNumber = lineNumberAtSearchOffset + newlinesBeforeMatch
+                guard output.writeLineNumberPrefix(matchedLineNumber) else {
+                    writeFailed = true
+                    return false
+                }
+                lineNumberAtSearchOffset = newline == nil
+                    ? matchedLineNumber
+                    : matchedLineNumber + 1
+            }
             guard output.write(base.advanced(by: lineStart), count: outputEnd - lineStart) else {
                 writeFailed = true
                 return false
@@ -295,16 +309,32 @@ private func rgSwiftDarwinWriteLiteralBytes(
         foldedLiteral.withUnsafeBufferPointer { foldedNeedle in
             caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
                 while searchOffset < haystackLength {
-                    guard let found = rg_memcasemem_ascii_prepared(
-                        base.advanced(by: searchOffset),
-                        haystackLength - searchOffset,
-                        foldedNeedle.baseAddress,
-                        foldedNeedle.count,
-                        shifts.baseAddress
-                    ) else {
+                    let found: UnsafePointer<UInt8>?
+                    let newlinesBeforeMatch: Int
+                    if lineNumber {
+                        let result = rg_memcasemem_ascii_count_byte_before(
+                            base.advanced(by: searchOffset),
+                            haystackLength - searchOffset,
+                            foldedNeedle.baseAddress,
+                            foldedNeedle.count,
+                            UInt8(ascii: "\n")
+                        )
+                        found = result.match
+                        newlinesBeforeMatch = result.count
+                    } else {
+                        found = rg_memcasemem_ascii_prepared(
+                            base.advanced(by: searchOffset),
+                            haystackLength - searchOffset,
+                            foldedNeedle.baseAddress,
+                            foldedNeedle.count,
+                            shifts.baseAddress
+                        )
+                        newlinesBeforeMatch = 0
+                    }
+                    guard let found else {
                         break
                     }
-                    guard emitMatchedLine(found: found) else {
+                    guard emitMatchedLine(found: found, newlinesBeforeMatch: newlinesBeforeMatch) else {
                         break
                     }
                 }
@@ -312,15 +342,31 @@ private func rgSwiftDarwinWriteLiteralBytes(
         }
     } else {
         while searchOffset < haystackLength {
-            guard let found = rg_memmem_simple(
-                base.advanced(by: searchOffset),
-                haystackLength - searchOffset,
-                literalBase,
-                literal.count
-            ) else {
+            let found: UnsafePointer<UInt8>?
+            let newlinesBeforeMatch: Int
+            if lineNumber {
+                let result = rg_memmem_count_byte_before(
+                    base.advanced(by: searchOffset),
+                    haystackLength - searchOffset,
+                    literalBase,
+                    literal.count,
+                    UInt8(ascii: "\n")
+                )
+                found = result.match
+                newlinesBeforeMatch = result.count
+            } else {
+                found = rg_memmem_simple(
+                    base.advanced(by: searchOffset),
+                    haystackLength - searchOffset,
+                    literalBase,
+                    literal.count
+                )
+                newlinesBeforeMatch = 0
+            }
+            guard let found else {
                 break
             }
-            guard emitMatchedLine(found: found) else {
+            guard emitMatchedLine(found: found, newlinesBeforeMatch: newlinesBeforeMatch) else {
                 break
             }
         }

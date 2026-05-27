@@ -595,6 +595,16 @@ sibling Rust oracle (871 lines). A seven-run A/B measured Swift at 333.1 ms
 versus 346.0 ms before and 312.0 ms for Rust; the neighboring no-line-number
 case stayed effectively unchanged at 252.6 ms versus 250.8 ms before.
 
+The executable-level Swift Darwin literal preflight now also accepts
+line-numbered literal file searches, including `-n` combined with ASCII
+`-i`, and counts newlines during the SIMD literal scan instead of doing a
+second skipped-region pass. Output for `-n 'Sherlock Holmes'` and
+`-n -i 'Sherlock Holmes'` on the 1.5 GiB subtitles corpus matched both the
+existing Swift fallback and sibling Rust oracle. Ten-run checks measured
+`-n` at 215.9 ms versus 249.7 ms for the fallback and 195.5 ms for Rust;
+`-n -i` measured 301.5 ms versus 334.1 ms for the fallback and 312.3 ms for
+Rust.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Routing multi-literal full-line output through the existing line-by-line
