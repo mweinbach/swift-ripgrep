@@ -162,6 +162,42 @@ struct MiscTests {
         """)
     }
 
+    @Test("ASCII boundary literal regex preserves byte boundary output")
+    func asciiBoundaryLiteralRegexPreservesByteBoundaryOutput() throws {
+        let root = try TemporaryDirectory()
+        try root.write("""
+        Sherlock Holmes
+        xSherlock Holmes
+        Sherlock HolmesX
+        _Sherlock Holmes
+        Sherlock Holmes_
+        éSherlock Holmes!
+        """, to: "ascii-boundary.txt")
+
+        let output = try runExecutableData([
+            "-n",
+            #"(?-u:\b)Sherlock Holmes(?-u:\b)"#,
+            root.path("ascii-boundary.txt"),
+        ], fixture: {})
+        #expect(String(decoding: output, as: UTF8.self) == """
+        1:Sherlock Holmes
+        6:éSherlock Holmes!
+
+        """)
+
+        let prefixedOutput = try runExecutableData([
+            "-H",
+            "-n",
+            #"(?-u:\b)Sherlock Holmes(?-u:\b)"#,
+            root.path("ascii-boundary.txt"),
+        ], fixture: {})
+        #expect(String(decoding: prefixedOutput, as: UTF8.self) == """
+        \(root.path("ascii-boundary.txt")):1:Sherlock Holmes
+        \(root.path("ascii-boundary.txt")):6:éSherlock Holmes!
+
+        """)
+    }
+
     @Test("streams simple Darwin byte literal lines")
     func streamsSimpleDarwinByteLiteralLines() throws {
         #if canImport(Darwin)

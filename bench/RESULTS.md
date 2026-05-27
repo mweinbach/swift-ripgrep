@@ -843,6 +843,19 @@ matched sibling Rust `rg`; a seven-run previous/current/Rust A/B measured the
 Unicode form at 698.3 ms versus 2.788 s before and 2.615 s for Rust. The ASCII
 form stayed in the retained fast band at 435.0 ms versus 2.408 s for Rust.
 
+ASCII boundary literal regexes of the form `(?-u:\b)LITERAL(?-u:\b)` now take
+a Swift direct line writer instead of reaching the generic regex fallback. The
+path parses the literal, scans mapped bytes directly, checks the two ASCII word
+boundary bytes, and counts line numbers during the same next-literal scan used
+to find the match. Output for `-n '(?-u:\b)Sherlock Holmes(?-u:\b)'` on the
+1.5 GiB subtitles corpus matched sibling Rust `rg` exactly (830 lines), and
+the focused byte-boundary fixture covers leading/trailing ASCII word bytes,
+underscores, and a non-ASCII prefix byte. The upstream
+`subtitles_en_literal_word` harness measured the ASCII regex case at
+243.76 ms median versus Rust at 197.01 ms; the neighboring Unicode `-nw
+'Sherlock Holmes'` case stayed on the existing path at 282.78 ms versus Rust
+at 200.11 ms.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Raising the no-mmap stream read size to 4 MiB preserved output but regressed
