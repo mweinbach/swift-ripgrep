@@ -711,12 +711,30 @@ name alternation matched sibling Rust `rg`; five-run checks measured plain
 214.0 ms versus 162.5 ms for Rust, with empty output and exit status still
 matching.
 
+Plain `--no-mmap` single-literal streaming now has a Swift-only complete-line
+chunk path for the common case-sensitive, non-line-numbered form. It processes
+complete lines directly from each `FileHandle` chunk and keeps only the
+trailing partial line as carry, leaving line-numbered and ignore-case searches
+on the existing general streaming path. Output for `--no-mmap 'Sherlock
+Holmes'` on the 1.5 GiB subtitles corpus matched sibling Rust `rg`; a clean
+seven-run check measured 282.2 ms versus a same-turn general-path check at
+287.3 ms and 162.3 ms for Rust. A chunk-boundary regression covers a literal
+split across the retained 2 MiB read edge, and the unterminated-final-line
+case remains covered.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Raising the no-mmap stream read size to 4 MiB preserved output but regressed
   both representative checks: plain output measured 293.0 ms versus 288.3 ms
   before in that run, and `-n` measured 355.3 ms versus 352.9 ms before. The
   2 MiB chunk size is the retained middle point.
+- Raising the complete-line plain no-mmap path to 4 MiB chunks also regressed
+  the representative subtitles check, measuring 327.9 ms versus the retained
+  2 MiB result's 282.2 ms and 162.1 ms for Rust.
+- Routing unlimited `Sherlock|Watson` through the bounded mmap/stdout writer's
+  first-byte candidate scan preserved focused output but regressed the 1.5 GiB
+  subtitles check to 377.5 ms versus the fallback path's same-turn 308.4 ms
+  and 276.3 ms for Rust, so unlimited output stays on the existing path.
 - Delaying no-mmap stream compaction until a full 8 MiB consumed prefix,
   without the half-buffer trigger, preserved the same output shape but regressed
   plain `--no-mmap 'Sherlock Holmes'` to 301.7 ms and raised peak memory versus

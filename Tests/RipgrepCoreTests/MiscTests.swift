@@ -897,6 +897,21 @@ struct MiscTests {
         ], fixture: {})
         #expect(noMmapOutput == output)
 
+        var noMmapBoundary = Data(
+            repeating: UInt8(ascii: "q"),
+            count: 2 * 1024 * 1024 - 4
+        )
+        noMmapBoundary.append(UInt8(ascii: "\n"))
+        noMmapBoundary.append(contentsOf: "nee".utf8)
+        noMmapBoundary.append(contentsOf: "dle across boundary\nquiet\n".utf8)
+        try root.write(noMmapBoundary, to: "no-mmap-boundary.txt")
+        let noMmapBoundaryOutput = try runExecutableData([
+            "--no-mmap",
+            "needle",
+            root.path("no-mmap-boundary.txt"),
+        ], fixture: {})
+        #expect(noMmapBoundaryOutput == Data("needle across boundary\n".utf8))
+
         let noMmapLineNumberIgnoreCaseOutput = try runExecutableData([
             "--no-mmap",
             "-n",
@@ -914,6 +929,13 @@ struct MiscTests {
             root.path("unterminated.txt"),
         ], fixture: {})
         #expect(noMmapUnterminatedLineOutput == Data("2:needle at end\n".utf8))
+
+        let noMmapUnterminatedOutput = try runExecutableData([
+            "--no-mmap",
+            "needle",
+            root.path("unterminated.txt"),
+        ], fixture: {})
+        #expect(noMmapUnterminatedOutput == Data("needle at end\n".utf8))
         #endif
     }
 
