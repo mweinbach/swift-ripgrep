@@ -2381,6 +2381,17 @@ struct FeatureTests {
             "X",
             "X",
         ])
+        #expect(try run(["-m1", "--replace", "X", "foo", root.path("line-replace.txt")]) == [
+            "X bar X",
+        ])
+        #expect(try run(["-m1", "-o", "--replace", "X", "foo", root.path("line-replace.txt")]) == [
+            "X",
+            "X",
+        ])
+        #expect(try run(["-m1", "-n", "-o", "--column", "--byte-offset", "--replace", "X", "foo", root.path("line-replace.txt")]) == [
+            "1:1:0:X",
+            "1:7:6:X",
+        ])
         #expect(try run(["-o", "--replace", "[$1]", #"([a-z]+)\d+"#, root.path("replace.txt")]) == [
             "[abc]",
             "[def]",

@@ -767,7 +767,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
             && options.printMode == .matchingLines
             && !onlyMatching
             && !options.vimgrep
-            && options.maxCount == nil
             && fastPath.literals.count == 1
             && fastPathByteSet == nil
             && !fastPath.wordASCII
@@ -777,7 +776,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
             && options.printMode == .matchingLines
             && onlyMatching
             && !options.vimgrep
-            && options.maxCount == nil
             && fastPath.literals.count == 1
             && fastPathByteSet == nil
             && !fastPath.wordASCII
@@ -1078,7 +1076,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         )
                     }
                 }
-                while searchOffset < data.count {
+                while searchOffset < data.count, matchedLineCount < maxCount {
                     let foundPointer = findReplacementLiteral(
                         from: searchOffset,
                         count: data.count - searchOffset
@@ -3515,7 +3513,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !options.crlf,
               !options.invertMatch,
               !options.stopOnNonmatch,
-              (!options.onlyMatching || (options.printMode == .matchingLines && options.maxCount == nil)),
+              (!options.onlyMatching
+                || (options.printMode == .matchingLines
+                    && (options.maxCount == nil || options.replacement != nil))),
               (options.printMode != .countMatches || options.maxCount == nil),
               options.replacement == nil || options.printMode == .matchingLines,
               !options.json,

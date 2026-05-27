@@ -268,6 +268,19 @@ before and 26.5 ms for Rust; `-n -o --column --byte-offset -r Holmes
 'Sherlock Holmes'` at 81.3 ms versus 10.781 s before and 30.2 ms for Rust;
 and `-o -i -r Holmes sherlock` at 61.4 ms versus 24.388 s before.
 
+Bounded literal replacement output now also stays on the direct Swift writer
+for whole-line and only-matching forms. It preserves ripgrep's one-line
+max-count semantics by stopping after the requested number of matching lines
+while still replacing every match on emitted lines. Output for bounded plain,
+only-matching, prefixed only-matching, and ignore-case replacement forms on the
+193 MiB subtitles corpus matched both the previous Swift checkpoint and the
+sibling Rust oracle. Five-run A/B checks measured `-m1 -r Holmes
+'Sherlock Holmes'` at 46.2 ms versus 10.738 s before and 11.6 ms for Rust;
+`-m128 -r Holmes 'Sherlock Holmes'` at 68.6 ms versus 10.760 s before;
+`-m1 -o -r Holmes 'Sherlock Holmes'` at 53.8 ms versus 10.694 s before and
+11.2 ms for Rust; and `-m1 -n -o --column --byte-offset -r Holmes
+'Sherlock Holmes'` at 65.0 ms versus 10.937 s before and 13.3 ms for Rust.
+
 Safe multi-literal only-match and vimgrep output now merge each literal's next
 match stream instead of re-scanning every literal from the current global
 offset. Interleaved same-line fixtures and representative subtitles cases
