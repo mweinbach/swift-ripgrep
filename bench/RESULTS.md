@@ -789,6 +789,16 @@ previous/current/Rust A/B measured `-n` at 404.3 ms versus 620.4 ms before and
 311.8 ms for Rust. The neighboring plain form stayed in its retained parallel
 literal band at 329.7 ms versus 278.9 ms for Rust.
 
+ASCII no-literal `\w{5}\s+...` matching-line scans now split large mapped
+haystacks on line boundaries and scan chunks in parallel, then reconstruct line
+numbers from sorted match offsets. The path is restricted to `(?-u)` ASCII
+semantics so Unicode fallback behavior remains on the existing serial scanner.
+Output for `-n '(?-u)\w{5}\s+\w{5}\s+\w{5}\s+\w{5}\s+\w{5}\s+\w{5}\s+\w{5}'`
+on the 1.5 GiB subtitles corpus matched sibling Rust `rg`; a seven-run
+previous/current/Rust A/B measured 429.8 ms versus 2.512 s before and 2.406 s
+for Rust. The neighboring Unicode form stayed on the existing path at 2.838 s
+versus 2.514 s for Rust.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Raising the no-mmap stream read size to 4 MiB preserved output but regressed

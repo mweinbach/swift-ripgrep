@@ -5665,6 +5665,224 @@ public struct RipgrepSearcher: @unchecked Sendable {
             var canContinueSequenceAfterWhitespace = false
             var sawNonASCIIInLine = false
 
+            let asciiWord: @Sendable (UInt8) -> Bool = { byte in
+                (byte >= UInt8(ascii: "a") && byte <= UInt8(ascii: "z"))
+                    || (byte >= UInt8(ascii: "A") && byte <= UInt8(ascii: "Z"))
+                    || (byte >= UInt8(ascii: "0") && byte <= UInt8(ascii: "9"))
+                    || byte == UInt8(ascii: "_")
+            }
+
+            let asciiWhitespace: @Sendable (UInt8) -> Bool = { byte in
+                byte == UInt8(ascii: " ") || (byte >= 0x09 && byte <= 0x0D)
+            }
+
+            func sortedUniqueLineBounds(
+                _ bounds: [DarwinMatchedLineBound]
+            ) -> [DarwinMatchedLineBound] {
+                var collectedBounds = bounds
+                collectedBounds.sort { $0.start < $1.start }
+                var uniqueBounds: [DarwinMatchedLineBound] = []
+                uniqueBounds.reserveCapacity(collectedBounds.count)
+                for bound in collectedBounds where uniqueBounds.last?.start != bound.start {
+                    uniqueBounds.append(bound)
+                }
+                return uniqueBounds
+            }
+
+            func collectParallelASCIISequenceLineBounds() -> [DarwinMatchedLineBound]? {
+                guard fastPath.asciiOnly,
+                      maxCount == Int.max,
+                      dataCount >= 64 * 1024 * 1024,
+                      ProcessInfo.processInfo.activeProcessorCount > 1 else {
+                    return nil
+                }
+
+                let workerCount = min(max(2, ProcessInfo.processInfo.activeProcessorCount), 16)
+                let targetChunkSize = max(8 * 1024 * 1024, dataCount / workerCount)
+                var chunkStarts = [0]
+                var targetOffset = targetChunkSize
+                while targetOffset < dataCount {
+                    let newlinePointer = memchr(
+                        baseAddress.advanced(by: targetOffset),
+                        Int32(UInt8(ascii: "\n")),
+                        dataCount - targetOffset
+                    )
+                    guard let newlinePointer else {
+                        break
+                    }
+                    let chunkStart = baseAddress.distance(
+                        to: newlinePointer.assumingMemoryBound(to: UInt8.self)
+                    ) + 1
+                    guard chunkStart < dataCount else {
+                        break
+                    }
+                    if chunkStarts.last != chunkStart {
+                        chunkStarts.append(chunkStart)
+                    }
+                    targetOffset = chunkStart + targetChunkSize
+                }
+                guard chunkStarts.count > 1 else {
+                    return nil
+                }
+
+                let chunkRanges = chunkStarts.enumerated().map { index, start in
+                    (start: start, end: index + 1 < chunkStarts.count ? chunkStarts[index + 1] : dataCount)
+                }
+                let store = DarwinMatchedLineBoundStore(count: chunkRanges.count)
+                let baseAddressValue = UInt(bitPattern: baseAddress)
+                let newlineByte = UInt8(ascii: "\n")
+                DispatchQueue.concurrentPerform(iterations: chunkRanges.count) { chunkIndex in
+                    let range = chunkRanges[chunkIndex]
+                    let localBaseAddress = UnsafeRawPointer(bitPattern: baseAddressValue)!
+                        .assumingMemoryBound(to: UInt8.self)
+                    var localBounds: [DarwinMatchedLineBound] = []
+                    var lineStart = range.start
+                    var offset = range.start
+                    var qualifyingWordRuns = 0
+                    var canContinueSequenceAfterWhitespace = false
+
+                    while offset < range.end {
+                        if offset == lineStart {
+                            let lineBytesRemaining = range.end - lineStart
+                            let shortLineCheckCount = min(minimumSequenceByteCount, lineBytesRemaining)
+                            let newlinePointer = memchr(
+                                localBaseAddress.advanced(by: lineStart),
+                                Int32(newlineByte),
+                                shortLineCheckCount
+                            )
+                            if let newlinePointer {
+                                lineStart = localBaseAddress.distance(
+                                    to: newlinePointer.assumingMemoryBound(to: UInt8.self)
+                                ) + 1
+                                offset = lineStart
+                                qualifyingWordRuns = 0
+                                canContinueSequenceAfterWhitespace = false
+                                continue
+                            }
+                            if lineBytesRemaining < minimumSequenceByteCount {
+                                break
+                            }
+                        }
+
+                        let byte = localBaseAddress[offset]
+                        if byte == newlineByte {
+                            lineStart = offset + 1
+                            offset = lineStart
+                            qualifyingWordRuns = 0
+                            canContinueSequenceAfterWhitespace = false
+                            continue
+                        }
+                        if byte >= 0x80 {
+                            qualifyingWordRuns = 0
+                            canContinueSequenceAfterWhitespace = false
+                            offset += 1
+                            continue
+                        }
+                        if asciiWord(byte) {
+                            let runStart = offset
+                            repeat {
+                                offset += 1
+                            } while offset < range.end && asciiWord(localBaseAddress[offset])
+                            let runLength = offset - runStart
+                            let extendsSequence: Bool
+                            if canContinueSequenceAfterWhitespace {
+                                if qualifyingWordRuns == fastPath.groupCount - 1 {
+                                    extendsSequence = runLength >= 5
+                                } else {
+                                    extendsSequence = runLength == 5
+                                }
+                            } else {
+                                extendsSequence = runLength >= 5
+                            }
+                            if extendsSequence {
+                                qualifyingWordRuns = canContinueSequenceAfterWhitespace ? qualifyingWordRuns + 1 : 1
+                                if qualifyingWordRuns == fastPath.groupCount {
+                                    let newlinePointer = memchr(
+                                        localBaseAddress.advanced(by: offset),
+                                        Int32(newlineByte),
+                                        range.end - offset
+                                    )
+                                    let outputEnd: Int
+                                    let hasNewline: Bool
+                                    if let newlinePointer {
+                                        outputEnd = localBaseAddress.distance(
+                                            to: newlinePointer.assumingMemoryBound(to: UInt8.self)
+                                        ) + 1
+                                        hasNewline = true
+                                    } else {
+                                        outputEnd = range.end
+                                        hasNewline = false
+                                    }
+                                    localBounds.append(DarwinMatchedLineBound(
+                                        start: lineStart,
+                                        outputEnd: outputEnd,
+                                        hasNewline: hasNewline,
+                                        firstMatchStart: lineStart
+                                    ))
+                                    lineStart = outputEnd
+                                    offset = outputEnd
+                                    qualifyingWordRuns = 0
+                                    canContinueSequenceAfterWhitespace = false
+                                    continue
+                                }
+                                canContinueSequenceAfterWhitespace = false
+                            } else {
+                                qualifyingWordRuns = runLength >= 5 ? 1 : 0
+                                canContinueSequenceAfterWhitespace = false
+                            }
+                            continue
+                        }
+                        if asciiWhitespace(byte) {
+                            repeat {
+                                offset += 1
+                            } while offset < range.end
+                                && localBaseAddress[offset] != newlineByte
+                                && asciiWhitespace(localBaseAddress[offset])
+                            canContinueSequenceAfterWhitespace = qualifyingWordRuns > 0
+                            continue
+                        }
+                        qualifyingWordRuns = 0
+                        canContinueSequenceAfterWhitespace = false
+                        offset += 1
+                    }
+                    store.store(localBounds, at: chunkIndex)
+                }
+
+                return sortedUniqueLineBounds(store.collect())
+            }
+
+            if let parallelLineBounds = collectParallelASCIISequenceLineBounds() {
+                var lineNumberCursor = 1
+                var lineCountOffset = 0
+                for bound in parallelLineBounds {
+                    lineNumberCursor += Int(rg_memcount_byte(
+                        baseAddress.advanced(by: lineCountOffset),
+                        bound.start - lineCountOffset,
+                        UInt8(ascii: "\n")
+                    ))
+                    lineCountOffset = bound.start
+                    let lineEnd = bound.hasNewline ? bound.outputEnd - 1 : bound.outputEnd
+                    guard let lineText = String(
+                        data: Data(bytes: baseAddress.advanced(by: bound.start), count: lineEnd - bound.start),
+                        encoding: .utf8
+                    ) else {
+                        needsDecodedFallback = true
+                        break
+                    }
+                    matches.append(SearchMatch(
+                        fileURL: fileURL,
+                        lineNumber: lineNumberCursor,
+                        column: nil,
+                        line: lineText,
+                        lineTerminator: bound.hasNewline ? "\n" : "",
+                        absoluteOffset: bound.start,
+                        matchCount: 1,
+                        spans: []
+                    ))
+                }
+                lineStart = dataCount + 1
+            }
+
             func appendMatch(lineEnd: Int, lineTerminator: String, nextLineStart: Int) -> Bool {
                 guard let lineText = String(
                     data: Data(bytes: baseAddress.advanced(by: lineStart), count: lineEnd - lineStart),
@@ -5723,7 +5941,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
             }
 
             // Keep the large-file short-line prefilter out of the normal recursive-file hot loop.
-            if canPrefilterShortLines {
+            if lineStart > dataCount {
+                return
+            } else if canPrefilterShortLines {
                 while offset < dataCount, matches.count < maxCount {
                     if offset == lineStart {
                         let lineBytesRemaining = dataCount - lineStart

@@ -94,6 +94,24 @@ struct MiscTests {
         6:alpha bravo charl delta echoo foxtt golfx
 
         """)
+
+        let largeFillerLineCount = 600_000
+        let largeFiller = String(repeating: "tiny words here\n", count: largeFillerLineCount)
+        try root.write(largeFiller + """
+        alpha bravo charl delta echoo foxtt golfx
+        short words nope here
+        bravo charl delta echoo foxtt golfx hotel
+        """, to: "large-words.txt")
+        let largeSevenGroupASCIIOutput = try runExecutableData([
+            "-n",
+            "(?-u)\(sevenGroupPattern)",
+            root.path("large-words.txt"),
+        ], fixture: {})
+        #expect(String(decoding: largeSevenGroupASCIIOutput, as: UTF8.self) == """
+        \(largeFillerLineCount + 1):alpha bravo charl delta echoo foxtt golfx
+        \(largeFillerLineCount + 3):bravo charl delta echoo foxtt golfx hotel
+
+        """)
     }
 
     @Test("streams simple Darwin byte literal lines")
