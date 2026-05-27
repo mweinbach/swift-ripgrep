@@ -657,6 +657,18 @@ Rust. A seven-run lower-boundary A/B measured `-m16` at 110.1 ms versus
 627.9 ms before. The neighboring unique-first-byte `-m128 'Sherlock|Watson'`
 case stayed in the fast preflight band at 57.5 ms on the same corpus.
 
+The same bounded mmap/stdout preflight now accepts up to 16 literals instead
+of eight. This keeps modest wider alternations on the exact-candidate scanner
+instead of dropping back to the mapped `Data` path. Output for `-m128`,
+`-n -m128`, `-m1024`, and `-n -m1024`
+`Sherlock Holmes|John Watson|Irene Adler|Inspector Lestrade|Professor
+Moriarty|Baker Street|Mycroft Holmes|Mrs Hudson|221B Baker|Moriarty` matched
+sibling Rust `rg` on the 1.5 GiB subtitles corpus. Seven-run checks measured
+the ten-literal `-m128` case at 197.7 ms versus 2.539 s before and 51.3 ms for
+Rust; `-n -m128` measured 197.9 ms versus 2.537 s before and 51.0 ms for Rust.
+The neighboring five-literal `-m128` case remained in the same band at
+133.3 ms.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Raising the no-mmap stream read size to 4 MiB preserved output but regressed

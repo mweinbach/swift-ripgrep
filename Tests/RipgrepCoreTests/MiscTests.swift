@@ -559,6 +559,28 @@ struct MiscTests {
                 == expectedDuplicateFirstByteBoundedLines
         )
 
+        let tenLiteralNames = [
+            "Ada", "Bert", "Cora", "Drew", "Eli",
+            "Faye", "Gus", "Hale", "Iris", "Jules",
+        ]
+        let tenLiteralLines = (1...20).map { index in
+            "\(tenLiteralNames[(index - 1) % tenLiteralNames.count]) \(index)"
+        }.joined(separator: "\n") + "\n"
+        try root.write(tenLiteralLines, to: "ten-literal-many-multi.txt")
+        let tenLiteralBoundedOutput = try runExecutableData([
+            "-n",
+            "-m16",
+            tenLiteralNames.joined(separator: "|"),
+            root.path("ten-literal-many-multi.txt"),
+        ], fixture: {})
+        let expectedTenLiteralBoundedLines = (1...16).map { index in
+            "\(index):\(tenLiteralNames[(index - 1) % tenLiteralNames.count]) \(index)"
+        }.joined(separator: "\n") + "\n"
+        #expect(
+            String(decoding: tenLiteralBoundedOutput, as: UTF8.self)
+                == expectedTenLiteralBoundedLines
+        )
+
         let onlyMatchingOutput = try runExecutableData([
             "-o",
             "b|d",
