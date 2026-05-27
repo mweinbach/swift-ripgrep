@@ -444,6 +444,12 @@ for Rust, `-n -o 'Sherlock|Watson'` at 82.5 ms versus 156.3 ms before and
 43.5 ms for Rust, and `--count-matches -i 'a'` at 66.3 ms versus 198.7 ms
 before and 509.0 ms for Rust.
 
+Line-numbered safe multi-literal only-match output now emits the common
+`line:match\n` form as one Swift raw output chunk when no path, column, or
+byte-offset field is requested. Output for `-n -o 'Sherlock|Watson'` on the
+193 MiB subtitles corpus matched the sibling Rust oracle; a 10-run recheck
+measured 75.7 ms versus the same-turn pre-change 82.4 ms and 43.2 ms for Rust.
+
 Byte-set `--count-matches` now counts sets of three or more bytes in one Swift
 SIMD pass instead of scanning the haystack once per byte. Two-byte sets stay on
 the previous counter after sparse checks came back neutral. Output for two-byte,

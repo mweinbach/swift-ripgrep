@@ -1811,6 +1811,22 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 while let match = popNextIndependentLiteralMatch(from: &candidates) {
                     totalMatchCount += 1
                     matchedLineCount = 1
+                    let matchBytes = UnsafeRawBufferPointer(
+                        start: rawBaseAddress.advanced(by: match.start),
+                        count: match.length
+                    )
+                    if pathPrefixBytes == nil,
+                       wantsLineNumber,
+                       !options.column,
+                       !options.byteOffset {
+                        advanceLineNumber(to: match.start)
+                        writeDarwinLineNumberedOnlyMatchingOutput(
+                            lineNumber: lineNumber,
+                            bytes: matchBytes,
+                            writeBytes: writeBytes
+                        )
+                        continue
+                    }
                     if pathPrefixBytes != nil || wantsLineNumber || options.column || options.byteOffset {
                         advanceLineNumber(to: match.start)
                         var column = 1
@@ -1830,10 +1846,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                             writeBytes: writeBytes
                         )
                     }
-                    writeBytes(UnsafeRawBufferPointer(
-                        start: rawBaseAddress.advanced(by: match.start),
-                        count: match.length
-                    ))
+                    writeBytes(matchBytes)
                     withUnsafeBytes(of: &newline) { buffer in
                         writeBytes(buffer)
                     }
@@ -4036,6 +4049,40 @@ public struct RipgrepSearcher: @unchecked Sendable {
             writeBytes(UnsafeRawBufferPointer(
                 start: buffer.baseAddress?.advanced(by: cursor),
                 count: buffer.count - cursor
+            ))
+        }
+    }
+
+    private func writeDarwinLineNumberedOnlyMatchingOutput(
+        lineNumber: Int,
+        bytes: UnsafeRawBufferPointer,
+        writeBytes: (UnsafeRawBufferPointer) -> Void
+    ) {
+        guard let bytesBaseAddress = bytes.baseAddress else {
+            return
+        }
+        withUnsafeTemporaryAllocation(of: UInt8.self, capacity: 33 + bytes.count) { buffer in
+            var cursor = 31
+            buffer[cursor] = UInt8(ascii: ":")
+            var number = lineNumber
+            repeat {
+                cursor -= 1
+                buffer[cursor] = UInt8(number % 10) + UInt8(ascii: "0")
+                number /= 10
+            } while number > 0
+
+            let prefixStart = cursor
+            let prefixCount = 32 - prefixStart
+            for index in 0..<prefixCount {
+                buffer[index] = buffer[prefixStart + index]
+            }
+            buffer.baseAddress!
+                .advanced(by: prefixCount)
+                .update(from: bytesBaseAddress.assumingMemoryBound(to: UInt8.self), count: bytes.count)
+            buffer[prefixCount + bytes.count] = UInt8(ascii: "\n")
+            writeBytes(UnsafeRawBufferPointer(
+                start: buffer.baseAddress,
+                count: prefixCount + bytes.count + 1
             ))
         }
     }
