@@ -582,6 +582,45 @@ struct MiscTests {
 
         """)
 
+        let largeFillerLineCount = 600_000
+        let largeFiller = String(
+            repeating: "quiet filler line without names\n",
+            count: largeFillerLineCount
+        )
+        try root.write(largeFiller + """
+        Sherlock Holmes and John Watson
+        quiet
+        Professor Moriarty investigates
+        Irene Adler replies
+        Inspector Lestrade reports
+        """, to: "large-five-name-alternation.txt")
+        let fiveNamePattern = "Sherlock Holmes|John Watson|Irene Adler|Inspector Lestrade|Professor Moriarty"
+        let largeFiveNameOutput = try runExecutableData([
+            fiveNamePattern,
+            root.path("large-five-name-alternation.txt"),
+        ], fixture: {})
+        #expect(String(decoding: largeFiveNameOutput, as: UTF8.self) == """
+        Sherlock Holmes and John Watson
+        Professor Moriarty investigates
+        Irene Adler replies
+        Inspector Lestrade reports
+
+        """)
+
+        let largeTokenLineNumberOutput = try runExecutableData([
+            "-n",
+            "Sherlock|Watson|Moriarty",
+            root.path("large-five-name-alternation.txt"),
+        ], fixture: {})
+        #expect(
+            String(decoding: largeTokenLineNumberOutput, as: UTF8.self)
+                == """
+                \(largeFillerLineCount + 1):Sherlock Holmes and John Watson
+                \(largeFillerLineCount + 3):Professor Moriarty investigates
+
+                """
+        )
+
         let tenLiteralNames = [
             "Ada", "Bert", "Cora", "Drew", "Eli",
             "Faye", "Gus", "Hale", "Iris", "Jules",

@@ -36,6 +36,39 @@ private struct SearchWorkItem: Sendable {
     let isRegularFile: Bool?
 }
 
+private struct DarwinMatchedLineBound: Sendable {
+    let start: Int
+    let outputEnd: Int
+    let hasNewline: Bool
+    var firstMatchStart: Int
+}
+
+private final class DarwinMatchedLineBoundStore: @unchecked Sendable {
+    private let lock = NSLock()
+    private var chunks: [[DarwinMatchedLineBound]]
+
+    init(count: Int) {
+        chunks = Array(repeating: [], count: count)
+    }
+
+    func store(_ bounds: [DarwinMatchedLineBound], at index: Int) {
+        lock.lock()
+        chunks[index] = bounds
+        lock.unlock()
+    }
+
+    func collect() -> [DarwinMatchedLineBound] {
+        lock.lock()
+        defer { lock.unlock() }
+        var result: [DarwinMatchedLineBound] = []
+        result.reserveCapacity(chunks.reduce(0) { $0 + $1.count })
+        for chunk in chunks {
+            result.append(contentsOf: chunk)
+        }
+        return result
+    }
+}
+
 private actor ParallelSearchState {
     private let items: [SearchWorkItem]
     private var nextIndex = 0
@@ -856,6 +889,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let literals = fastPath.literals
         let maxCount = options.maxCount ?? Int.max
         let finiteMultiLiteralMaxCountFastPathLimit = 1280
+        let parallelMultiLiteralLineScanMinimumSize = 16 * 1024 * 1024
         var matchedLineCount = 0
         var bytesSearched = data.count
         var needsDecodedFallback = false
@@ -1950,7 +1984,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 }
 
                 var seenLineIndexesByStart: [Int: Int] = [:]
-                var matchedLineBounds: [(start: Int, outputEnd: Int, hasNewline: Bool, firstMatchStart: Int)] = []
+                var matchedLineBounds: [DarwinMatchedLineBound] = []
                 struct SuffixLiteralPlan {
                     let literal: [UInt8]
                     let suffix: [UInt8]
@@ -2029,13 +2063,115 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         hasNewline = false
                     }
                     seenLineIndexesByStart[lineStart] = matchedLineBounds.count
-                    matchedLineBounds.append((
+                    matchedLineBounds.append(DarwinMatchedLineBound(
                         start: lineStart,
                         outputEnd: outputEnd,
                         hasNewline: hasNewline,
                         firstMatchStart: matchStart
                     ))
                     return outputEnd
+                }
+
+                func shouldCollectParallelMultiLiteralLineBounds() -> Bool {
+                    maxCount == Int.max
+                        && data.count >= parallelMultiLiteralLineScanMinimumSize
+                        && literals.count >= 3
+                        && literals.count <= 8
+                        && pathPrefixBytes == nil
+                        && !options.column
+                        && !options.byteOffset
+                        && !options.vimgrep
+                        && ProcessInfo.processInfo.activeProcessorCount > 1
+                }
+
+                func collectParallelMultiLiteralLineBounds() -> [DarwinMatchedLineBound] {
+                    let store = DarwinMatchedLineBoundStore(count: literals.count)
+                    let baseAddressValue = UInt(bitPattern: baseAddress)
+                    let dataCount = data.count
+                    let newlineByte = UInt8(ascii: "\n")
+
+                    DispatchQueue.concurrentPerform(iterations: literals.count) { literalIndex in
+                        let literal = literals[literalIndex]
+                        guard literal.count <= dataCount else {
+                            store.store([], at: literalIndex)
+                            return
+                        }
+
+                        let localBaseAddress = UnsafeRawPointer(bitPattern: baseAddressValue)!
+                            .assumingMemoryBound(to: UInt8.self)
+                        var localBounds: [DarwinMatchedLineBound] = []
+                        literal.withUnsafeBufferPointer { needle in
+                            guard let needleBaseAddress = needle.baseAddress else {
+                                return
+                            }
+                            var searchOffset = 0
+                            while searchOffset < dataCount {
+                                let foundPointer = rg_memmem_simple(
+                                    localBaseAddress.advanced(by: searchOffset),
+                                    dataCount - searchOffset,
+                                    needleBaseAddress,
+                                    needle.count
+                                )
+                                guard let rawFoundPointer = foundPointer else {
+                                    break
+                                }
+
+                                let matchStart = localBaseAddress.distance(to: rawFoundPointer)
+                                var lineStart = matchStart
+                                while lineStart > 0, localBaseAddress[lineStart - 1] != newlineByte {
+                                    lineStart -= 1
+                                }
+
+                                let newlinePointer = memchr(
+                                    localBaseAddress.advanced(by: matchStart),
+                                    Int32(newlineByte),
+                                    dataCount - matchStart
+                                )
+                                let outputEnd: Int
+                                let hasNewline: Bool
+                                if let newlinePointer {
+                                    outputEnd = localBaseAddress.distance(
+                                        to: newlinePointer.assumingMemoryBound(to: UInt8.self)
+                                    ) + 1
+                                    hasNewline = true
+                                } else {
+                                    outputEnd = dataCount
+                                    hasNewline = false
+                                }
+
+                                localBounds.append(DarwinMatchedLineBound(
+                                    start: lineStart,
+                                    outputEnd: outputEnd,
+                                    hasNewline: hasNewline,
+                                    firstMatchStart: matchStart
+                                ))
+                                searchOffset = outputEnd
+                            }
+                        }
+                        store.store(localBounds, at: literalIndex)
+                    }
+
+                    var collectedBounds = store.collect()
+                    collectedBounds.sort {
+                        if $0.start != $1.start {
+                            return $0.start < $1.start
+                        }
+                        return $0.firstMatchStart < $1.firstMatchStart
+                    }
+
+                    var uniqueBounds: [DarwinMatchedLineBound] = []
+                    uniqueBounds.reserveCapacity(collectedBounds.count)
+                    for bound in collectedBounds {
+                        if var last = uniqueBounds.last, last.start == bound.start {
+                            if bound.firstMatchStart < last.firstMatchStart {
+                                last.firstMatchStart = bound.firstMatchStart
+                                uniqueBounds[uniqueBounds.count - 1] = last
+                            }
+                        } else {
+                            uniqueBounds.append(bound)
+                        }
+                    }
+                    return uniqueBounds
                 }
 
                 if let suffixPlans = uniqueLastWordSuffixPlans() {
@@ -2065,6 +2201,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
                             }
                         }
                     }
+                } else if shouldCollectParallelMultiLiteralLineBounds() {
+                    matchedLineBounds = collectParallelMultiLiteralLineBounds()
                 } else {
                     for literal in literals where literal.count <= data.count {
                         var searchOffset = 0

@@ -765,6 +765,20 @@ subtitles corpus matched sibling Rust `rg`; a seven-run check measured
 662.1 ms and 309.9 ms for Rust. The plain form stayed in its existing band at
 580.5 ms versus 278.6 ms for Rust.
 
+Large unbounded 3-8 literal matching-line scans now collect line bounds in
+parallel, then sort and deduplicate by line start before writing. This keeps
+output order deterministic without adding C shims or replacing the literal
+scanner, and leaves two-literal alternations on the previous serial scanner
+after a neutral-to-slower probe. Output for plain and `-n` `Sherlock
+Holmes|John Watson|Irene Adler|Inspector Lestrade|Professor Moriarty` on the
+1.5 GiB subtitles corpus matched sibling Rust `rg`; a seven-run
+previous/current/Rust A/B measured the plain form at 337.9 ms versus
+589.4 ms before and 280.3 ms for Rust. The line-numbered form stayed on the
+unique-suffix path at 630.0 ms versus 623.9 ms before and 311.5 ms for Rust.
+On the 193 MiB corpus, the same plain five-name check measured 83.9 ms versus
+106.4 ms before and 39.7 ms for Rust, while `Sherlock|Watson` stayed neutral
+at 66.7 ms versus 67.0 ms before.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Raising the no-mmap stream read size to 4 MiB preserved output but regressed
