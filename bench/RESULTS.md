@@ -1051,6 +1051,11 @@ Rejected Swift-only probes from the same checkpoint:
   any load-balancing win. A 30-run A/B measured default listing at 185.19 ms
   median versus 127.74 ms before, and hidden listing at 180.23 ms versus
   120.95 ms before. The root-only parallel split stays.
+- Checking allowed files before recursing into child directories in the
+  ignore-aware `--quiet --files` existence walker preserved quiet exit/output,
+  but it did not improve the target. A 50-run A/B measured quiet listing at
+  8.97 ms median versus 8.75 ms before, with Rust at 6.51 ms. The existing
+  readdir-order walker stays.
 - A count-only multi-literal path that skipped line-bound storage and sorting
   preserved output, but measured neutral to slightly slower on
   `-c 'Sherlock|Watson'` over the 1.5 GiB subtitles corpus: 327.0 ms versus
