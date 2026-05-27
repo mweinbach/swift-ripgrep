@@ -340,6 +340,19 @@ checkpoint and the sibling Rust oracle. Five-run A/B checks measured `-r X
 `-o -r X 'Sherlock|Watson'` at 74.9 ms versus 16.287 s before and 41.3 ms for
 Rust; and `-m1 -r X 'Sherlock|Watson'` at 47.9 ms versus 16.033 s before.
 
+That replacement writer now also handles explicit `--with-filename` prefixes
+for literal-only single-file searches. It writes the display path before the
+same line/column/byte replacement fields while still leaving non-literal
+replacement expansion on the formatted path. Output for single-literal,
+multi-literal, only-matching, field-prefixed, empty replacement, and bounded
+forms on the 193 MiB subtitles corpus matched both the previous Swift
+checkpoint and the sibling Rust oracle. Five-run A/B checks measured
+`--with-filename -r X 'Sherlock|Watson'` at 70.8 ms versus 15.947 s before and
+40.4 ms for Rust; `--with-filename -o -r X 'Sherlock|Watson'` at 75.5 ms
+versus 16.041 s before and 39.5 ms for Rust; and `--with-filename -n --column
+--byte-offset -r X 'Sherlock|Watson'` at 106.2 ms versus 17.234 s before and
+44.7 ms for Rust.
+
 Safe multi-literal only-match and vimgrep output now merge each literal's next
 match stream instead of re-scanning every literal from the current global
 offset. Interleaved same-line fixtures and representative subtitles cases

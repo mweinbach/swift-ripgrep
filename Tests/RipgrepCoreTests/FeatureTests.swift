@@ -2407,6 +2407,20 @@ struct FeatureTests {
             "2:1:16:",
             "2:2:17:",
         ])
+        #expect(try run(["--with-filename", "--replace", "X", "Sherlock|Watson", root.path("multi-literal-replace.txt")]) == [
+            "\(root.path("multi-literal-replace.txt")):X X",
+            "\(root.path("multi-literal-replace.txt")):X X",
+        ])
+        #expect(try run(["--with-filename", "-n", "--column", "--byte-offset", "--replace", "XX", "Sherlock|Watson", root.path("multi-literal-replace.txt")]) == [
+            "\(root.path("multi-literal-replace.txt")):1:1:0:XX XX",
+            "\(root.path("multi-literal-replace.txt")):2:1:16:XX XX",
+        ])
+        #expect(try run(["--with-filename", "-n", "-o", "--column", "--byte-offset", "--replace", "", "Sherlock|Watson", root.path("multi-literal-replace.txt")]) == [
+            "\(root.path("multi-literal-replace.txt")):1:1:0:",
+            "\(root.path("multi-literal-replace.txt")):1:2:1:",
+            "\(root.path("multi-literal-replace.txt")):2:1:16:",
+            "\(root.path("multi-literal-replace.txt")):2:2:17:",
+        ])
         #expect(try run(["-o", "--replace", "[$1]", #"([a-z]+)\d+"#, root.path("replace.txt")]) == [
             "[abc]",
             "[def]",
