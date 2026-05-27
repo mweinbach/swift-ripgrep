@@ -1096,6 +1096,17 @@ Rejected Swift-only probes from the same checkpoint:
   136.7 ms median versus 131.5 ms / 128.6 ms before; `--hidden --files`
   improved to 137.0 ms mean / 131.6 ms median versus 141.5 ms / 139.2 ms
   before. The simpler unconditional Foundation trim stays.
+- Lowering the Darwin fast ignore-rule index threshold from 8 rules to 4 rules
+  preserved exact Swift output and sorted Rust parity, but did not produce a
+  reliable win. An 80-run A/B measured default `--files` at 116.4 ms mean /
+  116.3 ms median versus 116.8 ms / 115.1 ms before; `--hidden --files`
+  measured 118.2 ms mean / 115.6 ms median versus 115.5 ms / 115.5 ms before.
+  The 8-rule threshold stays.
+- Guarding basename prefix/suffix first-byte and last-byte lookups when their
+  fast-index buckets were empty preserved exact Swift output, but regressed the
+  hot controls. A 100-run A/B measured default `--files` at 140.1 ms mean
+  versus 128.8 ms before, and `--hidden --files` at 137.9 ms mean versus
+  128.9 ms before. The unconditional byte reads stay.
 - Replacing indexed ignore prefix/suffix `String.hasPrefix`/`hasSuffix` checks
   with ASCII-only UTF-8 byte comparisons, plus a rule-index prefilter for
   candidates that could not beat the current match, preserved sorted Rust
