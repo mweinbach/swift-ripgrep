@@ -34,6 +34,8 @@ struct MiscTests {
         perché il contesto delle righe verrà cambiato.
         alpha bravo charl delta echoo foxtt golfx
         aaaaa bbbbb ccccc ddddd ééééé fffff ggggg
+        alpha bravo charlie delta echoo
+        Oh, what a handful these girls become without their mother!
         """, to: "words.txt")
         let pattern = #"\w{5}\s+\w{5}\s+\w{5}\s+\w{5}\s+\w{5}"#
         let sevenGroupPattern = #"\w{5}\s+\w{5}\s+\w{5}\s+\w{5}\s+\w{5}\s+\w{5}\s+\w{5}"#

@@ -5330,31 +5330,38 @@ public struct RipgrepSearcher: @unchecked Sendable {
             guard let baseAddress = bytes.baseAddress else {
                 return
             }
-            while lineStart <= dataCount, matches.count < maxCount {
-                let remaining = dataCount - lineStart
-                let newlinePointer = remaining > 0
-                    ? memchr(baseAddress.advanced(by: lineStart), Int32(UInt8(ascii: "\n")), remaining)
-                    : nil
-                let lineEnd: Int
-                let nextLineStart: Int
-                let lineTerminator: String
-                if let newlinePointer {
-                    lineEnd = baseAddress.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self))
-                    nextLineStart = lineEnd + 1
-                    lineTerminator = "\n"
-                } else {
-                    lineEnd = dataCount
-                    nextLineStart = dataCount + 1
-                    lineTerminator = ""
-                }
+            var offset = 0
+            var qualifyingWordRuns = 0
+            var canContinueSequenceAfterWhitespace = false
+            var sawNonASCIIInLine = false
 
-                let lineBytes = UnsafeBufferPointer(
-                    start: baseAddress.advanced(by: lineStart),
-                    count: lineEnd - lineStart
-                )
-                let scan = wordWhitespaceSequenceLineMatch(lineBytes, groupCount: fastPath.groupCount)
-                var hasMatch = scan.hasMatch
-                if !hasMatch, scan.sawNonASCII, !fastPath.asciiOnly {
+            func appendMatch(lineEnd: Int, lineTerminator: String, nextLineStart: Int) -> Bool {
+                guard let lineText = String(
+                    data: Data(bytes: baseAddress.advanced(by: lineStart), count: lineEnd - lineStart),
+                    encoding: .utf8
+                ) else {
+                    needsDecodedFallback = true
+                    return false
+                }
+                matches.append(SearchMatch(
+                    fileURL: fileURL,
+                    lineNumber: lineNumber,
+                    column: nil,
+                    line: lineText,
+                    lineTerminator: lineTerminator,
+                    absoluteOffset: lineStart,
+                    matchCount: 1,
+                    spans: []
+                ))
+                if matches.count == maxCount {
+                    bytesSearched = nextLineStart <= dataCount ? nextLineStart : dataCount
+                    return false
+                }
+                return true
+            }
+
+            func finishUnmatchedLine(lineEnd: Int, lineTerminator: String, nextLineStart: Int) -> Bool {
+                if sawNonASCIIInLine, !fastPath.asciiOnly {
                     let lineWithTerminatorCount = nextLineStart <= dataCount
                         ? nextLineStart - lineStart
                         : lineEnd - lineStart
@@ -5363,40 +5370,128 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         encoding: .utf8
                     ) else {
                         needsDecodedFallback = true
-                        return
+                        return false
                     }
-                    hasMatch = !matcher.canFastReject(lineTextWithTerminator)
+                    if !matcher.canFastReject(lineTextWithTerminator)
                         && matcher.hasPositiveMatch(in: lineTextWithTerminator)
-                }
-                if hasMatch {
-                    guard let lineText = String(
-                        data: Data(bytes: baseAddress.advanced(by: lineStart), count: lineEnd - lineStart),
-                        encoding: .utf8
-                    ) else {
-                        needsDecodedFallback = true
-                        return
+                        && !appendMatch(
+                            lineEnd: lineEnd,
+                            lineTerminator: lineTerminator,
+                            nextLineStart: nextLineStart
+                        ) {
+                        return false
                     }
-                    matches.append(SearchMatch(
-                        fileURL: fileURL,
-                        lineNumber: lineNumber,
-                        column: nil,
-                        line: lineText,
-                        lineTerminator: lineTerminator,
-                        absoluteOffset: lineStart,
-                        matchCount: 1,
-                        spans: []
-                    ))
-                    if matches.count == maxCount {
-                        bytesSearched = nextLineStart <= dataCount ? nextLineStart : dataCount
-                        break
-                    }
-                }
-
-                guard nextLineStart <= dataCount else {
-                    break
                 }
                 lineStart = nextLineStart
                 lineNumber += 1
+                qualifyingWordRuns = 0
+                canContinueSequenceAfterWhitespace = false
+                sawNonASCIIInLine = false
+                return true
+            }
+
+            while offset < dataCount, matches.count < maxCount {
+                let byte = baseAddress[offset]
+                if byte == UInt8(ascii: "\n") {
+                    guard finishUnmatchedLine(
+                        lineEnd: offset,
+                        lineTerminator: "\n",
+                        nextLineStart: offset + 1
+                    ) else {
+                        break
+                    }
+                    offset = lineStart
+                    continue
+                }
+                if byte >= 0x80 {
+                    sawNonASCIIInLine = true
+                    qualifyingWordRuns = 0
+                    canContinueSequenceAfterWhitespace = false
+                    offset += 1
+                    continue
+                }
+                if isASCIIRegexWordByte(byte) {
+                    let runStart = offset
+                    repeat {
+                        offset += 1
+                    } while offset < dataCount && isASCIIRegexWordByte(baseAddress[offset])
+                    let runLength = offset - runStart
+                    let extendsSequence: Bool
+                    if canContinueSequenceAfterWhitespace {
+                        if qualifyingWordRuns == fastPath.groupCount - 1 {
+                            extendsSequence = runLength >= 5
+                        } else {
+                            extendsSequence = runLength == 5
+                        }
+                    } else {
+                        extendsSequence = runLength >= 5
+                    }
+                    if extendsSequence {
+                        qualifyingWordRuns = canContinueSequenceAfterWhitespace ? qualifyingWordRuns + 1 : 1
+                        if qualifyingWordRuns == fastPath.groupCount {
+                            let newlinePointer = memchr(
+                                baseAddress.advanced(by: offset),
+                                Int32(UInt8(ascii: "\n")),
+                                dataCount - offset
+                            )
+                            let lineEnd: Int
+                            let nextLineStart: Int
+                            let lineTerminator: String
+                            if let newlinePointer {
+                                lineEnd = baseAddress.distance(
+                                    to: newlinePointer.assumingMemoryBound(to: UInt8.self)
+                                )
+                                nextLineStart = lineEnd + 1
+                                lineTerminator = "\n"
+                            } else {
+                                lineEnd = dataCount
+                                nextLineStart = dataCount + 1
+                                lineTerminator = ""
+                            }
+                            guard appendMatch(
+                                lineEnd: lineEnd,
+                                lineTerminator: lineTerminator,
+                                nextLineStart: nextLineStart
+                            ) else {
+                                break
+                            }
+                            lineStart = nextLineStart
+                            lineNumber += 1
+                            offset = nextLineStart
+                            qualifyingWordRuns = 0
+                            canContinueSequenceAfterWhitespace = false
+                            sawNonASCIIInLine = false
+                            continue
+                        }
+                        canContinueSequenceAfterWhitespace = false
+                    } else {
+                        qualifyingWordRuns = runLength >= 5 ? 1 : 0
+                        canContinueSequenceAfterWhitespace = false
+                    }
+                    continue
+                }
+                if isASCIIRegexWhitespaceByte(byte) {
+                    repeat {
+                        offset += 1
+                    } while offset < dataCount
+                        && baseAddress[offset] != UInt8(ascii: "\n")
+                        && isASCIIRegexWhitespaceByte(baseAddress[offset])
+                    canContinueSequenceAfterWhitespace = qualifyingWordRuns > 0
+                    continue
+                }
+                qualifyingWordRuns = 0
+                canContinueSequenceAfterWhitespace = false
+                offset += 1
+            }
+
+            if matches.count < maxCount,
+               !needsDecodedFallback,
+               lineStart < dataCount {
+                _ = finishUnmatchedLine(
+                    lineEnd: dataCount,
+                    lineTerminator: "",
+                    nextLineStart: dataCount + 1
+                )
             }
         }
 
@@ -6352,16 +6447,27 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 repeat {
                     offset += 1
                 } while offset < count && isASCIIRegexWordByte(baseAddress[offset])
-                if offset - runStart >= 5 {
+                let runLength = offset - runStart
+                let extendsSequence: Bool
+                if canContinueSequenceAfterWhitespace {
+                    if qualifyingWordRuns == groupCount - 1 {
+                        extendsSequence = runLength >= 5
+                    } else {
+                        extendsSequence = runLength == 5
+                    }
+                } else {
+                    extendsSequence = runLength >= 5
+                }
+                if extendsSequence {
                     qualifyingWordRuns = canContinueSequenceAfterWhitespace
                         ? qualifyingWordRuns + 1
                         : 1
-                    if qualifyingWordRuns >= groupCount {
+                    if qualifyingWordRuns == groupCount {
                         return (true, sawNonASCII)
                     }
                     canContinueSequenceAfterWhitespace = false
                 } else {
-                    qualifyingWordRuns = 0
+                    qualifyingWordRuns = runLength >= 5 ? 1 : 0
                     canContinueSequenceAfterWhitespace = false
                 }
                 continue

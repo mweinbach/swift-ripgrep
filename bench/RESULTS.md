@@ -546,12 +546,19 @@ the Linux five-group corpus matched the sibling Rust oracle for both default
 Unicode (721 lines) and `(?-u)` ASCII (720 lines), including the Unicode-only
 Italian documentation line. A five-run check measured default Unicode at
 3.518 s versus 87.562 s before and 3.381 s for Rust; the ASCII form measured
-3.413 s versus 3.328 s for Rust. The same scanner also covers the seven-group
-subtitles no-literal bench shape; after switching the matcher from per-start
-probing to a linear word-run scan, a three-run check on the 1.5 GiB subtitles
-corpus measured the seven-group no-match form at 4.997 s versus the previous
-path still running past 3 minutes before it was interrupted, and 2.552 s for
-Rust.
+3.413 s versus 3.328 s for Rust.
+
+The same scanner also covers the seven-group subtitles no-literal bench shape.
+The latest version enforces regex-compatible run lengths: only the first and
+last `\w{5}` groups can be satisfied by longer word runs, while middle groups
+must be exactly five word bytes because they are immediately followed by `\s+`.
+That fixes false positives such as `handful these girls become without their
+mother`. Output on the 1.5 GiB subtitles corpus now matches the sibling Rust
+oracle for both Unicode and `(?-u)` ASCII forms (22 lines each). The scanner now
+walks the mapped bytes once and only looks for a line ending after a line has
+matched. Three-run checks measured the Unicode form at 4.297 s versus 4.814 s
+before and 2.519 s for Rust, and the ASCII form at 3.827 s versus 4.345 s
+before and 2.410 s for Rust.
 
 Line-numbered single-literal output now counts newline bytes inside the same
 Swift SIMD first/tail literal scan used to find the next match, avoiding the
