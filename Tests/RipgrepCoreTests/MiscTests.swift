@@ -559,6 +559,29 @@ struct MiscTests {
                 == expectedDuplicateFirstByteBoundedLines
         )
 
+        try root.write("""
+        quiet
+        Sherlock Holmes
+        Mycroft Holmes
+        John Watson
+        Irene Adler
+        Inspector Lestrade
+        Professor Moriarty
+        """, to: "five-name-alternation.txt")
+        let fiveNameLineNumberOutput = try runExecutableData([
+            "-n",
+            "Sherlock Holmes|John Watson|Irene Adler|Inspector Lestrade|Professor Moriarty",
+            root.path("five-name-alternation.txt"),
+        ], fixture: {})
+        #expect(String(decoding: fiveNameLineNumberOutput, as: UTF8.self) == """
+        2:Sherlock Holmes
+        4:John Watson
+        5:Irene Adler
+        6:Inspector Lestrade
+        7:Professor Moriarty
+
+        """)
+
         let tenLiteralNames = [
             "Ada", "Bert", "Cora", "Drew", "Eli",
             "Faye", "Gus", "Hale", "Iris", "Jules",

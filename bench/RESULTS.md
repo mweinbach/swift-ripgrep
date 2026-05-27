@@ -722,6 +722,17 @@ seven-run check measured 282.2 ms versus a same-turn general-path check at
 split across the retained 2 MiB read edge, and the unterminated-final-line
 case remains covered.
 
+Line-numbered five-name subtitles alternations now use a Swift-only unique
+last-word suffix scan. The path scans suffixes such as `Holmes`, `Watson`, and
+`Moriarty`, verifies the full literal at the computed start offset, and is
+restricted to plain `-n` output so the neighboring plain alternation remains
+on the existing full-literal scanner. Output for `-n 'Sherlock Holmes|John
+Watson|Irene Adler|Inspector Lestrade|Professor Moriarty'` on the 1.5 GiB
+subtitles corpus matched sibling Rust `rg`; a seven-run check measured
+618.7 ms versus the current focused-suite full-literal line-numbered band at
+662.1 ms and 309.9 ms for Rust. The plain form stayed in its existing band at
+580.5 ms versus 278.6 ms for Rust.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Raising the no-mmap stream read size to 4 MiB preserved output but regressed
@@ -760,11 +771,11 @@ Rejected Swift-only probes from the same checkpoint:
   `-n 'Sherlock Holmes|John Watson|Irene Adler|Inspector Lestrade|Professor
   Moriarty'` measured 644.6 ms, and the plain form measured 586.4 ms, versus
   Rust at 311.2 ms and 279.7 ms.
-- Scanning unique last-word suffix candidates for line-numbered two-word
-  multi-literal output preserved output and improved `-n 'Sherlock Holmes|John
-  Watson|Irene Adler|Inspector Lestrade|Professor Moriarty'` from 642.2 ms to
-  625.9 ms in a 10-run guard, but the neighboring plain form drifted from
-  577.1 ms to 583.9 ms, so the broad full-literal scanner remains in place.
+- Broadly routing both plain and line-numbered two-word multi-literal output
+  through unique last-word suffix candidates preserved output, but the plain
+  form drifted from 577.1 ms to 583.9 ms in the original probe. The retained
+  version is therefore limited to line-numbered output, where the suffix scan
+  has a measured win.
 - A one-pass first-byte line scanner for the same five-literal alternation also
   preserved output, but regressed the representative subtitles corpus to
   980.8 ms for `-n` and 917.6 ms for plain output, versus Rust at about

@@ -1951,6 +1951,56 @@ public struct RipgrepSearcher: @unchecked Sendable {
 
                 var seenLineIndexesByStart: [Int: Int] = [:]
                 var matchedLineBounds: [(start: Int, outputEnd: Int, hasNewline: Bool, firstMatchStart: Int)] = []
+                struct SuffixLiteralPlan {
+                    let literal: [UInt8]
+                    let suffix: [UInt8]
+                    let suffixOffset: Int
+                }
+
+                func uniqueLastWordSuffixPlans() -> [SuffixLiteralPlan]? {
+                    guard wantsLineNumber,
+                          pathPrefixBytes == nil,
+                          !options.column,
+                          !options.byteOffset,
+                          maxCount == Int.max,
+                          literals.count >= 3,
+                          literals.count <= 8 else {
+                        return nil
+                    }
+                    var suffixes: [[UInt8]] = []
+                    var plans: [SuffixLiteralPlan] = []
+                    plans.reserveCapacity(literals.count)
+                    for literal in literals {
+                        guard let separator = literal.lastIndex(of: UInt8(ascii: " ")),
+                              separator + 1 < literal.count else {
+                            return nil
+                        }
+                        let suffixStart = separator + 1
+                        let suffix = Array(literal[suffixStart...])
+                        guard suffix.count >= 4,
+                              !suffixes.contains(suffix) else {
+                            return nil
+                        }
+                        suffixes.append(suffix)
+                        plans.append(SuffixLiteralPlan(
+                            literal: literal,
+                            suffix: suffix,
+                            suffixOffset: suffixStart
+                        ))
+                    }
+                    return plans
+                }
+
+                func literal(_ literal: [UInt8], matchesAt offset: Int) -> Bool {
+                    guard offset >= 0, literal.count <= data.count - offset else {
+                        return false
+                    }
+                    for index in literal.indices where baseAddress[offset + index] != literal[index] {
+                        return false
+                    }
+                    return true
+                }
+
                 func recordMatchLine(containing matchStart: Int) -> Int {
                     var lineStart = matchStart
                     while lineStart > 0, baseAddress[lineStart - 1] != UInt8(ascii: "\n") {
@@ -1988,24 +2038,53 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     return outputEnd
                 }
 
-                for literal in literals where literal.count <= data.count {
-                    var searchOffset = 0
-                    literal.withUnsafeBufferPointer { needle in
-                        guard let needleBaseAddress = needle.baseAddress else {
-                            return
-                        }
-                        while searchOffset < data.count {
-                            let foundPointer = rg_memmem_simple(
-                                baseAddress.advanced(by: searchOffset),
-                                data.count - searchOffset,
-                                needleBaseAddress,
-                                needle.count
-                            )
-                            guard let rawFoundPointer = foundPointer else {
-                                break
+                if let suffixPlans = uniqueLastWordSuffixPlans() {
+                    for plan in suffixPlans where plan.suffix.count <= data.count {
+                        var searchOffset = 0
+                        plan.suffix.withUnsafeBufferPointer { suffix in
+                            guard let suffixBaseAddress = suffix.baseAddress else {
+                                return
                             }
-                            let matchStart = baseAddress.distance(to: rawFoundPointer)
-                            searchOffset = recordMatchLine(containing: matchStart)
+                            while searchOffset < data.count {
+                                let foundPointer = rg_memmem_simple(
+                                    baseAddress.advanced(by: searchOffset),
+                                    data.count - searchOffset,
+                                    suffixBaseAddress,
+                                    suffix.count
+                                )
+                                guard let rawFoundPointer = foundPointer else {
+                                    break
+                                }
+                                let suffixMatchStart = baseAddress.distance(to: rawFoundPointer)
+                                let matchStart = suffixMatchStart - plan.suffixOffset
+                                if literal(plan.literal, matchesAt: matchStart) {
+                                    searchOffset = recordMatchLine(containing: matchStart)
+                                } else {
+                                    searchOffset = suffixMatchStart + 1
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    for literal in literals where literal.count <= data.count {
+                        var searchOffset = 0
+                        literal.withUnsafeBufferPointer { needle in
+                            guard let needleBaseAddress = needle.baseAddress else {
+                                return
+                            }
+                            while searchOffset < data.count {
+                                let foundPointer = rg_memmem_simple(
+                                    baseAddress.advanced(by: searchOffset),
+                                    data.count - searchOffset,
+                                    needleBaseAddress,
+                                    needle.count
+                                )
+                                guard let rawFoundPointer = foundPointer else {
+                                    break
+                                }
+                                let matchStart = baseAddress.distance(to: rawFoundPointer)
+                                searchOffset = recordMatchLine(containing: matchStart)
+                            }
                         }
                     }
                 }
