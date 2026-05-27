@@ -610,6 +610,31 @@ Rejected Swift-only probes from the same checkpoint:
   unlimited `Sherlock|Watson` measured 95.4 ms versus 76.1 ms before, and `-m1`
   measured 46.3 ms versus 42.3 ms before. The landed path is therefore limited
   to medium finite `-m` cases where it outperformed the previous scanner.
+- Coalescing no-line-number vimgrep output into one temporary Swift buffer
+  preserved byte-identical output, but copying the full line outweighed the
+  reduced write calls. `--vimgrep -N 'Sherlock|Watson'` regressed to 78.3 ms
+  from the prior 68.0 ms band; the `-N --no-column` variant measured 76.3 ms
+  versus 79.1 ms before, which was too small and noisy to keep.
+- Relaxing unlimited vimgrep matched-line bookkeeping to only track whether any
+  match occurred preserved CLI output and exit status, but did not produce a
+  durable win. A 15-run check measured `--vimgrep -o 'Sherlock|Watson'` at
+  78.1 ms and default `--vimgrep 'Sherlock|Watson'` at 80.9 ms, both within
+  normal run noise for the current direct writer.
+- Replacing the Swift SIMD literal scanner's candidate `min() < 0` mask check
+  with `wrappedSum() != 0` preserved output but regressed scanner-heavy cases:
+  `--vimgrep 'Sherlock|Watson'` measured 83.5 ms and
+  `-i 'sherlock|watson'` measured 93.2 ms, versus the current roughly 80 ms
+  and 78 ms bands.
+- Widening the byte counter from `SIMD16` to `SIMD64` preserved output but was
+  catastrophically slower on Apple Silicon: `--vimgrep 'Sherlock|Watson'`
+  measured 351.2 ms, `-n -o 'Sherlock|Watson'` measured 346.8 ms, and
+  `--count-matches -i a` measured 722.4 ms.
+- Forcing the private Swift SIMD scanner helpers to inline and building with
+  `-cross-module-optimization` were both neutral-to-noisy. The inline
+  case-insensitive scanner measured `-i 'sherlock|watson'` at 78.1 ms and
+  default vimgrep at 86.2 ms; a separate CMO scratch build measured vimgrep at
+  79.7 ms, ignore-case multi-literal at 86.3 ms, and no-match `PM_RESUME` tied
+  with the normal release build. Neither is worth encoding in the package.
 
 ## Status — 2026-05-25 fast-path checkpoint
 
