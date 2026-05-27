@@ -4149,6 +4149,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
         #else
         guard options.printMode == .matchingLines,
               options.mmapMode != .never,
+              options.withFilename != true,
+              !options.vimgrep,
+              options.replacement == nil,
               !options.wantsLineNumber,
               !options.onlyMatching,
               !options.byteOffset,
@@ -4159,6 +4162,21 @@ public struct RipgrepSearcher: @unchecked Sendable {
               singleByteLiteralSet(fastPath.literals) == nil else {
             return nil
         }
+
+        #if !canImport(CRipgrepPlatform)
+        if let maxCount = options.maxCount,
+           maxCount >= 16,
+           let result = SwiftDarwinLiteralPreflight.multiLiteralResult(
+            path: fileURL.path,
+            literals: fastPath.literals,
+            maxCount: maxCount
+        ) {
+            if result.status == -1 {
+                throw RipgrepError.message("failed writing stdout")
+            }
+            return searchResults(fileURL: fileURL, directResult: result)
+        }
+        #endif
 
         var flattened: [UInt8] = []
         flattened.reserveCapacity(fastPath.literals.reduce(0) { $0 + $1.count })
@@ -4195,6 +4213,14 @@ public struct RipgrepSearcher: @unchecked Sendable {
             throw RipgrepError.message("failed writing stdout")
         }
 
+        return searchResults(fileURL: fileURL, directResult: result)
+        #endif
+    }
+
+    private func searchResults(
+        fileURL: URL,
+        directResult result: rg_darwin_literal_file_result
+    ) -> SearchResults {
         let matchedLineCount = Int(result.matched_line_count)
         let reportedMatches = result.total_match_count > 0 ? Int(result.total_match_count) : matchedLineCount
         let fileResult = SearchFileResult(
@@ -4214,7 +4240,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 totalMatches: reportedMatches
             )
         )
-        #endif
     }
 
     private func searchDarwinPlainLiteralNoMatch(

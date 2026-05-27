@@ -377,6 +377,27 @@ struct MiscTests {
 
         #expect(String(decoding: multiByteOutput, as: UTF8.self) == "2:bravo\n4:delta\n")
 
+        let boundedMultiByteOutput = try runExecutableData([
+            "-m1",
+            "bravo|delta",
+            root.path("letters.txt"),
+        ], fixture: {})
+
+        #expect(String(decoding: boundedMultiByteOutput, as: UTF8.self) == "bravo\n")
+        let manyMultiLines = (1...20).map { index in
+            "\(index.isMultiple(of: 2) ? "delta" : "bravo") \(index)"
+        }.joined(separator: "\n") + "\n"
+        try root.write(manyMultiLines, to: "many-multi.txt")
+        let boundedManyMultiByteOutput = try runExecutableData([
+            "-m16",
+            "bravo|delta",
+            root.path("many-multi.txt"),
+        ], fixture: {})
+        let expectedBoundedManyMultiLines = (1...16).map { index in
+            "\(index.isMultiple(of: 2) ? "delta" : "bravo") \(index)"
+        }.joined(separator: "\n") + "\n"
+        #expect(String(decoding: boundedManyMultiByteOutput, as: UTF8.self) == expectedBoundedManyMultiLines)
+
         let onlyMatchingOutput = try runExecutableData([
             "-o",
             "b|d",

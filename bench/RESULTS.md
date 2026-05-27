@@ -376,6 +376,18 @@ at 72.0 ms versus 705.3 ms before and 40.6 ms for Rust; `--with-filename
 39.6 ms for Rust; and `--with-filename --count-matches 'A|B|C|D|E'` at
 75.6 ms versus 1.959 s before and 170.3 ms for Rust.
 
+Finite safe multi-literal plain matching-line output now has a Swift-only
+mmap/stdout preflight for medium bounded `-m` cases. The new path is limited to
+plain non-prefixed, non-vimgrep, non-replacement output with distinct first
+literal bytes, leaving unlimited and tiny bounded forms on the previous writer.
+Output and exit status for unlimited, `-m1`, `-m10`, `-m128`, duplicate
+first-byte, filename-prefixed, vimgrep, replacement, and no-match controls
+matched both the previous Swift checkpoint and the sibling Rust oracle.
+Fifteen-run A/B checks on the 193 MiB subtitles corpus measured `-m128
+'Sherlock|Watson'` at 67.7 ms versus 140.0 ms before and 20.6 ms for Rust.
+The unlimited control stayed neutral at 77.6 ms versus 74.1 ms before and
+38.7 ms for Rust, and `-m1` stayed neutral at 39.9 ms versus 42.0 ms before.
+
 Safe multi-literal only-match and vimgrep output now merge each literal's next
 match stream instead of re-scanning every literal from the current global
 offset. Interleaved same-line fixtures and representative subtitles cases
@@ -541,6 +553,11 @@ Rejected Swift-only probes from the same checkpoint:
   `--vimgrep 'Sherlock|Watson'` at 99.4 ms versus 85.4 ms before; forced
   `memchr-any` inlining measured sparse `-o 'Q|Z'` at 69.5 ms versus 61.7 ms
   before and five-byte `--count-matches` at 72.9 ms versus 68.2 ms before.
+- Extending the Swift-only multi-literal mmap/stdout preflight to unlimited and
+  tiny bounded forms preserved output but regressed the representative controls:
+  unlimited `Sherlock|Watson` measured 95.4 ms versus 76.1 ms before, and `-m1`
+  measured 46.3 ms versus 42.3 ms before. The landed path is therefore limited
+  to medium finite `-m` cases where it outperformed the previous scanner.
 
 ## Status — 2026-05-25 fast-path checkpoint
 
