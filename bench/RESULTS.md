@@ -951,6 +951,12 @@ Rejected Swift-only probes from the same checkpoint:
   measured `subtitles_en_surrounding_words` at 219.13 ms for Unicode and
   219.71 ms for ASCII, versus the retained 217-219 ms band, so the shared
   buffered writer stays.
+- A lazy first-hit probe before allocating the single-literal stdout buffer
+  preserved no-match, plain, and line-numbered output, but did not improve the
+  no-match case it targeted. A direct 15-run A/B measured `PM_RESUME` no-match
+  at 184.54 ms versus 183.39 ms before, plain `Sherlock Holmes` at 187.65 ms
+  versus 186.42 ms before, and `-n` at 216.82 ms versus 219.04 ms before. The
+  mixed result is too noisy to keep.
 - A broader default-Unicode executable surrounding-word preflight preserved
   byte output by buffering matches and falling back on whole non-ASCII
   candidate lines, but that fallback double-scanned the representative corpus.
