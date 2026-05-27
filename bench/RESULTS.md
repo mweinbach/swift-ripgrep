@@ -699,6 +699,17 @@ checks measured 255.9 ms versus 3.310 s before and 194.8 ms for Rust. The
 Rust. A neighboring 40-literal matching pattern without a shared prefix stayed
 in the retained scanner band at 273.0 ms.
 
+Bounded multi-literal preflight now runs a small dry line-scan prefix for wide
+finite `-m` searches and commits it only when the first scanned prefix satisfies
+the full bound. This avoids initializing one whole-file next-match candidate
+per literal when the requested matches are dense near the start, while falling
+back unchanged for sparse searches. Output for `-m128` and `-n -m128` on the
+40-literal subtitles name alternation matched sibling Rust `rg`; five-run
+checks measured plain `-m128` at 43.8 ms versus the prior retained scanner's
+273.0 ms band and 5.2 ms for Rust. The 40-literal common-prefix no-match guard
+stayed in the retained prefix scanner band at 255.0 ms versus 162.4 ms for
+Rust, with empty output and exit status still matching.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Raising the no-mmap stream read size to 4 MiB preserved output but regressed

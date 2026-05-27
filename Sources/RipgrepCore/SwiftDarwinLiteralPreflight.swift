@@ -781,6 +781,57 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
         return true
     }
 
+    func firstLiteralMatch(inLineStart lineStart: Int, lineEnd: Int) -> Int? {
+        let lineLength = lineEnd - lineStart
+        for literal in literals where literal.count <= lineLength {
+            let foundPointer = literal.withUnsafeBufferPointer { literalBuffer in
+                rg_memmem_simple(
+                    base.advanced(by: lineStart),
+                    lineLength,
+                    literalBuffer.baseAddress,
+                    literalBuffer.count
+                )
+            }
+            if let foundPointer {
+                return base.distance(to: foundPointer)
+            }
+        }
+        return nil
+    }
+
+    func boundedPrefixLineMatches() -> [Int]? {
+        guard maxCount <= 1024, literals.count >= 4 else {
+            return nil
+        }
+        var matches: [Int] = []
+        matches.reserveCapacity(maxCount)
+        var lineStart = 0
+        let scanLimit = min(haystackLength, 2 * 1024 * 1024)
+        while lineStart < haystackLength,
+              lineStart < scanLimit,
+              matches.count < maxCount {
+            let newline = memchr(
+                base.advanced(by: lineStart),
+                Int32(UInt8(ascii: "\n")),
+                haystackLength - lineStart
+            )
+            let lineEnd: Int
+            let outputEnd: Int
+            if let newline {
+                lineEnd = base.distance(to: newline.assumingMemoryBound(to: UInt8.self))
+                outputEnd = lineEnd + 1
+            } else {
+                lineEnd = haystackLength
+                outputEnd = haystackLength
+            }
+            if let matchStart = firstLiteralMatch(inLineStart: lineStart, lineEnd: lineEnd) {
+                matches.append(matchStart)
+            }
+            lineStart = outputEnd
+        }
+        return matches.count == maxCount ? matches : nil
+    }
+
     func nextCandidate(literalIndex: Int, from offset: Int) -> (start: Int, literalIndex: Int) {
         let safeOffset = min(offset, haystackLength)
         let literal = literals[literalIndex]
@@ -812,7 +863,14 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
     }
 
     let prefixLength = commonPrefixLength()
-    if prefixLength >= 4 {
+    if let prefixMatches = boundedPrefixLineMatches() {
+        for matchStart in prefixMatches {
+            guard emitLine(containing: matchStart) else {
+                writeFailed = true
+                break
+            }
+        }
+    } else if prefixLength >= 4 {
         var searchOffset = 0
         while matchedLineCount < maxCount, searchOffset < haystackLength {
             let foundPointer = literals[0].withUnsafeBufferPointer { literalBuffer in
