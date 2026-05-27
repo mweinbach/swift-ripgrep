@@ -1219,6 +1219,27 @@ struct MiscTests {
         ], fixture: {})
         #expect(longNoLineNumberOutput == output)
 
+        let noHeadingOutput = try runExecutableData([
+            "--no-heading",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(noHeadingOutput == output)
+
+        let noFilenameOutput = try runExecutableData([
+            "--no-filename",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(noFilenameOutput == output)
+
+        let noMessagesOutput = try runExecutableData([
+            "--no-messages",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(noMessagesOutput == output)
+
         let orderedNoLineNumberOutput = try runExecutableData([
             "-n",
             "-N",

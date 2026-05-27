@@ -209,6 +209,15 @@ checks measured `-N Sherlock` at 177.0 ms versus 298.4 ms before and 267.7 ms
 for Rust; the long `--no-line-number` spelling measured 169.1 ms versus
 300.0 ms before and 265.0 ms for Rust.
 
+Output-neutral single-file flags now also stay eligible for the Swift
+executable preflight. The parser ignores `--no-heading`, `--no-filename`, and
+`--no-messages` only for the preflight eligibility check, leaving positive
+formatting flags on the full CLI path. Output for all three flags on the
+252 MiB dense fixture matched both the previous Swift binary and Rust. A noisy
+ten-run check measured `--no-heading Sherlock` at 190.3 ms versus 337.8 ms
+before and 280.5 ms for Rust, `--no-filename` at 197.8 ms versus 304.2 ms
+before, and `--no-messages` at 200.3 ms versus 324.5 ms before.
+
 The Swift-only Darwin mmap/stdout preflight now also covers line-numbered
 medium bounded multi-literal output when no filename, byte-offset, column,
 replacement, only-matching, or vimgrep formatting is requested. Output for
