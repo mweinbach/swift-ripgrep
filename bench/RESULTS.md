@@ -945,6 +945,12 @@ plain and 177.90 ms line-numbered.
 
 Rejected Swift-only probes from the same checkpoint:
 
+- A separate ASCII-only surrounding-word stdout writer that emitted matching
+  lines during the scan preserved both ASCII and Unicode-form output, but did
+  not improve the retained buffered executable preflight. The focused harness
+  measured `subtitles_en_surrounding_words` at 219.13 ms for Unicode and
+  219.71 ms for ASCII, versus the retained 217-219 ms band, so the shared
+  buffered writer stays.
 - A broader default-Unicode executable surrounding-word preflight preserved
   byte output by buffering matches and falling back on whole non-ASCII
   candidate lines, but that fallback double-scanned the representative corpus.
