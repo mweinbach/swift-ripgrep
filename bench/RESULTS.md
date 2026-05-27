@@ -813,6 +813,18 @@ while `-n` measured 52.4 ms versus 75.7 ms before and 46.6 ms for Rust.
 The focused benchmark harness reported the same 1.5 GiB checks at 102.70 ms
 plain and 169.68 ms line-numbered, versus Rust at 278.04 ms and 315.51 ms.
 
+Case-insensitive five-name alternations now use the same line-aligned chunk
+collector for large mapped files. Each chunk scans the folded literals with the
+prepared Swift ASCII case-insensitive scanner, then the result is sorted and
+deduplicated before output so line order remains deterministic. Output for
+plain and `-n -i` `Sherlock Holmes|John Watson|Irene Adler|Inspector
+Lestrade|Professor Moriarty` on the 1.5 GiB subtitles corpus matched both the
+previous Swift checkpoint and sibling Rust `rg`. A seven-run A/B measured
+`-n -i` at 315.4 ms versus 985.9 ms before and 530.2 ms for Rust. The plain
+neighbor measured 257.7 ms versus 907.2 ms before and 499.9 ms for Rust in a
+five-run check, and the focused benchmark harness reported the line-numbered
+case at 320.61 ms versus 534.65 ms for Rust.
+
 ASCII no-literal `\w{5}\s+...` matching-line scans now split large mapped
 haystacks on line boundaries and scan chunks in parallel, then reconstruct line
 numbers from sorted match offsets. The path is restricted to `(?-u)` ASCII

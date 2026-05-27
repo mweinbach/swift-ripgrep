@@ -2583,6 +2583,165 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     return shifts
                 }
 
+                func shouldCollectParallelTransformedMultiLiteralLineBounds() -> Bool {
+                    maxCount == Int.max
+                        && data.count >= parallelMultiLiteralLineScanMinimumSize
+                        && fastPath.caseInsensitiveASCII
+                        && !transformedMultiLiteralRequiresWordBoundary
+                        && literals.count >= 3
+                        && literals.count <= 8
+                        && pathPrefixBytes == nil
+                        && !options.column
+                        && !options.byteOffset
+                        && !options.vimgrep
+                        && ProcessInfo.processInfo.activeProcessorCount > 1
+                }
+
+                func transformedParallelLineAlignedChunkRanges(
+                    minimumChunkCount: Int
+                ) -> [(start: Int, end: Int)]? {
+                    let workerCount = min(max(2, ProcessInfo.processInfo.activeProcessorCount), 16)
+                    let targetChunkSize = max(8 * 1024 * 1024, data.count / workerCount)
+                    var chunkStarts = [0]
+                    var targetOffset = targetChunkSize
+                    while targetOffset < data.count {
+                        let newlinePointer = memchr(
+                            baseAddress.advanced(by: targetOffset),
+                            Int32(UInt8(ascii: "\n")),
+                            data.count - targetOffset
+                        )
+                        guard let newlinePointer else {
+                            break
+                        }
+                        let chunkStart = baseAddress.distance(
+                            to: newlinePointer.assumingMemoryBound(to: UInt8.self)
+                        ) + 1
+                        guard chunkStart < data.count else {
+                            break
+                        }
+                        if chunkStarts.last != chunkStart {
+                            chunkStarts.append(chunkStart)
+                        }
+                        targetOffset = chunkStart + targetChunkSize
+                    }
+                    guard chunkStarts.count > minimumChunkCount else {
+                        return nil
+                    }
+                    return chunkStarts.enumerated().map { index, start in
+                        (
+                            start: start,
+                            end: index + 1 < chunkStarts.count ? chunkStarts[index + 1] : data.count
+                        )
+                    }
+                }
+
+                func sortedUniqueTransformedLineBounds(
+                    _ bounds: [DarwinMatchedLineBound]
+                ) -> [DarwinMatchedLineBound] {
+                    var collectedBounds = bounds
+                    collectedBounds.sort {
+                        if $0.start != $1.start {
+                            return $0.start < $1.start
+                        }
+                        return $0.firstMatchStart < $1.firstMatchStart
+                    }
+
+                    var uniqueBounds: [DarwinMatchedLineBound] = []
+                    uniqueBounds.reserveCapacity(collectedBounds.count)
+                    for bound in collectedBounds {
+                        if var last = uniqueBounds.last, last.start == bound.start {
+                            if bound.firstMatchStart < last.firstMatchStart {
+                                last.firstMatchStart = bound.firstMatchStart
+                                uniqueBounds[uniqueBounds.count - 1] = last
+                            }
+                        } else {
+                            uniqueBounds.append(bound)
+                        }
+                    }
+                    return uniqueBounds
+                }
+
+                func collectChunkedParallelTransformedMultiLiteralLineBounds()
+                    -> [DarwinMatchedLineBound]? {
+                    guard let chunkRanges = transformedParallelLineAlignedChunkRanges(
+                        minimumChunkCount: literals.count
+                    ) else {
+                        return nil
+                    }
+
+                    let store = DarwinMatchedLineBoundStore(count: chunkRanges.count)
+                    let baseAddressValue = UInt(bitPattern: baseAddress)
+                    let newlineByte = UInt8(ascii: "\n")
+
+                    DispatchQueue.concurrentPerform(iterations: chunkRanges.count) { chunkIndex in
+                        let range = chunkRanges[chunkIndex]
+                        let localBaseAddress = UnsafeRawPointer(bitPattern: baseAddressValue)!
+                            .assumingMemoryBound(to: UInt8.self)
+                        var localBounds: [DarwinMatchedLineBound] = []
+
+                        for literalIndex in literals.indices {
+                            let literal = literals[literalIndex]
+                            guard literal.count <= range.end - range.start else {
+                                continue
+                            }
+                            foldedLiterals[literalIndex].withUnsafeBufferPointer { foldedNeedle in
+                                caseInsensitiveShifts[literalIndex].withUnsafeBufferPointer { shifts in
+                                    guard let foldedNeedleBaseAddress = foldedNeedle.baseAddress else {
+                                        return
+                                    }
+                                    var searchOffset = range.start
+                                    while searchOffset < range.end {
+                                        let foundPointer = rg_memcasemem_ascii_prepared(
+                                            localBaseAddress.advanced(by: searchOffset),
+                                            range.end - searchOffset,
+                                            foldedNeedleBaseAddress,
+                                            foldedNeedle.count,
+                                            shifts.baseAddress
+                                        )
+                                        guard let rawFoundPointer = foundPointer else {
+                                            break
+                                        }
+
+                                        let matchStart = localBaseAddress.distance(to: rawFoundPointer)
+                                        var lineStart = matchStart
+                                        while lineStart > 0, localBaseAddress[lineStart - 1] != newlineByte {
+                                            lineStart -= 1
+                                        }
+
+                                        let newlinePointer = memchr(
+                                            localBaseAddress.advanced(by: matchStart),
+                                            Int32(newlineByte),
+                                            range.end - matchStart
+                                        )
+                                        let outputEnd: Int
+                                        let hasNewline: Bool
+                                        if let newlinePointer {
+                                            outputEnd = localBaseAddress.distance(
+                                                to: newlinePointer.assumingMemoryBound(to: UInt8.self)
+                                            ) + 1
+                                            hasNewline = true
+                                        } else {
+                                            outputEnd = range.end
+                                            hasNewline = false
+                                        }
+
+                                        localBounds.append(DarwinMatchedLineBound(
+                                            start: lineStart,
+                                            outputEnd: outputEnd,
+                                            hasNewline: hasNewline,
+                                            firstMatchStart: matchStart
+                                        ))
+                                        searchOffset = outputEnd
+                                    }
+                                }
+                            }
+                        }
+                        store.store(localBounds, at: chunkIndex)
+                    }
+
+                    return sortedUniqueTransformedLineBounds(store.collect())
+                }
+
                 func findTransformedLiteral(_ literalIndex: Int, from offset: Int) -> UnsafePointer<UInt8>? {
                     guard offset < data.count else {
                         return nil
@@ -2639,6 +2798,28 @@ public struct RipgrepSearcher: @unchecked Sendable {
 
                 var candidates = literals.indices.map {
                     nextTransformedCandidate(literalIndex: $0, from: 0)
+                }
+
+                if shouldCollectParallelTransformedMultiLiteralLineBounds(),
+                   let matchedLineBounds = collectChunkedParallelTransformedMultiLiteralLineBounds() {
+                    matchedLineCount = matchedLineBounds.count
+                    if let lastLine = matchedLineBounds.last {
+                        bytesSearched = lastLine.outputEnd
+                    }
+                    for line in matchedLineBounds {
+                        writeMatchingLinePrefixes(lineStart: line.start, matchStart: line.firstMatchStart)
+                        writeBytes(UnsafeRawBufferPointer(
+                            start: rawBaseAddress.advanced(by: line.start),
+                            count: line.outputEnd - line.start
+                        ))
+                        if !line.hasNewline {
+                            var newline = UInt8(ascii: "\n")
+                            withUnsafeBytes(of: &newline) { buffer in
+                                writeBytes(buffer)
+                            }
+                        }
+                    }
+                    return
                 }
 
                 while matchedLineCount < maxCount,
