@@ -963,6 +963,11 @@ Rejected Swift-only probes from the same checkpoint:
   exact target. A direct seven-run A/B on
   `ERR_SYS|PME_TURN_OFF|LINK_REQ_RST|CFG_BME_EVT` measured 2.936 s versus
   2.758 s for the retained guard, so the standard collection scan stays.
+- Skipping no-shim construction of the now-unused case-insensitive shift tables
+  in the recursive multi-literal collector preserved sorted Linux output, but
+  the extra branch shape lost on median: a nine-run direct A/B measured
+  2.967 s versus 2.793 s for the retained code. The C-compatible shift-table
+  setup remains.
 - A broader default-Unicode executable surrounding-word preflight preserved
   byte output by buffering matches and falling back on whole non-ASCII
   candidate lines, but that fallback double-scanned the representative corpus.
