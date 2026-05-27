@@ -635,8 +635,20 @@ versus 363.0 ms before and 197.5 ms for Rust. Five-run case-insensitive guards
 measured `-i` at 362.8 ms versus 372.5 ms before and 279.9 ms for Rust, and
 `-n -i` at 425.1 ms versus 437.8 ms before and 310.7 ms for Rust.
 
+The same no-mmap streaming path now reads 2 MiB chunks instead of 1 MiB chunks.
+Plain output stayed neutral in a seven-run A/B (282.0 ms versus 281.3 ms
+before, with the means essentially tied at 281.7 ms versus 282.1 ms), while
+line-numbered and case-insensitive neighbors improved: `-n` measured 346.6 ms
+versus 349.8 ms before, `-i` measured 358.1 ms versus 364.3 ms before, and
+`-n -i` measured 424.5 ms versus 428.8 ms before. Output for plain, `-n`,
+`-i`, and `-n -i` matched sibling Rust `rg` on the 1.5 GiB subtitles corpus.
+
 Rejected Swift-only probes from the same checkpoint:
 
+- Raising the no-mmap stream read size to 4 MiB preserved output but regressed
+  both representative checks: plain output measured 293.0 ms versus 288.3 ms
+  before in that run, and `-n` measured 355.3 ms versus 352.9 ms before. The
+  2 MiB chunk size is the retained middle point.
 - Delaying no-mmap stream compaction until a full 8 MiB consumed prefix,
   without the half-buffer trigger, preserved the same output shape but regressed
   plain `--no-mmap 'Sherlock Holmes'` to 301.7 ms and raised peak memory versus

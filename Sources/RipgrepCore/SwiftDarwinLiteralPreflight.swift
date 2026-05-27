@@ -197,7 +197,7 @@ public enum SwiftDarwinLiteralPreflight {
 
         func readNextChunk() -> Bool {
             do {
-                guard let chunk = try handle.read(upToCount: 1024 * 1024),
+                guard let chunk = try handle.read(upToCount: 2 * 1024 * 1024),
                       !chunk.isEmpty else {
                     reachedEOF = true
                     return true
