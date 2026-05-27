@@ -437,7 +437,8 @@ public struct GlobMatcher: Equatable {
             bestRuleIndex: &bestRuleIndex,
             bestDecision: &bestDecision
         )
-        if let lastByte = relativePath.utf8.last,
+        if !fastRuleIndex.suffixPathRulesByLastByte.isEmpty,
+           let lastByte = relativePath.utf8.last,
            let suffixPathRules = fastRuleIndex.suffixPathRulesByLastByte[lastByte] {
             for candidate in suffixPathRules where hasPathComponentSuffix(candidate.text, in: relativePath) {
                 considerIndexedRule(

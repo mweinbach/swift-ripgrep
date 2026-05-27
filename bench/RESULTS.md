@@ -135,7 +135,11 @@ fallback matcher checks for common rules such as `foo/bar`. Exact Swift output
 and sorted Rust parity were preserved. A clean 100-run order-flipped check
 measured default `--files` at 119.1 ms mean / 117.7 ms median versus 124.1 ms /
 122.6 ms before; `--hidden --files` was neutral at 124.2 ms mean / 120.5 ms
-median versus 123.0 ms / 120.8 ms before.
+median versus 123.0 ms / 120.8 ms before. A follow-up guard now skips the
+suffix-path lookup entirely when the index has no suffix path buckets,
+preserving exact output and measuring default `--files` at 117.9 ms mean /
+117.4 ms median versus 120.2 ms / 118.7 ms before; `--hidden --files` measured
+119.1 ms mean / 118.7 ms median versus 120.3 ms / 119.0 ms before.
 
 The Swift multi-literal full-line writer now skips to a matched line's output
 end after recording it, caching line ends so later literals do not rescan
