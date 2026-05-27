@@ -899,6 +899,12 @@ Rejected Swift-only probes from the same checkpoint:
   plain output was 184.5 ms versus 185.6 ms before and 167.6 ms for Rust, while
   `-n` was 215.6 ms versus 218.0 ms before and 195.8 ms for Rust. The existing
   serial literal scanner stays simpler and just as fast for this sparse case.
+- Reusing the retained line-aligned chunk collector for that same single
+  literal also preserved output, but the focused harness did not improve the
+  representative plain/no-mmap checks: plain measured 184.04 ms and no-mmap
+  measured 183.34 ms, versus the retained 182.8/182.6 ms band. The `-n` median
+  moved only from 213.45 ms to 212.70 ms, so the broader single-literal route
+  stayed out.
 - Extending the finite multi-literal cutoff all the way to 4096 preserved
   output, but the repeated earliest-match scans overtook the collect/sort path:
   `-m 2048 'Sherlock|Watson'` measured 414.9 ms versus 309.7 ms before, and
