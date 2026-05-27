@@ -313,6 +313,24 @@ struct RipgrepCommand {
         pattern = valueArguments[0]
         path = valueArguments[1]
 
+        if !pattern.hasPrefix("-"),
+           path != "-",
+           !asciiCaseInsensitive,
+           !wordRegexp,
+           !noMmap,
+           pattern.hasPrefix("(?-u)"),
+           let surroundingLiteral = surroundingWordsLiteral(
+            pattern,
+            allowPCREQuotedLiterals: preflightArguments.allowPCREQuotedLiterals
+           ) {
+            return SwiftDarwinLiteralPreflight.surroundingWordsExitCode(
+                path: path,
+                literal: Array(surroundingLiteral.utf8),
+                lineNumber: lineNumber,
+                asciiOnly: pattern.hasPrefix("(?-u)")
+            )
+        }
+
         let asciiBoundaryLiteralPattern = asciiCaseInsensitive ? nil : asciiBoundaryLiteral(
             pattern,
             allowPCREQuotedLiterals: preflightArguments.allowPCREQuotedLiterals
@@ -448,6 +466,10 @@ struct RipgrepCommand {
         _ pattern: String,
         allowPCREQuotedLiterals: Bool
     ) -> String? {
+        var pattern = pattern
+        if pattern.hasPrefix("(?-u)") {
+            pattern.removeFirst("(?-u)".count)
+        }
         let prefix = #"\w+\s+"#
         let suffix = #"\s+\w+"#
         guard pattern.hasPrefix(prefix), pattern.hasSuffix(suffix) else {

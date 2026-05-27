@@ -881,8 +881,29 @@ regex at 215.8 ms. The focused upstream `subtitles_en_literal_word` harness
 now measures both Unicode and ASCII labels in the same band: Unicode
 214.52 ms versus Rust 198.16 ms, and ASCII 215.91 ms versus Rust 197.59 ms.
 
+The executable Swift preflight now also handles ASCII-scoped surrounding-word
+regexes of the form `(?-u)\w+\s+LITERAL\s+\w+` for plain and line-numbered
+single-file searches. It scans for the literal directly, verifies ASCII word
+and whitespace runs on both sides, buffers matching line ranges until the scan
+is complete, and then writes stdout, so no partial output is emitted before a
+fallback decision. Output for `-n '(?-u)\w+\s+Holmes\s+\w+'` on the 1.5 GiB
+subtitles corpus matched sibling Rust `rg` exactly (483 lines). The neighboring
+default Unicode form remains on the existing matcher to preserve full Unicode
+`\w` semantics; a small fixture with `Mø Holmes returns` and `Dr Holmes
+étrange` also matched Rust output. The focused upstream
+`subtitles_en_surrounding_words` harness measured the ASCII form at
+217.94 ms versus Rust at 197.97 ms, down from the previous Swift-only
+343.00 ms band. The Unicode form measured 318.88 ms versus Rust at 199.56 ms
+on the retained path.
+
 Rejected Swift-only probes from the same checkpoint:
 
+- A broader default-Unicode executable surrounding-word preflight preserved
+  byte output by buffering matches and falling back on non-ASCII candidate
+  lines, but that fallback double-scanned the representative corpus. Direct
+  checks measured 397.3 ms and the focused harness measured 413.30 ms, versus
+  the retained Unicode path at about 319 ms, so the executable preflight is
+  limited to explicit `(?-u)` ASCII semantics.
 - Raising the no-mmap stream read size to 4 MiB preserved output but regressed
   both representative checks: plain output measured 293.0 ms versus 288.3 ms
   before in that run, and `-n` measured 355.3 ms versus 352.9 ms before. The

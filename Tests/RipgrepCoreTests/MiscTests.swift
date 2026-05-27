@@ -605,6 +605,42 @@ struct MiscTests {
         ], fixture: {})
 
         #expect(String(decoding: escapedOutput, as: UTF8.self) == "1:Mr Holmes.Jr returns\n3:Doctor Holmes.Jr arrives\n")
+
+        try root.write("""
+        Mr Holmes returns
+        Mø Holmes returns
+        Dr Holmes étrange
+        Holmes alone
+        """, to: "unicode-sherlock.txt")
+        let unicodeFallbackOutput = try runExecutableData([
+            "-n",
+            #"\w+\s+Holmes\s+\w+"#,
+            root.path("unicode-sherlock.txt"),
+        ], fixture: {})
+        #expect(String(decoding: unicodeFallbackOutput, as: UTF8.self) == """
+        1:Mr Holmes returns
+        2:Mø Holmes returns
+        3:Dr Holmes étrange
+
+        """)
+
+        let asciiScopedOutput = try runExecutableData([
+            "-n",
+            #"(?-u)\w+\s+Holmes\s+\w+"#,
+            root.path("unicode-sherlock.txt"),
+        ], fixture: {})
+        #expect(String(decoding: asciiScopedOutput, as: UTF8.self) == """
+        1:Mr Holmes returns
+
+        """)
+
+        try root.write("Mr Holmes returns", to: "sherlock-no-final-newline.txt")
+        let noFinalNewlineOutput = try runExecutableData([
+            "-n",
+            #"(?-u)\w+\s+Holmes\s+\w+"#,
+            root.path("sherlock-no-final-newline.txt"),
+        ], fixture: {})
+        #expect(noFinalNewlineOutput == Data("1:Mr Holmes returns\n".utf8))
         #endif
     }
 
