@@ -5689,9 +5689,10 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 return uniqueBounds
             }
 
-            func collectParallelASCIISequenceLineBounds() -> [DarwinMatchedLineBound]? {
-                guard fastPath.asciiOnly,
-                      maxCount == Int.max,
+            let unicodeFallbackCandidateMarker = -1
+
+            func collectParallelSequenceLineBounds() -> [DarwinMatchedLineBound]? {
+                guard maxCount == Int.max,
                       dataCount >= 64 * 1024 * 1024,
                       ProcessInfo.processInfo.activeProcessorCount > 1 else {
                     return nil
@@ -5740,6 +5741,25 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     var offset = range.start
                     var qualifyingWordRuns = 0
                     var canContinueSequenceAfterWhitespace = false
+                    var sawNonASCIIInLine = false
+
+                    func recordUnicodeFallbackCandidate(
+                        lineEnd: Int,
+                        outputEnd: Int,
+                        hasNewline: Bool
+                    ) {
+                        guard !fastPath.asciiOnly,
+                              sawNonASCIIInLine,
+                              lineEnd - lineStart >= minimumSequenceByteCount else {
+                            return
+                        }
+                        localBounds.append(DarwinMatchedLineBound(
+                            start: lineStart,
+                            outputEnd: outputEnd,
+                            hasNewline: hasNewline,
+                            firstMatchStart: unicodeFallbackCandidateMarker
+                        ))
+                    }
 
                     while offset < range.end {
                         if offset == lineStart {
@@ -5757,6 +5777,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                                 offset = lineStart
                                 qualifyingWordRuns = 0
                                 canContinueSequenceAfterWhitespace = false
+                                sawNonASCIIInLine = false
                                 continue
                             }
                             if lineBytesRemaining < minimumSequenceByteCount {
@@ -5766,13 +5787,20 @@ public struct RipgrepSearcher: @unchecked Sendable {
 
                         let byte = localBaseAddress[offset]
                         if byte == newlineByte {
+                            recordUnicodeFallbackCandidate(
+                                lineEnd: offset,
+                                outputEnd: offset + 1,
+                                hasNewline: true
+                            )
                             lineStart = offset + 1
                             offset = lineStart
                             qualifyingWordRuns = 0
                             canContinueSequenceAfterWhitespace = false
+                            sawNonASCIIInLine = false
                             continue
                         }
                         if byte >= 0x80 {
+                            sawNonASCIIInLine = true
                             qualifyingWordRuns = 0
                             canContinueSequenceAfterWhitespace = false
                             offset += 1
@@ -5823,6 +5851,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                                     offset = outputEnd
                                     qualifyingWordRuns = 0
                                     canContinueSequenceAfterWhitespace = false
+                                    sawNonASCIIInLine = false
                                     continue
                                 }
                                 canContinueSequenceAfterWhitespace = false
@@ -5845,13 +5874,20 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         canContinueSequenceAfterWhitespace = false
                         offset += 1
                     }
+                    if lineStart < range.end {
+                        recordUnicodeFallbackCandidate(
+                            lineEnd: range.end,
+                            outputEnd: range.end,
+                            hasNewline: false
+                        )
+                    }
                     store.store(localBounds, at: chunkIndex)
                 }
 
                 return sortedUniqueLineBounds(store.collect())
             }
 
-            if let parallelLineBounds = collectParallelASCIISequenceLineBounds() {
+            if let parallelLineBounds = collectParallelSequenceLineBounds() {
                 var lineNumberCursor = 1
                 var lineCountOffset = 0
                 for bound in parallelLineBounds {
@@ -5862,6 +5898,22 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     ))
                     lineCountOffset = bound.start
                     let lineEnd = bound.hasNewline ? bound.outputEnd - 1 : bound.outputEnd
+                    if bound.firstMatchStart == unicodeFallbackCandidateMarker {
+                        guard let lineTextWithTerminator = String(
+                            data: Data(
+                                bytes: baseAddress.advanced(by: bound.start),
+                                count: bound.outputEnd - bound.start
+                            ),
+                            encoding: .utf8
+                        ) else {
+                            needsDecodedFallback = true
+                            break
+                        }
+                        guard !matcher.canFastReject(lineTextWithTerminator),
+                              matcher.hasPositiveMatch(in: lineTextWithTerminator) else {
+                            continue
+                        }
+                    }
                     guard let lineText = String(
                         data: Data(bytes: baseAddress.advanced(by: bound.start), count: lineEnd - bound.start),
                         encoding: .utf8

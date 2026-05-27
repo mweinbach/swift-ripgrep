@@ -101,6 +101,7 @@ struct MiscTests {
         alpha bravo charl delta echoo foxtt golfx
         short words nope here
         bravo charl delta echoo foxtt golfx hotel
+        aaaaa bbbbb ccccc ddddd ééééé fffff ggggg
         """, to: "large-words.txt")
         let largeSevenGroupASCIIOutput = try runExecutableData([
             "-n",
@@ -110,6 +111,17 @@ struct MiscTests {
         #expect(String(decoding: largeSevenGroupASCIIOutput, as: UTF8.self) == """
         \(largeFillerLineCount + 1):alpha bravo charl delta echoo foxtt golfx
         \(largeFillerLineCount + 3):bravo charl delta echoo foxtt golfx hotel
+
+        """)
+        let largeSevenGroupUnicodeOutput = try runExecutableData([
+            "-n",
+            sevenGroupPattern,
+            root.path("large-words.txt"),
+        ], fixture: {})
+        #expect(String(decoding: largeSevenGroupUnicodeOutput, as: UTF8.self) == """
+        \(largeFillerLineCount + 1):alpha bravo charl delta echoo foxtt golfx
+        \(largeFillerLineCount + 3):bravo charl delta echoo foxtt golfx hotel
+        \(largeFillerLineCount + 4):aaaaa bbbbb ccccc ddddd ééééé fffff ggggg
 
         """)
     }

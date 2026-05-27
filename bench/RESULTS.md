@@ -799,6 +799,14 @@ previous/current/Rust A/B measured 429.8 ms versus 2.512 s before and 2.406 s
 for Rust. The neighboring Unicode form stayed on the existing path at 2.838 s
 versus 2.514 s for Rust.
 
+The same large-file chunk scanner now supports Unicode `\w{5}\s+...` patterns
+by collecting non-ASCII candidate lines during the parallel ASCII pass and
+replaying only those candidates through the existing Unicode matcher in file
+order. Output for both Unicode and `(?-u)` ASCII seven-word subtitles patterns
+matched sibling Rust `rg`; a seven-run previous/current/Rust A/B measured the
+Unicode form at 698.3 ms versus 2.788 s before and 2.615 s for Rust. The ASCII
+form stayed in the retained fast band at 435.0 ms versus 2.408 s for Rust.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Raising the no-mmap stream read size to 4 MiB preserved output but regressed
