@@ -662,10 +662,31 @@ public struct PatternMatcher {
         let unscopedPattern = pattern.hasPrefix("(?-u)")
             ? String(pattern.dropFirst("(?-u)".count))
             : pattern
-        guard unscopedPattern == #"\w{5}\s+\w{5}\s+\w{5}\s+\w{5}\s+\w{5}"# else {
+        guard let groupCount = wordWhitespaceSequenceGroupCount(in: unscopedPattern) else {
             return nil
         }
-        return WordWhitespaceSequenceFastPath(asciiOnly: usesByteSemantics)
+        return WordWhitespaceSequenceFastPath(asciiOnly: usesByteSemantics, groupCount: groupCount)
+    }
+
+    private static func wordWhitespaceSequenceGroupCount(in pattern: String) -> Int? {
+        let wordGroup = #"\w{5}"#
+        let separator = #"\s+"#
+        var remainder = pattern[...]
+        var groupCount = 0
+        while true {
+            guard remainder.hasPrefix(wordGroup) else {
+                return nil
+            }
+            groupCount += 1
+            remainder.removeFirst(wordGroup.count)
+            if remainder.isEmpty {
+                return groupCount >= 2 ? groupCount : nil
+            }
+            guard remainder.hasPrefix(separator) else {
+                return nil
+            }
+            remainder.removeFirst(separator.count)
+        }
     }
 
     private static func makeByteRequiredLiteralPrefilter(
@@ -3773,6 +3794,7 @@ struct ByteLiteralFastPath {
 
 struct WordWhitespaceSequenceFastPath {
     let asciiOnly: Bool
+    let groupCount: Int
 }
 
 private extension UInt8 {

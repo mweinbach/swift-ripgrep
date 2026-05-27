@@ -4816,7 +4816,10 @@ public struct RipgrepSearcher: @unchecked Sendable {
                    !options.byteOffset,
                    options.maxColumns == nil,
                    !options.trim {
-                    let scan = wordWhitespaceSequenceLineMatch(streamedLine.data)
+                    let scan = wordWhitespaceSequenceLineMatch(
+                        streamedLine.data,
+                        groupCount: wordWhitespaceFastPath.groupCount
+                    )
                     var hasMatch = scan.hasMatch
                     if !hasMatch, scan.sawNonASCII, !wordWhitespaceFastPath.asciiOnly {
                         guard let lineTextWithTerminator = String(data: lineData, encoding: .utf8) else {
@@ -5317,7 +5320,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     start: baseAddress.advanced(by: lineStart),
                     count: lineEnd - lineStart
                 )
-                let scan = wordWhitespaceSequenceLineMatch(lineBytes)
+                let scan = wordWhitespaceSequenceLineMatch(lineBytes, groupCount: fastPath.groupCount)
                 var hasMatch = scan.hasMatch
                 if !hasMatch, scan.sawNonASCII, !fastPath.asciiOnly {
                     let lineWithTerminatorCount = nextLineStart <= dataCount
@@ -6281,82 +6284,66 @@ public struct RipgrepSearcher: @unchecked Sendable {
         #endif
     }
 
-    private func wordWhitespaceSequenceLineMatch(_ data: Data) -> (hasMatch: Bool, sawNonASCII: Bool) {
+    private func wordWhitespaceSequenceLineMatch(
+        _ data: Data,
+        groupCount: Int
+    ) -> (hasMatch: Bool, sawNonASCII: Bool) {
         data.withUnsafeBytes { rawBuffer in
             let bytes = rawBuffer.bindMemory(to: UInt8.self)
-            return wordWhitespaceSequenceLineMatch(bytes)
+            return wordWhitespaceSequenceLineMatch(bytes, groupCount: groupCount)
         }
     }
 
     private func wordWhitespaceSequenceLineMatch(
-        _ bytes: UnsafeBufferPointer<UInt8>
+        _ bytes: UnsafeBufferPointer<UInt8>,
+        groupCount: Int
     ) -> (hasMatch: Bool, sawNonASCII: Bool) {
         guard let baseAddress = bytes.baseAddress else {
             return (false, false)
         }
         var sawNonASCII = false
         let count = bytes.count
-        var start = 0
-        while start < count {
-            let first = baseAddress[start]
-            if first >= 0x80 {
+        var offset = 0
+        var qualifyingWordRuns = 0
+        var canContinueSequenceAfterWhitespace = false
+        while offset < count {
+            let byte = baseAddress[offset]
+            if byte >= 0x80 {
                 sawNonASCII = true
-                start += 1
+                qualifyingWordRuns = 0
+                canContinueSequenceAfterWhitespace = false
+                offset += 1
                 continue
             }
-            guard isASCIIRegexWordByte(first) else {
-                start += 1
+            if isASCIIRegexWordByte(byte) {
+                let runStart = offset
+                repeat {
+                    offset += 1
+                } while offset < count && isASCIIRegexWordByte(baseAddress[offset])
+                if offset - runStart >= 5 {
+                    qualifyingWordRuns = canContinueSequenceAfterWhitespace
+                        ? qualifyingWordRuns + 1
+                        : 1
+                    if qualifyingWordRuns >= groupCount {
+                        return (true, sawNonASCII)
+                    }
+                    canContinueSequenceAfterWhitespace = false
+                } else {
+                    qualifyingWordRuns = 0
+                    canContinueSequenceAfterWhitespace = false
+                }
                 continue
             }
-
-            var offset = start
-            var matched = true
-            for group in 0..<5 {
-                for _ in 0..<5 {
-                    guard offset < count else {
-                        matched = false
-                        break
-                    }
-                    let byte = baseAddress[offset]
-                    if byte >= 0x80 {
-                        sawNonASCII = true
-                        matched = false
-                        break
-                    }
-                    guard isASCIIRegexWordByte(byte) else {
-                        matched = false
-                        break
-                    }
+            if isASCIIRegexWhitespaceByte(byte) {
+                repeat {
                     offset += 1
-                }
-                if !matched {
-                    break
-                }
-                guard group < 4 else {
-                    continue
-                }
-                var consumedWhitespace = false
-                while offset < count {
-                    let byte = baseAddress[offset]
-                    if byte >= 0x80 {
-                        sawNonASCII = true
-                        break
-                    }
-                    guard isASCIIRegexWhitespaceByte(byte) else {
-                        break
-                    }
-                    consumedWhitespace = true
-                    offset += 1
-                }
-                if !consumedWhitespace {
-                    matched = false
-                    break
-                }
+                } while offset < count && isASCIIRegexWhitespaceByte(baseAddress[offset])
+                canContinueSequenceAfterWhitespace = qualifyingWordRuns > 0
+                continue
             }
-            if matched {
-                return (true, sawNonASCII)
-            }
-            start += 1
+            qualifyingWordRuns = 0
+            canContinueSequenceAfterWhitespace = false
+            offset += 1
         }
         return (false, sawNonASCII)
     }

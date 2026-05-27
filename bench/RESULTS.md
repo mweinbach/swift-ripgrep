@@ -537,16 +537,21 @@ previous Swift checkpoint and sibling Rust oracle, as did neighboring `-c` and
 --count-matches '(?(?=Sherlock)Sherlock|Holmes)'` at 156.3 ms versus
 247.3 ms before and 468.1 ms for Rust PCRE2.
 
-The upstream Linux no-literal regex shape
-`\w{5}\s+\w{5}\s+\w{5}\s+\w{5}\s+\w{5}` now has a Swift byte-line fast path for
+The upstream no-literal regex shapes made of repeated
+`\w{5}` groups separated by `\s+` now have a Swift byte-line fast path for
 matching-line output. The scanner handles ASCII lines directly and, for
 Unicode mode, falls back to the existing regex engine only on lines containing
 non-ASCII bytes so Unicode `\w`/`\s` semantics stay intact. Sorted output on
-the Linux corpus matched the sibling Rust oracle for both default Unicode
-(721 lines) and `(?-u)` ASCII (720 lines), including the Unicode-only Italian
-documentation line. A five-run check measured default Unicode at 3.518 s versus
-87.562 s before and 3.381 s for Rust; the ASCII form measured 3.413 s versus
-3.328 s for Rust.
+the Linux five-group corpus matched the sibling Rust oracle for both default
+Unicode (721 lines) and `(?-u)` ASCII (720 lines), including the Unicode-only
+Italian documentation line. A five-run check measured default Unicode at
+3.518 s versus 87.562 s before and 3.381 s for Rust; the ASCII form measured
+3.413 s versus 3.328 s for Rust. The same scanner also covers the seven-group
+subtitles no-literal bench shape; after switching the matcher from per-start
+probing to a linear word-run scan, a three-run check on the 1.5 GiB subtitles
+corpus measured the seven-group no-match form at 4.997 s versus the previous
+path still running past 3 minutes before it was interrupted, and 2.552 s for
+Rust.
 
 Rejected Swift-only probes from the same checkpoint:
 

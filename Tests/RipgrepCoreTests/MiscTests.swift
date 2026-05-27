@@ -32,8 +32,11 @@ struct MiscTests {
         short words nope here
         perche il contesto delle righe verra cambiato.
         perché il contesto delle righe verrà cambiato.
+        alpha bravo charl delta echoo foxtt golfx
+        aaaaa bbbbb ccccc ddddd ééééé fffff ggggg
         """, to: "words.txt")
         let pattern = #"\w{5}\s+\w{5}\s+\w{5}\s+\w{5}\s+\w{5}"#
+        let sevenGroupPattern = #"\w{5}\s+\w{5}\s+\w{5}\s+\w{5}\s+\w{5}\s+\w{5}\s+\w{5}"#
 
         let unicodeOutput = try runExecutableData([
             "-n",
@@ -51,12 +54,24 @@ struct MiscTests {
             "(?-u)\(pattern)",
             root.path("words.txt"),
         ], fixture: {})
+        let sevenGroupUnicodeOutput = try runExecutableData([
+            "-n",
+            sevenGroupPattern,
+            root.path("words.txt"),
+        ], fixture: {})
+        let sevenGroupASCIIOutput = try runExecutableData([
+            "-n",
+            "(?-u)\(sevenGroupPattern)",
+            root.path("words.txt"),
+        ], fixture: {})
 
         #expect(String(decoding: unicodeOutput, as: UTF8.self) == """
         1:alpha bravo charl delta echoo
         2:abcdef bravo charl delta echoo
         4:perche il contesto delle righe verra cambiato.
         5:perché il contesto delle righe verrà cambiato.
+        6:alpha bravo charl delta echoo foxtt golfx
+        7:aaaaa bbbbb ccccc ddddd ééééé fffff ggggg
 
         """)
         #expect(streamingUnicodeOutput == unicodeOutput)
@@ -64,6 +79,16 @@ struct MiscTests {
         1:alpha bravo charl delta echoo
         2:abcdef bravo charl delta echoo
         4:perche il contesto delle righe verra cambiato.
+        6:alpha bravo charl delta echoo foxtt golfx
+
+        """)
+        #expect(String(decoding: sevenGroupUnicodeOutput, as: UTF8.self) == """
+        6:alpha bravo charl delta echoo foxtt golfx
+        7:aaaaa bbbbb ccccc ddddd ééééé fffff ggggg
+
+        """)
+        #expect(String(decoding: sevenGroupASCIIOutput, as: UTF8.self) == """
+        6:alpha bravo charl delta echoo foxtt golfx
 
         """)
     }
