@@ -317,6 +317,18 @@ A/B checks measured `--vimgrep -m1 'Sherlock|Watson'` at 45.5 ms versus
 54.2 ms versus 15.976 s before and 5.7 ms for Rust; and `--vimgrep -m2 -o
 'Sherlock|Watson'` at 41.7 ms versus 15.833 s before.
 
+Literal-only safe multi-literal `--vimgrep --replace` now also has a direct
+Swift writer. It merges independent literal streams, builds each replaced line
+once, and emits replacement coordinates after prior replacements on that line,
+which matches ripgrep's shifted-column and shifted-byte-offset semantics.
+Output for full-line, only-matching, byte-offset, empty replacement, and
+bounded forms on the 193 MiB subtitles corpus matched both the previous Swift
+checkpoint and the sibling Rust oracle. Five-run A/B checks measured
+`--vimgrep -r X 'Sherlock|Watson'` at 88.8 ms versus 15.931 s before and
+45.9 ms for Rust; `--vimgrep -o -r X 'Sherlock|Watson'` at 70.0 ms versus
+15.975 s before and 45.9 ms for Rust; and `--vimgrep -m1 -r X
+'Sherlock|Watson'` at 43.8 ms versus 15.992 s before and 5.1 ms for Rust.
+
 Safe multi-literal only-match and vimgrep output now merge each literal's next
 match stream instead of re-scanning every literal from the current global
 offset. Interleaved same-line fixtures and representative subtitles cases

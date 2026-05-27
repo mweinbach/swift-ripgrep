@@ -2672,6 +2672,33 @@ struct FeatureTests {
             "\(root.path("vimgrep-literal-replace.txt")):1:1:X",
             "\(root.path("vimgrep-literal-replace.txt")):1:3:X",
         ])
+        try root.write("Watson Sherlock\nSherlock Watson\n", to: "vimgrep-multi-literal-replace.txt")
+        #expect(try run([
+            "--vimgrep",
+            "--replace",
+            "X",
+            "Sherlock|Watson",
+            root.path("vimgrep-multi-literal-replace.txt"),
+        ]) == [
+            "\(root.path("vimgrep-multi-literal-replace.txt")):1:1:X X",
+            "\(root.path("vimgrep-multi-literal-replace.txt")):1:3:X X",
+            "\(root.path("vimgrep-multi-literal-replace.txt")):2:1:X X",
+            "\(root.path("vimgrep-multi-literal-replace.txt")):2:3:X X",
+        ])
+        #expect(try run([
+            "--vimgrep",
+            "-o",
+            "--byte-offset",
+            "--replace",
+            "",
+            "Sherlock|Watson",
+            root.path("vimgrep-multi-literal-replace.txt"),
+        ]) == [
+            "\(root.path("vimgrep-multi-literal-replace.txt")):1:1:0:",
+            "\(root.path("vimgrep-multi-literal-replace.txt")):1:2:1:",
+            "\(root.path("vimgrep-multi-literal-replace.txt")):2:1:16:",
+            "\(root.path("vimgrep-multi-literal-replace.txt")):2:2:17:",
+        ])
         #expect(try run([
             "--vimgrep",
             "--byte-offset",

@@ -769,7 +769,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
             && options.vimgrep
             && allowDirectStdout
             && options.printMode == .matchingLines
-            && fastPath.literals.count == 1
+            && (fastPath.literals.count == 1
+                || (fastPathByteSet == nil && canScanDarwinLiteralsIndependently(fastPath)))
             && fastPathByteSet == nil
             && !fastPath.wordASCII
         let canDirectWriteLiteralReplacement = directLiteralReplacementBytes != nil
@@ -1251,6 +1252,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
 
                 if canDirectWriteVimgrepLiteralReplacement,
                    let replacementBytes = directLiteralReplacementBytes,
+                   literals.count == 1,
                    let literal = literals.first {
                     var searchOffset = 0
                     var foldedLiteral: [UInt8] = []
@@ -1351,6 +1353,93 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         }
                         searchOffset = bounds.lineEnd == data.count ? data.count : bounds.lineEnd + 1
                         bytesSearched = searchOffset
+                    }
+                    return
+                }
+
+                if canDirectWriteVimgrepLiteralReplacement,
+                   let replacementBytes = directLiteralReplacementBytes {
+                    var candidates = initialIndependentLiteralCandidates()
+
+                    func earliestReplacementCandidateIndex(before endOffset: Int = Int.max) -> Int? {
+                        var selectedCandidateIndex: Int?
+                        var selectedStart = Int.max
+                        for candidateIndex in candidates.indices
+                            where candidates[candidateIndex].start < selectedStart
+                                && candidates[candidateIndex].start < endOffset {
+                            selectedStart = candidates[candidateIndex].start
+                            selectedCandidateIndex = candidateIndex
+                        }
+                        return selectedCandidateIndex
+                    }
+
+                    func advanceReplacementCandidate(at candidateIndex: Int) {
+                        let selected = candidates[candidateIndex]
+                        if let nextMatch = nextIndependentLiteralMatch(
+                            literalIndex: selected.literalIndex,
+                            from: selected.start + selected.length
+                        ) {
+                            candidates[candidateIndex] = (
+                                nextMatch.start,
+                                nextMatch.length,
+                                selected.literalIndex
+                            )
+                        } else {
+                            candidates[candidateIndex] = (Int.max, 0, selected.literalIndex)
+                        }
+                    }
+
+                    while matchedLineCount < maxCount,
+                          let firstCandidateIndex = earliestReplacementCandidateIndex() {
+                        let firstCandidate = candidates[firstCandidateIndex]
+                        let bounds = vimgrepLineBounds(containing: firstCandidate.start)
+                        var cursor = bounds.lineStart
+                        var replacementDelta = 0
+                        var replacementStarts: [Int] = []
+                        var replacedLine = Data()
+                        replacedLine.reserveCapacity(bounds.lineEnd - bounds.lineStart)
+
+                        while let candidateIndex = earliestReplacementCandidateIndex(before: bounds.lineEnd) {
+                            let selected = candidates[candidateIndex]
+                            let replacementStart = selected.start - bounds.lineStart + replacementDelta
+                            replacementStarts.append(replacementStart)
+                            replacedLine.append(
+                                rawBaseAddress.assumingMemoryBound(to: UInt8.self).advanced(by: cursor),
+                                count: selected.start - cursor
+                            )
+                            replacedLine.append(contentsOf: replacementBytes)
+                            replacementDelta += replacementBytes.count - selected.length
+                            cursor = selected.start + selected.length
+                            advanceReplacementCandidate(at: candidateIndex)
+                        }
+
+                        replacedLine.append(
+                            rawBaseAddress.assumingMemoryBound(to: UInt8.self).advanced(by: cursor),
+                            count: bounds.lineEnd - cursor
+                        )
+                        advanceLineNumber(to: bounds.lineStart)
+                        matchedLineCount += 1
+                        totalMatchCount += replacementStarts.count
+                        for replacementStart in replacementStarts {
+                            writeVimgrepPrefixes(
+                                lineNumber: lineNumber,
+                                column: replacementStart + 1,
+                                byteOffset: bounds.lineStart + replacementStart
+                            )
+                            if onlyMatching {
+                                replacementBytes.withUnsafeBytes { buffer in
+                                    writeBytes(buffer)
+                                }
+                            } else {
+                                replacedLine.withUnsafeBytes { buffer in
+                                    writeBytes(buffer)
+                                }
+                            }
+                            withUnsafeBytes(of: &newline) { buffer in
+                                writeBytes(buffer)
+                            }
+                        }
+                        bytesSearched = bounds.lineEnd == data.count ? data.count : bounds.lineEnd + 1
                     }
                     return
                 }
