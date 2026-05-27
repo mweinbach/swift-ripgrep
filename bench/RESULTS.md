@@ -779,6 +779,16 @@ On the 193 MiB corpus, the same plain five-name check measured 83.9 ms versus
 106.4 ms before and 39.7 ms for Rust, while `Sherlock|Watson` stayed neutral
 at 66.7 ms versus 67.0 ms before.
 
+The line-numbered five-name suffix path now uses the same parallel
+collect/sort/deduplicate structure for large haystacks, scanning suffixes such
+as `Holmes`, `Watson`, and `Moriarty` concurrently and verifying the full
+literal before recording the line. Output for plain and `-n` `Sherlock
+Holmes|John Watson|Irene Adler|Inspector Lestrade|Professor Moriarty` on the
+1.5 GiB subtitles corpus matched sibling Rust `rg`; a seven-run
+previous/current/Rust A/B measured `-n` at 404.3 ms versus 620.4 ms before and
+311.8 ms for Rust. The neighboring plain form stayed in its retained parallel
+literal band at 329.7 ms versus 278.9 ms for Rust.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Raising the no-mmap stream read size to 4 MiB preserved output but regressed

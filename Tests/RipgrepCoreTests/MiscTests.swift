@@ -607,6 +607,19 @@ struct MiscTests {
 
         """)
 
+        let largeFiveNameLineNumberOutput = try runExecutableData([
+            "-n",
+            fiveNamePattern,
+            root.path("large-five-name-alternation.txt"),
+        ], fixture: {})
+        #expect(String(decoding: largeFiveNameLineNumberOutput, as: UTF8.self) == """
+        \(largeFillerLineCount + 1):Sherlock Holmes and John Watson
+        \(largeFillerLineCount + 3):Professor Moriarty investigates
+        \(largeFillerLineCount + 4):Irene Adler replies
+        \(largeFillerLineCount + 5):Inspector Lestrade reports
+
+        """)
+
         let largeTokenLineNumberOutput = try runExecutableData([
             "-n",
             "Sherlock|Watson|Moriarty",

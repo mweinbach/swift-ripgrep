@@ -2084,6 +2084,32 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         && ProcessInfo.processInfo.activeProcessorCount > 1
                 }
 
+                func sortedUniqueLineBounds(
+                    _ bounds: [DarwinMatchedLineBound]
+                ) -> [DarwinMatchedLineBound] {
+                    var collectedBounds = bounds
+                    collectedBounds.sort {
+                        if $0.start != $1.start {
+                            return $0.start < $1.start
+                        }
+                        return $0.firstMatchStart < $1.firstMatchStart
+                    }
+
+                    var uniqueBounds: [DarwinMatchedLineBound] = []
+                    uniqueBounds.reserveCapacity(collectedBounds.count)
+                    for bound in collectedBounds {
+                        if var last = uniqueBounds.last, last.start == bound.start {
+                            if bound.firstMatchStart < last.firstMatchStart {
+                                last.firstMatchStart = bound.firstMatchStart
+                                uniqueBounds[uniqueBounds.count - 1] = last
+                            }
+                        } else {
+                            uniqueBounds.append(bound)
+                        }
+                    }
+                    return uniqueBounds
+                }
+
                 func collectParallelMultiLiteralLineBounds() -> [DarwinMatchedLineBound] {
                     let store = DarwinMatchedLineBoundStore(count: literals.count)
                     let baseAddressValue = UInt(bitPattern: baseAddress)
@@ -2151,52 +2177,125 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         store.store(localBounds, at: literalIndex)
                     }
 
-                    var collectedBounds = store.collect()
-                    collectedBounds.sort {
-                        if $0.start != $1.start {
-                            return $0.start < $1.start
-                        }
-                        return $0.firstMatchStart < $1.firstMatchStart
-                    }
-
-                    var uniqueBounds: [DarwinMatchedLineBound] = []
-                    uniqueBounds.reserveCapacity(collectedBounds.count)
-                    for bound in collectedBounds {
-                        if var last = uniqueBounds.last, last.start == bound.start {
-                            if bound.firstMatchStart < last.firstMatchStart {
-                                last.firstMatchStart = bound.firstMatchStart
-                                uniqueBounds[uniqueBounds.count - 1] = last
-                            }
-                        } else {
-                            uniqueBounds.append(bound)
-                        }
-                    }
-                    return uniqueBounds
+                    return sortedUniqueLineBounds(store.collect())
                 }
 
-                if let suffixPlans = uniqueLastWordSuffixPlans() {
-                    for plan in suffixPlans where plan.suffix.count <= data.count {
-                        var searchOffset = 0
+                func collectParallelSuffixLiteralLineBounds(
+                    _ plans: [SuffixLiteralPlan]
+                ) -> [DarwinMatchedLineBound] {
+                    let store = DarwinMatchedLineBoundStore(count: plans.count)
+                    let baseAddressValue = UInt(bitPattern: baseAddress)
+                    let dataCount = data.count
+                    let newlineByte = UInt8(ascii: "\n")
+
+                    DispatchQueue.concurrentPerform(iterations: plans.count) { planIndex in
+                        let plan = plans[planIndex]
+                        guard plan.suffix.count <= dataCount else {
+                            store.store([], at: planIndex)
+                            return
+                        }
+
+                        let localBaseAddress = UnsafeRawPointer(bitPattern: baseAddressValue)!
+                            .assumingMemoryBound(to: UInt8.self)
+                        var localBounds: [DarwinMatchedLineBound] = []
+
+                        func literalMatches(_ literal: [UInt8], at offset: Int) -> Bool {
+                            guard offset >= 0, literal.count <= dataCount - offset else {
+                                return false
+                            }
+                            for index in literal.indices where localBaseAddress[offset + index] != literal[index] {
+                                return false
+                            }
+                            return true
+                        }
+
                         plan.suffix.withUnsafeBufferPointer { suffix in
                             guard let suffixBaseAddress = suffix.baseAddress else {
                                 return
                             }
-                            while searchOffset < data.count {
+                            var searchOffset = 0
+                            while searchOffset < dataCount {
                                 let foundPointer = rg_memmem_simple(
-                                    baseAddress.advanced(by: searchOffset),
-                                    data.count - searchOffset,
+                                    localBaseAddress.advanced(by: searchOffset),
+                                    dataCount - searchOffset,
                                     suffixBaseAddress,
                                     suffix.count
                                 )
                                 guard let rawFoundPointer = foundPointer else {
                                     break
                                 }
-                                let suffixMatchStart = baseAddress.distance(to: rawFoundPointer)
+
+                                let suffixMatchStart = localBaseAddress.distance(to: rawFoundPointer)
                                 let matchStart = suffixMatchStart - plan.suffixOffset
-                                if literal(plan.literal, matchesAt: matchStart) {
-                                    searchOffset = recordMatchLine(containing: matchStart)
-                                } else {
+                                guard literalMatches(plan.literal, at: matchStart) else {
                                     searchOffset = suffixMatchStart + 1
+                                    continue
+                                }
+
+                                var lineStart = matchStart
+                                while lineStart > 0, localBaseAddress[lineStart - 1] != newlineByte {
+                                    lineStart -= 1
+                                }
+
+                                let newlinePointer = memchr(
+                                    localBaseAddress.advanced(by: matchStart),
+                                    Int32(newlineByte),
+                                    dataCount - matchStart
+                                )
+                                let outputEnd: Int
+                                let hasNewline: Bool
+                                if let newlinePointer {
+                                    outputEnd = localBaseAddress.distance(
+                                        to: newlinePointer.assumingMemoryBound(to: UInt8.self)
+                                    ) + 1
+                                    hasNewline = true
+                                } else {
+                                    outputEnd = dataCount
+                                    hasNewline = false
+                                }
+
+                                localBounds.append(DarwinMatchedLineBound(
+                                    start: lineStart,
+                                    outputEnd: outputEnd,
+                                    hasNewline: hasNewline,
+                                    firstMatchStart: matchStart
+                                ))
+                                searchOffset = outputEnd
+                            }
+                        }
+                        store.store(localBounds, at: planIndex)
+                    }
+
+                    return sortedUniqueLineBounds(store.collect())
+                }
+
+                if let suffixPlans = uniqueLastWordSuffixPlans() {
+                    if shouldCollectParallelMultiLiteralLineBounds() {
+                        matchedLineBounds = collectParallelSuffixLiteralLineBounds(suffixPlans)
+                    } else {
+                        for plan in suffixPlans where plan.suffix.count <= data.count {
+                            var searchOffset = 0
+                            plan.suffix.withUnsafeBufferPointer { suffix in
+                                guard let suffixBaseAddress = suffix.baseAddress else {
+                                    return
+                                }
+                                while searchOffset < data.count {
+                                    let foundPointer = rg_memmem_simple(
+                                        baseAddress.advanced(by: searchOffset),
+                                        data.count - searchOffset,
+                                        suffixBaseAddress,
+                                        suffix.count
+                                    )
+                                    guard let rawFoundPointer = foundPointer else {
+                                        break
+                                    }
+                                    let suffixMatchStart = baseAddress.distance(to: rawFoundPointer)
+                                    let matchStart = suffixMatchStart - plan.suffixOffset
+                                    if literal(plan.literal, matchesAt: matchStart) {
+                                        searchOffset = recordMatchLine(containing: matchStart)
+                                    } else {
+                                        searchOffset = suffixMatchStart + 1
+                                    }
                                 }
                             }
                         }
