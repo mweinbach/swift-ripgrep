@@ -656,6 +656,13 @@ Rejected Swift-only probes from the same checkpoint:
   preserved output, but regressed the representative subtitles corpus to
   980.8 ms for `-n` and 917.6 ms for plain output, versus Rust at about
   311 ms and 279 ms.
+- A pure Swift DFA/Aho-Corasick mmap stdout probe for plain unlimited
+  multi-literal line output matched Rust byte-for-byte on the 1.5 GiB
+  `Sherlock Holmes|John Watson|Irene Adler|Inspector Lestrade|Professor
+  Moriarty` subtitles case (1094 lines for both plain and `-n`), but smoke
+  timings were about 2.04-2.08 s versus the committed scanner's roughly
+  0.58-0.64 s band, so the repeated SIMD literal scans remain faster than a
+  Swift per-byte transition-table loop.
 - Extending the finite multi-literal cutoff all the way to 4096 preserved
   output, but the repeated earliest-match scans overtook the collect/sort path:
   `-m 2048 'Sherlock|Watson'` measured 414.9 ms versus 309.7 ms before, and
