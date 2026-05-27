@@ -1205,6 +1205,50 @@ struct MiscTests {
 
         """.utf8))
 
+        let explicitNoLineNumberOutput = try runExecutableData([
+            "-N",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(explicitNoLineNumberOutput == output)
+
+        let longNoLineNumberOutput = try runExecutableData([
+            "--no-line-number",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(longNoLineNumberOutput == output)
+
+        let orderedNoLineNumberOutput = try runExecutableData([
+            "-n",
+            "-N",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(orderedNoLineNumberOutput == output)
+
+        let orderedLineNumberOutput = try runExecutableData([
+            "-N",
+            "-n",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(orderedLineNumberOutput == lineNumberOutput)
+
+        let clusteredNoLineNumberOutput = try runExecutableData([
+            "-nN",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(clusteredNoLineNumberOutput == output)
+
+        let clusteredLineNumberOutput = try runExecutableData([
+            "-Nn",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(clusteredLineNumberOutput == lineNumberOutput)
+
         let lineNumberIgnoreCaseOutput = try runExecutableData([
             "-n",
             "-i",

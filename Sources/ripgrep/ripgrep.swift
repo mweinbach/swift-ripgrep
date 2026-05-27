@@ -282,7 +282,10 @@ struct RipgrepCommand {
         func isLineNumberFlag(_ argument: String) -> Bool {
             argument == "-n" || argument == "--line-number"
         }
-        func shortFlagCluster(_ argument: String) -> (ignoreCase: Bool, lineNumber: Bool, wordRegexp: Bool)? {
+        func isNoLineNumberFlag(_ argument: String) -> Bool {
+            argument == "-N" || argument == "--no-line-number"
+        }
+        func shortFlagCluster(_ argument: String) -> (ignoreCase: Bool, lineNumber: Bool?, wordRegexp: Bool)? {
             let bytes = Array(argument.utf8)
             guard bytes.count > 2,
                   bytes.first == UInt8(ascii: "-"),
@@ -291,7 +294,7 @@ struct RipgrepCommand {
             }
 
             var ignoreCase = false
-            var lineNumber = false
+            var lineNumber: Bool?
             var wordRegexp = false
             for byte in bytes.dropFirst() {
                 switch byte {
@@ -299,6 +302,8 @@ struct RipgrepCommand {
                     ignoreCase = true
                 case UInt8(ascii: "n"):
                     lineNumber = true
+                case UInt8(ascii: "N"):
+                    lineNumber = false
                 case UInt8(ascii: "w"):
                     wordRegexp = true
                 default:
@@ -317,6 +322,8 @@ struct RipgrepCommand {
                 parsedIgnoreCase = true
             } else if isLineNumberFlag(argument) {
                 parsedLineNumber = true
+            } else if isNoLineNumberFlag(argument) {
+                parsedLineNumber = false
             } else if argument == "-nw" || argument == "-wn" {
                 parsedLineNumber = true
                 parsedWordRegexp = true
@@ -326,7 +333,9 @@ struct RipgrepCommand {
                 parsedNoMmap = true
             } else if let cluster = shortFlagCluster(argument) {
                 parsedIgnoreCase = parsedIgnoreCase || cluster.ignoreCase
-                parsedLineNumber = parsedLineNumber || cluster.lineNumber
+                if let lineNumber = cluster.lineNumber {
+                    parsedLineNumber = lineNumber
+                }
                 parsedWordRegexp = parsedWordRegexp || cluster.wordRegexp
             } else {
                 valueArguments.append(argument)

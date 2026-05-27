@@ -200,6 +200,15 @@ Swift binary and Rust. Ten-run checks measured `-ni Sherlock` at 212.3 ms
 versus 363.2 ms before and 503.0 ms for Rust; the `--no-mmap -ni` form
 measured 224.7 ms versus 401.6 ms before and 529.6 ms for Rust.
 
+The same parser now treats `-N`/`--no-line-number` as ordered line-number
+toggles, including clustered forms such as `-nN` and `-Nn`, so explicit
+no-line-number single-file searches can still use the Swift mapped preflight.
+Output for `-N Sherlock`, `-n -N Sherlock`, and clustered ordering checks on
+the 252 MiB dense fixture matched the previous Swift binary and Rust. Ten-run
+checks measured `-N Sherlock` at 177.0 ms versus 298.4 ms before and 267.7 ms
+for Rust; the long `--no-line-number` spelling measured 169.1 ms versus
+300.0 ms before and 265.0 ms for Rust.
+
 The Swift-only Darwin mmap/stdout preflight now also covers line-numbered
 medium bounded multi-literal output when no filename, byte-offset, column,
 replacement, only-matching, or vimgrep formatting is requested. Output for
