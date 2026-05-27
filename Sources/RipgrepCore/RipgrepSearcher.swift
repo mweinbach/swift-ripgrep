@@ -4165,6 +4165,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
 
         #if !canImport(CRipgrepPlatform)
         if let maxCount = options.maxCount,
+           maxCount > 0,
            maxCount >= 16,
            let result = SwiftDarwinLiteralPreflight.multiLiteralResult(
             path: fileURL.path,

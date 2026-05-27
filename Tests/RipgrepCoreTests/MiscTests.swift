@@ -384,10 +384,43 @@ struct MiscTests {
         ], fixture: {})
 
         #expect(String(decoding: boundedMultiByteOutput, as: UTF8.self) == "bravo\n")
+        let boundedTwoMultiByteOutput = try runExecutableData([
+            "-m2",
+            "bravo|delta",
+            root.path("letters.txt"),
+        ], fixture: {})
+        #expect(String(decoding: boundedTwoMultiByteOutput, as: UTF8.self) == "bravo\ndelta\n")
+
+        let explicitMmapBoundedMultiByteOutput = try runExecutableData([
+            "--mmap",
+            "-m1",
+            "bravo|delta",
+            root.path("letters.txt"),
+        ], fixture: {})
+        #expect(String(decoding: explicitMmapBoundedMultiByteOutput, as: UTF8.self) == "bravo\n")
+
+        try root.write("quiet\nlast delta", to: "unterminated-multi.txt")
+        let boundedUnterminatedMultiByteOutput = try runExecutableData([
+            "-m1",
+            "bravo|delta",
+            root.path("unterminated-multi.txt"),
+        ], fixture: {})
+        #expect(String(decoding: boundedUnterminatedMultiByteOutput, as: UTF8.self) == "last delta\n")
+
         let manyMultiLines = (1...20).map { index in
             "\(index.isMultiple(of: 2) ? "delta" : "bravo") \(index)"
         }.joined(separator: "\n") + "\n"
         try root.write(manyMultiLines, to: "many-multi.txt")
+        let boundedFifteenMultiByteOutput = try runExecutableData([
+            "-m15",
+            "bravo|delta",
+            root.path("many-multi.txt"),
+        ], fixture: {})
+        let expectedBoundedFifteenMultiLines = (1...15).map { index in
+            "\(index.isMultiple(of: 2) ? "delta" : "bravo") \(index)"
+        }.joined(separator: "\n") + "\n"
+        #expect(String(decoding: boundedFifteenMultiByteOutput, as: UTF8.self) == expectedBoundedFifteenMultiLines)
+
         let boundedManyMultiByteOutput = try runExecutableData([
             "-m16",
             "bravo|delta",
