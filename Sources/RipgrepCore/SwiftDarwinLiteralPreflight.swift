@@ -63,7 +63,8 @@ public enum SwiftDarwinLiteralPreflight {
     static func multiLiteralResult(
         path: String,
         literals: [[UInt8]],
-        maxCount: Int?
+        maxCount: Int?,
+        lineNumber: Bool = false
     ) -> rg_darwin_literal_file_result? {
         guard literals.count > 1,
               literals.count <= 8,
@@ -126,7 +127,8 @@ public enum SwiftDarwinLiteralPreflight {
             literals: literals,
             firstBytes: firstBytes,
             literalIndicesByByte: literalIndicesByByte,
-            maxCount: maxCount ?? Int.max
+            maxCount: maxCount ?? Int.max,
+            lineNumber: lineNumber
         )
     }
 }
@@ -176,6 +178,23 @@ private struct rgSwiftStdoutBuffer {
         storage[length] = byte
         length += 1
         return true
+    }
+
+    mutating func writeLineNumberPrefix(_ value: Int) -> Bool {
+        withUnsafeTemporaryAllocation(of: UInt8.self, capacity: 32) { buffer in
+            var cursor = buffer.count - 1
+            buffer[cursor] = UInt8(ascii: ":")
+            var number = value
+            repeat {
+                cursor -= 1
+                buffer[cursor] = UInt8(number % 10) + UInt8(ascii: "0")
+                number /= 10
+            } while number > 0
+            return write(
+                buffer.baseAddress!.advanced(by: cursor),
+                count: buffer.count - cursor
+            )
+        }
     }
 
     mutating func flush() -> Bool {
@@ -322,7 +341,8 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
     literals: [[UInt8]],
     firstBytes: [UInt8],
     literalIndicesByByte: [Int],
-    maxCount: Int
+    maxCount: Int,
+    lineNumber: Bool
 ) -> rg_darwin_literal_file_result? {
     if haystackLength >= 3,
        base[0] == 0xEF,
@@ -349,6 +369,8 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
     var matchedLineCount = 0
     var bytesSearched = haystackLength
     var searchOffset = 0
+    var currentLineNumber = 1
+    var lineCountOffset = 0
     var writeFailed = false
 
     firstBytes.withUnsafeBufferPointer { firstByteBuffer in
@@ -398,6 +420,18 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
             let outputEnd = newline.map {
                 base.distance(to: $0.assumingMemoryBound(to: UInt8.self)) + 1
             } ?? haystackLength
+            if lineNumber {
+                currentLineNumber += rg_memcount_byte(
+                    base.advanced(by: lineCountOffset),
+                    lineStart - lineCountOffset,
+                    UInt8(ascii: "\n")
+                )
+                lineCountOffset = lineStart
+                guard output.writeLineNumberPrefix(currentLineNumber) else {
+                    writeFailed = true
+                    break
+                }
+            }
             guard output.write(base.advanced(by: lineStart), count: outputEnd - lineStart) else {
                 writeFailed = true
                 break

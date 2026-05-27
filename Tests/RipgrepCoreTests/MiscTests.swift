@@ -377,6 +377,29 @@ struct MiscTests {
 
         #expect(String(decoding: multiByteOutput, as: UTF8.self) == "2:bravo\n4:delta\n")
 
+        let ignoreCaseMultiByteOutput = try runExecutableData([
+            "-i",
+            "BRAVO|DELTA",
+            root.path("letters.txt"),
+        ], fixture: {})
+        #expect(String(decoding: ignoreCaseMultiByteOutput, as: UTF8.self) == "bravo\ndelta\n")
+
+        try root.write("bravo\nBRAVO\ndelta\nDELTA\n", to: "case-letters.txt")
+        let mixedCaseMultiByteOutput = try runExecutableData([
+            "-i",
+            "BRAVO|DELTA",
+            root.path("case-letters.txt"),
+        ], fixture: {})
+        #expect(String(decoding: mixedCaseMultiByteOutput, as: UTF8.self) == "bravo\nBRAVO\ndelta\nDELTA\n")
+
+        try root.write("sherlocked\nSherlock\nWatson!\nWatsonian\n", to: "words.txt")
+        let wordMultiByteOutput = try runExecutableData([
+            "-w",
+            "Sherlock|Watson",
+            root.path("words.txt"),
+        ], fixture: {})
+        #expect(String(decoding: wordMultiByteOutput, as: UTF8.self) == "Sherlock\nWatson!\n")
+
         let boundedMultiByteOutput = try runExecutableData([
             "-m1",
             "bravo|delta",
@@ -430,6 +453,20 @@ struct MiscTests {
             "\(index.isMultiple(of: 2) ? "delta" : "bravo") \(index)"
         }.joined(separator: "\n") + "\n"
         #expect(String(decoding: boundedManyMultiByteOutput, as: UTF8.self) == expectedBoundedManyMultiLines)
+
+        let lineNumberedBoundedManyMultiByteOutput = try runExecutableData([
+            "-n",
+            "-m16",
+            "bravo|delta",
+            root.path("many-multi.txt"),
+        ], fixture: {})
+        let expectedLineNumberedBoundedManyMultiLines = (1...16).map { index in
+            "\(index):\(index.isMultiple(of: 2) ? "delta" : "bravo") \(index)"
+        }.joined(separator: "\n") + "\n"
+        #expect(
+            String(decoding: lineNumberedBoundedManyMultiByteOutput, as: UTF8.self)
+                == expectedLineNumberedBoundedManyMultiLines
+        )
 
         let onlyMatchingOutput = try runExecutableData([
             "-o",

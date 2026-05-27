@@ -120,6 +120,32 @@ measured `-m 129` at 145.4 ms versus 322.7 ms before and 23.4 ms for Rust,
 63.8 ms for Rust; `-m 1280` measured 289.6 ms versus 317.0 ms before and
 66.1 ms for Rust. Unlimited output continues through the previous scanner.
 
+The Swift-only Darwin mmap/stdout preflight now also covers line-numbered
+medium bounded multi-literal output when no filename, byte-offset, column,
+replacement, only-matching, or vimgrep formatting is requested. Output for
+`-n -m 16`, `-n -m 128`, `-n -m 1024`, and neighboring plain `-m 128`
+checks matched both the previous Swift checkpoint and Rust. On the small
+subtitles corpus, 20-run A/B checks measured `-n -m 16 'Sherlock|Watson'` at
+47.1 ms versus 55.1 ms before and 10.5 ms for Rust, while `-n -m 128` measured
+69.9 ms versus 148.7 ms before and 23.7 ms for Rust. A 12-run `-n -m 1024`
+check measured 103.0 ms versus 193.0 ms before and 43.9 ms for Rust.
+
+The direct Swift Darwin matching-line writer now covers transformed ASCII
+multi-literal regexes, including ignore-case alternations and word-boundary
+alternations, when no filename, byte-offset, column, replacement,
+only-matching, or vimgrep formatting is requested. The writer keeps one
+next-match candidate per literal and advances every candidate past an emitted
+or rejected line, avoiding repeated all-file rescans while preserving one output
+line per matched line. Output for `-i 'sherlock|watson'`,
+`-n -i 'sherlock|watson'`, `-w 'Sherlock|Watson'`, `-n -w 'Sherlock|Watson'`,
+and the neighboring `-n -m 16 'Sherlock|Watson'` check matched the sibling
+Rust oracle on the small subtitles corpus. The focused executable regression
+also covers mixed-case ignore-case output and a word-boundary false positive
+like `Watsonian`. A 10-run check measured `-i 'sherlock|watson'` at 78.5 ms
+versus the earlier 47,774.6 ms pathological Swift sweep and 40.7 ms for Rust;
+`-w 'Sherlock|Watson'` measured 79.9 ms versus the earlier 21,342.5 ms Swift
+sweep and 39.5 ms for Rust.
+
 The Swift byte-set scanner now uses SIMD for alternations with up to eight
 single-byte literals, while keeping the previous scalar bitset fallback for
 larger sets. Output for `--count-matches 'A|B|C|D|E'`, `-o 'A|B|C|D|E'` and
@@ -528,6 +554,11 @@ Rejected Swift-only probes from the same checkpoint:
   preserved output on spot checks, but was slow enough on the large subtitles
   corpus that the 60-run benchmark was terminated after the mmap baseline
   completed at 50.1 ms.
+- A Swift-only bounded-prefix multi-literal reader for `-m 1` and `-m 2`
+  preserved output against both the previous Swift checkpoint and Rust,
+  including no-match fallback output, but slowed representative subtitle checks:
+  small-corpus `-m 1 'Sherlock|Watson'` measured 50.1 ms versus 46.1 ms before,
+  and 200 MiB `-m 2` measured 46.0 ms versus 42.1 ms before.
 - Tracking the current line in the byte-set scanner preserved output, but
   regressed dense byte-set count and only-matching output: `--count-matches
   'A|B|C|D|E'` measured 254.3 ms versus 155.6 ms before, `-o` measured

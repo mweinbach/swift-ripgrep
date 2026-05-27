@@ -814,6 +814,18 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 || (fastPathByteSet == nil && canScanDarwinLiteralsIndependently(fastPath)))
             && fastPathByteSet == nil
             && !fastPath.wordASCII
+        let transformedMultiLiteralRequiresWordBoundary = options.wordRegexp || fastPath.wordASCII
+        let canDirectWriteTransformedMultiLiteralLines = fastPath.literals.count > 1
+            && fastPath.literals.allSatisfy { $0.allSatisfy { $0 < 0x80 } }
+            && (fastPath.caseInsensitiveASCII || transformedMultiLiteralRequiresWordBoundary)
+            && options.printMode == .matchingLines
+            && !options.quiet
+            && !onlyMatching
+            && options.replacement == nil
+            && !options.vimgrep
+            && options.withFilename != true
+            && !options.byteOffset
+            && !options.column
         guard (!onlyMatching
                 || fastPath.literals.count == 1
                 || fastPathByteSet != nil
@@ -836,7 +848,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         || canDirectWriteOnlyMatchingLiteralReplacement
                         || canDirectWriteVimgrep
                         || canDirectWriteVimgrepLiteralReplacement))),
-              canWriteDarwinSimpleByteLiteralFastPath(fastPath) else {
+              canWriteDarwinSimpleByteLiteralFastPath(fastPath)
+                || canDirectWriteTransformedMultiLiteralLines else {
             return nil
         }
 
@@ -1862,7 +1875,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
             if literals.count > 1,
                fastPathByteSet == nil,
                !countMatchesOnly,
-               !onlyMatching {
+               !onlyMatching,
+               !canDirectWriteTransformedMultiLiteralLines {
                 if maxCount <= finiteMultiLiteralMaxCountFastPathLimit {
                     var searchOffset = 0
                     while searchOffset < data.count, matchedLineCount < maxCount {
@@ -2019,6 +2033,154 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     options: options,
                     writeBytes: writeBytes
                 )
+            }
+
+            if canDirectWriteTransformedMultiLiteralLines {
+                let foldedLiterals = fastPath.caseInsensitiveASCII
+                    ? literals.map { $0.map(asciiLowercase) }
+                    : []
+                let caseInsensitiveShifts = foldedLiterals.map { foldedLiteral -> [Int] in
+                    var shifts = [Int](repeating: foldedLiteral.count, count: 256)
+                    if foldedLiteral.count > 1 {
+                        for index in 0..<(foldedLiteral.count - 1) {
+                            shifts[Int(foldedLiteral[index])] = foldedLiteral.count - 1 - index
+                        }
+                    }
+                    return shifts
+                }
+
+                func findTransformedLiteral(_ literalIndex: Int, from offset: Int) -> UnsafePointer<UInt8>? {
+                    guard offset < data.count else {
+                        return nil
+                    }
+                    if fastPath.caseInsensitiveASCII {
+                        return foldedLiterals[literalIndex].withUnsafeBufferPointer { foldedNeedle in
+                            caseInsensitiveShifts[literalIndex].withUnsafeBufferPointer { shifts in
+                                rg_memcasemem_ascii_prepared(
+                                    baseAddress.advanced(by: offset),
+                                    data.count - offset,
+                                    foldedNeedle.baseAddress,
+                                    foldedNeedle.count,
+                                    shifts.baseAddress
+                                )
+                            }
+                        }
+                    }
+                    return literals[literalIndex].withUnsafeBufferPointer { needle in
+                        return rg_memmem_simple(
+                            baseAddress.advanced(by: offset),
+                            data.count - offset,
+                            needle.baseAddress,
+                            needle.count
+                        )
+                    }
+                }
+
+                func nextTransformedCandidate(
+                    literalIndex: Int,
+                    from offset: Int
+                ) -> (start: Int, length: Int, literalIndex: Int) {
+                    guard literals[literalIndex].count <= data.count - min(offset, data.count),
+                          let foundPointer = findTransformedLiteral(literalIndex, from: offset) else {
+                        return (Int.max, 0, literalIndex)
+                    }
+                    return (
+                        baseAddress.distance(to: foundPointer),
+                        literals[literalIndex].count,
+                        literalIndex
+                    )
+                }
+
+                func earliestCandidateIndex(
+                    in candidates: [(start: Int, length: Int, literalIndex: Int)]
+                ) -> Int? {
+                    var selectedIndex: Int?
+                    var selectedStart = Int.max
+                    for index in candidates.indices where candidates[index].start < selectedStart {
+                        selectedStart = candidates[index].start
+                        selectedIndex = index
+                    }
+                    return selectedStart == Int.max ? nil : selectedIndex
+                }
+
+                var candidates = literals.indices.map {
+                    nextTransformedCandidate(literalIndex: $0, from: 0)
+                }
+
+                while matchedLineCount < maxCount,
+                      let candidateIndex = earliestCandidateIndex(in: candidates) {
+                    let earliestMatchStart = candidates[candidateIndex].start
+                    guard earliestMatchStart < data.count else {
+                        break
+                    }
+
+                    var lineStart = earliestMatchStart
+                    while lineStart > 0, baseAddress[lineStart - 1] != UInt8(ascii: "\n") {
+                        lineStart -= 1
+                    }
+                    let remaining = data.count - earliestMatchStart
+                    let newlinePointer = memchr(
+                        baseAddress.advanced(by: earliestMatchStart),
+                        Int32(UInt8(ascii: "\n")),
+                        remaining
+                    )
+                    let lineEnd: Int
+                    let outputEnd: Int
+                    if let newlinePointer {
+                        lineEnd = baseAddress.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self))
+                        outputEnd = lineEnd + 1
+                    } else {
+                        lineEnd = data.count
+                        outputEnd = data.count
+                    }
+
+                    func advanceCandidatesPastLine() {
+                        for index in candidates.indices where candidates[index].start < outputEnd {
+                            candidates[index] = nextTransformedCandidate(
+                                literalIndex: candidates[index].literalIndex,
+                                from: outputEnd
+                            )
+                        }
+                    }
+
+                    if transformedMultiLiteralRequiresWordBoundary {
+                        let scan = byteLiteralLineMatch(
+                            fastPath: fastPath,
+                            bytes: byteBuffer,
+                            lineStart: lineStart,
+                            lineEnd: lineEnd
+                        )
+                        if scan.needsDecodedFallback {
+                            needsDecodedFallback = true
+                            return
+                        }
+                        guard scan.hasMatch else {
+                            advanceCandidatesPastLine()
+                            continue
+                        }
+                    }
+
+                    matchedLineCount += 1
+                    if !countOnly {
+                        writeMatchingLinePrefixes(lineStart: lineStart, matchStart: earliestMatchStart)
+                        writeBytes(UnsafeRawBufferPointer(
+                            start: rawBaseAddress.advanced(by: lineStart),
+                            count: outputEnd - lineStart
+                        ))
+                        if newlinePointer == nil {
+                            var newline = UInt8(ascii: "\n")
+                            withUnsafeBytes(of: &newline) { buffer in
+                                writeBytes(buffer)
+                            }
+                        }
+                    }
+                    if matchedLineCount == maxCount {
+                        bytesSearched = outputEnd
+                        break
+                    }
+                    advanceCandidatesPastLine()
+                }
+                return
             }
 
             if literals.count == 1,
@@ -4152,7 +4314,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
               options.withFilename != true,
               !options.vimgrep,
               options.replacement == nil,
-              !options.wantsLineNumber,
+              !options.wordRegexp,
               !options.onlyMatching,
               !options.byteOffset,
               !options.column,
@@ -4163,6 +4325,13 @@ public struct RipgrepSearcher: @unchecked Sendable {
             return nil
         }
 
+        #if canImport(CRipgrepPlatform)
+        guard options.maxCount == nil,
+              !options.wantsLineNumber else {
+            return nil
+        }
+        #endif
+
         #if !canImport(CRipgrepPlatform)
         if let maxCount = options.maxCount,
            maxCount > 0,
@@ -4170,7 +4339,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
            let result = SwiftDarwinLiteralPreflight.multiLiteralResult(
             path: fileURL.path,
             literals: fastPath.literals,
-            maxCount: maxCount
+            maxCount: maxCount,
+            lineNumber: options.wantsLineNumber
         ) {
             if result.status == -1 {
                 throw RipgrepError.message("failed writing stdout")
