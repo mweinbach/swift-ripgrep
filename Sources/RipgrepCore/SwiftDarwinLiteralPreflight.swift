@@ -781,19 +781,38 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
         return true
     }
 
+    let prefixLineFirstBytes: [UInt8] = {
+        var firstBytes: [UInt8] = []
+        firstBytes.reserveCapacity(literals.count)
+        for literal in literals where !firstBytes.contains(literal[0]) {
+            firstBytes.append(literal[0])
+        }
+        return firstBytes
+    }()
+
     func firstLiteralMatch(inLineStart lineStart: Int, lineEnd: Int) -> Int? {
-        let lineLength = lineEnd - lineStart
-        for literal in literals where literal.count <= lineLength {
-            let foundPointer = literal.withUnsafeBufferPointer { literalBuffer in
-                rg_memmem_simple(
-                    base.advanced(by: lineStart),
-                    lineLength,
-                    literalBuffer.baseAddress,
-                    literalBuffer.count
+        var searchOffset = lineStart
+        while searchOffset < lineEnd {
+            let foundPointer = prefixLineFirstBytes.withUnsafeBufferPointer { firstByteBuffer in
+                rg_memchr_any_bytes(
+                    base.advanced(by: searchOffset),
+                    lineEnd - searchOffset,
+                    firstByteBuffer.baseAddress,
+                    firstByteBuffer.count
                 )
             }
             if let foundPointer {
-                return base.distance(to: foundPointer)
+                let matchStart = base.distance(to: foundPointer)
+                let firstByte = base[matchStart]
+                for candidateLiteral in literals
+                    where candidateLiteral[0] == firstByte && candidateLiteral.count <= lineEnd - matchStart {
+                    if literal(candidateLiteral, matchesAt: matchStart) {
+                        return matchStart
+                    }
+                }
+                searchOffset = matchStart + 1
+            } else {
+                return nil
             }
         }
         return nil
