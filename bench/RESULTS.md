@@ -896,6 +896,19 @@ default Unicode form remains on the existing matcher to preserve full Unicode
 343.00 ms band. The Unicode form measured 318.88 ms versus Rust at 199.56 ms
 on the retained path.
 
+Default Unicode surrounding-word output now also gets a direct Swift stdout
+writer inside `RipgrepSearcher`, before the generic `SearchMatch` and
+`StandardPrinter` path. It still buffers line ranges before writing, uses the
+existing decoded matcher for non-ASCII candidate lines, and falls back without
+emitting partial stdout if decoding fails or the buffered output grows too
+large. Output for both default Unicode and `(?-u)` ASCII surrounding-word
+queries on the 1.5 GiB subtitles corpus matched sibling Rust `rg` exactly
+(483 lines). A nine-run direct check measured the Unicode form at 249.8 ms
+versus 199.0 ms for Rust, down from the retained 318.88 ms harness band; the
+focused upstream harness measured the same route at 272.54 ms versus Rust at
+200.76 ms. The ASCII form stayed in the executable-preflight band at 217.4 ms
+versus Rust at 197.3 ms.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - A broader default-Unicode executable surrounding-word preflight preserved

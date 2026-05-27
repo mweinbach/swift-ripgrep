@@ -523,6 +523,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let byteUnitFastPath = matcher.byteUnitFastPath()
         let byteLiteralFastPath = matcher.byteLiteralFastPath()
         let asciiBoundaryLiteralFastPath = asciiBoundaryLiteralPattern(options: options)
+        let surroundingWordsLiteralFastPath = surroundingWordsLiteralPattern(options: options)
         guard let fileURL = options.roots.first?.standardizedFileURL,
               fixedLookbehindFastPath != nil
                 || fixedLookaheadFastPath != nil
@@ -534,7 +535,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 || fixedConditionalFastPath != nil
                 || byteUnitFastPath != nil
                 || byteLiteralFastPath != nil
-                || asciiBoundaryLiteralFastPath != nil else {
+                || asciiBoundaryLiteralFastPath != nil
+                || surroundingWordsLiteralFastPath != nil else {
             return nil
         }
         if (fixedLookbehindFastPath != nil
@@ -596,6 +598,18 @@ public struct RipgrepSearcher: @unchecked Sendable {
             data,
             fileURL: fileURL,
             literal: asciiBoundaryLiteralFastPath,
+            options: options,
+            writeBytes: writeBytes
+           ) {
+            return directResults
+        }
+
+        if let surroundingWordsLiteralFastPath,
+           let directResults = writeDarwinSurroundingWordsStdout(
+            data,
+            fileURL: fileURL,
+            literal: surroundingWordsLiteralFastPath,
+            matcher: matcher,
             options: options,
             writeBytes: writeBytes
            ) {
@@ -3538,6 +3552,179 @@ public struct RipgrepSearcher: @unchecked Sendable {
             fileURL: fileURL,
             matches: [],
             bytesSearched: bytesSearched,
+            searched: true,
+            supplementalMatchedLines: matchedLineCount,
+            supplementalMatches: matchedLineCount
+        )
+        return SearchResults(
+            files: [fileResult],
+            summary: SearchSummary(
+                filesSearched: 1,
+                filesWithMatches: matchedLineCount > 0 ? 1 : 0,
+                matchedLines: matchedLineCount,
+                totalMatches: matchedLineCount
+            )
+        )
+        #endif
+    }
+
+    private func writeDarwinSurroundingWordsStdout(
+        _ data: Data,
+        fileURL: URL,
+        literal: [UInt8],
+        matcher: PatternMatcher,
+        options: RipgrepOptions,
+        writeBytes: (UnsafeRawBufferPointer) -> Void
+    ) -> SearchResults? {
+        #if !canImport(Darwin)
+        return nil
+        #else
+        guard options.printMode == .matchingLines,
+              options.maxCount == nil,
+              !options.quiet,
+              !options.onlyMatching,
+              !options.vimgrep,
+              options.replacement == nil,
+              !options.byteOffset,
+              !options.column,
+              options.withFilename != true,
+              !literal.isEmpty else {
+            return nil
+        }
+
+        let asciiOnly = options.effectivePatterns.first?.hasPrefix("(?-u)") == true
+        struct PendingLine {
+            let number: Int
+            let start: Int
+            let outputEnd: Int
+            let needsFinalNewline: Bool
+        }
+
+        var pendingLines: [PendingLine] = []
+        pendingLines.reserveCapacity(1024)
+        let maxBufferedLines = 16_384
+        var failedDecode = false
+        var exceededBufferedLineLimit = false
+
+        data.withUnsafeBytes { rawBytes in
+            guard let rawBaseAddress = rawBytes.baseAddress else {
+                return
+            }
+            let baseAddress = rawBaseAddress.assumingMemoryBound(to: UInt8.self)
+            let bytes = rawBytes.bindMemory(to: UInt8.self)
+            let dataCount = data.count
+            var searchOffset = 0
+            var lineNumberAtSearchOffset = 1
+
+            while searchOffset < dataCount {
+                let result = literal.withUnsafeBufferPointer { needle in
+                    rg_memmem_count_byte_before(
+                        baseAddress.advanced(by: searchOffset),
+                        dataCount - searchOffset,
+                        needle.baseAddress,
+                        needle.count,
+                        UInt8(ascii: "\n")
+                    )
+                }
+                guard let rawFoundPointer = result.match else {
+                    break
+                }
+
+                let matchStart = baseAddress.distance(to: rawFoundPointer)
+                let matchEnd = matchStart + literal.count
+                let matchedLineNumber = lineNumberAtSearchOffset + Int(result.count)
+                var lineStart = matchStart
+                while lineStart > 0, bytes[lineStart - 1] != UInt8(ascii: "\n") {
+                    lineStart -= 1
+                }
+                let newlinePointer = memchr(
+                    rawFoundPointer,
+                    Int32(UInt8(ascii: "\n")),
+                    dataCount - matchStart
+                )
+                let lineEnd: Int
+                let outputEnd: Int
+                if let newlinePointer {
+                    lineEnd = baseAddress.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self))
+                    outputEnd = lineEnd + 1
+                } else {
+                    lineEnd = dataCount
+                    outputEnd = dataCount
+                }
+
+                var matched = asciiSurroundingWordsMatch(
+                    bytes: bytes,
+                    lineStart: lineStart,
+                    lineEnd: lineEnd,
+                    literalStart: matchStart,
+                    literalEnd: matchEnd
+                )
+                if !asciiOnly,
+                   !matched,
+                   lineContainsNonASCII(bytes: bytes, lineStart: lineStart, lineEnd: lineEnd) {
+                    guard let line = utf8LineString(
+                        baseAddress: baseAddress,
+                        lineStart: lineStart,
+                        lineEnd: lineEnd
+                    ) else {
+                        failedDecode = true
+                        break
+                    }
+                    matched = !decodedLiteralFallbackSpans(matcher: matcher, options: options, line: line).isEmpty
+                }
+
+                if matched {
+                    if pendingLines.count == maxBufferedLines {
+                        exceededBufferedLineLimit = true
+                        return
+                    }
+                    pendingLines.append(PendingLine(
+                        number: matchedLineNumber,
+                        start: lineStart,
+                        outputEnd: outputEnd,
+                        needsFinalNewline: newlinePointer == nil
+                    ))
+                    lineNumberAtSearchOffset = newlinePointer == nil ? matchedLineNumber : matchedLineNumber + 1
+                    searchOffset = outputEnd
+                    continue
+                }
+
+                lineNumberAtSearchOffset = matchedLineNumber
+                searchOffset = max(matchStart + 1, searchOffset + 1)
+            }
+        }
+
+        guard !failedDecode, !exceededBufferedLineLimit else {
+            return nil
+        }
+
+        let wantsLineNumber = options.wantsLineNumber
+        data.withUnsafeBytes { rawBytes in
+            guard let baseAddress = rawBytes.baseAddress else {
+                return
+            }
+            for line in pendingLines {
+                if wantsLineNumber {
+                    writeDarwinLineNumberPrefix(line.number, writeBytes: writeBytes)
+                }
+                writeBytes(UnsafeRawBufferPointer(
+                    start: baseAddress.advanced(by: line.start),
+                    count: line.outputEnd - line.start
+                ))
+                if line.needsFinalNewline {
+                    var newline = UInt8(ascii: "\n")
+                    withUnsafeBytes(of: &newline) { buffer in
+                        writeBytes(buffer)
+                    }
+                }
+            }
+        }
+
+        let matchedLineCount = pendingLines.count
+        let fileResult = SearchFileResult(
+            fileURL: fileURL,
+            matches: [],
+            bytesSearched: data.count,
             searched: true,
             supplementalMatchedLines: matchedLineCount,
             supplementalMatches: matchedLineCount
