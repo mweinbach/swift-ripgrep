@@ -568,6 +568,17 @@ previous Swift checkpoint and sibling Rust oracle (22 lines each). A seven-run
 A/B measured Unicode at 3.958 s versus 4.194 s before and 2.530 s for Rust;
 the ASCII form measured 3.691 s versus 3.736 s before and 2.407 s for Rust.
 
+Large mapped no-literal word-sequence scans now prefilter lines that are too
+short to satisfy the minimum `\w{5}\s+...` byte length, using `memchr` to skip
+the line before entering the Swift byte-classification loop. The prefilter is
+limited to large files so recursive Linux-tree scans keep the previous scalar
+loop. Output for the seven-group Unicode and `(?-u)` ASCII subtitles patterns
+remained byte-identical to the previous Swift checkpoint and sibling Rust
+oracle (22 lines each). A five-run A/B measured Unicode at 2.809 s versus
+3.968 s before, and ASCII at 2.542 s versus 3.689 s before. A three-run Linux
+five-group guard stayed neutral/noisy-good: Unicode 2.628 s versus 2.641 s
+before, and ASCII 2.537 s versus 2.586 s before.
+
 Line-numbered single-literal output now counts newline bytes inside the same
 Swift SIMD first/tail literal scan used to find the next match, avoiding the
 second skipped-region pass previously used only to print `-n` prefixes. Output

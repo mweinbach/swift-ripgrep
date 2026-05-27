@@ -5338,6 +5338,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let maxCount = options.maxCount ?? Int.max
         let dataCount = data.count
         let minimumSequenceByteCount = fastPath.groupCount * 5 + max(0, fastPath.groupCount - 1)
+        let canPrefilterShortLines = dataCount >= 64 * 1024 * 1024
         data.withUnsafeBytes { rawBuffer in
             let bytes = rawBuffer.bindMemory(to: UInt8.self)
             guard let baseAddress = bytes.baseAddress else {
@@ -5405,98 +5406,214 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 return true
             }
 
-            while offset < dataCount, matches.count < maxCount {
-                let byte = baseAddress[offset]
-                if byte == UInt8(ascii: "\n") {
-                    guard finishUnmatchedLine(
-                        lineEnd: offset,
-                        lineTerminator: "\n",
-                        nextLineStart: offset + 1
-                    ) else {
-                        break
-                    }
-                    offset = lineStart
-                    continue
-                }
-                if byte >= 0x80 {
-                    sawNonASCIIInLine = true
-                    qualifyingWordRuns = 0
-                    canContinueSequenceAfterWhitespace = false
-                    offset += 1
-                    continue
-                }
-                if isASCIIRegexWordByte(byte) {
-                    let runStart = offset
-                    repeat {
-                        offset += 1
-                    } while offset < dataCount && isASCIIRegexWordByte(baseAddress[offset])
-                    let runLength = offset - runStart
-                    let extendsSequence: Bool
-                    if canContinueSequenceAfterWhitespace {
-                        if qualifyingWordRuns == fastPath.groupCount - 1 {
-                            extendsSequence = runLength >= 5
-                        } else {
-                            extendsSequence = runLength == 5
-                        }
-                    } else {
-                        extendsSequence = runLength >= 5
-                    }
-                    if extendsSequence {
-                        qualifyingWordRuns = canContinueSequenceAfterWhitespace ? qualifyingWordRuns + 1 : 1
-                        if qualifyingWordRuns == fastPath.groupCount {
-                            let newlinePointer = memchr(
-                                baseAddress.advanced(by: offset),
-                                Int32(UInt8(ascii: "\n")),
-                                dataCount - offset
-                            )
-                            let lineEnd: Int
-                            let nextLineStart: Int
-                            let lineTerminator: String
-                            if let newlinePointer {
-                                lineEnd = baseAddress.distance(
-                                    to: newlinePointer.assumingMemoryBound(to: UInt8.self)
-                                )
-                                nextLineStart = lineEnd + 1
-                                lineTerminator = "\n"
-                            } else {
-                                lineEnd = dataCount
-                                nextLineStart = dataCount + 1
-                                lineTerminator = ""
-                            }
-                            guard appendMatch(
-                                lineEnd: lineEnd,
-                                lineTerminator: lineTerminator,
-                                nextLineStart: nextLineStart
-                            ) else {
-                                break
-                            }
-                            lineStart = nextLineStart
+            // Keep the large-file short-line prefilter out of the normal recursive-file hot loop.
+            if canPrefilterShortLines {
+                while offset < dataCount, matches.count < maxCount {
+                    if offset == lineStart {
+                        let newlinePointer = memchr(
+                            baseAddress.advanced(by: offset),
+                            Int32(UInt8(ascii: "\n")),
+                            dataCount - offset
+                        )
+                        let lineEnd = newlinePointer.map {
+                            baseAddress.distance(to: $0.assumingMemoryBound(to: UInt8.self))
+                        } ?? dataCount
+                        if lineEnd - lineStart < minimumSequenceByteCount {
+                            lineStart = lineEnd < dataCount ? lineEnd + 1 : dataCount + 1
                             lineNumber += 1
-                            offset = nextLineStart
+                            offset = lineStart
                             qualifyingWordRuns = 0
                             canContinueSequenceAfterWhitespace = false
                             sawNonASCIIInLine = false
                             continue
                         }
-                        canContinueSequenceAfterWhitespace = false
-                    } else {
-                        qualifyingWordRuns = runLength >= 5 ? 1 : 0
-                        canContinueSequenceAfterWhitespace = false
                     }
-                    continue
-                }
-                if isASCIIRegexWhitespaceByte(byte) {
-                    repeat {
+                    let byte = baseAddress[offset]
+                    if byte == UInt8(ascii: "\n") {
+                        guard finishUnmatchedLine(
+                            lineEnd: offset,
+                            lineTerminator: "\n",
+                            nextLineStart: offset + 1
+                        ) else {
+                            break
+                        }
+                        offset = lineStart
+                        continue
+                    }
+                    if byte >= 0x80 {
+                        sawNonASCIIInLine = true
+                        qualifyingWordRuns = 0
+                        canContinueSequenceAfterWhitespace = false
                         offset += 1
-                    } while offset < dataCount
-                        && baseAddress[offset] != UInt8(ascii: "\n")
-                        && isASCIIRegexWhitespaceByte(baseAddress[offset])
-                    canContinueSequenceAfterWhitespace = qualifyingWordRuns > 0
-                    continue
+                        continue
+                    }
+                    if isASCIIRegexWordByte(byte) {
+                        let runStart = offset
+                        repeat {
+                            offset += 1
+                        } while offset < dataCount && isASCIIRegexWordByte(baseAddress[offset])
+                        let runLength = offset - runStart
+                        let extendsSequence: Bool
+                        if canContinueSequenceAfterWhitespace {
+                            if qualifyingWordRuns == fastPath.groupCount - 1 {
+                                extendsSequence = runLength >= 5
+                            } else {
+                                extendsSequence = runLength == 5
+                            }
+                        } else {
+                            extendsSequence = runLength >= 5
+                        }
+                        if extendsSequence {
+                            qualifyingWordRuns = canContinueSequenceAfterWhitespace ? qualifyingWordRuns + 1 : 1
+                            if qualifyingWordRuns == fastPath.groupCount {
+                                let newlinePointer = memchr(
+                                    baseAddress.advanced(by: offset),
+                                    Int32(UInt8(ascii: "\n")),
+                                    dataCount - offset
+                                )
+                                let lineEnd: Int
+                                let nextLineStart: Int
+                                let lineTerminator: String
+                                if let newlinePointer {
+                                    lineEnd = baseAddress.distance(
+                                        to: newlinePointer.assumingMemoryBound(to: UInt8.self)
+                                    )
+                                    nextLineStart = lineEnd + 1
+                                    lineTerminator = "\n"
+                                } else {
+                                    lineEnd = dataCount
+                                    nextLineStart = dataCount + 1
+                                    lineTerminator = ""
+                                }
+                                guard appendMatch(
+                                    lineEnd: lineEnd,
+                                    lineTerminator: lineTerminator,
+                                    nextLineStart: nextLineStart
+                                ) else {
+                                    break
+                                }
+                                lineStart = nextLineStart
+                                lineNumber += 1
+                                offset = nextLineStart
+                                qualifyingWordRuns = 0
+                                canContinueSequenceAfterWhitespace = false
+                                sawNonASCIIInLine = false
+                                continue
+                            }
+                            canContinueSequenceAfterWhitespace = false
+                        } else {
+                            qualifyingWordRuns = runLength >= 5 ? 1 : 0
+                            canContinueSequenceAfterWhitespace = false
+                        }
+                        continue
+                    }
+                    if isASCIIRegexWhitespaceByte(byte) {
+                        repeat {
+                            offset += 1
+                        } while offset < dataCount
+                            && baseAddress[offset] != UInt8(ascii: "\n")
+                            && isASCIIRegexWhitespaceByte(baseAddress[offset])
+                        canContinueSequenceAfterWhitespace = qualifyingWordRuns > 0
+                        continue
+                    }
+                    qualifyingWordRuns = 0
+                    canContinueSequenceAfterWhitespace = false
+                    offset += 1
                 }
-                qualifyingWordRuns = 0
-                canContinueSequenceAfterWhitespace = false
-                offset += 1
+            } else {
+                while offset < dataCount, matches.count < maxCount {
+                    let byte = baseAddress[offset]
+                    if byte == UInt8(ascii: "\n") {
+                        guard finishUnmatchedLine(
+                            lineEnd: offset,
+                            lineTerminator: "\n",
+                            nextLineStart: offset + 1
+                        ) else {
+                            break
+                        }
+                        offset = lineStart
+                        continue
+                    }
+                    if byte >= 0x80 {
+                        sawNonASCIIInLine = true
+                        qualifyingWordRuns = 0
+                        canContinueSequenceAfterWhitespace = false
+                        offset += 1
+                        continue
+                    }
+                    if isASCIIRegexWordByte(byte) {
+                        let runStart = offset
+                        repeat {
+                            offset += 1
+                        } while offset < dataCount && isASCIIRegexWordByte(baseAddress[offset])
+                        let runLength = offset - runStart
+                        let extendsSequence: Bool
+                        if canContinueSequenceAfterWhitespace {
+                            if qualifyingWordRuns == fastPath.groupCount - 1 {
+                                extendsSequence = runLength >= 5
+                            } else {
+                                extendsSequence = runLength == 5
+                            }
+                        } else {
+                            extendsSequence = runLength >= 5
+                        }
+                        if extendsSequence {
+                            qualifyingWordRuns = canContinueSequenceAfterWhitespace ? qualifyingWordRuns + 1 : 1
+                            if qualifyingWordRuns == fastPath.groupCount {
+                                let newlinePointer = memchr(
+                                    baseAddress.advanced(by: offset),
+                                    Int32(UInt8(ascii: "\n")),
+                                    dataCount - offset
+                                )
+                                let lineEnd: Int
+                                let nextLineStart: Int
+                                let lineTerminator: String
+                                if let newlinePointer {
+                                    lineEnd = baseAddress.distance(
+                                        to: newlinePointer.assumingMemoryBound(to: UInt8.self)
+                                    )
+                                    nextLineStart = lineEnd + 1
+                                    lineTerminator = "\n"
+                                } else {
+                                    lineEnd = dataCount
+                                    nextLineStart = dataCount + 1
+                                    lineTerminator = ""
+                                }
+                                guard appendMatch(
+                                    lineEnd: lineEnd,
+                                    lineTerminator: lineTerminator,
+                                    nextLineStart: nextLineStart
+                                ) else {
+                                    break
+                                }
+                                lineStart = nextLineStart
+                                lineNumber += 1
+                                offset = nextLineStart
+                                qualifyingWordRuns = 0
+                                canContinueSequenceAfterWhitespace = false
+                                sawNonASCIIInLine = false
+                                continue
+                            }
+                            canContinueSequenceAfterWhitespace = false
+                        } else {
+                            qualifyingWordRuns = runLength >= 5 ? 1 : 0
+                            canContinueSequenceAfterWhitespace = false
+                        }
+                        continue
+                    }
+                    if isASCIIRegexWhitespaceByte(byte) {
+                        repeat {
+                            offset += 1
+                        } while offset < dataCount
+                            && baseAddress[offset] != UInt8(ascii: "\n")
+                            && isASCIIRegexWhitespaceByte(baseAddress[offset])
+                        canContinueSequenceAfterWhitespace = qualifyingWordRuns > 0
+                        continue
+                    }
+                    qualifyingWordRuns = 0
+                    canContinueSequenceAfterWhitespace = false
+                    offset += 1
+                }
             }
 
             if matches.count < maxCount,
