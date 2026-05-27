@@ -8,7 +8,8 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literal: [UInt8],
         asciiCaseInsensitive: Bool,
-        lineNumber: Bool = false
+        lineNumber: Bool = false,
+        asciiBoundary: Bool = false
     ) -> Int32? {
         guard !literal.isEmpty else {
             return nil
@@ -54,7 +55,8 @@ public enum SwiftDarwinLiteralPreflight {
                 haystackLength: haystackLength,
                 literal: literalBuffer,
                 asciiCaseInsensitive: asciiCaseInsensitive,
-                lineNumber: lineNumber
+                lineNumber: lineNumber,
+                asciiBoundary: asciiBoundary
             )
         }) else {
             return nil
@@ -500,7 +502,8 @@ private func rgSwiftDarwinWriteLiteralBytes(
     haystackLength: Int,
     literal: UnsafeBufferPointer<UInt8>,
     asciiCaseInsensitive: Bool,
-    lineNumber: Bool
+    lineNumber: Bool,
+    asciiBoundary: Bool
 ) -> Int? {
     guard let literalBase = literal.baseAddress, literal.count > 0 else {
         return nil
@@ -544,6 +547,26 @@ private func rgSwiftDarwinWriteLiteralBytes(
     var lastEmittedLineStart = -1
     var writeFailed = false
 
+    @inline(__always)
+    func isASCIIRegexWordByte(_ byte: UInt8) -> Bool {
+        (byte >= UInt8(ascii: "a") && byte <= UInt8(ascii: "z"))
+            || (byte >= UInt8(ascii: "A") && byte <= UInt8(ascii: "Z"))
+            || (byte >= UInt8(ascii: "0") && byte <= UInt8(ascii: "9"))
+            || byte == UInt8(ascii: "_")
+    }
+
+    @inline(__always)
+    func isASCIIBoundaryMatch(matchStart: Int, lineStart: Int, lineEnd: Int) -> Bool {
+        if matchStart > lineStart, isASCIIRegexWordByte(base[matchStart - 1]) {
+            return false
+        }
+        let matchEnd = matchStart + literal.count
+        if matchEnd < lineEnd, isASCIIRegexWordByte(base[matchEnd]) {
+            return false
+        }
+        return true
+    }
+
     func emitMatchedLine(found: UnsafePointer<UInt8>, newlinesBeforeMatch: Int) -> Bool {
         let matchStart = base.distance(to: found)
         var lineStart = matchStart
@@ -551,8 +574,20 @@ private func rgSwiftDarwinWriteLiteralBytes(
             lineStart -= 1
         }
 
+        let newline = memchr(found, Int32(UInt8(ascii: "\n")), haystackLength - matchStart)
+        let lineEnd = newline.map {
+            base.distance(to: $0.assumingMemoryBound(to: UInt8.self))
+        } ?? haystackLength
+        if asciiBoundary,
+           !isASCIIBoundaryMatch(matchStart: matchStart, lineStart: lineStart, lineEnd: lineEnd) {
+            if lineNumber {
+                lineNumberAtSearchOffset += newlinesBeforeMatch
+            }
+            searchOffset = max(matchStart + 1, searchOffset + 1)
+            return true
+        }
+
         if lineStart != lastEmittedLineStart {
-            let newline = memchr(found, Int32(UInt8(ascii: "\n")), haystackLength - matchStart)
             let outputEnd = newline.map {
                 base.distance(to: $0.assumingMemoryBound(to: UInt8.self)) + 1
             } ?? haystackLength

@@ -305,12 +305,20 @@ struct RipgrepCommand {
         pattern = valueArguments[0]
         path = valueArguments[1]
 
-        guard !pattern.hasPrefix("-"),
-              path != "-",
-              let literalPattern = RegexLiteralParser.literal(
+        let asciiBoundaryLiteralPattern = asciiCaseInsensitive ? nil : asciiBoundaryLiteral(
+            pattern,
+            allowPCREQuotedLiterals: preflightArguments.allowPCREQuotedLiterals
+        )
+        let asciiBoundary = asciiBoundaryLiteralPattern != nil
+        let parsedLiteralPattern = asciiBoundaryLiteralPattern
+            ?? RegexLiteralParser.literal(
                 fromPlainRegexPattern: pattern,
                 allowPCREQuotedLiterals: preflightArguments.allowPCREQuotedLiterals
-              ) else {
+            )
+
+        guard !pattern.hasPrefix("-"),
+              path != "-",
+              let literalPattern = parsedLiteralPattern else {
             return nil
         }
 
@@ -326,9 +334,13 @@ struct RipgrepCommand {
                 path: path,
                 literal: literal,
                 asciiCaseInsensitive: asciiCaseInsensitive,
-                lineNumber: lineNumber
+                lineNumber: lineNumber,
+                asciiBoundary: asciiBoundary
             ) {
                 return mappedExitCode
+            }
+            guard !asciiBoundary else {
+                return nil
             }
             return SwiftDarwinLiteralPreflight.streamingExitCode(
                 path: path,
@@ -341,7 +353,8 @@ struct RipgrepCommand {
             path: path,
             literal: literal,
             asciiCaseInsensitive: asciiCaseInsensitive,
-            lineNumber: lineNumber
+            lineNumber: lineNumber,
+            asciiBoundary: asciiBoundary
         )
     }
     #endif
@@ -422,6 +435,22 @@ struct RipgrepCommand {
         }
         let literalStart = pattern.index(pattern.startIndex, offsetBy: prefix.count)
         let literalEnd = pattern.index(pattern.endIndex, offsetBy: -suffix.count)
+        return RegexLiteralParser.literal(
+            fromPlainRegexPattern: String(pattern[literalStart..<literalEnd]),
+            allowPCREQuotedLiterals: allowPCREQuotedLiterals
+        )
+    }
+
+    private static func asciiBoundaryLiteral(
+        _ pattern: String,
+        allowPCREQuotedLiterals: Bool
+    ) -> String? {
+        let boundary = #"(?-u:\b)"#
+        guard pattern.hasPrefix(boundary), pattern.hasSuffix(boundary) else {
+            return nil
+        }
+        let literalStart = pattern.index(pattern.startIndex, offsetBy: boundary.count)
+        let literalEnd = pattern.index(pattern.endIndex, offsetBy: -boundary.count)
         return RegexLiteralParser.literal(
             fromPlainRegexPattern: String(pattern[literalStart..<literalEnd]),
             allowPCREQuotedLiterals: allowPCREQuotedLiterals

@@ -857,6 +857,16 @@ number when a same-line boundary candidate is rejected. The upstream
 251.20 ms median versus Rust at 196.96 ms; the Unicode `-nw 'Sherlock Holmes'`
 case measured 245.35 ms versus Rust at 197.04 ms.
 
+The executable Swift preflight now recognizes the same ASCII boundary literal
+shape before full CLI parsing and routes it through the direct mapped literal
+writer. That keeps the byte-boundary checks in Swift but avoids constructing
+the full searcher pipeline for the upstream ASCII word-literal command. Output
+for `-n '(?-u:\b)Sherlock Holmes(?-u:\b)'` on the 1.5 GiB subtitles corpus
+remained byte-identical to sibling Rust `rg`; a nine-run direct check measured
+214.7 ms versus 201.2 ms for Rust, and the focused upstream
+`subtitles_en_literal_word` harness measured 214.23 ms median versus
+194.86 ms for Rust.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Raising the no-mmap stream read size to 4 MiB preserved output but regressed
