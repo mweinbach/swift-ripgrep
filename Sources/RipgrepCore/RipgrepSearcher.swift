@@ -5337,6 +5337,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         var needsDecodedFallback = false
         let maxCount = options.maxCount ?? Int.max
         let dataCount = data.count
+        let minimumSequenceByteCount = fastPath.groupCount * 5 + max(0, fastPath.groupCount - 1)
         data.withUnsafeBytes { rawBuffer in
             let bytes = rawBuffer.bindMemory(to: UInt8.self)
             guard let baseAddress = bytes.baseAddress else {
@@ -5373,7 +5374,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
             }
 
             func finishUnmatchedLine(lineEnd: Int, lineTerminator: String, nextLineStart: Int) -> Bool {
-                if sawNonASCIIInLine, !fastPath.asciiOnly {
+                if sawNonASCIIInLine,
+                   !fastPath.asciiOnly,
+                   lineEnd - lineStart >= minimumSequenceByteCount {
                     let lineWithTerminatorCount = nextLineStart <= dataCount
                         ? nextLineStart - lineStart
                         : lineEnd - lineStart
@@ -6499,9 +6502,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
     }
 
     private func isASCIIRegexWordByte(_ byte: UInt8) -> Bool {
-        (byte >= UInt8(ascii: "0") && byte <= UInt8(ascii: "9"))
+        (byte >= UInt8(ascii: "a") && byte <= UInt8(ascii: "z"))
             || (byte >= UInt8(ascii: "A") && byte <= UInt8(ascii: "Z"))
-            || (byte >= UInt8(ascii: "a") && byte <= UInt8(ascii: "z"))
+            || (byte >= UInt8(ascii: "0") && byte <= UInt8(ascii: "9"))
             || byte == UInt8(ascii: "_")
     }
 

@@ -560,6 +560,14 @@ matched. Three-run checks measured the Unicode form at 4.297 s versus 4.814 s
 before and 2.519 s for Rust, and the ASCII form at 3.827 s versus 4.345 s
 before and 2.410 s for Rust.
 
+The no-literal scanner now rejects short non-ASCII lines before decoding them
+for the Unicode regex fallback, and checks lowercase ASCII word bytes before
+rarer uppercase/digit cases in the hot classifier. Output for the seven-group
+Unicode and `(?-u)` ASCII subtitles patterns stayed byte-identical to the
+previous Swift checkpoint and sibling Rust oracle (22 lines each). A seven-run
+A/B measured Unicode at 3.958 s versus 4.194 s before and 2.530 s for Rust;
+the ASCII form measured 3.691 s versus 3.736 s before and 2.407 s for Rust.
+
 Line-numbered single-literal output now counts newline bytes inside the same
 Swift SIMD first/tail literal scan used to find the next match, avoiding the
 second skipped-region pass previously used only to print `-n` prefixes. Output
