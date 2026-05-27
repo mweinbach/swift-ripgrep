@@ -183,6 +183,15 @@ measured 46.2 ms mean versus 56.4 ms before and 14.4 ms for Rust. The direct
 result now reports full-file bytes searched when the unbounded scan exhausts
 the file, matching Rust stats on the synthetic check.
 
+The executable Swift-only preflight now recognizes the same simple
+multi-literal alternations before full CLI/searcher setup, while still
+respecting escaped pipes, grouped/classed regexes, word mode, and
+case-insensitive fallbacks. Output for plain dense `Sherlock|Watson`,
+line-numbered `REG|MASK`, and escaped `a\|b` checks matched both the previous
+Swift binary and Rust. A 30-run synthetic dense check measured 227.0 ms mean
+versus 255.3 ms before and 201.1 ms for Rust; the 23 MiB line-numbered Linux
+header measured 20.6 ms mean versus 45.6 ms before and 18.8 ms for Rust.
+
 The Swift-only Darwin mmap/stdout preflight now also covers line-numbered
 medium bounded multi-literal output when no filename, byte-offset, column,
 replacement, only-matching, or vimgrep formatting is requested. Output for

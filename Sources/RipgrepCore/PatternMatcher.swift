@@ -1291,53 +1291,7 @@ public struct PatternMatcher {
     }
 
     private static func topLevelAlternatives(in pattern: String) -> [String] {
-        var alternatives: [String] = []
-        var start = pattern.startIndex
-        var index = pattern.startIndex
-        var escaped = false
-        var inClass = false
-        var depth = 0
-
-        while index < pattern.endIndex {
-            let character = pattern[index]
-            if escaped {
-                escaped = false
-                index = pattern.index(after: index)
-                continue
-            }
-            if character == "\\" {
-                escaped = true
-                index = pattern.index(after: index)
-                continue
-            }
-            if inClass {
-                if character == "]" {
-                    inClass = false
-                }
-                index = pattern.index(after: index)
-                continue
-            }
-            switch character {
-            case "[":
-                inClass = true
-            case "(":
-                depth += 1
-            case ")":
-                depth = max(0, depth - 1)
-            case "|" where depth == 0:
-                alternatives.append(String(pattern[start..<index]))
-                start = pattern.index(after: index)
-            default:
-                break
-            }
-            index = pattern.index(after: index)
-        }
-
-        guard !alternatives.isEmpty else {
-            return [pattern]
-        }
-        alternatives.append(String(pattern[start..<pattern.endIndex]))
-        return alternatives
+        RegexLiteralParser.topLevelAlternatives(in: pattern)
     }
 
     private static func inlineCRLFPattern(for pattern: String) -> (pattern: String, enablesGlobalCRLF: Bool) {

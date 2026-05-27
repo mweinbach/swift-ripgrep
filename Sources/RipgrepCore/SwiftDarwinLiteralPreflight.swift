@@ -198,6 +198,25 @@ public enum SwiftDarwinLiteralPreflight {
         return matchedLineCount > 0 ? 0 : 1
     }
 
+    public static func multiLiteralExitCode(
+        path: String,
+        literals: [[UInt8]],
+        lineNumber: Bool = false
+    ) -> Int32? {
+        guard let result = multiLiteralResult(
+            path: path,
+            literals: literals,
+            maxCount: nil,
+            lineNumber: lineNumber
+        ) else {
+            return nil
+        }
+        guard result.status >= 0 else {
+            return nil
+        }
+        return result.matched_line_count > 0 ? 0 : 1
+    }
+
     private static func streamingLiteralExitCode(
         path: String,
         literal: [UInt8],

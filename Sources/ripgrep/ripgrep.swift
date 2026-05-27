@@ -341,6 +341,23 @@ struct RipgrepCommand {
                 allowPCREQuotedLiterals: preflightArguments.allowPCREQuotedLiterals
             )
 
+        if !pattern.hasPrefix("-"),
+           path != "-",
+           !asciiCaseInsensitive,
+           !wordRegexp,
+           !asciiBoundary,
+           let literals = multiLiteralAlternation(
+            pattern,
+            allowPCREQuotedLiterals: preflightArguments.allowPCREQuotedLiterals
+           ),
+           let exitCode = SwiftDarwinLiteralPreflight.multiLiteralExitCode(
+            path: path,
+            literals: literals,
+            lineNumber: lineNumber
+           ) {
+            return exitCode
+        }
+
         guard !pattern.hasPrefix("-"),
               path != "-",
               let literalPattern = parsedLiteralPattern else {
@@ -522,6 +539,28 @@ struct RipgrepCommand {
             bytes.append(byte)
         }
         return bytes
+    }
+
+    private static func multiLiteralAlternation(
+        _ pattern: String,
+        allowPCREQuotedLiterals: Bool
+    ) -> [[UInt8]]? {
+        let alternatives = RegexLiteralParser.topLevelAlternatives(in: pattern)
+        guard alternatives.count > 1,
+              alternatives.count <= 64 else {
+            return nil
+        }
+        let literals = alternatives.compactMap {
+            RegexLiteralParser.literal(
+                fromPlainRegexPattern: $0,
+                allowPCREQuotedLiterals: allowPCREQuotedLiterals
+            )
+        }
+        guard literals.count == alternatives.count else {
+            return nil
+        }
+        let literalBytes = literals.map { Array($0.utf8) }
+        return literalBytes.allSatisfy { !$0.isEmpty } ? literalBytes : nil
     }
     #endif
 }
