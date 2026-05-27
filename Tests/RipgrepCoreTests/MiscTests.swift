@@ -541,6 +541,24 @@ struct MiscTests {
                 == expectedLineNumberedBoundedManyMultiLines
         )
 
+        let duplicateFirstByteLines = (1...20).map { index in
+            "\(index.isMultiple(of: 2) ? "Inspector" : "Irene") \(index)"
+        }.joined(separator: "\n") + "\n"
+        try root.write(duplicateFirstByteLines, to: "duplicate-first-byte-many-multi.txt")
+        let duplicateFirstByteBoundedOutput = try runExecutableData([
+            "-n",
+            "-m16",
+            "Irene|Inspector",
+            root.path("duplicate-first-byte-many-multi.txt"),
+        ], fixture: {})
+        let expectedDuplicateFirstByteBoundedLines = (1...16).map { index in
+            "\(index):\(index.isMultiple(of: 2) ? "Inspector" : "Irene") \(index)"
+        }.joined(separator: "\n") + "\n"
+        #expect(
+            String(decoding: duplicateFirstByteBoundedOutput, as: UTF8.self)
+                == expectedDuplicateFirstByteBoundedLines
+        )
+
         let onlyMatchingOutput = try runExecutableData([
             "-o",
             "b|d",

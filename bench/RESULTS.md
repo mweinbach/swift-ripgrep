@@ -643,6 +643,20 @@ versus 349.8 ms before, `-i` measured 358.1 ms versus 364.3 ms before, and
 `-n -i` measured 424.5 ms versus 428.8 ms before. Output for plain, `-n`,
 `-i`, and `-n -i` matched sibling Rust `rg` on the 1.5 GiB subtitles corpus.
 
+The Swift-only mmap/stdout multi-literal preflight now accepts bounded
+patterns whose literals share a first byte. The retained implementation keeps
+one exact next-match candidate per literal, so the old unique-first-byte setup
+guard was no longer needed and prevented the five-name subtitles alternation
+from using the medium bounded path. Output for `-m128`, `-n -m128`, `-m1024`,
+and `-n -m1024`
+`Sherlock Holmes|John Watson|Irene Adler|Inspector Lestrade|Professor
+Moriarty` matched sibling Rust `rg` on the 1.5 GiB subtitles corpus. Nine-run
+checks measured `-m128` at 139.4 ms versus 1.134 s before and 50.2 ms for
+Rust, while `-n -m128` measured 137.2 ms versus 1.145 s before and 54.9 ms for
+Rust. A seven-run lower-boundary A/B measured `-m16` at 110.1 ms versus
+627.9 ms before. The neighboring unique-first-byte `-m128 'Sherlock|Watson'`
+case stayed in the fast preflight band at 57.5 ms on the same corpus.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Raising the no-mmap stream read size to 4 MiB preserved output but regressed

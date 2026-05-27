@@ -383,18 +383,6 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
 
-        var firstBytes: [UInt8] = []
-        firstBytes.reserveCapacity(literals.count)
-        var literalIndicesByByte = [Int](repeating: -1, count: 256)
-        for (literalIndex, literal) in literals.enumerated() {
-            let firstByte = literal[0]
-            guard literalIndicesByByte[Int(firstByte)] == -1 else {
-                return nil
-            }
-            literalIndicesByByte[Int(firstByte)] = literalIndex
-            firstBytes.append(firstByte)
-        }
-
         let fd = path.withCString { Darwin.open($0, O_RDONLY) }
         guard fd >= 0 else {
             return nil
@@ -436,8 +424,6 @@ public enum SwiftDarwinLiteralPreflight {
             base,
             haystackLength: haystackLength,
             literals: literals,
-            firstBytes: firstBytes,
-            literalIndicesByByte: literalIndicesByByte,
             maxCount: maxCount ?? Int.max,
             lineNumber: lineNumber
         )
@@ -694,8 +680,6 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
     _ base: UnsafePointer<UInt8>,
     haystackLength: Int,
     literals: [[UInt8]],
-    firstBytes _: [UInt8],
-    literalIndicesByByte _: [Int],
     maxCount: Int,
     lineNumber: Bool
 ) -> rg_darwin_literal_file_result? {
