@@ -70,8 +70,7 @@ func jsonObject(_ line: String) throws -> [String: Any] {
 
 func runExecutableData(_ arguments: [String], fixture: () throws -> Void) throws -> Data {
     try fixture()
-    let executable = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        .appendingPathComponent(".build/debug/ripgrep")
+    let executable = ripgrepPackageRootURL().appendingPathComponent(".build/debug/ripgrep")
     let process = Process()
     process.executableURL = executable
     process.arguments = arguments
@@ -86,6 +85,13 @@ func runExecutableData(_ arguments: [String], fixture: () throws -> Void) throws
     #expect(errorData.isEmpty)
     #expect(process.terminationStatus == (data.isEmpty ? 1 : 0))
     return data
+}
+
+func ripgrepPackageRootURL() -> URL {
+    URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
 }
 
 final class TemporaryDirectory {

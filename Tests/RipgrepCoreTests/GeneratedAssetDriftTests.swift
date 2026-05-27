@@ -98,7 +98,10 @@ private func expectStoredAssetMatchesBinary(
 }
 
 private func packageRootURL() -> URL {
-    URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+    URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
 }
 
 private func ensureBuiltBinary(packageRoot: URL) throws -> URL {
@@ -108,15 +111,17 @@ private func ensureBuiltBinary(packageRoot: URL) throws -> URL {
     }
     _ = try runBinary(
         executable: URL(fileURLWithPath: "/usr/bin/env"),
-        arguments: ["swift", "build"]
+        arguments: ["swift", "build"],
+        currentDirectory: packageRoot
     )
     return binary
 }
 
-private func runBinary(executable: URL, arguments: [String]) throws -> Data {
+private func runBinary(executable: URL, arguments: [String], currentDirectory: URL? = nil) throws -> Data {
     let process = Process()
     process.executableURL = executable
     process.arguments = arguments
+    process.currentDirectoryURL = currentDirectory
 
     let stdout = Pipe()
     let stderr = Pipe()

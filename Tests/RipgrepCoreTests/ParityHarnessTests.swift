@@ -7,7 +7,7 @@ final class ParityHarnessTests: XCTestCase {
             throw XCTSkip("Set SWIFT_RIPGREP_PARITY=1 to run the Rust rg parity harness.")
         }
 
-        let packageRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+        let packageRoot = ripgrepPackageRootURL()
         let rustRipgrep = try findRustRipgrep(packageRoot: packageRoot)
         let swiftRipgrep = try ensureSwiftRipgrepBinary(packageRoot: packageRoot)
 
