@@ -162,6 +162,27 @@ struct MiscTests {
         """)
     }
 
+    @Test("word regexp line numbers survive rejected same-line candidate")
+    func wordRegexpLineNumbersSurviveRejectedSameLineCandidate() throws {
+        let root = try TemporaryDirectory()
+        try root.write("""
+        before
+        xSherlock Holmes Sherlock Holmes
+        after
+        """, to: "word-boundary-line-number.txt")
+
+        let output = try runExecutableData([
+            "-n",
+            "-w",
+            "Sherlock Holmes",
+            root.path("word-boundary-line-number.txt"),
+        ], fixture: {})
+        #expect(String(decoding: output, as: UTF8.self) == """
+        2:xSherlock Holmes Sherlock Holmes
+
+        """)
+    }
+
     @Test("ASCII boundary literal regex preserves byte boundary output")
     func asciiBoundaryLiteralRegexPreservesByteBoundaryOutput() throws {
         let root = try TemporaryDirectory()

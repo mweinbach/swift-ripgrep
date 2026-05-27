@@ -850,11 +850,12 @@ boundary bytes, and counts line numbers during the same next-literal scan used
 to find the match. Output for `-n '(?-u:\b)Sherlock Holmes(?-u:\b)'` on the
 1.5 GiB subtitles corpus matched sibling Rust `rg` exactly (830 lines), and
 the focused byte-boundary fixture covers leading/trailing ASCII word bytes,
-underscores, and a non-ASCII prefix byte. The upstream
+underscores, and a non-ASCII prefix byte. The neighboring `-nw` literal path
+now also counts line numbers during the literal scan, updating the tracked line
+number when a same-line boundary candidate is rejected. The upstream
 `subtitles_en_literal_word` harness measured the ASCII regex case at
-243.76 ms median versus Rust at 197.01 ms; the neighboring Unicode `-nw
-'Sherlock Holmes'` case stayed on the existing path at 282.78 ms versus Rust
-at 200.11 ms.
+251.20 ms median versus Rust at 196.96 ms; the Unicode `-nw 'Sherlock Holmes'`
+case measured 245.35 ms versus Rust at 197.04 ms.
 
 Rejected Swift-only probes from the same checkpoint:
 

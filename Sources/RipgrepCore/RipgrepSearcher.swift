@@ -2931,7 +2931,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     && !options.byteOffset
                     && !countOnly
                     && !onlyMatching
-                    && !fastPath.wordASCII
                 var lineNumberAtSearchOffset = 1
                 if countMatchesOnly && allowDirectStdout && !fastPath.wordASCII {
                     // Direct stdout count-matches cannot print stats/JSON, so only the total is observable here.
@@ -3062,6 +3061,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                             lineEnd = data.count
                             outputEnd = data.count
                         }
+                        let scannedLineNumber = lineNumberAtSearchOffset + newlinesBeforeMatch
                         if fastPath.wordASCII {
                             switch asciiWordBoundaryState(
                                 bytes: byteBuffer,
@@ -3073,6 +3073,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
                             case .bounded:
                                 break
                             case .notBounded:
+                                if canTrackLineNumbersInLiteralScan {
+                                    lineNumberAtSearchOffset = scannedLineNumber
+                                }
                                 searchOffset = max(matchStart + 1, searchOffset + 1)
                                 continue
                             case .needsDecodedFallback:
@@ -3133,7 +3136,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         }
                         matchedLineCount += 1
                         lastEmittedLineStart = lineStart
-                        let scannedLineNumber = lineNumberAtSearchOffset + newlinesBeforeMatch
                         if !countOnly {
                             if canTrackLineNumbersInLiteralScan {
                                 writePathPrefixIfNeeded()
