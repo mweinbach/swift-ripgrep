@@ -581,6 +581,28 @@ struct MiscTests {
                 == expectedTenLiteralBoundedLines
         )
 
+        let twentyLiteralNames = tenLiteralNames + [
+            "Kara", "Liam", "Mina", "Nora", "Omar",
+            "Pia", "Quin", "Rhea", "Seth", "Tess",
+        ]
+        let twentyLiteralLines = (1...40).map { index in
+            "\(twentyLiteralNames[(index - 1) % twentyLiteralNames.count]) \(index)"
+        }.joined(separator: "\n") + "\n"
+        try root.write(twentyLiteralLines, to: "twenty-literal-many-multi.txt")
+        let twentyLiteralBoundedOutput = try runExecutableData([
+            "-n",
+            "-m16",
+            twentyLiteralNames.joined(separator: "|"),
+            root.path("twenty-literal-many-multi.txt"),
+        ], fixture: {})
+        let expectedTwentyLiteralBoundedLines = (1...16).map { index in
+            "\(index):\(twentyLiteralNames[(index - 1) % twentyLiteralNames.count]) \(index)"
+        }.joined(separator: "\n") + "\n"
+        #expect(
+            String(decoding: twentyLiteralBoundedOutput, as: UTF8.self)
+                == expectedTwentyLiteralBoundedLines
+        )
+
         let onlyMatchingOutput = try runExecutableData([
             "-o",
             "b|d",
