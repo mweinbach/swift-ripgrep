@@ -2400,7 +2400,10 @@ public struct FileWalker: @unchecked Sendable {
     }
 
     private func isIncludedByIgnore(relativePath: String, basename: String? = nil, isDirectory: Bool, ignoreStack: IgnoreStack) -> Bool {
-        ignoreStack.decision(relativePath: relativePath, basename: basename, isDirectory: isDirectory) == .include
+        guard ignoreStack.canIncludePaths else {
+            return false
+        }
+        return ignoreStack.decision(relativePath: relativePath, basename: basename, isDirectory: isDirectory) == .include
     }
 
     private func rootBase(for root: URL) -> URL {

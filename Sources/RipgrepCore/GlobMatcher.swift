@@ -225,6 +225,10 @@ public struct GlobMatcher: Equatable {
         rules.isEmpty
     }
 
+    public var canInclude: Bool {
+        rules.contains { $0.decision == .include }
+    }
+
     private static func unescapeLeadingCommentOrNegation(_ pattern: String) -> (pattern: String, wasEscaped: Bool) {
         guard pattern.hasPrefix("\\#") || pattern.hasPrefix("\\!") else {
             return (pattern, false)
@@ -1016,6 +1020,7 @@ public struct GlobMatcher: Equatable {
 
 public struct IgnoreStack: @unchecked Sendable {
     private var matchers: [GlobMatcher] = []
+    private var canInclude = false
 
     public init() {}
 
@@ -1023,9 +1028,14 @@ public struct IgnoreStack: @unchecked Sendable {
         matchers.isEmpty
     }
 
+    public var canIncludePaths: Bool {
+        canInclude
+    }
+
     public mutating func append(_ matcher: GlobMatcher) {
         if !matcher.isEmpty {
             matchers.append(matcher)
+            canInclude = canInclude || matcher.canInclude
         }
     }
 

@@ -96,6 +96,13 @@ preserved exact Swift output and measured default `--files` at 134.0 ms mean /
 median; `--hidden --files` measured 134.3 ms mean / 130.6 ms median versus
 135.7 ms mean / 133.3 ms median.
 
+Hidden-entry include checks now skip the ignore-stack walk when the active stack
+has no include rules. A 100-run confirmation on the same Linux tree preserved
+exact Swift output and sorted Rust parity, measuring default `--files` at
+120.4 ms mean / 119.6 ms median versus 124.5 ms mean / 123.6 ms median before;
+`--hidden --files` measured 121.0 ms mean / 120.2 ms median versus 124.0 ms mean
+/ 122.6 ms median.
+
 The Swift multi-literal full-line writer now skips to a matched line's output
 end after recording it, caching line ends so later literals do not rescan
 duplicate lines for newline boundaries. It also special-cases `-m 1` by finding
