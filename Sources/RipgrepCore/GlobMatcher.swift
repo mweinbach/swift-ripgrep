@@ -176,6 +176,9 @@ public struct GlobMatcher: Equatable {
         sourcePath: String? = nil
     ) {
         var rules: [Rule] = []
+        var lastPattern: String?
+        var lastDecision: Decision?
+        var lastCaseInsensitive: Bool?
         for entry in patternEntries {
             let raw = entry.pattern
             let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -192,12 +195,20 @@ public struct GlobMatcher: Equatable {
             } else {
                 decision = isNegated ? .include : .exclude
             }
+            if pattern == lastPattern,
+               decision == lastDecision,
+               entry.caseInsensitive == lastCaseInsensitive {
+                continue
+            }
             rules.append(Rule(
                 pattern: pattern,
                 decision: decision,
                 caseInsensitive: entry.caseInsensitive,
                 sourcePath: sourcePath
             ))
+            lastPattern = pattern
+            lastDecision = decision
+            lastCaseInsensitive = entry.caseInsensitive
         }
 
         self.rules = rules

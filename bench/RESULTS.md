@@ -111,6 +111,15 @@ parity, measuring default `--files` at 137.2 ms mean / 136.5 ms median versus
 139.0 ms mean / 139.7 ms median before; `--hidden --files` measured 130.3 ms
 mean / 129.3 ms median versus 133.5 ms mean / 134.0 ms median.
 
+Ignore matcher construction now collapses adjacent duplicate rules after blank
+and comment lines are skipped, preserving last-match behavior because the
+duplicates have the same pattern, decision, and case-sensitivity. This removes
+repeated global-ignore rules from the hot stack. Exact Swift output and sorted
+Rust parity were preserved. A 150-run order-flipped default check measured
+`--files` at 112.0 ms mean / 109.0 ms median versus 118.1 ms mean / 114.8 ms
+median before; a 100-run hidden check measured `--hidden --files` at
+114.0 ms mean / 109.8 ms median versus 118.9 ms mean / 115.9 ms median before.
+
 The Swift multi-literal full-line writer now skips to a matched line's output
 end after recording it, caching line ends so later literals do not rescan
 duplicate lines for newline boundaries. It also special-cases `-m 1` by finding
