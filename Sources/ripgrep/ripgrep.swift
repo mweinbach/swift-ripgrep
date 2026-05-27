@@ -320,6 +320,16 @@ struct RipgrepCommand {
             return nil
         }
         if noMmap {
+            // This executable preflight is output-only; prefer the faster mapped
+            // Swift scanner when it is available and keep streaming as fallback.
+            if let mappedExitCode = SwiftDarwinLiteralPreflight.exitCode(
+                path: path,
+                literal: literal,
+                asciiCaseInsensitive: asciiCaseInsensitive,
+                lineNumber: lineNumber
+            ) {
+                return mappedExitCode
+            }
             return SwiftDarwinLiteralPreflight.streamingExitCode(
                 path: path,
                 literal: literal,

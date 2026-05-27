@@ -744,6 +744,16 @@ sibling Rust `rg`; a nine-run previous/current/Rust A/B measured `-i` at
 424.5 ms versus 426.8 ms before and 317.1 ms for Rust. Split-chunk ignore-case
 boundary regressions cover both plain and line-numbered output.
 
+Executable no-mmap single-literal preflight now treats `--no-mmap` as an
+output-equivalent request: it tries the existing Swift mapped literal scanner
+first and falls back to the streaming scanner if mapping is unavailable. Output
+for plain, `-n`, `-i`, and `-n -i` `--no-mmap 'Sherlock Holmes'` on the 1.5 GiB
+subtitles corpus matched sibling Rust `rg`; a seven-run previous/current/Rust
+A/B measured plain output at 183.0 ms versus 281.3 ms before and 162.8 ms for
+Rust, `-n` at 213.8 ms versus 345.3 ms before and 193.9 ms for Rust, `-i` at
+249.9 ms versus 360.3 ms before and 280.1 ms for Rust, and `-n -i` at 300.4 ms
+versus 428.0 ms before and 313.9 ms for Rust.
+
 Line-numbered five-name subtitles alternations now use a Swift-only unique
 last-word suffix scan. The path scans suffixes such as `Holmes`, `Watson`, and
 `Moriarty`, verifies the full literal at the computed start offset, and is
