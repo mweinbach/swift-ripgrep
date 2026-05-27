@@ -296,6 +296,17 @@ Holmes 'Sherlock Holmes'` at 58.3 ms versus 10.799 s before and 13.4 ms for
 Rust; and `--vimgrep -m1 -o -r Holmes 'Sherlock Holmes'` at 57.2 ms versus
 10.822 s before and 12.5 ms for Rust.
 
+Plain single-literal `--vimgrep` now keeps finite max-count output on the
+direct Swift writer. The bounded path scans at line granularity so `-m` counts
+matching lines while still emitting every match on each admitted line for both
+whole-line and only-matching output. Output for `-m1`, `-m2`, `-o`, byte-offset,
+no-column, no-filename, and ignore-case vimgrep forms on the 193 MiB subtitles
+corpus matched both the previous Swift checkpoint and the sibling Rust oracle.
+Five-run A/B checks measured `--vimgrep -m1 'Sherlock Holmes'` at 50.8 ms
+versus 10.828 s before and 13.5 ms for Rust; `--vimgrep -m1 -o
+'Sherlock Holmes'` at 53.8 ms versus 10.826 s before and 12.7 ms for Rust; and
+`--vimgrep -m2 -o 'Sherlock Holmes'` at 51.4 ms versus 10.815 s before.
+
 Safe multi-literal only-match and vimgrep output now merge each literal's next
 match stream instead of re-scanning every literal from the current global
 offset. Interleaved same-line fixtures and representative subtitles cases

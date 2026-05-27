@@ -760,7 +760,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             && options.replacement == nil
             && allowDirectStdout
             && options.printMode == .matchingLines
-            && options.maxCount == nil
+            && (options.maxCount == nil || (fastPath.literals.count == 1 && !fastPath.wordASCII))
             && (fastPath.literals.count == 1
                 || (fastPathByteSet == nil && canScanDarwinLiteralsIndependently(fastPath)))
         let canDirectWriteVimgrepLiteralReplacement = directLiteralReplacementBytes != nil
@@ -1366,30 +1366,79 @@ public struct RipgrepSearcher: @unchecked Sendable {
                             }
                         }
                     }
-                    while searchOffset < data.count {
-                        let foundPointer: UnsafePointer<UInt8>?
+                    func findVimgrepLiteral(from offset: Int, count: Int) -> UnsafePointer<UInt8>? {
                         if fastPath.caseInsensitiveASCII {
-                            foundPointer = foldedLiteral.withUnsafeBufferPointer { foldedNeedle in
+                            return foldedLiteral.withUnsafeBufferPointer { foldedNeedle in
                                 caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
                                     rg_memcasemem_ascii_prepared(
-                                        baseAddress.advanced(by: searchOffset),
-                                        data.count - searchOffset,
+                                        baseAddress.advanced(by: offset),
+                                        count,
                                         foldedNeedle.baseAddress,
                                         foldedNeedle.count,
                                         shifts.baseAddress
                                     )
                                 }
                             }
-                        } else {
-                            foundPointer = literal.withUnsafeBufferPointer { needle in
-                                rg_memmem_simple(
-                                    baseAddress.advanced(by: searchOffset),
-                                    data.count - searchOffset,
-                                    needle.baseAddress,
-                                    needle.count
-                                )
-                            }
                         }
+                        return literal.withUnsafeBufferPointer { needle in
+                            rg_memmem_simple(
+                                baseAddress.advanced(by: offset),
+                                count,
+                                needle.baseAddress,
+                                needle.count
+                            )
+                        }
+                    }
+                    if options.maxCount != nil {
+                        while searchOffset < data.count, matchedLineCount < maxCount {
+                            let foundPointer = findVimgrepLiteral(
+                                from: searchOffset,
+                                count: data.count - searchOffset
+                            )
+                            guard let rawFoundPointer = foundPointer else {
+                                break
+                            }
+                            let matchStart = baseAddress.distance(to: rawFoundPointer)
+                            let bounds = vimgrepLineBounds(containing: matchStart)
+                            advanceLineNumber(to: bounds.lineStart)
+                            var lineSearchOffset = bounds.lineStart
+                            while lineSearchOffset < bounds.lineEnd {
+                                let lineFoundPointer = findVimgrepLiteral(
+                                    from: lineSearchOffset,
+                                    count: bounds.lineEnd - lineSearchOffset
+                                )
+                                guard let rawLineFoundPointer = lineFoundPointer else {
+                                    break
+                                }
+                                let lineMatchStart = baseAddress.distance(to: rawLineFoundPointer)
+                                totalMatchCount += 1
+                                writeVimgrepPrefixes(
+                                    lineNumber: lineNumber,
+                                    column: lineMatchStart - bounds.lineStart + 1,
+                                    byteOffset: lineMatchStart
+                                )
+                                let outputStart = onlyMatching ? lineMatchStart : bounds.lineStart
+                                let outputEnd = onlyMatching ? lineMatchStart + literal.count : bounds.lineEnd
+                                writeBytes(UnsafeRawBufferPointer(
+                                    start: rawBaseAddress.advanced(by: outputStart),
+                                    count: outputEnd - outputStart
+                                ))
+                                withUnsafeBytes(of: &newline) { buffer in
+                                    writeBytes(buffer)
+                                }
+                                lineSearchOffset = lineMatchStart + literal.count
+                            }
+                            matchedLineCount += 1
+                            searchOffset = bounds.lineEnd == data.count ? data.count : bounds.lineEnd + 1
+                            bytesSearched = searchOffset
+                        }
+                        return
+                    }
+                    while searchOffset < data.count {
+                        let foundPointer = findVimgrepLiteral(
+                            from: searchOffset,
+                            count: data.count - searchOffset
+                        )
                         guard let rawFoundPointer = foundPointer else {
                             break
                         }
@@ -3639,7 +3688,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !options.stopOnNonmatch,
               (!options.onlyMatching
                 || (options.printMode == .matchingLines
-                    && (options.maxCount == nil || options.replacement != nil))),
+                    && (options.maxCount == nil || options.replacement != nil || options.vimgrep))),
               (options.printMode != .countMatches || options.maxCount == nil),
               options.replacement == nil || options.printMode == .matchingLines,
               !options.json,
@@ -3651,8 +3700,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
               options.heading != true,
               !options.trim,
               (!options.vimgrep
-                || (options.printMode == .matchingLines
-                    && (options.maxCount == nil || options.replacement != nil))),
+                || options.printMode == .matchingLines),
               options.colorMode != .always,
               options.colorMode != .ansi,
               options.hyperlinkFormat.isEnabled == false,

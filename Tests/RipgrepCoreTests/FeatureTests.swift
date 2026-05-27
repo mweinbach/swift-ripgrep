@@ -2599,6 +2599,14 @@ struct FeatureTests {
             "\(root.path("a.txt")):1:3:needle",
             "\(root.path("a.txt")):1:14:needle",
         ])
+        #expect(try run(["--vimgrep", "-m1", "needle", root.path("a.txt")]) == [
+            "\(root.path("a.txt")):1:3:  needle one needle",
+            "\(root.path("a.txt")):1:14:  needle one needle",
+        ])
+        #expect(try run(["--vimgrep", "-m1", "-o", "--byte-offset", "needle", root.path("a.txt")]) == [
+            "\(root.path("a.txt")):1:3:2:needle",
+            "\(root.path("a.txt")):1:14:13:needle",
+        ])
         try root.write("abc\nABC\nxxxabcxxx\nzzz\nabc\n", to: "vimgrep-columns.txt")
         #expect(try run(["--vimgrep", "--max-columns", "3", "abc", root.path("vimgrep-columns.txt")]) == [
             "\(root.path("vimgrep-columns.txt")):1:1:[Omitted long line with 1 matches]",
