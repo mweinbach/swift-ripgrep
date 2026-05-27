@@ -120,6 +120,14 @@ Rust parity were preserved. A 150-run order-flipped default check measured
 median before; a 100-run hidden check measured `--hidden --files` at
 114.0 ms mean / 109.8 ms median versus 118.9 ms mean / 115.9 ms median before.
 
+The matcher constructor now records include-rule and basename-only-rule flags
+while appending rules, instead of rescanning the completed rule array and then
+rescanning again when an `IgnoreStack` appends the matcher. Exact Swift output
+and sorted Rust parity were preserved. A 100-run confirmation measured default
+`--files` at 113.3 ms mean / 109.5 ms median versus 115.7 ms mean / 112.2 ms
+median before; `--hidden --files` measured 113.2 ms mean / 108.4 ms median
+versus 114.5 ms mean / 110.3 ms median before.
+
 The Swift multi-literal full-line writer now skips to a matched line's output
 end after recording it, caching line ends so later literals do not rescan
 duplicate lines for newline boundaries. It also special-cases `-m 1` by finding

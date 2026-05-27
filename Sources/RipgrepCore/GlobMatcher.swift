@@ -139,6 +139,7 @@ public struct GlobMatcher: Equatable {
     private let rules: [Rule]
     private let requirePositiveMatch: Bool
     private let hasBasenameOnlyRules: Bool
+    private let hasIncludeRules: Bool
     private let slashPatternsMatchAnywhere: Bool
     private let stripBasePath: String?
     private let stripBasePathPrefix: String?
@@ -179,6 +180,8 @@ public struct GlobMatcher: Equatable {
         var lastPattern: String?
         var lastDecision: Decision?
         var lastCaseInsensitive: Bool?
+        var hasIncludeRules = false
+        var hasBasenameOnlyRules = false
         for entry in patternEntries {
             let raw = entry.pattern
             let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -200,20 +203,24 @@ public struct GlobMatcher: Equatable {
                entry.caseInsensitive == lastCaseInsensitive {
                 continue
             }
-            rules.append(Rule(
+            let rule = Rule(
                 pattern: pattern,
                 decision: decision,
                 caseInsensitive: entry.caseInsensitive,
                 sourcePath: sourcePath
-            ))
+            )
+            rules.append(rule)
+            hasIncludeRules = hasIncludeRules || decision == .include
+            hasBasenameOnlyRules = hasBasenameOnlyRules || rule.basenameOnly
             lastPattern = pattern
             lastDecision = decision
             lastCaseInsensitive = entry.caseInsensitive
         }
 
         self.rules = rules
-        self.requirePositiveMatch = overrideSemantics && rules.contains { $0.decision == .include }
-        self.hasBasenameOnlyRules = rules.contains(where: \.basenameOnly)
+        self.requirePositiveMatch = overrideSemantics && hasIncludeRules
+        self.hasBasenameOnlyRules = hasBasenameOnlyRules
+        self.hasIncludeRules = hasIncludeRules
         self.overrideSemantics = overrideSemantics
         self.slashPatternsMatchAnywhere = slashPatternsMatchAnywhere ?? !overrideSemantics
         self.stripBasePath = stripBasePath?.isEmpty == true ? nil : stripBasePath
@@ -237,7 +244,7 @@ public struct GlobMatcher: Equatable {
     }
 
     public var canInclude: Bool {
-        rules.contains { $0.decision == .include }
+        hasIncludeRules
     }
 
     private static func unescapeLeadingCommentOrNegation(_ pattern: String) -> (pattern: String, wasEscaped: Bool) {
