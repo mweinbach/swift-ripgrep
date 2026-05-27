@@ -760,7 +760,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
             && options.replacement == nil
             && allowDirectStdout
             && options.printMode == .matchingLines
-            && (options.maxCount == nil || (fastPath.literals.count == 1 && !fastPath.wordASCII))
+            && (options.maxCount == nil
+                || (fastPath.literals.count == 1 && !fastPath.wordASCII)
+                || (fastPathByteSet == nil && canScanDarwinLiteralsIndependently(fastPath)))
             && (fastPath.literals.count == 1
                 || (fastPathByteSet == nil && canScanDarwinLiteralsIndependently(fastPath)))
         let canDirectWriteVimgrepLiteralReplacement = directLiteralReplacementBytes != nil
@@ -1469,6 +1471,64 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 }
 
                 var candidates = initialIndependentLiteralCandidates()
+                if options.maxCount != nil {
+                    func earliestCandidateIndex(before endOffset: Int = Int.max) -> Int? {
+                        var selectedCandidateIndex: Int?
+                        var selectedStart = Int.max
+                        for candidateIndex in candidates.indices
+                            where candidates[candidateIndex].start < selectedStart
+                                && candidates[candidateIndex].start < endOffset {
+                            selectedStart = candidates[candidateIndex].start
+                            selectedCandidateIndex = candidateIndex
+                        }
+                        return selectedCandidateIndex
+                    }
+
+                    func advanceCandidate(at candidateIndex: Int) {
+                        let selected = candidates[candidateIndex]
+                        if let nextMatch = nextIndependentLiteralMatch(
+                            literalIndex: selected.literalIndex,
+                            from: selected.start + selected.length
+                        ) {
+                            candidates[candidateIndex] = (
+                                nextMatch.start,
+                                nextMatch.length,
+                                selected.literalIndex
+                            )
+                        } else {
+                            candidates[candidateIndex] = (Int.max, 0, selected.literalIndex)
+                        }
+                    }
+
+                    while matchedLineCount < maxCount,
+                          let firstCandidateIndex = earliestCandidateIndex() {
+                        let firstCandidate = candidates[firstCandidateIndex]
+                        let bounds = vimgrepLineBounds(containing: firstCandidate.start)
+                        advanceLineNumber(to: bounds.lineStart)
+                        while let candidateIndex = earliestCandidateIndex(before: bounds.lineEnd) {
+                            let selected = candidates[candidateIndex]
+                            totalMatchCount += 1
+                            writeVimgrepPrefixes(
+                                lineNumber: lineNumber,
+                                column: selected.start - bounds.lineStart + 1,
+                                byteOffset: selected.start
+                            )
+                            let outputStart = onlyMatching ? selected.start : bounds.lineStart
+                            let outputEnd = onlyMatching ? selected.start + selected.length : bounds.lineEnd
+                            writeBytes(UnsafeRawBufferPointer(
+                                start: rawBaseAddress.advanced(by: outputStart),
+                                count: outputEnd - outputStart
+                            ))
+                            withUnsafeBytes(of: &newline) { buffer in
+                                writeBytes(buffer)
+                            }
+                            advanceCandidate(at: candidateIndex)
+                        }
+                        matchedLineCount += 1
+                        bytesSearched = bounds.lineEnd == data.count ? data.count : bounds.lineEnd + 1
+                    }
+                    return
+                }
                 while let match = popNextIndependentLiteralMatch(from: &candidates) {
                     writeVimgrepMatch(matchStart: match.start, length: match.length)
                 }

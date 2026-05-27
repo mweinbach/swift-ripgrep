@@ -307,6 +307,16 @@ versus 10.828 s before and 13.5 ms for Rust; `--vimgrep -m1 -o
 'Sherlock Holmes'` at 53.8 ms versus 10.826 s before and 12.7 ms for Rust; and
 `--vimgrep -m2 -o 'Sherlock Holmes'` at 51.4 ms versus 10.815 s before.
 
+Safe multi-literal `--vimgrep` now uses the same line-granular finite
+max-count strategy, merging independent literal streams and emitting every
+match from each admitted line in byte order. Output for `-m1`, `-m2`, `-o`,
+byte-offset, no-column, and no-filename forms on the 193 MiB subtitles corpus
+matched both the previous Swift checkpoint and the sibling Rust oracle. Five-run
+A/B checks measured `--vimgrep -m1 'Sherlock|Watson'` at 45.5 ms versus
+15.927 s before and 5.7 ms for Rust; `--vimgrep -m1 -o 'Sherlock|Watson'` at
+54.2 ms versus 15.976 s before and 5.7 ms for Rust; and `--vimgrep -m2 -o
+'Sherlock|Watson'` at 41.7 ms versus 15.833 s before.
+
 Safe multi-literal only-match and vimgrep output now merge each literal's next
 match stream instead of re-scanning every literal from the current global
 offset. Interleaved same-line fixtures and representative subtitles cases

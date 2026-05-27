@@ -2720,6 +2720,14 @@ struct FeatureTests {
             "\(root.path("vimgrep.txt")):8:Watson Sherlock",
             "\(root.path("vimgrep.txt")):1:Sherlock Holmes",
         ])
+        #expect(try run(["--vimgrep", "-m1", "Sherlock|Watson", root.path("vimgrep.txt")]) == [
+            "\(root.path("vimgrep.txt")):1:1:Watson Sherlock",
+            "\(root.path("vimgrep.txt")):1:8:Watson Sherlock",
+        ])
+        #expect(try run(["--vimgrep", "-m1", "-o", "--byte-offset", "Sherlock|Watson", root.path("vimgrep.txt")]) == [
+            "\(root.path("vimgrep.txt")):1:1:0:Watson",
+            "\(root.path("vimgrep.txt")):1:8:7:Sherlock",
+        ])
         let vimgrepInvertRoot = try TemporaryDirectory()
         try vimgrepInvertRoot.write("before\nneedle\nafter\n", to: "vimgrep-invert.txt")
         #expect(try run(["--vimgrep", "-v", "NEEDLE", vimgrepInvertRoot.path("vimgrep-invert.txt")]) == [
