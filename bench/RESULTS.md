@@ -537,6 +537,17 @@ previous Swift checkpoint and sibling Rust oracle, as did neighboring `-c` and
 --count-matches '(?(?=Sherlock)Sherlock|Holmes)'` at 156.3 ms versus
 247.3 ms before and 468.1 ms for Rust PCRE2.
 
+The upstream Linux no-literal regex shape
+`\w{5}\s+\w{5}\s+\w{5}\s+\w{5}\s+\w{5}` now has a Swift byte-line fast path for
+matching-line output. The scanner handles ASCII lines directly and, for
+Unicode mode, falls back to the existing regex engine only on lines containing
+non-ASCII bytes so Unicode `\w`/`\s` semantics stay intact. Sorted output on
+the Linux corpus matched the sibling Rust oracle for both default Unicode
+(721 lines) and `(?-u)` ASCII (720 lines), including the Unicode-only Italian
+documentation line. A five-run check measured default Unicode at 3.518 s versus
+87.562 s before and 3.381 s for Rust; the ASCII form measured 3.413 s versus
+3.328 s for Rust.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Routing multi-literal full-line output through the existing line-by-line
@@ -635,6 +646,11 @@ Rejected Swift-only probes from the same checkpoint:
   default vimgrep at 86.2 ms; a separate CMO scratch build measured vimgrep at
   79.7 ms, ignore-case multi-literal at 86.3 ms, and no-match `PM_RESUME` tied
   with the normal release build. Neither is worth encoding in the package.
+- A one-pass first-byte scanner for safe multi-literal `--count-matches`
+  preserved output for plain, path-prefixed, and include-zero no-match cases,
+  but regressed the representative `Sherlock|Watson` count path. A 15-run A/B
+  measured plain count at 89.7 ms versus 70.7 ms before, and path-prefixed count
+  at 96.3 ms versus 76.5 ms before, while Rust stayed around 39.6-39.9 ms.
 
 ## Status — 2026-05-25 fast-path checkpoint
 

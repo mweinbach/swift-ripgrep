@@ -4721,6 +4721,15 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
 
         func canStreamLineByLine() -> Bool {
+            let wordWhitespaceFastPath = matcher.wordWhitespaceSequenceFastPath()
+            let canUseWordWhitespaceStreamFastPath = wordWhitespaceFastPath != nil
+                && options.printMode == .matchingLines
+                && canOmitMatchSpans(options: options)
+                && !options.stats
+                && !options.column
+                && !options.byteOffset
+                && options.maxColumns == nil
+                && !options.trim
             guard !shouldPreprocess(haystack, options: options),
                   decompressionCommand(for: fileURL, options: options) == nil,
                   (try? HaystackReader.selectedPath(for: haystack, options: options)) == .buffered,
@@ -4733,7 +4742,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                   !options.invertMatch,
                   !options.stopOnNonmatch,
                   options.replacement == nil,
-                  !matcher.usesByteSemantics else {
+                  (!matcher.usesByteSemantics || canUseWordWhitespaceStreamFastPath) else {
                 return false
             }
             guard case .automatic = options.encodingMode else {
@@ -4768,6 +4777,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 && !options.column
                 && !options.byteOffset
             let streamByteFastPath = streamingByteLiteralFastPath(matcher: matcher, options: options)
+            let wordWhitespaceFastPath = matcher.wordWhitespaceSequenceFastPath()
             if streamByteFastPath != nil,
                canUseBufferedRawLiteralSearch(fileURL: fileURL) {
                 return nil
@@ -4796,6 +4806,49 @@ public struct RipgrepSearcher: @unchecked Sendable {
                    lineData.contains(0) {
                     fellBackToBufferedSearch = true
                     terminate = true
+                    return
+                }
+                if let wordWhitespaceFastPath,
+                   options.printMode == .matchingLines,
+                   canOmitMatchSpans(options: options),
+                   !options.stats,
+                   !options.column,
+                   !options.byteOffset,
+                   options.maxColumns == nil,
+                   !options.trim {
+                    let scan = wordWhitespaceSequenceLineMatch(streamedLine.data)
+                    var hasMatch = scan.hasMatch
+                    if !hasMatch, scan.sawNonASCII, !wordWhitespaceFastPath.asciiOnly {
+                        guard let lineTextWithTerminator = String(data: lineData, encoding: .utf8) else {
+                            fellBackToBufferedSearch = true
+                            terminate = true
+                            return
+                        }
+                        hasMatch = !matcher.canFastReject(lineTextWithTerminator)
+                            && matcher.hasPositiveMatch(in: lineTextWithTerminator)
+                    }
+                    guard hasMatch else {
+                        return
+                    }
+                    guard let lineText = String(data: streamedLine.data, encoding: .utf8) else {
+                        fellBackToBufferedSearch = true
+                        terminate = true
+                        return
+                    }
+                    let lineTerminator = String(data: streamedLine.terminator, encoding: .utf8) ?? ""
+                    matches.append(SearchMatch(
+                        fileURL: fileURL,
+                        lineNumber: lineNumber,
+                        column: nil,
+                        line: lineText,
+                        lineTerminator: lineTerminator,
+                        absoluteOffset: streamedLine.absoluteOffset,
+                        matchCount: 1,
+                        spans: []
+                    ))
+                    if matches.count >= maxCount {
+                        terminate = true
+                    }
                     return
                 }
                 if let streamByteFastPath {
@@ -5153,6 +5206,14 @@ public struct RipgrepSearcher: @unchecked Sendable {
             ))
         }
 
+        if let fastResult = searchRawWordWhitespaceSequenceContents(
+            data,
+            fileURL: fileURL,
+            matcher: matcher,
+            options: options
+        ) {
+            return FileSearchOutcome(result: fastResult)
+        }
         if let fastResult = searchRawLiteralContents(
             data,
             fileURL: fileURL,
@@ -5189,6 +5250,130 @@ public struct RipgrepSearcher: @unchecked Sendable {
             supplementalMatchedLines: result.supplementalMatchedLines,
             supplementalMatches: result.supplementalMatches
         ))
+    }
+
+    private func searchRawWordWhitespaceSequenceContents(
+        _ data: Data,
+        fileURL: URL,
+        matcher: PatternMatcher,
+        options: RipgrepOptions
+    ) -> SearchFileResult? {
+        guard let fastPath = matcher.wordWhitespaceSequenceFastPath(),
+              case .automatic = options.encodingMode,
+              !data.starts(with: [0xEF, 0xBB, 0xBF]),
+              !data.starts(with: [0xFF, 0xFE]),
+              !data.starts(with: [0xFE, 0xFF]),
+              !options.json,
+              !options.stats,
+              options.beforeContext == 0,
+              options.afterContext == 0,
+              !options.passthru,
+              options.replacement == nil,
+              !options.stopOnNonmatch,
+              !options.invertMatch,
+              !options.onlyMatching,
+              !options.column,
+              !options.byteOffset,
+              !options.vimgrep,
+              !options.crlf,
+              options.maxColumns == nil,
+              !options.trim,
+              options.printMode == .matchingLines,
+              canOmitMatchSpans(options: options) else {
+            return nil
+        }
+
+        var matches: [SearchMatch] = []
+        var lineStart = 0
+        var lineNumber = 1
+        var bytesSearched = data.count
+        var needsDecodedFallback = false
+        let maxCount = options.maxCount ?? Int.max
+        let dataCount = data.count
+        data.withUnsafeBytes { rawBuffer in
+            let bytes = rawBuffer.bindMemory(to: UInt8.self)
+            guard let baseAddress = bytes.baseAddress else {
+                return
+            }
+            while lineStart <= dataCount, matches.count < maxCount {
+                let remaining = dataCount - lineStart
+                let newlinePointer = remaining > 0
+                    ? memchr(baseAddress.advanced(by: lineStart), Int32(UInt8(ascii: "\n")), remaining)
+                    : nil
+                let lineEnd: Int
+                let nextLineStart: Int
+                let lineTerminator: String
+                if let newlinePointer {
+                    lineEnd = baseAddress.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self))
+                    nextLineStart = lineEnd + 1
+                    lineTerminator = "\n"
+                } else {
+                    lineEnd = dataCount
+                    nextLineStart = dataCount + 1
+                    lineTerminator = ""
+                }
+
+                let lineBytes = UnsafeBufferPointer(
+                    start: baseAddress.advanced(by: lineStart),
+                    count: lineEnd - lineStart
+                )
+                let scan = wordWhitespaceSequenceLineMatch(lineBytes)
+                var hasMatch = scan.hasMatch
+                if !hasMatch, scan.sawNonASCII, !fastPath.asciiOnly {
+                    let lineWithTerminatorCount = nextLineStart <= dataCount
+                        ? nextLineStart - lineStart
+                        : lineEnd - lineStart
+                    guard let lineTextWithTerminator = String(
+                        data: Data(bytes: baseAddress.advanced(by: lineStart), count: lineWithTerminatorCount),
+                        encoding: .utf8
+                    ) else {
+                        needsDecodedFallback = true
+                        return
+                    }
+                    hasMatch = !matcher.canFastReject(lineTextWithTerminator)
+                        && matcher.hasPositiveMatch(in: lineTextWithTerminator)
+                }
+                if hasMatch {
+                    guard let lineText = String(
+                        data: Data(bytes: baseAddress.advanced(by: lineStart), count: lineEnd - lineStart),
+                        encoding: .utf8
+                    ) else {
+                        needsDecodedFallback = true
+                        return
+                    }
+                    matches.append(SearchMatch(
+                        fileURL: fileURL,
+                        lineNumber: lineNumber,
+                        column: nil,
+                        line: lineText,
+                        lineTerminator: lineTerminator,
+                        absoluteOffset: lineStart,
+                        matchCount: 1,
+                        spans: []
+                    ))
+                    if matches.count == maxCount {
+                        bytesSearched = nextLineStart <= dataCount ? nextLineStart : dataCount
+                        break
+                    }
+                }
+
+                guard nextLineStart <= dataCount else {
+                    break
+                }
+                lineStart = nextLineStart
+                lineNumber += 1
+            }
+        }
+
+        guard !needsDecodedFallback else {
+            return nil
+        }
+        return SearchFileResult(
+            fileURL: fileURL,
+            matches: matches,
+            bytesSearched: bytesSearched,
+            searched: true
+        )
     }
 
     private func searchRawLiteralContents(
@@ -6094,6 +6279,97 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
         return matcher.byteLiteralFastPath()
         #endif
+    }
+
+    private func wordWhitespaceSequenceLineMatch(_ data: Data) -> (hasMatch: Bool, sawNonASCII: Bool) {
+        data.withUnsafeBytes { rawBuffer in
+            let bytes = rawBuffer.bindMemory(to: UInt8.self)
+            return wordWhitespaceSequenceLineMatch(bytes)
+        }
+    }
+
+    private func wordWhitespaceSequenceLineMatch(
+        _ bytes: UnsafeBufferPointer<UInt8>
+    ) -> (hasMatch: Bool, sawNonASCII: Bool) {
+        guard let baseAddress = bytes.baseAddress else {
+            return (false, false)
+        }
+        var sawNonASCII = false
+        let count = bytes.count
+        var start = 0
+        while start < count {
+            let first = baseAddress[start]
+            if first >= 0x80 {
+                sawNonASCII = true
+                start += 1
+                continue
+            }
+            guard isASCIIRegexWordByte(first) else {
+                start += 1
+                continue
+            }
+
+            var offset = start
+            var matched = true
+            for group in 0..<5 {
+                for _ in 0..<5 {
+                    guard offset < count else {
+                        matched = false
+                        break
+                    }
+                    let byte = baseAddress[offset]
+                    if byte >= 0x80 {
+                        sawNonASCII = true
+                        matched = false
+                        break
+                    }
+                    guard isASCIIRegexWordByte(byte) else {
+                        matched = false
+                        break
+                    }
+                    offset += 1
+                }
+                if !matched {
+                    break
+                }
+                guard group < 4 else {
+                    continue
+                }
+                var consumedWhitespace = false
+                while offset < count {
+                    let byte = baseAddress[offset]
+                    if byte >= 0x80 {
+                        sawNonASCII = true
+                        break
+                    }
+                    guard isASCIIRegexWhitespaceByte(byte) else {
+                        break
+                    }
+                    consumedWhitespace = true
+                    offset += 1
+                }
+                if !consumedWhitespace {
+                    matched = false
+                    break
+                }
+            }
+            if matched {
+                return (true, sawNonASCII)
+            }
+            start += 1
+        }
+        return (false, sawNonASCII)
+    }
+
+    private func isASCIIRegexWordByte(_ byte: UInt8) -> Bool {
+        (byte >= UInt8(ascii: "0") && byte <= UInt8(ascii: "9"))
+            || (byte >= UInt8(ascii: "A") && byte <= UInt8(ascii: "Z"))
+            || (byte >= UInt8(ascii: "a") && byte <= UInt8(ascii: "z"))
+            || byte == UInt8(ascii: "_")
+    }
+
+    private func isASCIIRegexWhitespaceByte(_ byte: UInt8) -> Bool {
+        byte == UInt8(ascii: " ") || (byte >= 0x09 && byte <= 0x0D)
     }
 
     private func canUseBufferedRawLiteralSearch(fileURL: URL) -> Bool {

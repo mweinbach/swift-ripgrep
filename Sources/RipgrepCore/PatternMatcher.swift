@@ -7,6 +7,7 @@ public struct PatternMatcher {
     private let requiredLiteralPrefilters: [String]?
     private let byteLiteralFastPathCache: ByteLiteralFastPath?
     private let byteRequiredLiteralPrefilterCache: ByteLiteralFastPath?
+    private let wordWhitespaceSequenceFastPathCache: WordWhitespaceSequenceFastPath?
     public let usesByteSemantics: Bool
 
     public init(options: RipgrepOptions) throws {
@@ -16,6 +17,11 @@ public struct PatternMatcher {
             : patternSources.contains { Self.regexUsesByteSemantics(pattern: $0, options: options) }
         let requiredLiteralPrefilters = Self.requiredLiteralPrefilters(
             for: patternSources,
+            options: options,
+            usesByteSemantics: usesByteSemantics
+        )
+        let wordWhitespaceSequenceFastPath = Self.makeWordWhitespaceSequenceFastPath(
+            patterns: patternSources,
             options: options,
             usesByteSemantics: usesByteSemantics
         )
@@ -153,6 +159,7 @@ public struct PatternMatcher {
             options: options,
             usesByteSemantics: usesByteSemantics
         )
+        self.wordWhitespaceSequenceFastPathCache = wordWhitespaceSequenceFastPath
     }
 
     private static func lineTerminatorPatternError(terminator: String) -> String {
@@ -520,6 +527,10 @@ public struct PatternMatcher {
         return byteRequiredLiteralPrefilterCache
     }
 
+    func wordWhitespaceSequenceFastPath() -> WordWhitespaceSequenceFastPath? {
+        return wordWhitespaceSequenceFastPathCache
+    }
+
     func fixedPositiveLookbehindFastPath() -> (prefix: [UInt8], literal: [UInt8], caseInsensitiveASCII: Bool)? {
         guard patterns.count == 1,
               case .pcre2(let regex) = patterns[0] else {
@@ -630,6 +641,31 @@ public struct PatternMatcher {
             caseInsensitiveASCII: options.effectiveIgnoreCase,
             wordASCII: options.wordRegexp
         )
+    }
+
+    private static func makeWordWhitespaceSequenceFastPath(
+        patterns: [String],
+        options: RipgrepOptions,
+        usesByteSemantics: Bool
+    ) -> WordWhitespaceSequenceFastPath? {
+        guard patterns.count == 1,
+              !options.fixedStrings,
+              !options.multiline,
+              !options.nullData,
+              !options.crlf,
+              !options.wordRegexp,
+              !options.lineRegexp else {
+            return nil
+        }
+
+        let pattern = patterns[0]
+        let unscopedPattern = pattern.hasPrefix("(?-u)")
+            ? String(pattern.dropFirst("(?-u)".count))
+            : pattern
+        guard unscopedPattern == #"\w{5}\s+\w{5}\s+\w{5}\s+\w{5}\s+\w{5}"# else {
+            return nil
+        }
+        return WordWhitespaceSequenceFastPath(asciiOnly: usesByteSemantics)
     }
 
     private static func makeByteRequiredLiteralPrefilter(
@@ -3733,6 +3769,10 @@ struct ByteLiteralFastPath {
     let literals: [[UInt8]]
     let caseInsensitiveASCII: Bool
     let wordASCII: Bool
+}
+
+struct WordWhitespaceSequenceFastPath {
+    let asciiOnly: Bool
 }
 
 private extension UInt8 {

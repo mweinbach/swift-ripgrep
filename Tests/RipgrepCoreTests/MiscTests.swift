@@ -23,6 +23,51 @@ struct MiscTests {
         ])
     }
 
+    @Test("no-literal word whitespace regex preserves Unicode and ASCII output")
+    func noLiteralWordWhitespaceRegexPreservesUnicodeAndASCIIOutput() throws {
+        let root = try TemporaryDirectory()
+        try root.write("""
+        alpha bravo charl delta echoo
+        abcdef bravo charl delta echoo
+        short words nope here
+        perche il contesto delle righe verra cambiato.
+        perché il contesto delle righe verrà cambiato.
+        """, to: "words.txt")
+        let pattern = #"\w{5}\s+\w{5}\s+\w{5}\s+\w{5}\s+\w{5}"#
+
+        let unicodeOutput = try runExecutableData([
+            "-n",
+            pattern,
+            root.path("words.txt"),
+        ], fixture: {})
+        let streamingUnicodeOutput = try runExecutableData([
+            "--no-mmap",
+            "-n",
+            pattern,
+            root.path("words.txt"),
+        ], fixture: {})
+        let asciiOutput = try runExecutableData([
+            "-n",
+            "(?-u)\(pattern)",
+            root.path("words.txt"),
+        ], fixture: {})
+
+        #expect(String(decoding: unicodeOutput, as: UTF8.self) == """
+        1:alpha bravo charl delta echoo
+        2:abcdef bravo charl delta echoo
+        4:perche il contesto delle righe verra cambiato.
+        5:perché il contesto delle righe verrà cambiato.
+
+        """)
+        #expect(streamingUnicodeOutput == unicodeOutput)
+        #expect(String(decoding: asciiOutput, as: UTF8.self) == """
+        1:alpha bravo charl delta echoo
+        2:abcdef bravo charl delta echoo
+        4:perche il contesto delle righe verra cambiato.
+
+        """)
+    }
+
     @Test("streams simple Darwin byte literal lines")
     func streamsSimpleDarwinByteLiteralLines() throws {
         #if canImport(Darwin)
