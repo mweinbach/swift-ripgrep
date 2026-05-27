@@ -1134,6 +1134,13 @@ Rejected Swift-only probes from the same checkpoint:
   `subtitles_en_literal (lines)` at 232.00 ms, `subtitles_en_literal_word` at
   231.18 ms, and `subtitles_en_surrounding_words` at 231.74 ms, all worse than
   the retained roughly 215-218 ms bands, so the existing `memcmp` verifier stays.
+- Dropping the always-loaded tail SIMD vector from the case-sensitive literal
+  scanner and checking the tail byte only on first-byte candidate lanes
+  preserved `Sherlock Holmes` plain and line-numbered output, but badly
+  regressed the intended controls. The focused harness measured
+  `subtitles_en_literal` at 250.01 ms, `subtitles_en_literal (no mmap)` at
+  250.58 ms, and `subtitles_en_literal (lines)` at 291.29 ms, versus the
+  retained roughly 184/184/215 ms bands. The first/tail SIMD filter stays.
 - Widening the byte counter from `SIMD16` to `SIMD64` preserved output but was
   catastrophically slower on Apple Silicon: `--vimgrep 'Sherlock|Watson'`
   measured 351.2 ms, `-n -o 'Sherlock|Watson'` measured 346.8 ms, and
