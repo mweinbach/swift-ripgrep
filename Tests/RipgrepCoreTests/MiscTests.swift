@@ -126,6 +126,42 @@ struct MiscTests {
         """)
     }
 
+    @Test("word-prefix literal regex preserves Unicode and ASCII output")
+    func wordPrefixLiteralRegexPreservesUnicodeAndASCIIOutput() throws {
+        let root = try TemporaryDirectory()
+        try root.write("""
+        xAh
+        _Ah
+         Ah
+        -Ah
+        éAh
+        zzz
+        """, to: "word-prefix.txt")
+
+        let unicodeOutput = try runExecutableData([
+            "-n",
+            #"\wAh"#,
+            root.path("word-prefix.txt"),
+        ], fixture: {})
+        #expect(String(decoding: unicodeOutput, as: UTF8.self) == """
+        1:xAh
+        2:_Ah
+        5:éAh
+
+        """)
+
+        let asciiOutput = try runExecutableData([
+            "-n",
+            #"(?-u)\wAh"#,
+            root.path("word-prefix.txt"),
+        ], fixture: {})
+        #expect(String(decoding: asciiOutput, as: UTF8.self) == """
+        1:xAh
+        2:_Ah
+
+        """)
+    }
+
     @Test("streams simple Darwin byte literal lines")
     func streamsSimpleDarwinByteLiteralLines() throws {
         #if canImport(Darwin)

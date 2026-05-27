@@ -589,6 +589,16 @@ versus 2.585 s before. Linux five-group guards stayed neutral: Unicode
 2.596 s versus 2.587 s before in a five-run recheck, and ASCII 2.526 s versus
 2.547 s before in a three-run check.
 
+Required-literal regexes of the form `\wAh` now have a byte verifier for the
+single word-character prefix before the required literal. ASCII candidates are
+checked without decoding; Unicode mode falls back to the existing regex engine
+only when the byte before the literal is non-ASCII. Output for `\wAh` and
+`(?-u)\wAh` on the Linux corpus matched the previous Swift checkpoint exactly
+(247 and 233 lines respectively; the pre-existing Linux traversal order differs
+from sibling Rust). A three-run benchmark measured Unicode at 2.144 s versus
+62.189 s before and 3.354 s for Rust, and ASCII at 2.126 s versus 72.039 s
+before and 3.499 s for Rust.
+
 Line-numbered single-literal output now counts newline bytes inside the same
 Swift SIMD first/tail literal scan used to find the next match, avoiding the
 second skipped-region pass previously used only to print `-n` prefixes. Output
