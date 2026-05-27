@@ -1075,6 +1075,13 @@ Rejected Swift-only probes from the same checkpoint:
   default listing at 213.71 ms median versus 143.73 ms before, while hidden
   listing was only slightly faster at 140.57 ms versus 144.52 ms. The dynamic
   array growth stays.
+- Replacing `IgnoreStack.decision`'s reversed matcher loop with an explicit
+  unsafe-buffer reverse walk preserved exact Swift output and sorted Rust parity,
+  but the measured result was unstable and did not survive an order-flipped
+  confirmation. A noisy 60-run pass measured probe default listing at 392.9 ms
+  mean / 383.0 ms median versus 383.5 ms / 363.2 ms before, and probe hidden
+  listing at 258.2 ms mean / 231.0 ms median versus 214.6 ms / 206.8 ms before.
+  The simpler reversed matcher loop stays.
 - A count-only multi-literal path that skipped line-bound storage and sorting
   preserved output, but measured neutral to slightly slower on
   `-c 'Sherlock|Watson'` over the 1.5 GiB subtitles corpus: 327.0 ms versus
