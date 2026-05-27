@@ -1045,6 +1045,12 @@ Rejected Swift-only probes from the same checkpoint:
   exit/output. It regressed the hot default listing badly in a same-machine
   30-run A/B: probe `--files` measured 217.77 ms median versus 153.96 ms before,
   with Rust at 96.97 ms. The existing String prefix/suffix checks stay.
+- Adding one extra ordered parallel split inside large top-level ignore-aware
+  `--files` subtrees preserved exact current Swift output and sorted Rust
+  content, but the nested chunk collection and dispatch overhead overwhelmed
+  any load-balancing win. A 30-run A/B measured default listing at 185.19 ms
+  median versus 127.74 ms before, and hidden listing at 180.23 ms versus
+  120.95 ms before. The root-only parallel split stays.
 - A count-only multi-literal path that skipped line-bound storage and sorting
   preserved output, but measured neutral to slightly slower on
   `-c 'Sherlock|Watson'` over the 1.5 GiB subtitles corpus: 327.0 ms versus
