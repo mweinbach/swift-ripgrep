@@ -689,6 +689,16 @@ line-numbered form measured 244.3 ms versus 6.3 ms for Rust. The neighboring
 32-literal `-m128` case stayed in the retained path at 246.4 ms in the same
 run family.
 
+Bounded multi-literal preflight now scans a shared literal prefix once when all
+alternatives have a common prefix of at least four bytes, then verifies full
+literals only at prefix candidates. This keeps wide common-prefix no-match
+alternations from paying one whole-file scan per alternative. Empty output and
+exit status for 40-literal `PM_NOPE_*` matched sibling Rust `rg`; five-run
+checks measured 255.9 ms versus 3.310 s before and 194.8 ms for Rust. The
+64-literal version measured 242.0 ms versus 5.272 s before and 196.9 ms for
+Rust. A neighboring 40-literal matching pattern without a shared prefix stayed
+in the retained scanner band at 273.0 ms.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Raising the no-mmap stream read size to 4 MiB preserved output but regressed

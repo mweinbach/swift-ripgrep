@@ -627,6 +627,14 @@ struct MiscTests {
                 == expectedFortyLiteralBoundedLines
         )
 
+        let commonPrefixNoMatchNames = (1...20).map { "PM_NOPE_\($0)" }
+        let commonPrefixNoMatchOutput = try runExecutableData([
+            "-m16",
+            commonPrefixNoMatchNames.joined(separator: "|"),
+            root.path("many-multi.txt"),
+        ], fixture: {})
+        #expect(commonPrefixNoMatchOutput.isEmpty)
+
         let onlyMatchingOutput = try runExecutableData([
             "-o",
             "b|d",
