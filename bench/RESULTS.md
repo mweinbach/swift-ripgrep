@@ -255,6 +255,19 @@ and 24.4 ms for Rust; `--column --byte-offset -r Holmes 'Sherlock Holmes'` at
 79.3 ms versus 10.897 s before and 30.0 ms for Rust; and `--byte-offset -i -r
 Holmes sherlock` at 60.3 ms versus 24.281 s before and 41.3 ms for Rust.
 
+Only-matching replacement output now uses the same direct literal replacement
+scanner, including line/column/byte-offset prefixes and ASCII ignore-case
+literals. Output for plain `-o -r`, column, byte-offset, combined
+line+column+byte-offset, and ignore-case forms on the 193 MiB subtitles corpus
+matched both the previous Swift checkpoint and the sibling Rust oracle. Five-run
+A/B checks measured `-o -r Holmes 'Sherlock Holmes'` at 56.7 ms versus
+10.860 s before and 26.8 ms for Rust; `-o --column -r Holmes
+'Sherlock Holmes'` at 86.4 ms versus 10.863 s before and 30.8 ms for Rust;
+`-o --byte-offset -r Holmes 'Sherlock Holmes'` at 70.9 ms versus 10.794 s
+before and 26.5 ms for Rust; `-n -o --column --byte-offset -r Holmes
+'Sherlock Holmes'` at 81.3 ms versus 10.781 s before and 30.2 ms for Rust;
+and `-o -i -r Holmes sherlock` at 61.4 ms versus 24.388 s before.
+
 Safe multi-literal only-match and vimgrep output now merge each literal's next
 match stream instead of re-scanning every literal from the current global
 offset. Interleaved same-line fixtures and representative subtitles cases

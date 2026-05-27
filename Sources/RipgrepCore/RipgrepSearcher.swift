@@ -772,6 +772,16 @@ public struct RipgrepSearcher: @unchecked Sendable {
             && fastPathByteSet == nil
             && !fastPath.wordASCII
             && options.withFilename != true
+        let canDirectWriteOnlyMatchingLiteralReplacement = directLiteralReplacementBytes?.isEmpty == false
+            && allowDirectStdout
+            && options.printMode == .matchingLines
+            && onlyMatching
+            && !options.vimgrep
+            && options.maxCount == nil
+            && fastPath.literals.count == 1
+            && fastPathByteSet == nil
+            && !fastPath.wordASCII
+            && options.withFilename != true
         guard (!onlyMatching
                 || fastPath.literals.count == 1
                 || fastPathByteSet != nil
@@ -781,7 +791,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 || fastPathByteSet != nil
                 || canDirectCountIndependentLiterals),
               (!options.vimgrep || canDirectWriteVimgrep),
-              (options.replacement == nil || canDirectWriteLiteralReplacement),
+              (options.replacement == nil
+                || canDirectWriteLiteralReplacement
+                || canDirectWriteOnlyMatchingLiteralReplacement),
               (!options.byteOffset && !options.column
                 || (options.printMode == .matchingLines
                     && (fastPath.literals.count == 1
@@ -1027,7 +1039,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 return (selected.start, selected.length)
             }
 
-            if canDirectWriteLiteralReplacement,
+            if (canDirectWriteLiteralReplacement || canDirectWriteOnlyMatchingLiteralReplacement),
                let replacementBytes = directLiteralReplacementBytes,
                let literal = literals.first {
                 var searchOffset = 0
@@ -1090,7 +1102,11 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     var cursor = lineStart
                     var lineSearchOffset = lineStart
                     var lineMatchCount = 0
-                    if wantsLineNumber || options.column || options.byteOffset {
+                    var replacementDelta = 0
+                    if onlyMatching, wantsLineNumber {
+                        advanceLineNumber(to: lineStart)
+                    }
+                    if !onlyMatching, (wantsLineNumber || options.column || options.byteOffset) {
                         advanceLineNumber(to: lineStart)
                         writeDarwinOnlyMatchingPrefixes(
                             lineNumber: lineNumber,
@@ -1109,23 +1125,43 @@ public struct RipgrepSearcher: @unchecked Sendable {
                             break
                         }
                         let lineMatchStart = baseAddress.distance(to: rawLineFoundPointer)
-                        writeBytes(UnsafeRawBufferPointer(
-                            start: rawBaseAddress.advanced(by: cursor),
-                            count: lineMatchStart - cursor
-                        ))
-                        replacementBytes.withUnsafeBytes { buffer in
-                            writeBytes(buffer)
+                        if onlyMatching {
+                            let replacementStart = lineMatchStart - lineStart + replacementDelta
+                            writeDarwinOnlyMatchingPrefixes(
+                                lineNumber: lineNumber,
+                                column: replacementStart + 1,
+                                byteOffset: lineStart + replacementStart,
+                                options: options,
+                                writeBytes: writeBytes
+                            )
+                            replacementBytes.withUnsafeBytes { buffer in
+                                writeBytes(buffer)
+                            }
+                            withUnsafeBytes(of: &newline) { buffer in
+                                writeBytes(buffer)
+                            }
+                            replacementDelta += replacementBytes.count - literal.count
+                        } else {
+                            writeBytes(UnsafeRawBufferPointer(
+                                start: rawBaseAddress.advanced(by: cursor),
+                                count: lineMatchStart - cursor
+                            ))
+                            replacementBytes.withUnsafeBytes { buffer in
+                                writeBytes(buffer)
+                            }
                         }
                         cursor = lineMatchStart + literal.count
                         lineSearchOffset = cursor
                         lineMatchCount += 1
                     }
-                    writeBytes(UnsafeRawBufferPointer(
-                        start: rawBaseAddress.advanced(by: cursor),
-                        count: lineEnd - cursor
-                    ))
-                    withUnsafeBytes(of: &newline) { buffer in
-                        writeBytes(buffer)
+                    if !onlyMatching {
+                        writeBytes(UnsafeRawBufferPointer(
+                            start: rawBaseAddress.advanced(by: cursor),
+                            count: lineEnd - cursor
+                        ))
+                        withUnsafeBytes(of: &newline) { buffer in
+                            writeBytes(buffer)
+                        }
                     }
                     matchedLineCount += 1
                     totalMatchCount += lineMatchCount
