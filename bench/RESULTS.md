@@ -923,6 +923,12 @@ Rejected Swift-only probes from the same checkpoint:
   247.0 ms versus the retained direct writer's 249.8 ms band. The broader
   whole-line non-ASCII guard stayed because it is simpler and already captures
   most of the measured win.
+- A Swift-only Boyer-Moore-Horspool scanner for long case-sensitive
+  single-literal executable preflight output preserved byte-identical
+  `Sherlock Holmes` output but was much slower than the retained SIMD first/tail
+  scanner: the focused harness measured 567.16 ms for plain output and
+  567.36 ms for the `--no-mmap` output-equivalent path, versus the retained
+  roughly 187 ms/184 ms bands.
 - Raising the no-mmap stream read size to 4 MiB preserved output but regressed
   both representative checks: plain output measured 293.0 ms versus 288.3 ms
   before in that run, and `-n` measured 355.3 ms versus 352.9 ms before. The
