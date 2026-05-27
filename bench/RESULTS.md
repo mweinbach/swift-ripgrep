@@ -306,6 +306,20 @@ Swift binary timed out after 10 seconds with no output for both
 `--no-unicode Sherlock` at 258.5 ms versus 392.2 ms for Rust, and current
 `--crlf Sherlock` at 327.9 ms versus 406.1 ms for Rust.
 
+Default-reset and no-op selection flags now also stay eligible for the
+executable literal preflight when the command is still a single explicit file
+search. This covers buffering/search/output resets such as
+`--no-block-buffered`, `--no-json`, `--no-stats`, `--no-search-zip`, glob-case
+toggles without globs, `--sort none`/`--sortr none`, and validated
+`--threads N` forms. Small previous/current/Rust checks covered each accepted
+form, large current/Rust checks covered `--no-block-buffered`, `--sort=none`,
+and `--threads=1`, and invalid `--threads=bogus` still fell through to the
+normal parser error. Ten-run checks on the 252 MiB dense fixture measured
+current `--no-block-buffered Sherlock` at 313.7 ms versus 443.0 ms before,
+`--sort=none Sherlock` at 319.8 ms versus 449.3 ms before and 418.7 ms for
+Rust, and a noisy `--threads=1 Sherlock` rerun at 380.1 ms versus 480.0 ms
+before and 401.8 ms for Rust.
+
 The Swift-only Darwin mmap/stdout preflight now also covers line-numbered
 medium bounded multi-literal output when no filename, byte-offset, column,
 replacement, only-matching, or vimgrep formatting is requested. Output for

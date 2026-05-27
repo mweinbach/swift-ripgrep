@@ -1403,6 +1403,67 @@ struct MiscTests {
         ], fixture: {})
         #expect(noCrlfOutput == crlfOutput)
 
+        for neutralResetFlag in [
+            "--glob-case-insensitive",
+            "--no-block-buffered",
+            "--no-binary",
+            "--no-context-separator",
+            "--no-glob-case-insensitive",
+            "--no-include-zero",
+            "--no-invert-match",
+            "--no-json",
+            "--no-max-columns-preview",
+            "--no-multiline",
+            "--no-multiline-dotall",
+            "--no-search-zip",
+            "--no-sort-files",
+            "--no-stats",
+            "--no-text",
+        ] {
+            let neutralResetOutput = try runExecutableData([
+                neutralResetFlag,
+                "needle",
+                root.path("dense.txt"),
+            ], fixture: {})
+            #expect(neutralResetOutput == output)
+        }
+
+        let inlineSortNoneOutput = try runExecutableData([
+            "--sort=none",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(inlineSortNoneOutput == output)
+
+        let separateSortNoneOutput = try runExecutableData([
+            "--sort",
+            "none",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(separateSortNoneOutput == output)
+
+        let reverseSortNoneOutput = try runExecutableData([
+            "--sortr=none",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(reverseSortNoneOutput == output)
+
+        let threadCountOutput = try runExecutableData([
+            "--threads=1",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(threadCountOutput == output)
+
+        let shortThreadCountOutput = try runExecutableData([
+            "-j1",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(shortThreadCountOutput == output)
+
         let hiddenFlagOutput = try runExecutableData([
             "--hidden",
             "--no-ignore",

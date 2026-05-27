@@ -375,6 +375,10 @@ struct RipgrepCommand {
                  "--ignore-parent",
                  "--ignore-vcs",
                  "--crlf",
+                 "--glob-case-insensitive",
+                 "--no-block-buffered",
+                 "--no-binary",
+                 "--no-context-separator",
                  "--no-crlf",
                  "--no-hidden",
                  "--no-ignore",
@@ -386,6 +390,17 @@ struct RipgrepCommand {
                  "--no-ignore-messages",
                  "--no-ignore-parent",
                  "--no-ignore-vcs",
+                 "--no-glob-case-insensitive",
+                 "--no-include-zero",
+                 "--no-invert-match",
+                 "--no-json",
+                 "--no-max-columns-preview",
+                 "--no-multiline",
+                 "--no-multiline-dotall",
+                 "--no-search-zip",
+                 "--no-sort-files",
+                 "--no-stats",
+                 "--no-text",
                  "--no-config",
                  "--no-one-file-system",
                  "--no-require-git",
@@ -399,6 +414,25 @@ struct RipgrepCommand {
             default:
                 return isBufferingFlag(argument) || isMessageFlag(argument)
             }
+        }
+        func isValidNonNegativeInteger(_ value: String) -> Bool {
+            guard !value.hasPrefix("-"),
+                  Int(value) != nil else {
+                return false
+            }
+            return true
+        }
+        func inlineThreadCount(_ argument: String) -> String? {
+            if argument.hasPrefix("--threads=") {
+                return String(argument.dropFirst("--threads=".count))
+            }
+            if argument.hasPrefix("-j"), argument.count > 2 {
+                return String(argument.dropFirst(2))
+            }
+            return nil
+        }
+        func inlineSortNone(_ argument: String) -> Bool {
+            argument == "--sort=none" || argument == "--sortr=none"
         }
         func shortFlagCluster(
             _ argument: String
@@ -524,6 +558,24 @@ struct RipgrepCommand {
                     return nil
                 }
                 parsedColorMayEmit = mayEmit
+            } else if argument == "--sort" || argument == "--sortr" {
+                guard argumentIndex < arguments.count,
+                      arguments[argumentIndex] == "none" else {
+                    return nil
+                }
+                argumentIndex += 1
+            } else if inlineSortNone(argument) {
+                continue
+            } else if argument == "-j" || argument == "--threads" {
+                guard argumentIndex < arguments.count,
+                      isValidNonNegativeInteger(arguments[argumentIndex]) else {
+                    return nil
+                }
+                argumentIndex += 1
+            } else if let threadCount = inlineThreadCount(argument) {
+                guard isValidNonNegativeInteger(threadCount) else {
+                    return nil
+                }
             } else if isOutputNeutralSingleFileFlag(argument) {
                 continue
             } else if let cluster = shortFlagCluster(argument) {
