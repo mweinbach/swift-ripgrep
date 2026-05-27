@@ -272,6 +272,7 @@ struct RipgrepCommand {
         let arguments = preflightArguments.arguments
         let asciiCaseInsensitive: Bool
         let lineNumber: Bool
+        let noMmap: Bool
         let pattern: String
         let path: String
         func isIgnoreCaseFlag(_ argument: String) -> Bool {
@@ -280,40 +281,29 @@ struct RipgrepCommand {
         func isLineNumberFlag(_ argument: String) -> Bool {
             argument == "-n" || argument == "--line-number"
         }
-        if arguments.count == 2 {
-            asciiCaseInsensitive = false
-            lineNumber = false
-            pattern = arguments[0]
-            path = arguments[1]
-        } else if arguments.count == 3,
-                  isIgnoreCaseFlag(arguments[0]) {
-            asciiCaseInsensitive = true
-            lineNumber = false
-            pattern = arguments[1]
-            path = arguments[2]
-        } else if arguments.count == 3,
-                  isLineNumberFlag(arguments[0]) {
-            asciiCaseInsensitive = false
-            lineNumber = true
-            pattern = arguments[1]
-            path = arguments[2]
-        } else if arguments.count == 4,
-                  isLineNumberFlag(arguments[0]),
-                  isIgnoreCaseFlag(arguments[1]) {
-            asciiCaseInsensitive = true
-            lineNumber = true
-            pattern = arguments[2]
-            path = arguments[3]
-        } else if arguments.count == 4,
-                  isIgnoreCaseFlag(arguments[0]),
-                  isLineNumberFlag(arguments[1]) {
-            asciiCaseInsensitive = true
-            lineNumber = true
-            pattern = arguments[2]
-            path = arguments[3]
-        } else {
+        var parsedIgnoreCase = false
+        var parsedLineNumber = false
+        var parsedNoMmap = false
+        var valueArguments: [String] = []
+        for argument in arguments {
+            if isIgnoreCaseFlag(argument) {
+                parsedIgnoreCase = true
+            } else if isLineNumberFlag(argument) {
+                parsedLineNumber = true
+            } else if argument == "--no-mmap" {
+                parsedNoMmap = true
+            } else {
+                valueArguments.append(argument)
+            }
+        }
+        guard valueArguments.count == 2 else {
             return nil
         }
+        asciiCaseInsensitive = parsedIgnoreCase
+        lineNumber = parsedLineNumber
+        noMmap = parsedNoMmap
+        pattern = valueArguments[0]
+        path = valueArguments[1]
 
         guard !pattern.hasPrefix("-"),
               path != "-",
@@ -328,6 +318,14 @@ struct RipgrepCommand {
         guard !literal.isEmpty,
               !asciiCaseInsensitive || literal.allSatisfy({ $0 < 0x80 }) else {
             return nil
+        }
+        if noMmap {
+            return SwiftDarwinLiteralPreflight.streamingExitCode(
+                path: path,
+                literal: literal,
+                asciiCaseInsensitive: asciiCaseInsensitive,
+                lineNumber: lineNumber
+            )
         }
         return SwiftDarwinLiteralPreflight.exitCode(
             path: path,

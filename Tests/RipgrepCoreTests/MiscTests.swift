@@ -795,6 +795,31 @@ struct MiscTests {
         4:tail needle
 
         """.utf8))
+
+        let noMmapOutput = try runExecutableData([
+            "--no-mmap",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(noMmapOutput == output)
+
+        let noMmapLineNumberIgnoreCaseOutput = try runExecutableData([
+            "--no-mmap",
+            "-n",
+            "-i",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(noMmapLineNumberIgnoreCaseOutput == lineNumberIgnoreCaseOutput)
+
+        try root.write("quiet\nneedle at end", to: "unterminated.txt")
+        let noMmapUnterminatedLineOutput = try runExecutableData([
+            "--no-mmap",
+            "-n",
+            "needle",
+            root.path("unterminated.txt"),
+        ], fixture: {})
+        #expect(noMmapUnterminatedLineOutput == Data("2:needle at end\n".utf8))
         #endif
     }
 

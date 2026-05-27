@@ -605,6 +605,16 @@ existing Swift fallback and sibling Rust oracle. Ten-run checks measured
 `-n -i` measured 301.5 ms versus 334.1 ms for the fallback and 312.3 ms for
 Rust.
 
+The same executable preflight now handles explicit `--no-mmap` literal file
+searches with a Swift chunked scanner instead of falling through to the
+buffered reader limit. It keeps overlap bytes between chunks, searches for the
+next literal before finding line bounds, and preserves line-number output.
+Output for plain, `-n`, `-i`, and `-n -i` `--no-mmap 'Sherlock Holmes'` on the
+1.5 GiB subtitles corpus matched sibling Rust `rg`. Five-run checks measured
+plain `--no-mmap` at 294.3 ms versus a previous Swift error and 164.5 ms for
+Rust; `--no-mmap -n` measured 378.7 ms versus the same previous error and
+195.8 ms for Rust.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Routing multi-literal full-line output through the existing line-by-line
