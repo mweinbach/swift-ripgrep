@@ -118,13 +118,15 @@ def main():
         sys.exit(f"rg not found at {args.rg}")
     if not Path(args.swift_rg).is_file():
         sys.exit(f"swift-rg not found at {args.swift_rg}")
+    rg_path = str(Path(args.rg).resolve())
+    swift_rg_path = str(Path(args.swift_rg).resolve())
 
     out_dir = Path(args.out)
     json_dir = out_dir / "hyperfine"
     json_dir.mkdir(parents=True, exist_ok=True)
 
     ns = load_benchsuite(args.benchsuite)
-    cases = collect_benchmarks(ns, args.suite_dir, args.rg, args.swift_rg)
+    cases = collect_benchmarks(ns, args.suite_dir, rg_path, swift_rg_path)
     if args.filter:
         wanted = set(args.filter.split(","))
         cases = [c for c in cases if c["bench"] in wanted]
