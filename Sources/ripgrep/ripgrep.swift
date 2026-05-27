@@ -374,6 +374,8 @@ struct RipgrepCommand {
                  "--ignore-messages",
                  "--ignore-parent",
                  "--ignore-vcs",
+                 "--crlf",
+                 "--no-crlf",
                  "--no-hidden",
                  "--no-ignore",
                  "--no-ignore-dot",
@@ -387,7 +389,11 @@ struct RipgrepCommand {
                  "--no-config",
                  "--no-one-file-system",
                  "--no-require-git",
+                 "--no-pcre2-unicode",
+                 "--no-unicode",
                  "--one-file-system",
+                 "--pcre2-unicode",
+                 "--unicode",
                  "--require-git":
                 return true
             default:

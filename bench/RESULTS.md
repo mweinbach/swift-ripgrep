@@ -287,10 +287,24 @@ semantics. Dense-fixture output and exit status for `--messages`,
 `--heading --no-heading`, `--column --no-column`,
 `--byte-offset --no-byte-offset`, `--trim --no-trim`, and
 `--color=always --color=never` matched both the previous Swift binary and
-Rust. Five-run checks on the 252 MiB dense fixture measured the combined
-neutral-format form at 127.3 ms versus 243.7 ms before and 161.2 ms for Rust;
-`--block-buffered --messages Sherlock` measured 127.2 ms versus 242.4 ms
-before and 160.6 ms for Rust.
+Rust. Ten-run checks on the 252 MiB dense fixture measured the combined
+neutral-format form at 258.3 ms versus 359.7 ms before and 329.1 ms for Rust;
+`--block-buffered --messages Sherlock` measured 265.3 ms versus 355.6 ms
+before and 308.7 ms for Rust; `--no-line-buffered Sherlock` measured 235.1 ms
+versus 349.6 ms before and 335.7 ms for Rust.
+
+Regex-mode toggles that do not affect plain literal line output now also stay
+eligible for the executable preflight. `--unicode`/`--no-unicode`,
+`--pcre2-unicode`/`--no-pcre2-unicode`, and `--crlf`/`--no-crlf` are still
+rejected naturally when the pattern is not reducible to a literal. Small
+previous/current/Rust checks covered Unicode and CRLF output bytes, including a
+CRLF-terminated file. On the 252 MiB dense fixture, current output for
+`--no-unicode Sherlock`, ordered Unicode toggles, PCRE2 Unicode toggles,
+`--crlf Sherlock`, and ordered CRLF toggles matched Rust exactly; the previous
+Swift binary timed out after 10 seconds with no output for both
+`--no-unicode Sherlock` and `--crlf Sherlock`. Ten-run checks measured current
+`--no-unicode Sherlock` at 258.5 ms versus 392.2 ms for Rust, and current
+`--crlf Sherlock` at 327.9 ms versus 406.1 ms for Rust.
 
 The Swift-only Darwin mmap/stdout preflight now also covers line-numbered
 medium bounded multi-literal output when no filename, byte-offset, column,

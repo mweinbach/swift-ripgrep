@@ -1179,6 +1179,7 @@ struct MiscTests {
         -needle
         needle
         """, to: "dash-pattern.txt")
+        try root.write(Data("needle\r\nquiet\r\n".utf8), to: "crlf.txt")
         try root.write("needle\n", to: ".hidden.txt")
         try root.write("*.txt\n", to: ".ignore")
         try root.write("needle\n", to: "ignored.txt")
@@ -1364,6 +1365,43 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(orderedColorNeverOutput == output)
+
+        let noUnicodeOutput = try runExecutableData([
+            "--no-unicode",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(noUnicodeOutput == output)
+
+        let orderedUnicodeOutput = try runExecutableData([
+            "--no-unicode",
+            "--unicode",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(orderedUnicodeOutput == output)
+
+        let noPCRE2UnicodeOutput = try runExecutableData([
+            "--no-pcre2-unicode",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(noPCRE2UnicodeOutput == output)
+
+        let crlfOutput = try runExecutableData([
+            "--crlf",
+            "needle",
+            root.path("crlf.txt"),
+        ], fixture: {})
+        #expect(crlfOutput == Data("needle\r\n".utf8))
+
+        let noCrlfOutput = try runExecutableData([
+            "--crlf",
+            "--no-crlf",
+            "needle",
+            root.path("crlf.txt"),
+        ], fixture: {})
+        #expect(noCrlfOutput == crlfOutput)
 
         let hiddenFlagOutput = try runExecutableData([
             "--hidden",
