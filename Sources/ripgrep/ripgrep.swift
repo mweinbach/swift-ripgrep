@@ -282,6 +282,31 @@ struct RipgrepCommand {
         func isLineNumberFlag(_ argument: String) -> Bool {
             argument == "-n" || argument == "--line-number"
         }
+        func shortFlagCluster(_ argument: String) -> (ignoreCase: Bool, lineNumber: Bool, wordRegexp: Bool)? {
+            let bytes = Array(argument.utf8)
+            guard bytes.count > 2,
+                  bytes.first == UInt8(ascii: "-"),
+                  bytes.dropFirst().first != UInt8(ascii: "-") else {
+                return nil
+            }
+
+            var ignoreCase = false
+            var lineNumber = false
+            var wordRegexp = false
+            for byte in bytes.dropFirst() {
+                switch byte {
+                case UInt8(ascii: "i"):
+                    ignoreCase = true
+                case UInt8(ascii: "n"):
+                    lineNumber = true
+                case UInt8(ascii: "w"):
+                    wordRegexp = true
+                default:
+                    return nil
+                }
+            }
+            return (ignoreCase, lineNumber, wordRegexp)
+        }
         var parsedIgnoreCase = false
         var parsedLineNumber = false
         var parsedNoMmap = false
@@ -299,6 +324,10 @@ struct RipgrepCommand {
                 parsedWordRegexp = true
             } else if argument == "--no-mmap" {
                 parsedNoMmap = true
+            } else if let cluster = shortFlagCluster(argument) {
+                parsedIgnoreCase = parsedIgnoreCase || cluster.ignoreCase
+                parsedLineNumber = parsedLineNumber || cluster.lineNumber
+                parsedWordRegexp = parsedWordRegexp || cluster.wordRegexp
             } else {
                 valueArguments.append(argument)
             }

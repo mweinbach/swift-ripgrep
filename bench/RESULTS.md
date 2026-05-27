@@ -192,6 +192,14 @@ Swift binary and Rust. A 30-run synthetic dense check measured 227.0 ms mean
 versus 255.3 ms before and 201.1 ms for Rust; the 23 MiB line-numbered Linux
 header measured 20.6 ms mean versus 45.6 ms before and 18.8 ms for Rust.
 
+The Swift executable preflight parser now recognizes clustered short flags made
+only from `-i`, `-n`, and `-w`, so common forms such as `-ni` reach the same
+Swift-only mapped literal writer as `-n -i`. Output for `-ni Sherlock` and
+`--no-mmap -ni Sherlock` on the 252 MiB dense fixture matched both the previous
+Swift binary and Rust. Ten-run checks measured `-ni Sherlock` at 212.3 ms
+versus 363.2 ms before and 503.0 ms for Rust; the `--no-mmap -ni` form
+measured 224.7 ms versus 401.6 ms before and 529.6 ms for Rust.
+
 The Swift-only Darwin mmap/stdout preflight now also covers line-numbered
 medium bounded multi-literal output when no filename, byte-offset, column,
 replacement, only-matching, or vimgrep formatting is requested. Output for

@@ -1218,6 +1218,13 @@ struct MiscTests {
 
         """.utf8))
 
+        let clusteredLineNumberIgnoreCaseOutput = try runExecutableData([
+            "-ni",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(clusteredLineNumberIgnoreCaseOutput == lineNumberIgnoreCaseOutput)
+
         let noMmapOutput = try runExecutableData([
             "--no-mmap",
             "needle",
@@ -1270,6 +1277,14 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(noMmapLineNumberIgnoreCaseOutput == lineNumberIgnoreCaseOutput)
+
+        let noMmapClusteredLineNumberIgnoreCaseOutput = try runExecutableData([
+            "--no-mmap",
+            "-ni",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(noMmapClusteredLineNumberIgnoreCaseOutput == lineNumberIgnoreCaseOutput)
 
         try root.write("quiet\nneedle at end", to: "unterminated.txt")
         let noMmapUnterminatedLineOutput = try runExecutableData([
