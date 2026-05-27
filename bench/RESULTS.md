@@ -968,6 +968,12 @@ Rejected Swift-only probes from the same checkpoint:
   the extra branch shape lost on median: a nine-run direct A/B measured
   2.967 s versus 2.793 s for the retained code. The C-compatible shift-table
   setup remains.
+- Splitting the plain case-sensitive executable literal writer out of the
+  generic line-number/boundary/case-folding writer preserved `Sherlock Holmes`
+  output and no-match exit status, but the longer same-binary A/B was slower:
+  plain `Sherlock Holmes` measured 187.78 ms versus 187.35 ms before, and
+  no-match `PM_RESUME` measured 184.56 ms versus 183.82 ms before. The generic
+  writer stays.
 - A broader default-Unicode executable surrounding-word preflight preserved
   byte output by buffering matches and falling back on whole non-ASCII
   candidate lines, but that fallback double-scanned the representative corpus.
