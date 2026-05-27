@@ -579,6 +579,16 @@ oracle (22 lines each). A five-run A/B measured Unicode at 2.809 s versus
 five-group guard stayed neutral/noisy-good: Unicode 2.628 s versus 2.641 s
 before, and ASCII 2.537 s versus 2.586 s before.
 
+The same large-file short-line prefilter now checks only the minimum required
+line-width window before deciding a line is too short, avoiding a full
+newline search on lines that the scanner will inspect anyway. Output for the
+seven-group Unicode and `(?-u)` ASCII subtitles patterns matched both the
+previous Swift checkpoint and sibling Rust oracle (22 lines each). A seven-run
+A/B measured Unicode at 2.784 s versus 2.844 s before, and ASCII at 2.513 s
+versus 2.585 s before. Linux five-group guards stayed neutral: Unicode
+2.596 s versus 2.587 s before in a five-run recheck, and ASCII 2.526 s versus
+2.547 s before in a three-run check.
+
 Line-numbered single-literal output now counts newline bytes inside the same
 Swift SIMD first/tail literal scan used to find the next match, avoiding the
 second skipped-region pass previously used only to print `-n` prefixes. Output

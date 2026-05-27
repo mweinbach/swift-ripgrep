@@ -5410,16 +5410,25 @@ public struct RipgrepSearcher: @unchecked Sendable {
             if canPrefilterShortLines {
                 while offset < dataCount, matches.count < maxCount {
                     if offset == lineStart {
+                        let lineBytesRemaining = dataCount - lineStart
+                        let shortLineCheckCount = min(minimumSequenceByteCount, lineBytesRemaining)
                         let newlinePointer = memchr(
-                            baseAddress.advanced(by: offset),
+                            baseAddress.advanced(by: lineStart),
                             Int32(UInt8(ascii: "\n")),
-                            dataCount - offset
+                            shortLineCheckCount
                         )
-                        let lineEnd = newlinePointer.map {
-                            baseAddress.distance(to: $0.assumingMemoryBound(to: UInt8.self))
-                        } ?? dataCount
-                        if lineEnd - lineStart < minimumSequenceByteCount {
-                            lineStart = lineEnd < dataCount ? lineEnd + 1 : dataCount + 1
+                        if let newlinePointer {
+                            let lineEnd = baseAddress.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self))
+                            lineStart = lineEnd + 1
+                            lineNumber += 1
+                            offset = lineStart
+                            qualifyingWordRuns = 0
+                            canContinueSequenceAfterWhitespace = false
+                            sawNonASCIIInLine = false
+                            continue
+                        }
+                        if lineBytesRemaining < minimumSequenceByteCount {
+                            lineStart = dataCount + 1
                             lineNumber += 1
                             offset = lineStart
                             qualifyingWordRuns = 0
