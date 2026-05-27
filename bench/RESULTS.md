@@ -789,6 +789,20 @@ previous/current/Rust A/B measured `-n` at 404.3 ms versus 620.4 ms before and
 311.8 ms for Rust. The neighboring plain form stayed in its retained parallel
 literal band at 329.7 ms versus 278.9 ms for Rust.
 
+Large five-name alternations now split the mapped file into line-aligned chunks
+and scan each chunk's literals concurrently, falling back to the per-literal
+collector when the file cannot produce enough chunks. The same chunk fan-out is
+used for the line-numbered unique-suffix path. Output for plain and `-n`
+`Sherlock Holmes|John Watson|Irene Adler|Inspector Lestrade|Professor
+Moriarty` matched sibling Rust `rg` on both subtitles corpora. On the 1.5 GiB
+corpus, a seven-run previous/current/Rust A/B measured plain output at
+120.8 ms versus 356.2 ms before and 282.4 ms for Rust, while `-n` measured
+187.5 ms versus 418.9 ms before and 322.3 ms for Rust. On the 200 MiB corpus,
+plain output measured 48.2 ms versus 69.8 ms before and 42.5 ms for Rust,
+while `-n` measured 52.4 ms versus 75.7 ms before and 46.6 ms for Rust.
+The focused benchmark harness reported the same 1.5 GiB checks at 102.70 ms
+plain and 169.68 ms line-numbered, versus Rust at 278.04 ms and 315.51 ms.
+
 ASCII no-literal `\w{5}\s+...` matching-line scans now split large mapped
 haystacks on line boundaries and scan chunks in parallel, then reconstruct line
 numbers from sorted match offsets. The path is restricted to `(?-u)` ASCII
