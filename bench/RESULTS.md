@@ -909,6 +909,16 @@ focused upstream harness measured the same route at 272.54 ms versus Rust at
 200.76 ms. The ASCII form stayed in the executable-preflight band at 217.4 ms
 versus Rust at 197.3 ms.
 
+The executable Swift surrounding-word preflight now also covers default Unicode
+patterns when nearby non-ASCII context cannot affect `\w+\s+LITERAL\s+\w+`.
+The scan still buffers all output before writing and returns to the full matcher
+if non-ASCII word characters or known Unicode whitespace could create a match.
+The existing Unicode-adjacent fixture continues to fall back for `Mø Holmes
+returns` and `Dr Holmes étrange`; on the subtitles corpus, default Unicode
+`-n '\w+\s+Holmes\s+\w+'` matched sibling Rust `rg` byte-for-byte (483 lines)
+and improved from the 277.62 ms recheck band to 217.58 ms, while the ASCII form
+measured 219.37 ms.
+
 ASCII case-insensitive literal scanning now adds a middle-byte SIMD filter for
 literals of at least eight bytes, keeping the existing first/tail filter but
 avoiding many false candidate verifications on longer folded literals. Single
@@ -924,11 +934,12 @@ matched and the harness improved from 4.717 s to 4.146 s.
 Rejected Swift-only probes from the same checkpoint:
 
 - A broader default-Unicode executable surrounding-word preflight preserved
-  byte output by buffering matches and falling back on non-ASCII candidate
-  lines, but that fallback double-scanned the representative corpus. Direct
-  checks measured 397.3 ms and the focused harness measured 413.30 ms, versus
-  the retained Unicode path at about 319 ms, so the executable preflight is
-  limited to explicit `(?-u)` ASCII semantics.
+  byte output by buffering matches and falling back on whole non-ASCII
+  candidate lines, but that fallback double-scanned the representative corpus.
+  Direct checks measured 397.3 ms and the focused harness measured 413.30 ms,
+  versus the retained Unicode path at about 319 ms. The retained default-Unicode
+  executable preflight uses the narrower local Unicode-context gate described
+  above.
 - Narrowing the Unicode direct writer's decoded fallback trigger to only
   non-ASCII bytes adjacent to the candidate word/whitespace regions also
   preserved byte-identical output, but the nine-run check was within noise:

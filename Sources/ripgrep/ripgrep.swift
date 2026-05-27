@@ -318,7 +318,6 @@ struct RipgrepCommand {
            !asciiCaseInsensitive,
            !wordRegexp,
            !noMmap,
-           pattern.hasPrefix("(?-u)"),
            let surroundingLiteral = surroundingWordsLiteral(
             pattern,
             allowPCREQuotedLiterals: preflightArguments.allowPCREQuotedLiterals

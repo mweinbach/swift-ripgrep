@@ -147,8 +147,7 @@ public enum SwiftDarwinLiteralPreflight {
         lineNumber: Bool,
         asciiOnly: Bool
     ) -> Int32? {
-        guard asciiOnly,
-              !literal.isEmpty,
+        guard !literal.isEmpty,
               !literal.contains(UInt8(ascii: "\n")),
               literal.allSatisfy({ $0 < 0x80 }) else {
             return nil
@@ -1015,6 +1014,182 @@ private func rgSwiftDarwinWriteSurroundingWordsBytes(
         return afterWordEnd > afterWhitespaceEnd
     }
 
+    @inline(__always)
+    func utf8SequenceLength(startingWith byte: UInt8) -> Int? {
+        if byte < 0x80 {
+            return 1
+        }
+        if byte >= 0xC2 && byte <= 0xDF {
+            return 2
+        }
+        if byte >= 0xE0 && byte <= 0xEF {
+            return 3
+        }
+        if byte >= 0xF0 && byte <= 0xF4 {
+            return 4
+        }
+        return nil
+    }
+
+    @inline(__always)
+    func isUTF8Continuation(_ byte: UInt8) -> Bool {
+        byte >= 0x80 && byte <= 0xBF
+    }
+
+    @inline(__always)
+    func knownUnicodeWhitespaceScalar(at offset: Int, lineEnd: Int) -> Bool? {
+        // Keep the Unicode preflight conservative in \s+ slots: known
+        // whitespace can fall back, known non-whitespace can keep scanning, and
+        // malformed UTF-8 returns nil so the full matcher decides.
+        guard offset < lineEnd else {
+            return false
+        }
+        let first = base[offset]
+        guard first >= 0x80 else {
+            return rgSwiftIsASCIIRegexWhitespaceByte(first)
+        }
+        guard let length = utf8SequenceLength(startingWith: first),
+              offset + length <= lineEnd else {
+            return nil
+        }
+        for continuationOffset in (offset + 1)..<(offset + length) {
+            guard isUTF8Continuation(base[continuationOffset]) else {
+                return nil
+            }
+        }
+
+        if length == 2 {
+            return first == 0xC2 && (base[offset + 1] == 0x85 || base[offset + 1] == 0xA0)
+        }
+        if length == 3 {
+            let second = base[offset + 1]
+            let third = base[offset + 2]
+            if first == 0xE1, second == 0x9A, third == 0x80 {
+                return true
+            }
+            if first == 0xE2 {
+                if second == 0x80, (0x80...0x8A).contains(third) || third == 0xA8 || third == 0xA9 {
+                    return true
+                }
+                if second == 0x80, third == 0xAF {
+                    return true
+                }
+                if second == 0x81, third == 0x9F {
+                    return true
+                }
+            }
+            if first == 0xE3, second == 0x80, third == 0x80 {
+                return true
+            }
+        }
+        return false
+    }
+
+    @inline(__always)
+    func previousKnownUnicodeWhitespaceScalar(endingAt offset: Int, lineStart: Int) -> Bool? {
+        guard offset > lineStart else {
+            return false
+        }
+        var scalarStart = offset - 1
+        while scalarStart > lineStart, isUTF8Continuation(base[scalarStart]) {
+            scalarStart -= 1
+        }
+        guard let length = utf8SequenceLength(startingWith: base[scalarStart]),
+              scalarStart + length == offset else {
+            return nil
+        }
+        return knownUnicodeWhitespaceScalar(at: scalarStart, lineEnd: offset)
+    }
+
+    @inline(__always)
+    func leftSideMayNeedUnicode(lineStart: Int, literalStart: Int) -> Bool {
+        var offset = literalStart
+        var sawWhitespace = false
+        while offset > lineStart {
+            let byte = base[offset - 1]
+            if rgSwiftIsASCIIRegexWhitespaceByte(byte) {
+                sawWhitespace = true
+                offset -= 1
+                continue
+            }
+            if byte >= 0x80 {
+                if sawWhitespace {
+                    return true
+                }
+                return previousKnownUnicodeWhitespaceScalar(endingAt: offset, lineStart: lineStart) ?? true
+            }
+            break
+        }
+        guard sawWhitespace else {
+            return false
+        }
+
+        var sawWord = false
+        while offset > lineStart {
+            let byte = base[offset - 1]
+            if rgSwiftIsASCIIRegexWordByte(byte) {
+                sawWord = true
+                offset -= 1
+                continue
+            }
+            if byte >= 0x80 {
+                return true
+            }
+            break
+        }
+        return sawWord
+    }
+
+    @inline(__always)
+    func rightSideMayNeedUnicode(lineEnd: Int, literalEnd: Int) -> Bool {
+        var offset = literalEnd
+        var sawWhitespace = false
+        while offset < lineEnd {
+            let byte = base[offset]
+            if rgSwiftIsASCIIRegexWhitespaceByte(byte) {
+                sawWhitespace = true
+                offset += 1
+                continue
+            }
+            if byte >= 0x80 {
+                if sawWhitespace {
+                    return true
+                }
+                return knownUnicodeWhitespaceScalar(at: offset, lineEnd: lineEnd) ?? true
+            }
+            break
+        }
+        guard sawWhitespace else {
+            return false
+        }
+
+        var sawWord = false
+        while offset < lineEnd {
+            let byte = base[offset]
+            if rgSwiftIsASCIIRegexWordByte(byte) {
+                sawWord = true
+                offset += 1
+                continue
+            }
+            if byte >= 0x80 {
+                return true
+            }
+            break
+        }
+        return sawWord
+    }
+
+    @inline(__always)
+    func surroundingUnicodeFallbackMayMatch(
+        lineStart: Int,
+        lineEnd: Int,
+        literalStart: Int,
+        literalEnd: Int
+    ) -> Bool {
+        leftSideMayNeedUnicode(lineStart: lineStart, literalStart: literalStart)
+            && rightSideMayNeedUnicode(lineEnd: lineEnd, literalEnd: literalEnd)
+    }
+
     var pendingLines: [PendingLine] = []
     pendingLines.reserveCapacity(1024)
     let maxBufferedLines = 16_384
@@ -1047,12 +1222,13 @@ private func rgSwiftDarwinWriteSurroundingWordsBytes(
         } ?? haystackLength
         let outputEnd = newline == nil ? haystackLength : lineEnd + 1
 
-        if hasSurroundingASCIIWords(
+        let asciiMatched = hasSurroundingASCIIWords(
             lineStart: lineStart,
             lineEnd: lineEnd,
             literalStart: literalStart,
             literalEnd: literalEnd
-        ) {
+        )
+        if asciiMatched {
             if lineStart != lastEmittedLineStart {
                 guard pendingLines.count < maxBufferedLines else {
                     return nil
@@ -1068,6 +1244,15 @@ private func rgSwiftDarwinWriteSurroundingWordsBytes(
             lineNumberAtSearchOffset = newline == nil ? matchedLineNumber : matchedLineNumber + 1
             searchOffset = outputEnd
             continue
+        }
+        if !asciiOnly,
+           surroundingUnicodeFallbackMayMatch(
+            lineStart: lineStart,
+            lineEnd: lineEnd,
+            literalStart: literalStart,
+            literalEnd: literalEnd
+           ) {
+            return nil
         }
 
         lineNumberAtSearchOffset = matchedLineNumber
