@@ -1549,6 +1549,10 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
         }
     }
 
+    if matchedLineCount < maxCount {
+        bytesSearched = haystackLength
+    }
+
     guard !writeFailed else {
         return rg_darwin_literal_file_result(
             status: -1,

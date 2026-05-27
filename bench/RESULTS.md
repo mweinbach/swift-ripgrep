@@ -170,7 +170,18 @@ measured `-m 129` at 145.4 ms versus 322.7 ms before and 23.4 ms for Rust,
 `-m 1024` at 259.7 ms versus 325.3 ms before. Extending the cutoff again from
 1024 to 1280 lines measured `-m 1025` at 265.7 ms versus 319.2 ms before and
 63.8 ms for Rust; `-m 1280` measured 289.6 ms versus 317.0 ms before and
-66.1 ms for Rust. Unlimited output continues through the previous scanner.
+66.1 ms for Rust.
+
+Unbounded plain and line-numbered multi-literal single-file output now routes
+through the same Swift-only mmap/stdout helper when the C shim is unavailable.
+It preserves exact output while avoiding the previous full collect/sort writer.
+On a 252 MiB synthetic dense `Sherlock|Watson` corpus, a 30-run A/B measured
+the new path at 263.9 ms mean versus 1.364 s before and 200.6 ms for Rust; a
+post-stats-patch 10-run confirmation measured 260.9 ms versus 1.358 s before.
+On a 23 MiB generated Linux register header, a 50-run A/B for `REG|MASK`
+measured 46.2 ms mean versus 56.4 ms before and 14.4 ms for Rust. The direct
+result now reports full-file bytes searched when the unbounded scan exhausts
+the file, matching Rust stats on the synthetic check.
 
 The Swift-only Darwin mmap/stdout preflight now also covers line-numbered
 medium bounded multi-literal output when no filename, byte-offset, column,

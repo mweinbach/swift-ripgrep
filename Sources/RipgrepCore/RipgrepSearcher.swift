@@ -5545,13 +5545,12 @@ public struct RipgrepSearcher: @unchecked Sendable {
         #endif
 
         #if !canImport(CRipgrepPlatform)
-        if let maxCount = options.maxCount,
-           maxCount > 0,
-           maxCount >= 16,
+        let swiftPreflightMaxCount = options.maxCount ?? Int.max
+        if swiftPreflightMaxCount >= 16,
            let result = SwiftDarwinLiteralPreflight.multiLiteralResult(
             path: fileURL.path,
             literals: fastPath.literals,
-            maxCount: maxCount,
+            maxCount: swiftPreflightMaxCount,
             lineNumber: options.wantsLineNumber
         ) {
             if result.status == -1 {
