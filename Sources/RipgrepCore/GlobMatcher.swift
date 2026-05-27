@@ -53,6 +53,7 @@ public struct GlobMatcher: Equatable {
     private struct FastRuleIndex: Equatable {
         let indexedRuleCount: Int
         let exactPathRules: [String: [IndexedRule]]
+        let suffixPathRulesByLastByte: [UInt8: [IndexedTextRule]]
         let exactBasenameRules: [String: [IndexedRule]]
         let suffixBasenameRulesByLastByte: [UInt8: [IndexedTextRule]]
         let prefixBasenameRulesByFirstByte: [UInt8: [IndexedTextRule]]
@@ -222,13 +223,17 @@ public struct GlobMatcher: Equatable {
         self.hasBasenameOnlyRules = hasBasenameOnlyRules
         self.hasIncludeRules = hasIncludeRules
         self.overrideSemantics = overrideSemantics
-        self.slashPatternsMatchAnywhere = slashPatternsMatchAnywhere ?? !overrideSemantics
+        let resolvedSlashPatternsMatchAnywhere = slashPatternsMatchAnywhere ?? !overrideSemantics
+        self.slashPatternsMatchAnywhere = resolvedSlashPatternsMatchAnywhere
         self.stripBasePath = stripBasePath?.isEmpty == true ? nil : stripBasePath
         self.stripBasePathPrefix = self.stripBasePath.map { "\($0)/" }
         self.pathPrefix = pathPrefix
         #if canImport(Darwin)
         if rules.count >= 8 {
-            let fastRuleIndex = Self.makeFastRuleIndex(for: rules)
+            let fastRuleIndex = Self.makeFastRuleIndex(
+                for: rules,
+                slashPatternsMatchAnywhere: resolvedSlashPatternsMatchAnywhere
+            )
             self.fastRuleIndex = fastRuleIndex.indexedRuleCount >= 8
                 && fastRuleIndex.indexedRuleCount >= fastRuleIndex.unindexedRuleIndicesDescending.count
                 ? fastRuleIndex
@@ -305,8 +310,12 @@ public struct GlobMatcher: Equatable {
     }
 
     #if canImport(Darwin)
-    private static func makeFastRuleIndex(for rules: [Rule]) -> FastRuleIndex {
+    private static func makeFastRuleIndex(
+        for rules: [Rule],
+        slashPatternsMatchAnywhere: Bool
+    ) -> FastRuleIndex {
         var exactPathRules: [String: [IndexedRule]] = [:]
+        var suffixPathRulesByLastByte: [UInt8: [IndexedTextRule]] = [:]
         var exactBasenameRules: [String: [IndexedRule]] = [:]
         var suffixBasenameRulesByLastByte: [UInt8: [IndexedTextRule]] = [:]
         var prefixBasenameRulesByFirstByte: [UInt8: [IndexedTextRule]] = [:]
@@ -335,8 +344,20 @@ public struct GlobMatcher: Equatable {
                 }
                 continue
             }
-            guard rule.basenameOnly else {
-                unindexedRuleIndices.append(ruleIndex)
+            if !rule.basenameOnly {
+                if case .exact(let expected) = fastMatcher {
+                    exactPathRules[expected, default: []].append(indexedRule)
+                    if slashPatternsMatchAnywhere,
+                       let lastByte = expected.utf8.last {
+                        suffixPathRulesByLastByte[lastByte, default: []].append(IndexedTextRule(
+                            rule: indexedRule,
+                            text: expected
+                        ))
+                    }
+                    indexedRuleCount += 1
+                } else {
+                    unindexedRuleIndices.append(ruleIndex)
+                }
                 continue
             }
 
@@ -391,6 +412,7 @@ public struct GlobMatcher: Equatable {
         return FastRuleIndex(
             indexedRuleCount: indexedRuleCount,
             exactPathRules: exactPathRules,
+            suffixPathRulesByLastByte: suffixPathRulesByLastByte,
             exactBasenameRules: exactBasenameRules,
             suffixBasenameRulesByLastByte: suffixBasenameRulesByLastByte,
             prefixBasenameRulesByFirstByte: prefixBasenameRulesByFirstByte,
@@ -415,6 +437,17 @@ public struct GlobMatcher: Equatable {
             bestRuleIndex: &bestRuleIndex,
             bestDecision: &bestDecision
         )
+        if let lastByte = relativePath.utf8.last,
+           let suffixPathRules = fastRuleIndex.suffixPathRulesByLastByte[lastByte] {
+            for candidate in suffixPathRules where hasPathComponentSuffix(candidate.text, in: relativePath) {
+                considerIndexedRule(
+                    candidate.rule,
+                    isDirectory: isDirectory,
+                    bestRuleIndex: &bestRuleIndex,
+                    bestDecision: &bestDecision
+                )
+            }
+        }
 
         if let pathBasename {
             considerIndexedRules(

@@ -128,6 +128,15 @@ and sorted Rust parity were preserved. A 100-run confirmation measured default
 median before; `--hidden --files` measured 113.2 ms mean / 108.4 ms median
 versus 114.5 ms mean / 110.3 ms median before.
 
+Slash-containing exact ignore patterns are now included in the Darwin fast rule
+index. Anchored/root-relative rules still use exact-path lookup, while
+match-anywhere slash rules also get a path-component suffix bucket, avoiding
+fallback matcher checks for common rules such as `foo/bar`. Exact Swift output
+and sorted Rust parity were preserved. A clean 100-run order-flipped check
+measured default `--files` at 119.1 ms mean / 117.7 ms median versus 124.1 ms /
+122.6 ms before; `--hidden --files` was neutral at 124.2 ms mean / 120.5 ms
+median versus 123.0 ms / 120.8 ms before.
+
 The Swift multi-literal full-line writer now skips to a matched line's output
 end after recording it, caching line ends so later literals do not rescan
 duplicate lines for newline boundaries. It also special-cases `-m 1` by finding
@@ -1077,6 +1086,12 @@ Rejected Swift-only probes from the same checkpoint:
 - A stdout byte-chunk writer for ignore-aware `--files` preserved current Swift
   ordering and sorted Rust content, but slowed default Linux-tree listing from
   149.7 ms to 168.3 ms.
+- Guarding ignore-pattern trimming with a first/last-scalar whitespace check
+  preserved exact Swift output and sorted Rust parity, but regressed the hot
+  default listing. An 80-run A/B measured default `--files` at 140.4 ms mean /
+  136.7 ms median versus 131.5 ms / 128.6 ms before; `--hidden --files`
+  improved to 137.0 ms mean / 131.6 ms median versus 141.5 ms / 139.2 ms
+  before. The simpler unconditional Foundation trim stays.
 - Replacing indexed ignore prefix/suffix `String.hasPrefix`/`hasSuffix` checks
   with ASCII-only UTF-8 byte comparisons, plus a rule-index prefilter for
   candidates that could not beat the current match, preserved sorted Rust

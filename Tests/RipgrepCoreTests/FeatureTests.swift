@@ -3834,6 +3834,48 @@ struct FeatureTests {
             indexedRules.path("keep.bin"),
             indexedRules.path("main.swift"),
         ])
+
+        let indexedSlashRules = try TemporaryDirectory()
+        try indexedSlashRules.createDirectory(".git")
+        try indexedSlashRules.createDirectory("foo")
+        try indexedSlashRules.createDirectory("build/out")
+        try indexedSlashRules.createDirectory("nested/foo")
+        try indexedSlashRules.createDirectory("nested/build/out")
+        try indexedSlashRules.createDirectory("keep/foo")
+        try indexedSlashRules.write(
+            """
+            *.tmp
+            *.bin
+            *.log
+            *.o
+            *.d
+            cache
+            dist
+            foo/bar
+            build/out/
+            !keep/foo/bar
+            """,
+            to: ".gitignore"
+        )
+        try indexedSlashRules.write("needle\n", to: "foo/bar")
+        try indexedSlashRules.write("needle\n", to: "build/out/generated.txt")
+        try indexedSlashRules.write("needle\n", to: "nested/foo/bar")
+        try indexedSlashRules.write("needle\n", to: "nested/build/out/generated.txt")
+        try indexedSlashRules.write("needle\n", to: "keep/foo/bar")
+        try indexedSlashRules.write("needle\n", to: "main.swift")
+        #expect(try run(["--sort", "path", "--files", indexedSlashRules.url.path]) == [
+            indexedSlashRules.path("keep/foo/bar"),
+            indexedSlashRules.path("main.swift"),
+            indexedSlashRules.path("nested/build/out/generated.txt"),
+            indexedSlashRules.path("nested/foo/bar"),
+        ])
+
+        let anywhereSlashMatcher = GlobMatcher(patterns: [
+            "*.tmp", "*.bin", "*.log", "*.o", "*.d", "cache", "dist", "foo/bar",
+        ])
+        #expect(anywhereSlashMatcher.decision(relativePath: "foo/bar", isDirectory: false) == .exclude)
+        #expect(anywhereSlashMatcher.decision(relativePath: "nested/foo/bar", isDirectory: false) == .exclude)
+        #expect(anywhereSlashMatcher.decision(relativePath: "nested/foo/baz", isDirectory: false) == nil)
     }
 
     @Test("honors git info exclude and its toggle")
