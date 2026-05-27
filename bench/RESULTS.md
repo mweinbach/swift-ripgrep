@@ -1056,6 +1056,11 @@ Rejected Swift-only probes from the same checkpoint:
   but it did not improve the target. A 50-run A/B measured quiet listing at
   8.97 ms median versus 8.75 ms before, with Rust at 6.51 ms. The existing
   readdir-order walker stays.
+- Pre-reserving 1024 entries for each parallel ignore-aware `--files` string
+  chunk also failed to produce a reliable win. A noisy 50-run A/B measured
+  default listing at 213.71 ms median versus 143.73 ms before, while hidden
+  listing was only slightly faster at 140.57 ms versus 144.52 ms. The dynamic
+  array growth stays.
 - A count-only multi-literal path that skipped line-bound storage and sorting
   preserved output, but measured neutral to slightly slower on
   `-c 'Sherlock|Watson'` over the 1.5 GiB subtitles corpus: 327.0 ms versus
