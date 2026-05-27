@@ -2217,7 +2217,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     && !options.byteOffset
                     && !countOnly
                     && !onlyMatching
-                    && !fastPath.caseInsensitiveASCII
                     && !fastPath.wordASCII
                 var lineNumberAtSearchOffset = 1
                 if countMatchesOnly && allowDirectStdout && !fastPath.wordASCII {
@@ -2283,14 +2282,27 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     let foundPointer: UnsafePointer<UInt8>?
                     var newlinesBeforeMatch = 0
                     if canTrackLineNumbersInLiteralScan {
-                        let result = literal.withUnsafeBufferPointer { needle in
-                            rg_memmem_count_byte_before(
-                                baseAddress.advanced(by: searchOffset),
-                                data.count - searchOffset,
-                                needle.baseAddress,
-                                needle.count,
-                                UInt8(ascii: "\n")
-                            )
+                        let result: (match: UnsafePointer<UInt8>?, count: Int)
+                        if fastPath.caseInsensitiveASCII {
+                            result = foldedLiteral.withUnsafeBufferPointer { foldedNeedle in
+                                rg_memcasemem_ascii_count_byte_before(
+                                    baseAddress.advanced(by: searchOffset),
+                                    data.count - searchOffset,
+                                    foldedNeedle.baseAddress,
+                                    foldedNeedle.count,
+                                    UInt8(ascii: "\n")
+                                )
+                            }
+                        } else {
+                            result = literal.withUnsafeBufferPointer { needle in
+                                rg_memmem_count_byte_before(
+                                    baseAddress.advanced(by: searchOffset),
+                                    data.count - searchOffset,
+                                    needle.baseAddress,
+                                    needle.count,
+                                    UInt8(ascii: "\n")
+                                )
+                            }
                         }
                         foundPointer = result.match
                         newlinesBeforeMatch = result.count

@@ -569,6 +569,13 @@ A/B measured Swift at 253.0 ms versus 281.1 ms before and 196.8 ms for Rust.
 The focused regression also covers a long pre-match line gap, duplicate hits on
 one output line, and the `-H -n -m1` prefixed form.
 
+The same newline-counting literal scan now covers ASCII case-insensitive
+single-literal line-number output. Output for `-n -i 'Sherlock Holmes'` on the
+1.5 GiB subtitles corpus matched both the previous Swift checkpoint and the
+sibling Rust oracle (871 lines). A seven-run A/B measured Swift at 333.1 ms
+versus 346.0 ms before and 312.0 ms for Rust; the neighboring no-line-number
+case stayed effectively unchanged at 252.6 ms versus 250.8 ms before.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Routing multi-literal full-line output through the existing line-by-line

@@ -247,6 +247,10 @@ struct FeatureTests {
         #expect(try run(["-H", "-n", "-m1", "anchor", numberedRoot.path("numbered-literal.txt")]) == [
             "\(numberedRoot.path("numbered-literal.txt")):37:prefix anchor suffix anchor",
         ])
+        #expect(try run(["-n", "-i", "ANCHOR", numberedRoot.path("numbered-literal.txt")]) == [
+            "37:prefix anchor suffix anchor",
+            "41:anchor again",
+        ])
         #expect(try run(["-H", "-c", "needle", root.path("one.txt")]) == [
             "\(root.path("one.txt")):2",
         ])
