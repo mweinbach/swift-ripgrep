@@ -1255,6 +1255,23 @@ struct MiscTests {
         ], fixture: {})
         #expect(clusteredCaseSensitiveOutput == output)
 
+        let smartCaseSensitiveOutput = try runExecutableData([
+            "-S",
+            "Needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(smartCaseSensitiveOutput == Data("""
+        NEEDLE needle Needle
+
+        """.utf8))
+
+        let longSmartCaseIgnoreCaseOutput = try runExecutableData([
+            "--smart-case",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(longSmartCaseIgnoreCaseOutput == ignoreCaseOutput)
+
         let orderedNoLineNumberOutput = try runExecutableData([
             "-n",
             "-N",
@@ -1311,6 +1328,43 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(clusteredCaseInsensitiveOutput == ignoreCaseOutput)
+
+        let lowercaseSmartCaseOutput = try runExecutableData([
+            "-S",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(lowercaseSmartCaseOutput == ignoreCaseOutput)
+
+        let clusteredSmartCaseSensitiveOutput = try runExecutableData([
+            "-iS",
+            "Needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(clusteredSmartCaseSensitiveOutput == smartCaseSensitiveOutput)
+
+        let clusteredIgnoreCaseOutput = try runExecutableData([
+            "-Si",
+            "Needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(clusteredIgnoreCaseOutput == ignoreCaseOutput)
+
+        let orderedSmartCaseSensitiveOutput = try runExecutableData([
+            "-i",
+            "-S",
+            "Needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(orderedSmartCaseSensitiveOutput == smartCaseSensitiveOutput)
+
+        let orderedIgnoreCaseOutput = try runExecutableData([
+            "-S",
+            "-i",
+            "Needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(orderedIgnoreCaseOutput == ignoreCaseOutput)
 
         let noMmapOutput = try runExecutableData([
             "--no-mmap",

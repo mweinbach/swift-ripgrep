@@ -276,11 +276,19 @@ struct RipgrepCommand {
         let pattern: String
         let path: String
         let wordRegexp: Bool
+        enum CaseMode {
+            case sensitive
+            case insensitive
+            case smart
+        }
         func isIgnoreCaseFlag(_ argument: String) -> Bool {
             argument == "-i" || argument == "--ignore-case"
         }
         func isCaseSensitiveFlag(_ argument: String) -> Bool {
             argument == "-s" || argument == "--case-sensitive"
+        }
+        func isSmartCaseFlag(_ argument: String) -> Bool {
+            argument == "-S" || argument == "--smart-case"
         }
         func isLineNumberFlag(_ argument: String) -> Bool {
             argument == "-n" || argument == "--line-number"
@@ -298,7 +306,7 @@ struct RipgrepCommand {
                 return false
             }
         }
-        func shortFlagCluster(_ argument: String) -> (ignoreCase: Bool?, lineNumber: Bool?, wordRegexp: Bool)? {
+        func shortFlagCluster(_ argument: String) -> (caseMode: CaseMode?, lineNumber: Bool?, wordRegexp: Bool)? {
             let bytes = Array(argument.utf8)
             guard bytes.count > 2,
                   bytes.first == UInt8(ascii: "-"),
@@ -306,15 +314,17 @@ struct RipgrepCommand {
                 return nil
             }
 
-            var ignoreCase: Bool?
+            var caseMode: CaseMode?
             var lineNumber: Bool?
             var wordRegexp = false
             for byte in bytes.dropFirst() {
                 switch byte {
                 case UInt8(ascii: "i"):
-                    ignoreCase = true
+                    caseMode = .insensitive
                 case UInt8(ascii: "s"):
-                    ignoreCase = false
+                    caseMode = .sensitive
+                case UInt8(ascii: "S"):
+                    caseMode = .smart
                 case UInt8(ascii: "n"):
                     lineNumber = true
                 case UInt8(ascii: "N"):
@@ -325,18 +335,20 @@ struct RipgrepCommand {
                     return nil
                 }
             }
-            return (ignoreCase, lineNumber, wordRegexp)
+            return (caseMode, lineNumber, wordRegexp)
         }
-        var parsedIgnoreCase = false
+        var parsedCaseMode = CaseMode.sensitive
         var parsedLineNumber = false
         var parsedNoMmap = false
         var parsedWordRegexp = false
         var valueArguments: [String] = []
         for argument in arguments {
             if isIgnoreCaseFlag(argument) {
-                parsedIgnoreCase = true
+                parsedCaseMode = .insensitive
             } else if isCaseSensitiveFlag(argument) {
-                parsedIgnoreCase = false
+                parsedCaseMode = .sensitive
+            } else if isSmartCaseFlag(argument) {
+                parsedCaseMode = .smart
             } else if isLineNumberFlag(argument) {
                 parsedLineNumber = true
             } else if isNoLineNumberFlag(argument) {
@@ -351,8 +363,8 @@ struct RipgrepCommand {
             } else if isOutputNeutralSingleFileFlag(argument) {
                 continue
             } else if let cluster = shortFlagCluster(argument) {
-                if let ignoreCase = cluster.ignoreCase {
-                    parsedIgnoreCase = ignoreCase
+                if let caseMode = cluster.caseMode {
+                    parsedCaseMode = caseMode
                 }
                 if let lineNumber = cluster.lineNumber {
                     parsedLineNumber = lineNumber
@@ -365,12 +377,19 @@ struct RipgrepCommand {
         guard valueArguments.count == 2 else {
             return nil
         }
-        asciiCaseInsensitive = parsedIgnoreCase
+        pattern = valueArguments[0]
+        path = valueArguments[1]
+        switch parsedCaseMode {
+        case .sensitive:
+            asciiCaseInsensitive = false
+        case .insensitive:
+            asciiCaseInsensitive = true
+        case .smart:
+            asciiCaseInsensitive = pattern.rangeOfCharacter(from: .uppercaseLetters) == nil
+        }
         lineNumber = parsedLineNumber
         noMmap = parsedNoMmap
         wordRegexp = parsedWordRegexp
-        pattern = valueArguments[0]
-        path = valueArguments[1]
 
         if !pattern.hasPrefix("-"),
            path != "-",

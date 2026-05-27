@@ -228,6 +228,17 @@ rerun measured `-i -s Sherlock` at 193.5 ms versus 306.5 ms before and
 283.2 ms for Rust; clustered checks measured `-is Sherlock` at 196.5 ms versus
 303.5 ms before, and `-si sherlock` at 195.8 ms versus 321.1 ms before.
 
+Smart-case toggles now use the same ordered case-mode parser. The executable
+preflight accepts `-S`/`--smart-case`, keeps the last `-i`/`-s`/`-S` toggle
+semantics for separate and clustered flags, and decides smart-case from the raw
+pattern before dispatching to the mapped literal writer. Output for
+`-S Sherlock`, `-S sherlock`, `--smart-case sherlock`, `-i -S Sherlock`,
+`-S -i Sherlock`, `-iS Sherlock`, and `-Si Sherlock` on the 252 MiB dense
+fixture matched both the previous Swift binary and Rust. A ten-run check
+measured `-S Sherlock` at 203.8 ms versus 327.9 ms before and 284.8 ms for
+Rust; the lowercase smart-case form measured 212.1 ms versus 318.0 ms before
+and 366.8 ms for Rust.
+
 The Swift-only Darwin mmap/stdout preflight now also covers line-numbered
 medium bounded multi-literal output when no filename, byte-offset, column,
 replacement, only-matching, or vimgrep formatting is requested. Output for
