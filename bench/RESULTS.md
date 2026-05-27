@@ -917,6 +917,12 @@ Rejected Swift-only probes from the same checkpoint:
   checks measured 397.3 ms and the focused harness measured 413.30 ms, versus
   the retained Unicode path at about 319 ms, so the executable preflight is
   limited to explicit `(?-u)` ASCII semantics.
+- Narrowing the Unicode direct writer's decoded fallback trigger to only
+  non-ASCII bytes adjacent to the candidate word/whitespace regions also
+  preserved byte-identical output, but the nine-run check was within noise:
+  247.0 ms versus the retained direct writer's 249.8 ms band. The broader
+  whole-line non-ASCII guard stayed because it is simpler and already captures
+  most of the measured win.
 - Raising the no-mmap stream read size to 4 MiB preserved output but regressed
   both representative checks: plain output measured 293.0 ms versus 288.3 ms
   before in that run, and `-n` measured 355.3 ms versus 352.9 ms before. The
