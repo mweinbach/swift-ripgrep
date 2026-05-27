@@ -1240,6 +1240,21 @@ struct MiscTests {
         ], fixture: {})
         #expect(noMessagesOutput == output)
 
+        let orderedCaseSensitiveOutput = try runExecutableData([
+            "-i",
+            "-s",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(orderedCaseSensitiveOutput == output)
+
+        let clusteredCaseSensitiveOutput = try runExecutableData([
+            "-is",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(clusteredCaseSensitiveOutput == output)
+
         let orderedNoLineNumberOutput = try runExecutableData([
             "-n",
             "-N",
@@ -1289,6 +1304,13 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(clusteredLineNumberIgnoreCaseOutput == lineNumberIgnoreCaseOutput)
+
+        let clusteredCaseInsensitiveOutput = try runExecutableData([
+            "-si",
+            "NEEDLE",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(clusteredCaseInsensitiveOutput == ignoreCaseOutput)
 
         let noMmapOutput = try runExecutableData([
             "--no-mmap",

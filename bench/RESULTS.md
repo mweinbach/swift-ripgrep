@@ -218,6 +218,16 @@ ten-run check measured `--no-heading Sherlock` at 190.3 ms versus 337.8 ms
 before and 280.5 ms for Rust, `--no-filename` at 197.8 ms versus 304.2 ms
 before, and `--no-messages` at 200.3 ms versus 324.5 ms before.
 
+Ordered case-sensitivity toggles now also flow through the executable
+preflight. The parser treats `-s`/`--case-sensitive` as the inverse of
+`-i`/`--ignore-case`, including clustered forms where the last case toggle wins
+(`-is` stays case-sensitive and `-si` returns to ignore-case). Output for
+`-i -s Sherlock`, `-is Sherlock`, and `-si sherlock` on the 252 MiB dense
+fixture matched both the previous Swift binary and Rust. A clean ten-run split
+rerun measured `-i -s Sherlock` at 193.5 ms versus 306.5 ms before and
+283.2 ms for Rust; clustered checks measured `-is Sherlock` at 196.5 ms versus
+303.5 ms before, and `-si sherlock` at 195.8 ms versus 321.1 ms before.
+
 The Swift-only Darwin mmap/stdout preflight now also covers line-numbered
 medium bounded multi-literal output when no filename, byte-offset, column,
 replacement, only-matching, or vimgrep formatting is requested. Output for

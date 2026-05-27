@@ -279,6 +279,9 @@ struct RipgrepCommand {
         func isIgnoreCaseFlag(_ argument: String) -> Bool {
             argument == "-i" || argument == "--ignore-case"
         }
+        func isCaseSensitiveFlag(_ argument: String) -> Bool {
+            argument == "-s" || argument == "--case-sensitive"
+        }
         func isLineNumberFlag(_ argument: String) -> Bool {
             argument == "-n" || argument == "--line-number"
         }
@@ -295,7 +298,7 @@ struct RipgrepCommand {
                 return false
             }
         }
-        func shortFlagCluster(_ argument: String) -> (ignoreCase: Bool, lineNumber: Bool?, wordRegexp: Bool)? {
+        func shortFlagCluster(_ argument: String) -> (ignoreCase: Bool?, lineNumber: Bool?, wordRegexp: Bool)? {
             let bytes = Array(argument.utf8)
             guard bytes.count > 2,
                   bytes.first == UInt8(ascii: "-"),
@@ -303,13 +306,15 @@ struct RipgrepCommand {
                 return nil
             }
 
-            var ignoreCase = false
+            var ignoreCase: Bool?
             var lineNumber: Bool?
             var wordRegexp = false
             for byte in bytes.dropFirst() {
                 switch byte {
                 case UInt8(ascii: "i"):
                     ignoreCase = true
+                case UInt8(ascii: "s"):
+                    ignoreCase = false
                 case UInt8(ascii: "n"):
                     lineNumber = true
                 case UInt8(ascii: "N"):
@@ -330,6 +335,8 @@ struct RipgrepCommand {
         for argument in arguments {
             if isIgnoreCaseFlag(argument) {
                 parsedIgnoreCase = true
+            } else if isCaseSensitiveFlag(argument) {
+                parsedIgnoreCase = false
             } else if isLineNumberFlag(argument) {
                 parsedLineNumber = true
             } else if isNoLineNumberFlag(argument) {
@@ -344,7 +351,9 @@ struct RipgrepCommand {
             } else if isOutputNeutralSingleFileFlag(argument) {
                 continue
             } else if let cluster = shortFlagCluster(argument) {
-                parsedIgnoreCase = parsedIgnoreCase || cluster.ignoreCase
+                if let ignoreCase = cluster.ignoreCase {
+                    parsedIgnoreCase = ignoreCase
+                }
                 if let lineNumber = cluster.lineNumber {
                     parsedLineNumber = lineNumber
                 }
