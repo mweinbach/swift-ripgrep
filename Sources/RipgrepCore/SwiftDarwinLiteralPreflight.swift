@@ -378,7 +378,7 @@ public enum SwiftDarwinLiteralPreflight {
         lineNumber: Bool = false
     ) -> rg_darwin_literal_file_result? {
         guard literals.count > 1,
-              literals.count <= 32,
+              literals.count <= 64,
               literals.allSatisfy({ !$0.isEmpty }) else {
             return nil
         }

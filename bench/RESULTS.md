@@ -679,6 +679,16 @@ line-numbered form measured 215.5 ms versus 6.8 ms for Rust. The neighboring
 16-literal `-m128` case stayed in the retained path at 208.2 ms in the same
 run family.
 
+The bounded mmap/stdout preflight ceiling is now 64 literals. A 40-literal
+bounded alternation that had fallen back to the mapped `Data` path now uses the
+same exact-candidate scanner. Output for `-m128`, `-n -m128`, `-m1024`, and
+`-n -m1024` for the 40-literal Sherlock/Watson subtitles pattern matched
+sibling Rust `rg` on the 1.5 GiB subtitles corpus. Five-run checks measured
+`-m128` at 241.4 ms versus 22.909 s before and 6.1 ms for Rust; the
+line-numbered form measured 244.3 ms versus 6.3 ms for Rust. The neighboring
+32-literal `-m128` case stayed in the retained path at 246.4 ms in the same
+run family.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Raising the no-mmap stream read size to 4 MiB preserved output but regressed
