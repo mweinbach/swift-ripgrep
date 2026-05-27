@@ -1169,6 +1169,16 @@ struct MiscTests {
         NEEDLE needle Needle
         tail needle
         """, to: "dense.txt")
+        try root.write("""
+        a.b
+        aXb
+        Sherlock|Watson
+        sherlock|watson
+        """, to: "fixed.txt")
+        try root.write("""
+        -needle
+        needle
+        """, to: "dash-pattern.txt")
 
         let output = try runExecutableData([
             "needle",
@@ -1272,6 +1282,77 @@ struct MiscTests {
         ], fixture: {})
         #expect(longSmartCaseIgnoreCaseOutput == ignoreCaseOutput)
 
+        let regexpOutput = try runExecutableData([
+            "-e",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(regexpOutput == output)
+
+        let longRegexpOutput = try runExecutableData([
+            "--regexp",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(longRegexpOutput == output)
+
+        let inlineLongRegexpOutput = try runExecutableData([
+            "--regexp=needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(inlineLongRegexpOutput == output)
+
+        let inlineShortRegexpOutput = try runExecutableData([
+            "-eneedle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(inlineShortRegexpOutput == output)
+
+        let noConfigRegexpOutput = try runExecutableData([
+            "--no-config",
+            "-e",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(noConfigRegexpOutput == output)
+
+        let regexpLineNumberOutput = try runExecutableData([
+            "-e",
+            "needle",
+            "-n",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(regexpLineNumberOutput == lineNumberOutput)
+
+        let regexpLeadingDashOutput = try runExecutableData([
+            "-e",
+            "-needle",
+            root.path("dash-pattern.txt"),
+        ], fixture: {})
+        #expect(regexpLeadingDashOutput == Data("-needle\n".utf8))
+
+        let endOfOptionsLeadingDashOutput = try runExecutableData([
+            "--",
+            "-needle",
+            root.path("dash-pattern.txt"),
+        ], fixture: {})
+        #expect(endOfOptionsLeadingDashOutput == Data("-needle\n".utf8))
+
+        let repeatedRegexpOutput = try runExecutableData([
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(repeatedRegexpOutput == Data("""
+        needle needle needle
+        quiet line
+        NEEDLE needle Needle
+        tail needle
+
+        """.utf8))
+
         let orderedNoLineNumberOutput = try runExecutableData([
             "-n",
             "-N",
@@ -1365,6 +1446,43 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(orderedIgnoreCaseOutput == ignoreCaseOutput)
+
+        let fixedLiteralMetacharOutput = try runExecutableData([
+            "-F",
+            "a.b",
+            root.path("fixed.txt"),
+        ], fixture: {})
+        #expect(fixedLiteralMetacharOutput == Data("a.b\n".utf8))
+
+        let longFixedLiteralPipeOutput = try runExecutableData([
+            "--fixed-strings",
+            "Sherlock|Watson",
+            root.path("fixed.txt"),
+        ], fixture: {})
+        #expect(longFixedLiteralPipeOutput == Data("Sherlock|Watson\n".utf8))
+
+        let clusteredFixedIgnoreCaseOutput = try runExecutableData([
+            "-Fi",
+            "sherlock|watson",
+            root.path("fixed.txt"),
+        ], fixture: {})
+        #expect(clusteredFixedIgnoreCaseOutput == Data("""
+        Sherlock|Watson
+        sherlock|watson
+
+        """.utf8))
+
+        let orderedNoFixedStringsOutput = try runExecutableData([
+            "-F",
+            "--no-fixed-strings",
+            "a.b",
+            root.path("fixed.txt"),
+        ], fixture: {})
+        #expect(orderedNoFixedStringsOutput == Data("""
+        a.b
+        aXb
+
+        """.utf8))
 
         let mmapOutput = try runExecutableData([
             "--mmap",

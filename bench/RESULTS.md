@@ -249,6 +249,21 @@ measured `--mmap Sherlock` at 206.9 ms versus 321.4 ms before and 298.6 ms for
 Rust; `--mmap -n -i Sherlock` measured 285.3 ms versus 443.0 ms before and
 563.4 ms for Rust.
 
+Fixed-string and single explicit-regexp forms now feed the executable preflight
+too. The parser accepts `-F`/`--fixed-strings`, ordered
+`--no-fixed-strings`, clustered `-Fi`, single `-e`/`--regexp` pattern sources,
+inline regexp values, `--no-config`, and `--` leading-dash patterns, while
+repeated explicit patterns still fall back to the full CLI path. Dense-fixture
+byte checks for `-F Sherlock`, `-Fi sherlock`, fixed no-match pipes,
+`-e Sherlock`, `--regexp=Sherlock`, `-n -i -e Sherlock`, and repeated `-e`
+fallback matched both the previous Swift binary and Rust, with matching exit
+status. Focused fixtures also cover fixed metacharacter literals,
+`--no-fixed-strings` regex fallback, and leading-dash patterns. Ten-run checks
+measured `-F Sherlock` at 218.4 ms versus 392.7 ms before and 312.0 ms for
+Rust; `-Fi sherlock` at 226.9 ms versus 340.9 ms before and 412.5 ms for Rust;
+`-e Sherlock` at 207.9 ms versus 336.0 ms before and 289.5 ms for Rust; and
+`-n -i -e Sherlock` at 281.4 ms versus 458.5 ms before and 572.1 ms for Rust.
+
 The Swift-only Darwin mmap/stdout preflight now also covers line-numbered
 medium bounded multi-literal output when no filename, byte-offset, column,
 replacement, only-matching, or vimgrep formatting is requested. Output for

@@ -276,6 +276,7 @@ struct RipgrepCommand {
         let pattern: String
         let path: String
         let wordRegexp: Bool
+        let fixedStrings: Bool
         enum CaseMode {
             case sensitive
             case insensitive
@@ -296,20 +297,38 @@ struct RipgrepCommand {
         func isNoLineNumberFlag(_ argument: String) -> Bool {
             argument == "-N" || argument == "--no-line-number"
         }
+        func isFixedStringsFlag(_ argument: String) -> Bool {
+            argument == "-F" || argument == "--fixed-strings"
+        }
+        func isNoFixedStringsFlag(_ argument: String) -> Bool {
+            argument == "--no-fixed-strings"
+        }
         func isMmapFlag(_ argument: String) -> Bool {
             argument == "--mmap"
+        }
+        func inlineRegexpPattern(_ argument: String) -> String? {
+            if argument.hasPrefix("--regexp=") {
+                return String(argument.dropFirst("--regexp=".count))
+            }
+            if argument.hasPrefix("-e"), argument.count > 2 {
+                return String(argument.dropFirst(2))
+            }
+            return nil
         }
         func isOutputNeutralSingleFileFlag(_ argument: String) -> Bool {
             switch argument {
             case "--no-heading",
                  "--no-filename",
-                 "--no-messages":
+                 "--no-messages",
+                 "--no-config":
                 return true
             default:
                 return false
             }
         }
-        func shortFlagCluster(_ argument: String) -> (caseMode: CaseMode?, lineNumber: Bool?, wordRegexp: Bool)? {
+        func shortFlagCluster(
+            _ argument: String
+        ) -> (caseMode: CaseMode?, lineNumber: Bool?, wordRegexp: Bool, fixedStrings: Bool)? {
             let bytes = Array(argument.utf8)
             guard bytes.count > 2,
                   bytes.first == UInt8(ascii: "-"),
@@ -320,6 +339,7 @@ struct RipgrepCommand {
             var caseMode: CaseMode?
             var lineNumber: Bool?
             var wordRegexp = false
+            var fixedStrings = false
             for byte in bytes.dropFirst() {
                 switch byte {
                 case UInt8(ascii: "i"):
@@ -334,18 +354,26 @@ struct RipgrepCommand {
                     lineNumber = false
                 case UInt8(ascii: "w"):
                     wordRegexp = true
+                case UInt8(ascii: "F"):
+                    fixedStrings = true
                 default:
                     return nil
                 }
             }
-            return (caseMode, lineNumber, wordRegexp)
+            return (caseMode, lineNumber, wordRegexp, fixedStrings)
         }
         var parsedCaseMode = CaseMode.sensitive
+        var parsedFixedStrings = false
         var parsedLineNumber = false
         var parsedNoMmap = false
         var parsedWordRegexp = false
+        var parsedRegexpPattern: String?
+        var patternCanStartWithDash = false
         var valueArguments: [String] = []
-        for argument in arguments {
+        var argumentIndex = 0
+        while argumentIndex < arguments.count {
+            let argument = arguments[argumentIndex]
+            argumentIndex += 1
             if isIgnoreCaseFlag(argument) {
                 parsedCaseMode = .insensitive
             } else if isCaseSensitiveFlag(argument) {
@@ -356,6 +384,10 @@ struct RipgrepCommand {
                 parsedLineNumber = true
             } else if isNoLineNumberFlag(argument) {
                 parsedLineNumber = false
+            } else if isFixedStringsFlag(argument) {
+                parsedFixedStrings = true
+            } else if isNoFixedStringsFlag(argument) {
+                parsedFixedStrings = false
             } else if argument == "-nw" || argument == "-wn" {
                 parsedLineNumber = true
                 parsedWordRegexp = true
@@ -365,6 +397,20 @@ struct RipgrepCommand {
                 parsedNoMmap = true
             } else if isMmapFlag(argument) {
                 parsedNoMmap = false
+            } else if argument == "-e" || argument == "--regexp" {
+                guard argumentIndex < arguments.count,
+                      parsedRegexpPattern == nil else {
+                    return nil
+                }
+                parsedRegexpPattern = arguments[argumentIndex]
+                patternCanStartWithDash = true
+                argumentIndex += 1
+            } else if let inlineRegexp = inlineRegexpPattern(argument) {
+                guard parsedRegexpPattern == nil else {
+                    return nil
+                }
+                parsedRegexpPattern = inlineRegexp
+                patternCanStartWithDash = true
             } else if isOutputNeutralSingleFileFlag(argument) {
                 continue
             } else if let cluster = shortFlagCluster(argument) {
@@ -375,15 +421,28 @@ struct RipgrepCommand {
                     parsedLineNumber = lineNumber
                 }
                 parsedWordRegexp = parsedWordRegexp || cluster.wordRegexp
+                parsedFixedStrings = parsedFixedStrings || cluster.fixedStrings
+            } else if argument == "--" {
+                valueArguments.append(contentsOf: arguments[argumentIndex...])
+                patternCanStartWithDash = true
+                argumentIndex = arguments.count
             } else {
                 valueArguments.append(argument)
             }
         }
-        guard valueArguments.count == 2 else {
-            return nil
+        if let regexpPattern = parsedRegexpPattern {
+            guard valueArguments.count == 1 else {
+                return nil
+            }
+            pattern = regexpPattern
+            path = valueArguments[0]
+        } else {
+            guard valueArguments.count == 2 else {
+                return nil
+            }
+            pattern = valueArguments[0]
+            path = valueArguments[1]
         }
-        pattern = valueArguments[0]
-        path = valueArguments[1]
         switch parsedCaseMode {
         case .sensitive:
             asciiCaseInsensitive = false
@@ -395,8 +454,10 @@ struct RipgrepCommand {
         lineNumber = parsedLineNumber
         noMmap = parsedNoMmap
         wordRegexp = parsedWordRegexp
+        fixedStrings = parsedFixedStrings
 
-        if !pattern.hasPrefix("-"),
+        if !fixedStrings,
+           (patternCanStartWithDash || !pattern.hasPrefix("-")),
            path != "-",
            !asciiCaseInsensitive,
            !wordRegexp,
@@ -413,18 +474,20 @@ struct RipgrepCommand {
             )
         }
 
-        let asciiBoundaryLiteralPattern = asciiCaseInsensitive ? nil : asciiBoundaryLiteral(
+        let asciiBoundaryLiteralPattern = (fixedStrings || asciiCaseInsensitive) ? nil : asciiBoundaryLiteral(
             pattern,
             allowPCREQuotedLiterals: preflightArguments.allowPCREQuotedLiterals
         )
         let asciiBoundary = asciiBoundaryLiteralPattern != nil
-        let parsedLiteralPattern = asciiBoundaryLiteralPattern
-            ?? RegexLiteralParser.literal(
+        let parsedLiteralPattern = fixedStrings
+            ? pattern
+            : asciiBoundaryLiteralPattern ?? RegexLiteralParser.literal(
                 fromPlainRegexPattern: pattern,
                 allowPCREQuotedLiterals: preflightArguments.allowPCREQuotedLiterals
             )
 
-        if !pattern.hasPrefix("-"),
+        if !fixedStrings,
+           (patternCanStartWithDash || !pattern.hasPrefix("-")),
            path != "-",
            !asciiCaseInsensitive,
            !wordRegexp,
@@ -441,7 +504,7 @@ struct RipgrepCommand {
             return exitCode
         }
 
-        guard !pattern.hasPrefix("-"),
+        guard (patternCanStartWithDash || !pattern.hasPrefix("-")),
               path != "-",
               let literalPattern = parsedLiteralPattern else {
             return nil
@@ -449,6 +512,7 @@ struct RipgrepCommand {
 
         let literal = Array(literalPattern.utf8)
         guard !literal.isEmpty,
+              !literal.contains(UInt8(ascii: "\n")),
               !asciiCaseInsensitive || literal.allSatisfy({ $0 < 0x80 }) else {
             return nil
         }
