@@ -23,6 +23,28 @@ struct MiscTests {
         ])
     }
 
+    @Test("case-insensitive alternation preserves recursive line output")
+    func caseInsensitiveAlternationPreservesRecursiveLineOutput() throws {
+        let root = try TemporaryDirectory()
+        try root.write("quiet\nerr_sys reached\nquiet\n", to: "drivers/one.c")
+        try root.write("cfg_bme_evt and link_req_rst\nquiet\nPME_TURN_OFF\n", to: "drivers/two.c")
+        try root.write("quiet\nERR_SYS café\n", to: "drivers/unicode.c")
+
+        let output = try run([
+            "-n",
+            "-i",
+            "ERR_SYS|PME_TURN_OFF|LINK_REQ_RST|CFG_BME_EVT",
+            root.url.path,
+        ])
+
+        #expect(Set(output) == Set([
+            "\(root.path("drivers/one.c")):2:err_sys reached",
+            "\(root.path("drivers/two.c")):1:cfg_bme_evt and link_req_rst",
+            "\(root.path("drivers/two.c")):3:PME_TURN_OFF",
+            "\(root.path("drivers/unicode.c")):2:ERR_SYS café",
+        ]))
+    }
+
     @Test("no-literal word whitespace regex preserves Unicode and ASCII output")
     func noLiteralWordWhitespaceRegexPreservesUnicodeAndASCIIOutput() throws {
         let root = try TemporaryDirectory()

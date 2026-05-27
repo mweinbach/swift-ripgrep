@@ -7105,6 +7105,21 @@ public struct RipgrepSearcher: @unchecked Sendable {
             }
             if options.printMode == .matchingLines,
                canOmitMatchSpans(options: options),
+               fastPath.caseInsensitiveASCII,
+               !fastPath.wordASCII,
+               fastPath.literals.count > 1 {
+                if let literalResult = searchDarwinCaseInsensitiveMultiLiteralLines(
+                    data: data,
+                    fileURL: fileURL,
+                    bytes: bytes,
+                    baseAddress: baseAddress,
+                    fastPath: fastPath
+                ) {
+                    return literalResult
+                }
+            }
+            if options.printMode == .matchingLines,
+               canOmitMatchSpans(options: options),
                !fastPath.caseInsensitiveASCII,
                fastPath.literals.count == 1,
                let literal = fastPath.literals.first,
@@ -8744,6 +8759,160 @@ public struct RipgrepSearcher: @unchecked Sendable {
             bytesSearched: bytesSearchedThroughMaxCount ?? data.count,
             searched: true
         )
+        #else
+        return nil
+        #endif
+    }
+
+    private func searchDarwinCaseInsensitiveMultiLiteralLines(
+        data: Data,
+        fileURL: URL,
+        bytes: UnsafeBufferPointer<UInt8>,
+        baseAddress: UnsafePointer<UInt8>,
+        fastPath: ByteLiteralFastPath
+    ) -> SearchFileResult? {
+        #if canImport(Darwin)
+        guard fastPath.caseInsensitiveASCII,
+              !fastPath.wordASCII,
+              fastPath.literals.count > 1,
+              fastPath.literals.allSatisfy({
+                !$0.isEmpty && $0.allSatisfy { $0 < 0x80 }
+              }) else {
+            return nil
+        }
+
+        guard !bytes.contains(where: { $0 >= 0x80 }) else {
+            return nil
+        }
+
+        let dataCount = data.count
+        let newlineByte = UInt8(ascii: "\n")
+        var matchedLineBounds: [DarwinMatchedLineBound] = []
+        matchedLineBounds.reserveCapacity(fastPath.literals.count)
+
+        for literal in fastPath.literals {
+            let foldedLiteral = literal.map(asciiLowercase)
+            var caseInsensitiveShifts = [Int](repeating: foldedLiteral.count, count: 256)
+            if foldedLiteral.count > 1 {
+                for index in 0..<(foldedLiteral.count - 1) {
+                    caseInsensitiveShifts[Int(foldedLiteral[index])] = foldedLiteral.count - 1 - index
+                }
+            }
+
+            foldedLiteral.withUnsafeBufferPointer { foldedNeedle in
+                caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
+                    guard let foldedNeedleBaseAddress = foldedNeedle.baseAddress else {
+                        return
+                    }
+                    var searchOffset = 0
+                    while searchOffset < dataCount {
+                        let foundPointer = rg_memcasemem_ascii_prepared(
+                            baseAddress.advanced(by: searchOffset),
+                            dataCount - searchOffset,
+                            foldedNeedleBaseAddress,
+                            foldedNeedle.count,
+                            shifts.baseAddress
+                        )
+                        guard let rawFoundPointer = foundPointer else {
+                            break
+                        }
+
+                        let matchStart = baseAddress.distance(to: rawFoundPointer)
+                        var lineStart = matchStart
+                        while lineStart > 0, bytes[lineStart - 1] != newlineByte {
+                            lineStart -= 1
+                        }
+
+                        let newlinePointer = memchr(
+                            baseAddress.advanced(by: matchStart),
+                            Int32(newlineByte),
+                            dataCount - matchStart
+                        )
+                        let outputEnd: Int
+                        let hasNewline: Bool
+                        if let newlinePointer {
+                            outputEnd = baseAddress.distance(
+                                to: newlinePointer.assumingMemoryBound(to: UInt8.self)
+                            ) + 1
+                            hasNewline = true
+                        } else {
+                            outputEnd = dataCount
+                            hasNewline = false
+                        }
+
+                        matchedLineBounds.append(DarwinMatchedLineBound(
+                            start: lineStart,
+                            outputEnd: outputEnd,
+                            hasNewline: hasNewline,
+                            firstMatchStart: matchStart
+                        ))
+                        searchOffset = outputEnd
+                    }
+                }
+            }
+        }
+
+        guard !matchedLineBounds.isEmpty else {
+            return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: data.count, searched: true)
+        }
+
+        matchedLineBounds.sort {
+            if $0.start != $1.start {
+                return $0.start < $1.start
+            }
+            return $0.firstMatchStart < $1.firstMatchStart
+        }
+
+        var uniqueBounds: [DarwinMatchedLineBound] = []
+        uniqueBounds.reserveCapacity(matchedLineBounds.count)
+        for bound in matchedLineBounds {
+            if var last = uniqueBounds.last, last.start == bound.start {
+                if bound.firstMatchStart < last.firstMatchStart {
+                    last.firstMatchStart = bound.firstMatchStart
+                    uniqueBounds[uniqueBounds.count - 1] = last
+                }
+            } else {
+                uniqueBounds.append(bound)
+            }
+        }
+
+        var matches: [SearchMatch] = []
+        matches.reserveCapacity(uniqueBounds.count)
+        var lineNumber = 1
+        var lineCountOffset = 0
+
+        func advanceLineNumber(to targetOffset: Int) {
+            guard lineCountOffset < targetOffset else {
+                return
+            }
+            lineNumber += Int(rg_memcount_byte(
+                baseAddress.advanced(by: lineCountOffset),
+                targetOffset - lineCountOffset,
+                newlineByte
+            ))
+            lineCountOffset = targetOffset
+        }
+
+        for bound in uniqueBounds {
+            advanceLineNumber(to: bound.start)
+            let lineEnd = bound.hasNewline ? bound.outputEnd - 1 : bound.outputEnd
+            let lineData = Data(bytes: baseAddress.advanced(by: bound.start), count: lineEnd - bound.start)
+            guard let line = String(data: lineData, encoding: .utf8) else {
+                return nil
+            }
+            matches.append(SearchMatch(
+                fileURL: fileURL,
+                lineNumber: lineNumber,
+                column: nil,
+                line: line,
+                lineTerminator: bound.hasNewline ? "\n" : "",
+                absoluteOffset: bound.start,
+                matchCount: 1,
+                spans: []
+            ))
+        }
+
+        return SearchFileResult(fileURL: fileURL, matches: matches, bytesSearched: data.count, searched: true)
         #else
         return nil
         #endif

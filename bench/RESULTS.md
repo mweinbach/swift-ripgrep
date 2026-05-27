@@ -931,6 +931,18 @@ the current-map 253.72 ms band, and the line-numbered form at 269.82 ms versus
 Swift's traversal order still differs from Rust's, but sorted output content
 matched and the harness improved from 4.717 s to 4.146 s.
 
+Recursive case-insensitive ASCII alternations now also use a raw multi-literal
+line collector for buffered `SearchMatch` output. The path only runs on
+all-ASCII files, scans each folded literal across the file, sorts and dedupes
+matched line ranges, and decodes only lines that will be emitted; files with
+non-ASCII bytes fall back to the existing decoded matcher path. Sorted output
+for the Linux kernel `ERR_SYS|PME_TURN_OFF|LINK_REQ_RST|CFG_BME_EVT` workload
+matched sibling Rust `rg` exactly (241 lines). A seven-run focused harness
+measured `linux_alternates_casei` at 3.085 s versus Rust at 3.817 s, improving
+the prior Swift 4.146 s band to a Swift win. Neighboring subtitle alternation
+checks stayed faster than Rust: `subtitles_en_alternate` measured 124.86 ms
+plain and 177.90 ms line-numbered.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - A broader default-Unicode executable surrounding-word preflight preserved
