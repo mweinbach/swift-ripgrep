@@ -450,6 +450,13 @@ byte-offset field is requested. Output for `-n -o 'Sherlock|Watson'` on the
 193 MiB subtitles corpus matched the sibling Rust oracle; a 10-run recheck
 measured 75.7 ms versus the same-turn pre-change 82.4 ms and 43.2 ms for Rust.
 
+Vimgrep direct output now skips newline counting when both line and column
+fields are suppressed, leaving default and line-only vimgrep accounting intact.
+Output for `--vimgrep -N --no-column 'Sherlock|Watson'` and the neighboring
+`--vimgrep --no-column` form matched the sibling Rust oracle on the 193 MiB
+subtitles corpus. A 10-run no-fields check measured 79.1 ms versus the
+same-turn pre-change 85.2 ms and 39.0 ms for Rust.
+
 Byte-set `--count-matches` now counts sets of three or more bytes in one Swift
 SIMD pass instead of scanning the haystack once per byte. Two-byte sets stay on
 the previous counter after sparse checks came back neutral. Output for two-byte,

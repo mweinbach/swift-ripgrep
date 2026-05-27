@@ -872,6 +872,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let filesWithMatches = options.printMode == .filesWithMatches
         let filesWithoutMatch = options.printMode == .filesWithoutMatch
         let pathOnly = filesWithMatches || filesWithoutMatch
+        let needsLineNumberAccounting = wantsLineNumber || (options.vimgrep && !options.noLineNumber)
         var totalMatchCount = 0
         func writePathPrefixIfNeeded() {
             pathPrefixBytes?.withUnsafeBytes { buffer in
@@ -1013,7 +1014,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             }
 
             func advanceLineNumber(to targetOffset: Int) {
-                guard (wantsLineNumber || options.vimgrep), lineCountOffset < targetOffset else {
+                guard needsLineNumberAccounting, lineCountOffset < targetOffset else {
                     return
                 }
                 lineNumber += Int(rg_memcount_byte(
