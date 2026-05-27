@@ -130,6 +130,14 @@ subtitles corpus, 20-run A/B checks measured `-n -m 16 'Sherlock|Watson'` at
 69.9 ms versus 148.7 ms before and 23.7 ms for Rust. A 12-run `-n -m 1024`
 check measured 103.0 ms versus 193.0 ms before and 43.9 ms for Rust.
 
+The same bounded multi-literal preflight now keeps one exact next-match
+candidate per literal instead of scanning for any literal first byte and then
+rejecting false candidates. Output for `-m16`, `-m128`, `-n -m16`, `-n -m128`,
+and the `-m1281` fallback boundary matched the sibling Rust oracle on the small
+subtitles corpus. A 10-run check measured `-m128 'Sherlock|Watson'` at
+58.9 ms versus the same-turn pre-change sweep at 72.7 ms and 22.9 ms for Rust;
+`-n -m128` measured 62.0 ms versus 23.5 ms for Rust.
+
 The direct Swift Darwin matching-line writer now covers transformed ASCII
 multi-literal regexes, including ignore-case alternations and word-boundary
 alternations, when no filename, byte-offset, column, replacement,
