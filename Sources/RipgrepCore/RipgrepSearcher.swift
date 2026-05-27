@@ -2212,6 +2212,14 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         }
                     }
                 }
+                let canTrackLineNumbersInLiteralScan = wantsLineNumber
+                    && !options.column
+                    && !options.byteOffset
+                    && !countOnly
+                    && !onlyMatching
+                    && !fastPath.caseInsensitiveASCII
+                    && !fastPath.wordASCII
+                var lineNumberAtSearchOffset = 1
                 if countMatchesOnly && allowDirectStdout && !fastPath.wordASCII {
                     // Direct stdout count-matches cannot print stats/JSON, so only the total is observable here.
                     if literal.count == 1 {
@@ -2273,7 +2281,20 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 }
                 while searchOffset < data.count, matchedLineCount < maxCount {
                     let foundPointer: UnsafePointer<UInt8>?
-                    if fastPath.caseInsensitiveASCII {
+                    var newlinesBeforeMatch = 0
+                    if canTrackLineNumbersInLiteralScan {
+                        let result = literal.withUnsafeBufferPointer { needle in
+                            rg_memmem_count_byte_before(
+                                baseAddress.advanced(by: searchOffset),
+                                data.count - searchOffset,
+                                needle.baseAddress,
+                                needle.count,
+                                UInt8(ascii: "\n")
+                            )
+                        }
+                        foundPointer = result.match
+                        newlinesBeforeMatch = result.count
+                    } else if fastPath.caseInsensitiveASCII {
                         foundPointer = foldedLiteral.withUnsafeBufferPointer { foldedNeedle in
                             caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
                                 rg_memcasemem_ascii_prepared(
@@ -2386,8 +2407,14 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         }
                         matchedLineCount += 1
                         lastEmittedLineStart = lineStart
+                        let scannedLineNumber = lineNumberAtSearchOffset + newlinesBeforeMatch
                         if !countOnly {
-                            writeMatchingLinePrefixes(lineStart: lineStart, matchStart: matchStart)
+                            if canTrackLineNumbersInLiteralScan {
+                                writePathPrefixIfNeeded()
+                                writeDarwinLineNumberPrefix(scannedLineNumber, writeBytes: writeBytes)
+                            } else {
+                                writeMatchingLinePrefixes(lineStart: lineStart, matchStart: matchStart)
+                            }
                             writeBytes(UnsafeRawBufferPointer(
                                 start: rawBaseAddress.advanced(by: lineStart),
                                 count: outputEnd - lineStart
@@ -2402,6 +2429,11 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         if matchedLineCount == maxCount {
                             bytesSearched = outputEnd
                             break
+                        }
+                        if canTrackLineNumbersInLiteralScan {
+                            lineNumberAtSearchOffset = newlinePointer == nil
+                                ? scannedLineNumber
+                                : scannedLineNumber + 1
                         }
                         searchOffset = outputEnd
                         continue

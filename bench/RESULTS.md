@@ -553,6 +553,15 @@ corpus measured the seven-group no-match form at 4.997 s versus the previous
 path still running past 3 minutes before it was interrupted, and 2.552 s for
 Rust.
 
+Line-numbered single-literal output now counts newline bytes inside the same
+Swift SIMD first/tail literal scan used to find the next match, avoiding the
+second skipped-region pass previously used only to print `-n` prefixes. Output
+for `-n 'Sherlock Holmes'` on the 1.5 GiB subtitles corpus matched both the
+previous Swift checkpoint and the sibling Rust oracle (830 lines). A seven-run
+A/B measured Swift at 253.0 ms versus 281.1 ms before and 196.8 ms for Rust.
+The focused regression also covers a long pre-match line gap, duplicate hits on
+one output line, and the `-H -n -m1` prefixed form.
+
 Rejected Swift-only probes from the same checkpoint:
 
 - Routing multi-literal full-line output through the existing line-by-line
@@ -570,6 +579,15 @@ Rejected Swift-only probes from the same checkpoint:
   preserved output, but measured neutral to slightly slower on
   `-c 'Sherlock|Watson'` over the 1.5 GiB subtitles corpus: 327.0 ms versus
   323.0 ms for the current scanner.
+- Extending the transformed multi-literal candidate writer to plain unlimited
+  matching-line output preserved output, but did not beat the current scanner:
+  `-n 'Sherlock Holmes|John Watson|Irene Adler|Inspector Lestrade|Professor
+  Moriarty'` measured 644.6 ms, and the plain form measured 586.4 ms, versus
+  Rust at 311.2 ms and 279.7 ms.
+- A one-pass first-byte line scanner for the same five-literal alternation also
+  preserved output, but regressed the representative subtitles corpus to
+  980.8 ms for `-n` and 917.6 ms for plain output, versus Rust at about
+  311 ms and 279 ms.
 - Extending the finite multi-literal cutoff all the way to 4096 preserved
   output, but the repeated earliest-match scans overtook the collect/sort path:
   `-m 2048 'Sherlock|Watson'` measured 414.9 ms versus 309.7 ms before, and

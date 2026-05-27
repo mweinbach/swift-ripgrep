@@ -90,6 +90,74 @@ private func rgMemmemSIMD16(
     return nil
 }
 
+func rg_memmem_count_byte_before(
+    _ haystack: UnsafePointer<UInt8>?,
+    _ haystackLength: Int,
+    _ needle: UnsafePointer<UInt8>?,
+    _ needleLength: Int,
+    _ byte: UInt8
+) -> (match: UnsafePointer<UInt8>?, count: Int) {
+    guard let haystack,
+          let needle,
+          haystackLength > 0,
+          needleLength > 0,
+          needleLength <= haystackLength else {
+        return (nil, 0)
+    }
+
+    let first = needle[0]
+    let tail = needle[needleLength - 1]
+    let firstVector = SIMD16<UInt8>(repeating: first)
+    let tailVector = SIMD16<UInt8>(repeating: tail)
+    let countVector = SIMD16<UInt8>(repeating: byte)
+
+    var count = 0
+    var cursor = 0
+    let vectorLimit = haystackLength >= needleLength + 15
+        ? haystackLength - needleLength - 15 + 1
+        : 0
+    while cursor < vectorLimit {
+        let firstBytes = UnsafeRawPointer(haystack.advanced(by: cursor))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let tailBytes = UnsafeRawPointer(haystack.advanced(by: cursor + needleLength - 1))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let candidateStorage = ((firstBytes .== firstVector) .& (tailBytes .== tailVector))._storage
+        if candidateStorage.min() < 0 {
+            for lane in 0..<16 where candidateStorage[lane] != 0 {
+                let candidate = haystack.advanced(by: cursor + lane)
+                if needleLength <= 2
+                    || memcmp(candidate.advanced(by: 1), needle.advanced(by: 1), needleLength - 2) == 0 {
+                    for offset in 0..<lane where haystack[cursor + offset] == byte {
+                        count += 1
+                    }
+                    return (candidate, count)
+                }
+            }
+        }
+        count -= Int((firstBytes .== countVector)._storage.wrappedSum())
+        cursor += 16
+    }
+
+    let maxStart = haystackLength - needleLength + 1
+    while cursor < maxStart {
+        if haystack[cursor] == first,
+           haystack[cursor + needleLength - 1] == tail,
+           needleLength <= 2
+            || memcmp(
+                haystack.advanced(by: cursor + 1),
+                needle.advanced(by: 1),
+                needleLength - 2
+            ) == 0 {
+            return (haystack.advanced(by: cursor), count)
+        }
+        if haystack[cursor] == byte {
+            count += 1
+        }
+        cursor += 1
+    }
+    return (nil, count)
+}
+
 @inline(__always)
 private func rgCaseInsensitiveMiddleMatches(
     candidate: UnsafePointer<UInt8>,

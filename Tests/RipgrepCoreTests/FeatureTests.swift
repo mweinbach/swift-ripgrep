@@ -235,6 +235,18 @@ struct FeatureTests {
             "2:needle here",
             "3:needle there",
         ])
+        let numberedRoot = try TemporaryDirectory()
+        let numberedLiteralLines = (1...40).map { line in
+            line == 37 ? "prefix anchor suffix anchor" : "filler \(line)"
+        }.joined(separator: "\n") + "\nanchor again\n"
+        try numberedRoot.write(numberedLiteralLines, to: "numbered-literal.txt")
+        #expect(try run(["-n", "anchor", numberedRoot.path("numbered-literal.txt")]) == [
+            "37:prefix anchor suffix anchor",
+            "41:anchor again",
+        ])
+        #expect(try run(["-H", "-n", "-m1", "anchor", numberedRoot.path("numbered-literal.txt")]) == [
+            "\(numberedRoot.path("numbered-literal.txt")):37:prefix anchor suffix anchor",
+        ])
         #expect(try run(["-H", "-c", "needle", root.path("one.txt")]) == [
             "\(root.path("one.txt")):2",
         ])
