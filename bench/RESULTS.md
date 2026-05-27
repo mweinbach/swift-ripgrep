@@ -1118,6 +1118,11 @@ Rejected Swift-only probes from the same checkpoint:
   hot controls. A 100-run A/B measured default `--files` at 140.1 ms mean
   versus 128.8 ms before, and `--hidden --files` at 137.9 ms mean versus
   128.9 ms before. The unconditional byte reads stay.
+- Raising the direct no-ignore file-list output buffer from 64 KiB to 256 KiB
+  preserved exact Swift output and sorted Rust parity, but did not improve the
+  already-direct byte writer. A 100-run A/B measured `--no-ignore --files` at
+  80.7 ms mean versus 79.8 ms before, and `--no-ignore --hidden --files` at
+  80.6 ms mean versus 78.7 ms before. The 64 KiB buffer stays.
 - Replacing indexed ignore prefix/suffix `String.hasPrefix`/`hasSuffix` checks
   with ASCII-only UTF-8 byte comparisons, plus a rule-index prefilter for
   candidates that could not beat the current match, preserved sorted Rust
