@@ -1116,6 +1116,12 @@ Rejected Swift-only probes from the same checkpoint:
   `--vimgrep 'Sherlock|Watson'` measured 83.5 ms and
   `-i 'sherlock|watson'` measured 93.2 ms, versus the current roughly 80 ms
   and 78 ms bands.
+- Replacing short case-sensitive literal candidate verification with two
+  unaligned `UInt64` comparisons preserved `Sherlock Holmes` output but slowed
+  the shared line-numbered scanners. A seven-run focused check measured
+  `subtitles_en_literal (lines)` at 232.00 ms, `subtitles_en_literal_word` at
+  231.18 ms, and `subtitles_en_surrounding_words` at 231.74 ms, all worse than
+  the retained roughly 215-218 ms bands, so the existing `memcmp` verifier stays.
 - Widening the byte counter from `SIMD16` to `SIMD64` preserved output but was
   catastrophically slower on Apple Silicon: `--vimgrep 'Sherlock|Watson'`
   measured 351.2 ms, `-n -o 'Sherlock|Watson'` measured 346.8 ms, and
