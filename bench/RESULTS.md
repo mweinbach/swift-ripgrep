@@ -103,6 +103,14 @@ exact Swift output and sorted Rust parity, measuring default `--files` at
 `--hidden --files` measured 121.0 ms mean / 120.2 ms median versus 124.0 ms mean
 / 122.6 ms median.
 
+Ignore-file parsing now returns the raw line split directly instead of trimming
+and checking every line before appending the same raw text anyway. `GlobMatcher`
+continues to filter empty and comment lines at rule construction. A 100-run
+confirmation on the Linux tree preserved exact Swift output and sorted Rust
+parity, measuring default `--files` at 137.2 ms mean / 136.5 ms median versus
+139.0 ms mean / 139.7 ms median before; `--hidden --files` measured 130.3 ms
+mean / 129.3 ms median versus 133.5 ms mean / 134.0 ms median.
+
 The Swift multi-literal full-line writer now skips to a matched line's output
 end after recording it, caching line ends so later literals do not rescan
 duplicate lines for newline boundaries. It also special-cases `-m 1` by finding

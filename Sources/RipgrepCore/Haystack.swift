@@ -3017,16 +3017,7 @@ public struct FileWalker: @unchecked Sendable {
     }
 
     private func parseIgnorePatterns(_ contents: String, fileURL _: URL) -> (patterns: [String], messages: [String]) {
-        var patterns: [String] = []
-        for rawLine in contents.components(separatedBy: .newlines) {
-            let trimmed = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else {
-                patterns.append(rawLine)
-                continue
-            }
-            patterns.append(rawLine)
-        }
-        return (patterns, [])
+        (contents.components(separatedBy: .newlines), [])
     }
 
     private func globalGitIgnoreFile() -> URL? {
