@@ -68,6 +68,9 @@ lookahead.
 ASCII fixed-lookaround PCRE count and count-matches forms now use mapped Swift
 counting preflights too, preserving prefixed counts, CRLF summaries,
 `--include-zero`, bounded line counts, and overlap-safe rejected assertions.
+Positive fixed-lookbehind/lookahead matching-line output now searches the
+contiguous `prefixliteral` / `literalsuffix` key through the literal line
+writer too, since whole-line output does not expose the assertion span.
 ASCII PCRE reset-start `prefix\Kliteral` quiet, path-only, count, and
 count-matches summaries now reuse the fixed-lookbehind mapped Swift preflights
 for non-empty ASCII prefix/literal pairs. Normal matching-line output for the
@@ -120,6 +123,20 @@ preflight bypassed via `RIPGREP_CONFIG_PATH=`:
 | `-P --count-matches '(?<=prefix)needle'` | 42.4 ms | 9.7 ms | 20.4 ms |
 | `-P -c 'needle(?=suffix)'` | 44.9 ms | 6.9 ms | 9.8 ms |
 | `-P --count-matches 'needle(?=suffix)'` | 42.0 ms | 7.2 ms | 20.5 ms |
+
+The fixed positive lookaround matching-line check used
+`/tmp/swift-rg-bench/pcre-lookbehind-line-small.txt` and
+`/tmp/swift-rg-bench/pcre-lookahead-line-small.txt`, 4.64 MiB and 4.80 MiB
+sparse ASCII fixtures, with 3 warmups and 10 timed runs. The before column is
+the same binary with the executable preflight bypassed via
+`RIPGREP_CONFIG_PATH=`:
+
+| Flags | Swift before | Swift after | rg |
+|---|---:|---:|---:|
+| `-P '(?<=Sherlock )Holmes'` | 164.3 ms | 5.0 ms | 9.2 ms |
+| `-P -n '(?<=Sherlock )Holmes'` | n/a | 5.1 ms | 9.1 ms |
+| `-P 'Sherlock(?= Holmes)'` | 163.6 ms | 5.0 ms | 8.4 ms |
+| `-P -n 'Sherlock(?= Holmes)'` | n/a | 4.7 ms | 8.2 ms |
 
 The fixed reset-start check used
 `/tmp/swift-rg-bench/pcre-reset-small.txt`, a 6.4 MiB ASCII fixture, with

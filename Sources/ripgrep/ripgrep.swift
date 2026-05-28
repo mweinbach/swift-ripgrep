@@ -1979,6 +1979,19 @@ struct RipgrepCommand {
                     crlfTerminated: parsedCrlf
                 )
             }
+            if parsedPrintMode == .matchingLines,
+               !parsedOnlyMatching,
+               fixedLookbehind.prefixShouldMatch {
+                return SwiftDarwinLiteralPreflight.multiLiteralExitCode(
+                    path: path,
+                    literals: [fixedLookbehind.prefix + fixedLookbehind.literal],
+                    maxCount: parsedMaxCount,
+                    lineNumber: lineNumber,
+                    lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                    linePrefix: parsedLinePrefix,
+                    headingPrefix: parsedHeadingPrefix
+                )
+            }
         }
 
         if !fixedStrings,
@@ -2036,6 +2049,19 @@ struct RipgrepCommand {
                     maxCount: parsedMaxCount,
                     countPrefix: parsedCountPrefix,
                     crlfTerminated: parsedCrlf
+                )
+            }
+            if parsedPrintMode == .matchingLines,
+               !parsedOnlyMatching,
+               fixedLookahead.suffixShouldMatch {
+                return SwiftDarwinLiteralPreflight.multiLiteralExitCode(
+                    path: path,
+                    literals: [fixedLookahead.literal + fixedLookahead.suffix],
+                    maxCount: parsedMaxCount,
+                    lineNumber: lineNumber,
+                    lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                    linePrefix: parsedLinePrefix,
+                    headingPrefix: parsedHeadingPrefix
                 )
             }
         }

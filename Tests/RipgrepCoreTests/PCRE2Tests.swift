@@ -1149,6 +1149,19 @@ struct PCRE2Tests {
         #expect(overlappingNegativeCountMatchesOutput == Data("1\n".utf8))
     }
 
+    @Test func pcre2FixedLookbehindExecutableFastPathMatchingLines() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("Mycroft Holmes\nSherlock Holmes and Sherlock Holmes\nHolmes\n", to: "pcre.txt")
+
+        let output = try runExecutableData(["-P", "(?<=Sherlock )Holmes", temp.path("pcre.txt")]) {}
+        let lineNumberOutput = try runExecutableData(["-P", "-n", "(?<=Sherlock )Holmes", temp.path("pcre.txt")]) {}
+        let maxCountOutput = try runExecutableData(["-P", "-m1", "(?<=Sherlock )Holmes", temp.path("pcre.txt")]) {}
+
+        #expect(output == Data("Sherlock Holmes and Sherlock Holmes\n".utf8))
+        #expect(lineNumberOutput == Data("2:Sherlock Holmes and Sherlock Holmes\n".utf8))
+        #expect(maxCountOutput == Data("Sherlock Holmes and Sherlock Holmes\n".utf8))
+    }
+
     @Test func pcre2FixedLookbehindExecutableFastPathPathOutputs() throws {
         let temp = try TemporaryDirectory()
         try temp.write("Mycroft Holmes\nSherlock Holmes\n", to: "pcre.txt")
@@ -1270,6 +1283,19 @@ struct PCRE2Tests {
         #expect(nonmatchingOutput == Data("\(temp.path("pcre.txt"))\n".utf8))
         #expect(negativeMatchingOutput == Data("\(temp.path("pcre.txt"))\n".utf8))
         #expect(overlappingNegativeOutput == Data("\(temp.path("overlap.txt"))\n".utf8))
+    }
+
+    @Test func pcre2FixedLookaheadExecutableFastPathMatchingLines() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("Sherlock Watson\nSherlock Holmes and Sherlock Holmes\nSherlock\n", to: "pcre.txt")
+
+        let output = try runExecutableData(["-P", "Sherlock(?= Holmes)", temp.path("pcre.txt")]) {}
+        let lineNumberOutput = try runExecutableData(["-P", "-n", "Sherlock(?= Holmes)", temp.path("pcre.txt")]) {}
+        let maxCountOutput = try runExecutableData(["-P", "-m1", "Sherlock(?= Holmes)", temp.path("pcre.txt")]) {}
+
+        #expect(output == Data("Sherlock Holmes and Sherlock Holmes\n".utf8))
+        #expect(lineNumberOutput == Data("2:Sherlock Holmes and Sherlock Holmes\n".utf8))
+        #expect(maxCountOutput == Data("Sherlock Holmes and Sherlock Holmes\n".utf8))
     }
 
     @Test func pcre2FixedLookaheadExecutableFastPathCountOutputs() throws {
