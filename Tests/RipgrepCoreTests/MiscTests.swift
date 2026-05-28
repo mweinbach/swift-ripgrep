@@ -3844,6 +3844,32 @@ struct MiscTests {
         ], fixture: {})
         #expect(columnCountMatchesOutput == countMatchesOutput)
 
+        let colorQuietResult = try runExecutableResult([
+            "--color=always",
+            "-q",
+            "needle",
+            root.path("dense.txt"),
+        ])
+        #expect(colorQuietResult.status == 0)
+        #expect(colorQuietResult.stdout.isEmpty)
+        #expect(colorQuietResult.stderr.isEmpty)
+
+        let colorCountOutput = try runExecutableData([
+            "--color=always",
+            "-c",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(colorCountOutput == Data("3\n".utf8))
+
+        let prettyCountMatchesOutput = try runExecutableData([
+            "--pretty",
+            "--count-matches",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(prettyCountMatchesOutput == countMatchesOutput)
+
         let trimCountMatchesOutput = try runExecutableData([
             "--trim",
             "--count-matches",

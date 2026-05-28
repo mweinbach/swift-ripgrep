@@ -133,6 +133,18 @@ and column fields are preserved.
 | `--byte-offset -c needle` | 1.528 s | 12.8 ms | 12.6 ms |
 | `--column --count-matches needle` | 1.519 s | 6.7 ms | 20.3 ms |
 
+Color-enabled forms now stay eligible when quiet, count, or count-matches
+output makes color unobservable. Path-only and matching-line color output still
+falls back because Rust emits ANSI path/match styling there.
+
+10 timed runs on `/tmp/swift-rg-candidates/trim.txt` with 3 warmups:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--color=always -q needle` | 256.0 ms | 4.3 ms | 3.9 ms |
+| `--color=always -c needle` | 114.8 ms | 10.1 ms | 10.0 ms |
+| `--color=always --count-matches needle` | 109.1 ms | 6.9 ms | 18.9 ms |
+
 Case-sensitive repeated `-e`/`-f` and top-level literal alternation `--trim`
 forms now use the same mapped trim writer.
 Literal `--invert-match` matching-line output now has its own mapped Swift line
