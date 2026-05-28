@@ -1244,6 +1244,7 @@ struct MiscTests {
         try root.write("   \n  needle space\n", to: "trim-space.txt")
         try root.write("quiet one\nneedle skip\nquiet two\nneedle skip two\ntail quiet", to: "invert.txt")
         try root.write("quiet one\nNeedle skip\nafter one\nNEEDLE skip two\ntail quiet", to: "invert-case.txt")
+        try root.write("needle\ntail\n", to: "invert-patterns.txt")
         try root.write("needle\nneedle two\n", to: "all-needle.txt")
         try root.write("alpha\nneedle one\nomega", to: "passthru.txt")
         try root.write("needle one\nafter one\nquiet\nquiet\nneedle two\nafter two\nquiet", to: "after-context.txt")
@@ -1810,6 +1811,49 @@ struct MiscTests {
         5:tail quiet
 
         """.utf8))
+
+        let invertMultiLiteralOutput = try runExecutableData([
+            "-n",
+            "-v",
+            "-e",
+            "needle",
+            "-e",
+            "tail",
+            root.path("invert.txt"),
+        ], fixture: {})
+        #expect(invertMultiLiteralOutput == Data("""
+        1:quiet one
+        3:quiet two
+
+        """.utf8))
+
+        let invertAlternationOutput = try runExecutableData([
+            "-n",
+            "-v",
+            "needle|tail",
+            root.path("invert.txt"),
+        ], fixture: {})
+        #expect(invertAlternationOutput == invertMultiLiteralOutput)
+
+        let invertPatternFileOutput = try runExecutableData([
+            "-n",
+            "-v",
+            "-f",
+            root.path("invert-patterns.txt"),
+            root.path("invert.txt"),
+        ], fixture: {})
+        #expect(invertPatternFileOutput == invertMultiLiteralOutput)
+
+        let invertMultiLiteralMaxCountOutput = try runExecutableData([
+            "-v",
+            "-m1",
+            "-e",
+            "needle",
+            "-e",
+            "tail",
+            root.path("invert.txt"),
+        ], fixture: {})
+        #expect(invertMultiLiteralMaxCountOutput == Data("quiet one\n".utf8))
 
         let invertAllFilteredResult = try runExecutableResult([
             "-v",

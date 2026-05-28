@@ -2065,30 +2065,67 @@ struct RipgrepCommand {
            !wordRegexp,
            !parsedLineRegexp,
            parsedMaxCount != 0,
-           explicitRegexpPatterns.count <= 1,
            (patternCanStartWithDash || !pattern.hasPrefix("-")),
            path != "-" {
-            let invertedLiteralPattern = fixedStrings
-                ? pattern
-                : RegexLiteralParser.literal(
-                    fromPlainRegexPattern: pattern,
+            if explicitRegexpPatterns.count > 1 {
+                if !asciiCaseInsensitive,
+                   let invertedLiterals = explicitRegexpPatternLiterals(
+                    explicitRegexpPatterns,
+                    fixedStrings: fixedStrings,
                     allowPCREQuotedLiterals: allowPCREQuotedLiterals
-                )
-            if let invertedLiteralPattern {
-                let invertedLiteral = Array(invertedLiteralPattern.utf8)
-                if !invertedLiteral.isEmpty,
-                   !invertedLiteral.contains(UInt8(ascii: "\n")),
-                   (!asciiCaseInsensitive || invertedLiteral.allSatisfy({ $0 < 0x80 })) {
-                    return SwiftDarwinLiteralPreflight.invertedLiteralLineExitCode(
+                   ),
+                   invertedLiterals.allSatisfy({ !$0.contains(UInt8(ascii: "\n")) }) {
+                    return SwiftDarwinLiteralPreflight.invertedMultiLiteralLineExitCode(
                         path: path,
-                        literal: invertedLiteral,
+                        literals: invertedLiterals,
                         maxCount: parsedMaxCount ?? Int.max,
-                        asciiCaseInsensitive: asciiCaseInsensitive,
                         lineNumber: lineNumber,
                         lineNumberFieldSeparator: parsedFieldMatchSeparator,
                         linePrefix: parsedLinePrefix,
                         headingPrefix: parsedHeadingPrefix
                     )
+                }
+            } else {
+                if !asciiCaseInsensitive,
+                   !fixedStrings,
+                   let invertedLiterals = multiLiteralAlternation(
+                    pattern,
+                    allowPCREQuotedLiterals: allowPCREQuotedLiterals
+                   ),
+                   invertedLiterals.allSatisfy({ !$0.contains(UInt8(ascii: "\n")) }) {
+                    return SwiftDarwinLiteralPreflight.invertedMultiLiteralLineExitCode(
+                        path: path,
+                        literals: invertedLiterals,
+                        maxCount: parsedMaxCount ?? Int.max,
+                        lineNumber: lineNumber,
+                        lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                        linePrefix: parsedLinePrefix,
+                        headingPrefix: parsedHeadingPrefix
+                    )
+                }
+
+                let invertedLiteralPattern = fixedStrings
+                    ? pattern
+                    : RegexLiteralParser.literal(
+                        fromPlainRegexPattern: pattern,
+                        allowPCREQuotedLiterals: allowPCREQuotedLiterals
+                    )
+                if let invertedLiteralPattern {
+                    let invertedLiteral = Array(invertedLiteralPattern.utf8)
+                    if !invertedLiteral.isEmpty,
+                       !invertedLiteral.contains(UInt8(ascii: "\n")),
+                       (!asciiCaseInsensitive || invertedLiteral.allSatisfy({ $0 < 0x80 })) {
+                        return SwiftDarwinLiteralPreflight.invertedLiteralLineExitCode(
+                            path: path,
+                            literal: invertedLiteral,
+                            maxCount: parsedMaxCount ?? Int.max,
+                            asciiCaseInsensitive: asciiCaseInsensitive,
+                            lineNumber: lineNumber,
+                            lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                            linePrefix: parsedLinePrefix,
+                            headingPrefix: parsedHeadingPrefix
+                        )
+                    }
                 }
             }
         }

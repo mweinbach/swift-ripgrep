@@ -94,6 +94,9 @@ Literal `--invert-match` matching-line output now has its own mapped Swift line
 writer for single-file literal searches, preserving line numbers, headings,
 filename prefixes, max-count, fixed-string literals, no-final-newline output,
 and binary/BOM fallback behavior.
+Case-sensitive repeated `-e`/`-f` and top-level literal alternation
+`--invert-match` forms now use a mapped multi-literal line classifier that emits
+only lines containing none of the literals.
 ASCII case-insensitive `--trim` and `--invert-match` now reuse Swift mapped
 line writers when the literal and haystack are ASCII, preserving original
 emitted bytes while leaving Unicode case-folding and binary input on the
@@ -1247,6 +1250,15 @@ unset:
 |---|---:|---:|---:|
 | `-v needle` | 927.2 ms | 10.3 ms | 11.1 ms |
 | `-n -v needle` | 970.6 ms | 12.4 ms | 17.3 ms |
+
+The multi-literal invert check used the same fixture and 3 warmups plus 10
+timed runs. The before column is the same binary with executable preflight
+bypassed via `RIPGREP_CONFIG_PATH=`:
+
+| Flags | Swift before | Swift after | rg |
+|---|---:|---:|---:|
+| `-v -e needle -e absent` | 1.302 s | 13.3 ms | 10.6 ms |
+| `-v "needle|absent"` | 1.447 s | 13.0 ms | 10.3 ms |
 
 ASCII ignore-case trim/invert checks used the same fixtures with uppercase
 `NEEDLE` as the query. The before column is the same binary with executable
