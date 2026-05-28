@@ -2791,6 +2791,113 @@ struct MiscTests {
 
         """.utf8))
 
+        let repeatedRegexpLineNumberOutput = try runExecutableData([
+            "-n",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(repeatedRegexpLineNumberOutput == Data("""
+        1:needle needle needle
+        2:quiet line
+        3:NEEDLE needle Needle
+        4:tail needle
+
+        """.utf8))
+
+        let repeatedRegexpFilenameOutput = try runExecutableData([
+            "--with-filename",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(repeatedRegexpFilenameOutput == Data("""
+        \(root.path("dense.txt")):needle needle needle
+        \(root.path("dense.txt")):quiet line
+        \(root.path("dense.txt")):NEEDLE needle Needle
+        \(root.path("dense.txt")):tail needle
+
+        """.utf8))
+
+        let repeatedRegexpHeadingOutput = try runExecutableData([
+            "--heading",
+            "--with-filename",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(repeatedRegexpHeadingOutput == Data("""
+        \(root.path("dense.txt"))
+        needle needle needle
+        quiet line
+        NEEDLE needle Needle
+        tail needle
+
+        """.utf8))
+
+        let repeatedRegexpPathOnlyResult = try runExecutableResult([
+            "-l",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ])
+        #expect(repeatedRegexpPathOnlyResult.status == 0)
+        #expect(repeatedRegexpPathOnlyResult.stdout == Data("\(root.path("dense.txt"))\n".utf8))
+        #expect(repeatedRegexpPathOnlyResult.stderr.isEmpty)
+
+        let repeatedRegexpWithoutMatchResult = try runExecutableResult([
+            "--files-without-match",
+            "-e",
+            "missing",
+            "-e",
+            "absent",
+            root.path("dense.txt"),
+        ])
+        #expect(repeatedRegexpWithoutMatchResult.status == 0)
+        #expect(repeatedRegexpWithoutMatchResult.stdout == Data("\(root.path("dense.txt"))\n".utf8))
+        #expect(repeatedRegexpWithoutMatchResult.stderr.isEmpty)
+
+        let repeatedFixedRegexpOutput = try runExecutableData([
+            "-F",
+            "-e",
+            "needle needle",
+            "-e",
+            "quiet line",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(repeatedFixedRegexpOutput == Data("""
+        needle needle needle
+        quiet line
+
+        """.utf8))
+
+        let repeatedAlternationRegexpOutput = try runExecutableData([
+            "-e",
+            "needle|tail",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(repeatedAlternationRegexpOutput == repeatedRegexpOutput)
+
+        let repeatedIgnoreCaseRegexpOutput = try runExecutableData([
+            "-i",
+            "-e",
+            "NEEDLE",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(repeatedIgnoreCaseRegexpOutput == repeatedRegexpOutput)
+
         let orderedNoLineNumberOutput = try runExecutableData([
             "-n",
             "-N",

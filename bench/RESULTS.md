@@ -252,17 +252,33 @@ Rust; `--mmap -n -i Sherlock` measured 285.3 ms versus 443.0 ms before and
 Fixed-string and single explicit-regexp forms now feed the executable preflight
 too. The parser accepts `-F`/`--fixed-strings`, ordered
 `--no-fixed-strings`, clustered `-Fi`, single `-e`/`--regexp` pattern sources,
-inline regexp values, `--no-config`, and `--` leading-dash patterns, while
-repeated explicit patterns still fall back to the full CLI path. Dense-fixture
+inline regexp values, `--no-config`, and `--` leading-dash patterns. Dense-fixture
 byte checks for `-F Sherlock`, `-Fi sherlock`, fixed no-match pipes,
-`-e Sherlock`, `--regexp=Sherlock`, `-n -i -e Sherlock`, and repeated `-e`
-fallback matched both the previous Swift binary and Rust, with matching exit
+`-e Sherlock`, `--regexp=Sherlock`, `-n -i -e Sherlock`, and unsupported repeated
+`-e` fallback matched both the previous Swift binary and Rust, with matching exit
 status. Focused fixtures also cover fixed metacharacter literals,
 `--no-fixed-strings` regex fallback, and leading-dash patterns. Ten-run checks
 measured `-F Sherlock` at 218.4 ms versus 392.7 ms before and 312.0 ms for
 Rust; `-Fi sherlock` at 226.9 ms versus 340.9 ms before and 412.5 ms for Rust;
 `-e Sherlock` at 207.9 ms versus 336.0 ms before and 289.5 ms for Rust; and
 `-n -i -e Sherlock` at 281.4 ms versus 458.5 ms before and 572.1 ms for Rust.
+
+Repeated explicit-regexp forms whose patterns reduce to bounded non-empty
+literal bytes now reuse the existing multi-literal executable preflight instead
+of falling back to full CLI setup. This covers plain and line-numbered matching
+lines, filename and heading prefixes, path-only modes, quiet checks, fixed-string
+patterns, and explicit patterns that themselves contain safe literal
+alternations; case-insensitive line output and semantic modes like word-regexp,
+line-regexp, counts, and max-count still fall back. Dense-fixture byte checks for
+`-e needle -e quiet`, `-n -e needle -e quiet`,
+`--with-filename -e needle -e quiet`,
+`--heading --with-filename -e needle -e quiet`,
+`--files-without-match -e absent -e missing`, `-q -e needle -e quiet`,
+`-i -q -e needle -e quiet`, `-F -e 'needle needle' -e 'quiet line'`, and
+`-e 'needle|tail' -e quiet` matched Rust. On the 50 KiB dense fixture,
+`-e needle -e quiet` measured 4.3 ms versus 31.6 ms before and 2.8 ms for Rust,
+while `-n -e needle -e quiet` measured 3.2 ms versus 26.9 ms before and 2.8 ms
+for Rust.
 
 Traversal-only flags that do not affect an explicit regular file now stay
 eligible for the executable preflight. The parser treats hidden, ignore-family,

@@ -1031,7 +1031,7 @@ struct RipgrepCommand {
         var parsedCrlf = false
         var parsedIgnoreFilesEnabled = true
         var parsedIgnoreFilePaths: [String] = []
-        var parsedRegexpPattern: String?
+        var parsedRegexpPatterns: [String] = []
         var patternCanStartWithDash = false
         var valueArguments: [String] = []
         func applyNumericPreflightOption(_ option: NumericPreflightOption, value: Int) {
@@ -1187,18 +1187,14 @@ struct RipgrepCommand {
             } else if isSingleArgumentEngineSelector(argument) {
                 allowPCREQuotedLiterals = singleArgumentEngineSelectorAllowsPCREQuotedLiterals(argument)
             } else if argument == "-e" || argument == "--regexp" {
-                guard argumentIndex < arguments.count,
-                      parsedRegexpPattern == nil else {
+                guard argumentIndex < arguments.count else {
                     return nil
                 }
-                parsedRegexpPattern = arguments[argumentIndex]
+                parsedRegexpPatterns.append(arguments[argumentIndex])
                 patternCanStartWithDash = true
                 argumentIndex += 1
             } else if let inlineRegexp = inlineRegexpPattern(argument) {
-                guard parsedRegexpPattern == nil else {
-                    return nil
-                }
-                parsedRegexpPattern = inlineRegexp
+                parsedRegexpPatterns.append(inlineRegexp)
                 patternCanStartWithDash = true
             } else if argument == "-p" || argument == "--pretty" {
                 parsedColorMayEmit = true
@@ -1478,11 +1474,12 @@ struct RipgrepCommand {
                 valueArguments.append(argument)
             }
         }
-        if let regexpPattern = parsedRegexpPattern {
+        let explicitRegexpPatterns = parsedRegexpPatterns
+        if !explicitRegexpPatterns.isEmpty {
             guard valueArguments.count == 1 else {
                 return nil
             }
-            pattern = regexpPattern
+            pattern = explicitRegexpPatterns[0]
             path = valueArguments[0]
         } else {
             guard valueArguments.count == 2 else {
@@ -1505,7 +1502,10 @@ struct RipgrepCommand {
         case .insensitive:
             asciiCaseInsensitive = true
         case .smart:
-            asciiCaseInsensitive = pattern.rangeOfCharacter(from: .uppercaseLetters) == nil
+            let smartCasePatterns = explicitRegexpPatterns.isEmpty ? [pattern] : explicitRegexpPatterns
+            asciiCaseInsensitive = smartCasePatterns.allSatisfy {
+                $0.rangeOfCharacter(from: .uppercaseLetters) == nil
+            }
         }
         lineNumber = parsedLineNumber
         noMmap = parsedNoMmap
@@ -1567,6 +1567,64 @@ struct RipgrepCommand {
               !parsedTrim,
               parsedPrintMode != .countMatches else {
             return nil
+        }
+
+        if explicitRegexpPatterns.count > 1 {
+            guard path != "-",
+                  !wordRegexp,
+                  !parsedLineRegexp,
+                  !parsedCount,
+                  parsedMaxCount == nil,
+                  let literals = explicitRegexpPatternLiterals(
+                    explicitRegexpPatterns,
+                    fixedStrings: fixedStrings,
+                    allowPCREQuotedLiterals: allowPCREQuotedLiterals
+                  ) else {
+                return nil
+            }
+            if asciiCaseInsensitive {
+                if parsedQuiet {
+                    return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveMultiLiteralQuietExitCode(
+                        path: path,
+                        literals: literals
+                    )
+                }
+                if let parsedPathOnlyMode {
+                    return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveMultiLiteralPathOnlyExitCode(
+                        path: path,
+                        literals: literals,
+                        printWhenMatched: parsedPathOnlyMode == .matching,
+                        nullTerminated: parsedNullPathTerminator,
+                        crlfTerminated: parsedCrlf,
+                        outputPath: parsedPathOnlyOutputPath
+                    )
+                }
+                return nil
+            }
+            if parsedQuiet {
+                return SwiftDarwinLiteralPreflight.multiLiteralQuietExitCode(
+                    path: path,
+                    literals: literals
+                )
+            }
+            if let parsedPathOnlyMode {
+                return SwiftDarwinLiteralPreflight.multiLiteralPathOnlyExitCode(
+                    path: path,
+                    literals: literals,
+                    printWhenMatched: parsedPathOnlyMode == .matching,
+                    nullTerminated: parsedNullPathTerminator,
+                    crlfTerminated: parsedCrlf,
+                    outputPath: parsedPathOnlyOutputPath
+                )
+            }
+            return SwiftDarwinLiteralPreflight.multiLiteralExitCode(
+                path: path,
+                literals: literals,
+                lineNumber: lineNumber,
+                lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                linePrefix: parsedLinePrefix,
+                headingPrefix: parsedHeadingPrefix
+            )
         }
 
         if !fixedStrings,
@@ -2076,6 +2134,47 @@ struct RipgrepCommand {
         }
         let literalBytes = literals.map { Array($0.utf8) }
         return literalBytes.allSatisfy { !$0.isEmpty } ? literalBytes : nil
+    }
+
+    private static func explicitRegexpPatternLiterals(
+        _ patterns: [String],
+        fixedStrings: Bool,
+        allowPCREQuotedLiterals: Bool
+    ) -> [[UInt8]]? {
+        guard patterns.count > 1 else {
+            return nil
+        }
+
+        var literalBytes: [[UInt8]] = []
+        literalBytes.reserveCapacity(patterns.count)
+        for pattern in patterns {
+            if fixedStrings {
+                literalBytes.append(Array(pattern.utf8))
+                continue
+            }
+            if let alternationLiterals = multiLiteralAlternation(
+                pattern,
+                allowPCREQuotedLiterals: allowPCREQuotedLiterals
+            ) {
+                literalBytes.append(contentsOf: alternationLiterals)
+                continue
+            }
+            guard let literal = RegexLiteralParser.literal(
+                fromPlainRegexPattern: pattern,
+                allowPCREQuotedLiterals: allowPCREQuotedLiterals
+            ) else {
+                return nil
+            }
+            literalBytes.append(Array(literal.utf8))
+        }
+        guard literalBytes.count > 1,
+              literalBytes.count <= 64,
+              literalBytes.allSatisfy({
+                  !$0.isEmpty && !$0.contains(UInt8(ascii: "\n"))
+              }) else {
+            return nil
+        }
+        return literalBytes
     }
     #endif
 }
