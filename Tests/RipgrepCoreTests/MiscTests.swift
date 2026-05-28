@@ -1255,6 +1255,21 @@ struct MiscTests {
         ], fixture: {})
         #expect(noMessagesOutput == output)
 
+        for (includeZeroArguments, expectedOutput) in [
+            (["--include-zero"], output),
+            (["--include-zero", "-n"], lineNumberOutput),
+            (["--include-zero", "--no-include-zero"], output),
+        ] {
+            let includeZeroOutput = try runExecutableData(
+                includeZeroArguments + [
+                    "needle",
+                    root.path("dense.txt"),
+                ],
+                fixture: {}
+            )
+            #expect(includeZeroOutput == expectedOutput)
+        }
+
         for (nullPathArguments, expectedOutput) in [
             (["--null"], output),
             (["-0"], output),

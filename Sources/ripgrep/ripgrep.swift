@@ -377,6 +377,7 @@ struct RipgrepCommand {
                  "--ignore-messages",
                  "--ignore-parent",
                  "--ignore-vcs",
+                 "--include-zero",
                  "--binary",
                  "--crlf",
                  "--glob-case-insensitive",

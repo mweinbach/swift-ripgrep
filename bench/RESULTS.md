@@ -293,6 +293,14 @@ neutral-format form at 258.3 ms versus 359.7 ms before and 329.1 ms for Rust;
 before and 308.7 ms for Rust; `--no-line-buffered Sherlock` measured 235.1 ms
 versus 349.6 ms before and 335.7 ms for Rust.
 
+`--include-zero` now stays on the executable literal preflight for normal
+matching-line output, where it only affects count summaries. Focused tests
+cover plain output, `-n`, and `--include-zero --no-include-zero`; byte checks
+also covered NUL-containing binary fallback and `-c`/`--count-matches`
+zero-match forms against Rust. On a 45 MiB dense fixture,
+`--include-zero needle` improved from 87.8 ms to 34.9 ms, versus 43.1 ms for
+Rust, while plain `needle` on the same current binary measured 38.2 ms.
+
 Regex-mode toggles that do not affect plain literal line output now also stay
 eligible for the executable preflight. `--unicode`/`--no-unicode`,
 `--pcre2-unicode`/`--no-pcre2-unicode`, and `--crlf`/`--no-crlf` are still
