@@ -39,6 +39,18 @@ public enum SwiftDarwinLiteralPreflight {
         output.append(contentsOf: linePrefix)
     }
 
+    private static func appendHeadingPrefix(
+        _ headingPrefix: [UInt8],
+        emittedHeading: inout Bool,
+        to output: inout Data
+    ) {
+        guard !emittedHeading else {
+            return
+        }
+        emittedHeading = true
+        output.append(contentsOf: headingPrefix)
+    }
+
     private static func pathOnlyOutput(
         path: String,
         outputPath: [UInt8]?,
@@ -340,7 +352,8 @@ public enum SwiftDarwinLiteralPreflight {
         maxCount: Int,
         lineNumber: Bool = false,
         lineNumberFieldSeparator: [UInt8] = [58],
-        linePrefix: [UInt8] = []
+        linePrefix: [UInt8] = [],
+        headingPrefix: [UInt8] = []
     ) -> Int32? {
         guard !literal.isEmpty,
               maxCount > 0,
@@ -361,6 +374,7 @@ public enum SwiftDarwinLiteralPreflight {
         var nextLineNumber = 1
         var matchedLineCount = 0
         var checkedBinaryPrefix = false
+        var emittedHeading = false
         var output = Data()
         output.reserveCapacity(64 * 1024)
 
@@ -384,6 +398,7 @@ public enum SwiftDarwinLiteralPreflight {
                 .firstIndex(of: newline) ?? data.endIndex
 
             if lineNumber {
+                appendHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading, to: &output)
                 appendLinePrefix(linePrefix, to: &output)
                 let skippedNewlines = data[lineScanStart..<lineStart]
                     .reduce(0) { count, byte in count + (byte == newline ? 1 : 0) }
@@ -395,6 +410,7 @@ public enum SwiftDarwinLiteralPreflight {
                 )
                 nextLineNumber = matchedLineNumber + 1
             } else {
+                appendHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading, to: &output)
                 appendLinePrefix(linePrefix, to: &output)
             }
             output.append(contentsOf: data[lineStart..<lineEnd])
@@ -467,7 +483,8 @@ public enum SwiftDarwinLiteralPreflight {
         maxCount: Int? = nil,
         lineNumber: Bool = false,
         lineNumberFieldSeparator: [UInt8] = [58],
-        linePrefix: [UInt8] = []
+        linePrefix: [UInt8] = [],
+        headingPrefix: [UInt8] = []
     ) -> Int32? {
         guard !literal.isEmpty,
               !literal.contains(UInt8(ascii: "\n")),
@@ -489,7 +506,8 @@ public enum SwiftDarwinLiteralPreflight {
                 data: data,
                 literal: literal,
                 maxCount: maxCount,
-                linePrefix: linePrefix
+                linePrefix: linePrefix,
+                headingPrefix: headingPrefix
             )
         }
 
@@ -500,6 +518,7 @@ public enum SwiftDarwinLiteralPreflight {
         var lineScanStart = data.startIndex
         var nextLineNumber = 1
         var matchedLineCount = 0
+        var emittedHeading = false
         var output = Data()
         output.reserveCapacity(64 * 1024)
 
@@ -523,6 +542,7 @@ public enum SwiftDarwinLiteralPreflight {
             }
             if lineStart == matchRange.lowerBound,
                lineEnd == matchRange.upperBound {
+                appendHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading, to: &output)
                 appendLinePrefix(linePrefix, to: &output)
                 if lineNumber {
                     appendLineNumberPrefix(
@@ -592,7 +612,8 @@ public enum SwiftDarwinLiteralPreflight {
         data: Data,
         literal: [UInt8],
         maxCount: Int?,
-        linePrefix: [UInt8]
+        linePrefix: [UInt8],
+        headingPrefix: [UInt8]
     ) -> Int32? {
         let newline = UInt8(ascii: "\n")
         let limit = maxCount ?? Int.max
@@ -601,6 +622,7 @@ public enum SwiftDarwinLiteralPreflight {
         lineNeedle.append(newline)
         var searchStart = data.startIndex
         var matchedLineCount = 0
+        var emittedHeading = false
         var output = Data()
         output.reserveCapacity(64 * 1024)
 
@@ -612,6 +634,7 @@ public enum SwiftDarwinLiteralPreflight {
             }
             if matchRange.lowerBound == data.startIndex
                 || data[data.index(before: matchRange.lowerBound)] == newline {
+                appendHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading, to: &output)
                 appendLinePrefix(linePrefix, to: &output)
                 output.append(lineNeedle)
                 matchedLineCount += 1
@@ -629,6 +652,7 @@ public enum SwiftDarwinLiteralPreflight {
             let suffixStart = data.index(data.endIndex, offsetBy: -needle.count)
             if (suffixStart == data.startIndex || data[data.index(before: suffixStart)] == newline),
                data[suffixStart..<data.endIndex].elementsEqual(needle) {
+                appendHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading, to: &output)
                 appendLinePrefix(linePrefix, to: &output)
                 output.append(needle)
                 output.append(newline)
@@ -931,7 +955,8 @@ public enum SwiftDarwinLiteralPreflight {
         lineNumber: Bool = false,
         asciiBoundary: Bool = false,
         lineNumberFieldSeparator: [UInt8] = [58],
-        linePrefix: [UInt8] = []
+        linePrefix: [UInt8] = [],
+        headingPrefix: [UInt8] = []
     ) -> Int32? {
         guard !literal.isEmpty else {
             return nil
@@ -980,7 +1005,8 @@ public enum SwiftDarwinLiteralPreflight {
                 lineNumber: lineNumber,
                 asciiBoundary: asciiBoundary,
                 lineNumberFieldSeparator: lineNumberFieldSeparator,
-                linePrefix: linePrefix
+                linePrefix: linePrefix,
+                headingPrefix: headingPrefix
             )
         }) else {
             return nil
@@ -994,7 +1020,8 @@ public enum SwiftDarwinLiteralPreflight {
         asciiCaseInsensitive: Bool,
         lineNumber: Bool = false,
         lineNumberFieldSeparator: [UInt8] = [58],
-        linePrefix: [UInt8] = []
+        linePrefix: [UInt8] = [],
+        headingPrefix: [UInt8] = []
     ) -> Int32? {
         guard !literal.isEmpty,
               !literal.contains(UInt8(ascii: "\n")) else {
@@ -1009,7 +1036,8 @@ public enum SwiftDarwinLiteralPreflight {
             asciiCaseInsensitive: asciiCaseInsensitive,
             lineNumber: lineNumber,
             lineNumberFieldSeparator: lineNumberFieldSeparator,
-            linePrefix: linePrefix
+            linePrefix: linePrefix,
+            headingPrefix: headingPrefix
         )
     }
 
@@ -1025,7 +1053,8 @@ public enum SwiftDarwinLiteralPreflight {
         literal: [UInt8],
         lineNumber: Bool,
         lineNumberFieldSeparator: [UInt8] = [58],
-        linePrefix: [UInt8] = []
+        linePrefix: [UInt8] = [],
+        headingPrefix: [UInt8] = []
     ) -> Int32? {
         guard !literal.isEmpty,
               !literal.contains(UInt8(ascii: "\n")),
@@ -1074,7 +1103,8 @@ public enum SwiftDarwinLiteralPreflight {
                 literal: literalBuffer,
                 lineNumber: lineNumber,
                 lineNumberFieldSeparator: lineNumberFieldSeparator,
-                linePrefix: linePrefix
+                linePrefix: linePrefix,
+                headingPrefix: headingPrefix
             )
         }) else {
             return nil
@@ -1088,7 +1118,8 @@ public enum SwiftDarwinLiteralPreflight {
         lineNumber: Bool,
         asciiOnly: Bool,
         lineNumberFieldSeparator: [UInt8] = [58],
-        linePrefix: [UInt8] = []
+        linePrefix: [UInt8] = [],
+        headingPrefix: [UInt8] = []
     ) -> Int32? {
         guard !literal.isEmpty,
               !literal.contains(UInt8(ascii: "\n")),
@@ -1135,7 +1166,8 @@ public enum SwiftDarwinLiteralPreflight {
                 lineNumber: lineNumber,
                 asciiOnly: asciiOnly,
                 lineNumberFieldSeparator: lineNumberFieldSeparator,
-                linePrefix: linePrefix
+                linePrefix: linePrefix,
+                headingPrefix: headingPrefix
             )
         }) else {
             return nil
@@ -1148,7 +1180,8 @@ public enum SwiftDarwinLiteralPreflight {
         literals: [[UInt8]],
         lineNumber: Bool = false,
         lineNumberFieldSeparator: [UInt8] = [58],
-        linePrefix: [UInt8] = []
+        linePrefix: [UInt8] = [],
+        headingPrefix: [UInt8] = []
     ) -> Int32? {
         guard let result = multiLiteralResult(
             path: path,
@@ -1156,7 +1189,8 @@ public enum SwiftDarwinLiteralPreflight {
             maxCount: nil,
             lineNumber: lineNumber,
             lineNumberFieldSeparator: lineNumberFieldSeparator,
-            linePrefix: linePrefix
+            linePrefix: linePrefix,
+            headingPrefix: headingPrefix
         ) else {
             return nil
         }
@@ -1172,7 +1206,8 @@ public enum SwiftDarwinLiteralPreflight {
         asciiCaseInsensitive: Bool,
         lineNumber: Bool,
         lineNumberFieldSeparator: [UInt8],
-        linePrefix: [UInt8]
+        linePrefix: [UInt8],
+        headingPrefix: [UInt8]
     ) -> Int32? {
         guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
             return nil
@@ -1214,6 +1249,7 @@ public enum SwiftDarwinLiteralPreflight {
         var isFirstChunk = true
         var rejected = false
         var writeFailed = false
+        var emittedHeading = false
         var currentLineNumber = 1
         let newlineByte = UInt8(ascii: "\n")
         let foldedLiteral = asciiCaseInsensitive ? literal.map(rgSwiftASCIILower) : []
@@ -1350,6 +1386,13 @@ public enum SwiftDarwinLiteralPreflight {
                         newlineByte
                     ))
                     lineCountOffset = lineStart
+                    guard output.writeHeadingPrefix(
+                        headingPrefix,
+                        emittedHeading: &emittedHeading
+                    ) else {
+                        writeFailed = true
+                        return (lineNumberCursor, lineCountOffset)
+                    }
                     guard output.writeBytes(linePrefix) else {
                         writeFailed = true
                         return (lineNumberCursor, lineCountOffset)
@@ -1362,6 +1405,13 @@ public enum SwiftDarwinLiteralPreflight {
                         return (lineNumberCursor, lineCountOffset)
                     }
                 } else {
+                    guard output.writeHeadingPrefix(
+                        headingPrefix,
+                        emittedHeading: &emittedHeading
+                    ) else {
+                        writeFailed = true
+                        return (lineNumberCursor, lineCountOffset)
+                    }
                     guard output.writeBytes(linePrefix) else {
                         writeFailed = true
                         return (lineNumberCursor, lineCountOffset)
@@ -1467,7 +1517,8 @@ public enum SwiftDarwinLiteralPreflight {
         maxCount: Int?,
         lineNumber: Bool = false,
         lineNumberFieldSeparator: [UInt8] = [58],
-        linePrefix: [UInt8] = []
+        linePrefix: [UInt8] = [],
+        headingPrefix: [UInt8] = []
     ) -> rg_darwin_literal_file_result? {
         guard literals.count > 1,
               literals.count <= 64,
@@ -1519,7 +1570,8 @@ public enum SwiftDarwinLiteralPreflight {
             maxCount: maxCount ?? Int.max,
             lineNumber: lineNumber,
             lineNumberFieldSeparator: lineNumberFieldSeparator,
-            linePrefix: linePrefix
+            linePrefix: linePrefix,
+            headingPrefix: headingPrefix
         )
     }
 }
@@ -1590,6 +1642,17 @@ private struct rgSwiftStdoutBuffer {
         }
     }
 
+    mutating func writeHeadingPrefix(
+        _ headingPrefix: [UInt8],
+        emittedHeading: inout Bool
+    ) -> Bool {
+        guard !emittedHeading else {
+            return true
+        }
+        emittedHeading = true
+        return writeBytes(headingPrefix)
+    }
+
     mutating func writeLineNumberPrefix(_ value: Int, fieldSeparator: [UInt8]) -> Bool {
         let wroteNumber = withUnsafeTemporaryAllocation(of: UInt8.self, capacity: 32) { buffer in
             var cursor = buffer.count
@@ -1641,7 +1704,8 @@ private func rgSwiftDarwinWriteLiteralBytes(
     lineNumber: Bool,
     asciiBoundary: Bool,
     lineNumberFieldSeparator: [UInt8],
-    linePrefix: [UInt8]
+    linePrefix: [UInt8],
+    headingPrefix: [UInt8]
 ) -> Int? {
     guard let literalBase = literal.baseAddress, literal.count > 0 else {
         return nil
@@ -1683,6 +1747,7 @@ private func rgSwiftDarwinWriteLiteralBytes(
     var lineNumberAtSearchOffset = 1
     var searchOffset = 0
     var lastEmittedLineStart = -1
+    var emittedHeading = false
     var writeFailed = false
 
     @inline(__always)
@@ -1721,6 +1786,10 @@ private func rgSwiftDarwinWriteLiteralBytes(
             let outputEnd = newline.map {
                 base.distance(to: $0.assumingMemoryBound(to: UInt8.self)) + 1
             } ?? haystackLength
+            guard output.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading) else {
+                writeFailed = true
+                return false
+            }
             guard output.writeBytes(linePrefix) else {
                 writeFailed = true
                 return false
@@ -1838,7 +1907,8 @@ private func rgSwiftDarwinWriteWordLiteralLineBytes(
     literal: UnsafeBufferPointer<UInt8>,
     lineNumber: Bool,
     lineNumberFieldSeparator: [UInt8],
-    linePrefix: [UInt8]
+    linePrefix: [UInt8],
+    headingPrefix: [UInt8]
 ) -> Int? {
     guard let literalBase = literal.baseAddress, literal.count > 0 else {
         return nil
@@ -1959,7 +2029,11 @@ private func rgSwiftDarwinWriteWordLiteralLineBytes(
         output.deallocate()
     }
 
+    var emittedHeading = false
     for line in pendingLines {
+        guard output.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading) else {
+            return nil
+        }
         guard output.writeBytes(linePrefix) else {
             return nil
         }
@@ -1989,7 +2063,8 @@ private func rgSwiftDarwinWriteSurroundingWordsBytes(
     lineNumber: Bool,
     asciiOnly: Bool,
     lineNumberFieldSeparator: [UInt8],
-    linePrefix: [UInt8]
+    linePrefix: [UInt8],
+    headingPrefix: [UInt8]
 ) -> Int? {
     guard let literalBase = literal.baseAddress, literal.count > 0 else {
         return nil
@@ -2309,7 +2384,11 @@ private func rgSwiftDarwinWriteSurroundingWordsBytes(
         output.deallocate()
     }
 
+    var emittedHeading = false
     for line in pendingLines {
+        guard output.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading) else {
+            return nil
+        }
         guard output.writeBytes(linePrefix) else {
             return nil
         }
@@ -2339,7 +2418,8 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
     maxCount: Int,
     lineNumber: Bool,
     lineNumberFieldSeparator: [UInt8],
-    linePrefix: [UInt8]
+    linePrefix: [UInt8],
+    headingPrefix: [UInt8]
 ) -> rg_darwin_literal_file_result? {
     if haystackLength >= 3,
        base[0] == 0xEF,
@@ -2367,6 +2447,7 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
     var bytesSearched = haystackLength
     var currentLineNumber = 1
     var lineCountOffset = 0
+    var emittedHeading = false
     var writeFailed = false
 
     func literal(_ literal: [UInt8], matchesAt offset: Int) -> Bool {
@@ -2417,6 +2498,9 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
         let outputEnd = newline.map {
             base.distance(to: $0.assumingMemoryBound(to: UInt8.self)) + 1
         } ?? haystackLength
+        guard output.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading) else {
+            return false
+        }
         guard output.writeBytes(linePrefix) else {
             return false
         }

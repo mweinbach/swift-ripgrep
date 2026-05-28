@@ -1527,8 +1527,23 @@ struct RipgrepCommand {
             pathSeparator: parsedPathSeparator
         )
         let parsedPathOnlyOutputPath = parsedPathSeparator == nil ? nil : parsedDisplayPath
+        let parsedHeadingPrefix: [UInt8] = if parsedHeading && parsedWithFilename {
+            if parsedNullPathTerminator {
+                parsedDisplayPath + [0]
+            } else if parsedCrlf {
+                parsedDisplayPath + [UInt8(ascii: "\r"), UInt8(ascii: "\n")]
+            } else {
+                parsedDisplayPath + [UInt8(ascii: "\n")]
+            }
+        } else {
+            []
+        }
         let parsedLinePrefix: [UInt8] = if parsedWithFilename {
-            parsedDisplayPath + (parsedNullPathTerminator ? [0] : parsedFieldMatchSeparator)
+            if parsedHeading {
+                []
+            } else {
+                parsedDisplayPath + (parsedNullPathTerminator ? [0] : parsedFieldMatchSeparator)
+            }
         } else {
             []
         }
@@ -1541,7 +1556,7 @@ struct RipgrepCommand {
               parsedEncodingIsAutomatic,
               parsedAfterContext == 0,
               parsedBeforeContext == 0,
-              !parsedHeading || !parsedWithFilename,
+              !parsedHeading || !parsedWithFilename || parsedPrintMode == .matchingLines,
               !parsedInvertMatch,
               !parsedJson,
               parsedMaxColumns == 0,
@@ -1575,7 +1590,8 @@ struct RipgrepCommand {
                 lineNumber: lineNumber,
                 asciiOnly: pattern.hasPrefix("(?-u)"),
                 lineNumberFieldSeparator: parsedFieldMatchSeparator,
-                linePrefix: parsedLinePrefix
+                linePrefix: parsedLinePrefix,
+                headingPrefix: parsedHeadingPrefix
             )
         }
 
@@ -1642,7 +1658,8 @@ struct RipgrepCommand {
                     literals: literals,
                     lineNumber: lineNumber,
                     lineNumberFieldSeparator: parsedFieldMatchSeparator,
-                    linePrefix: parsedLinePrefix
+                    linePrefix: parsedLinePrefix,
+                    headingPrefix: parsedHeadingPrefix
                 ) {
                     return exitCode
                 }
@@ -1837,7 +1854,8 @@ struct RipgrepCommand {
                 maxCount: parsedMaxCount,
                 lineNumber: lineNumber,
                 lineNumberFieldSeparator: parsedFieldMatchSeparator,
-                linePrefix: parsedLinePrefix
+                linePrefix: parsedLinePrefix,
+                headingPrefix: parsedHeadingPrefix
             )
         }
         if let parsedMaxCount {
@@ -1852,7 +1870,8 @@ struct RipgrepCommand {
                 maxCount: parsedMaxCount,
                 lineNumber: lineNumber,
                 lineNumberFieldSeparator: parsedFieldMatchSeparator,
-                linePrefix: parsedLinePrefix
+                linePrefix: parsedLinePrefix,
+                headingPrefix: parsedHeadingPrefix
             )
         }
         if wordRegexp {
@@ -1866,7 +1885,8 @@ struct RipgrepCommand {
                 literal: literal,
                 lineNumber: lineNumber,
                 lineNumberFieldSeparator: parsedFieldMatchSeparator,
-                linePrefix: parsedLinePrefix
+                linePrefix: parsedLinePrefix,
+                headingPrefix: parsedHeadingPrefix
             )
         }
         if noMmap {
@@ -1879,7 +1899,8 @@ struct RipgrepCommand {
                 lineNumber: lineNumber,
                 asciiBoundary: asciiBoundary,
                 lineNumberFieldSeparator: parsedFieldMatchSeparator,
-                linePrefix: parsedLinePrefix
+                linePrefix: parsedLinePrefix,
+                headingPrefix: parsedHeadingPrefix
             ) {
                 return mappedExitCode
             }
@@ -1892,7 +1913,8 @@ struct RipgrepCommand {
                 asciiCaseInsensitive: asciiCaseInsensitive,
                 lineNumber: lineNumber,
                 lineNumberFieldSeparator: parsedFieldMatchSeparator,
-                linePrefix: parsedLinePrefix
+                linePrefix: parsedLinePrefix,
+                headingPrefix: parsedHeadingPrefix
             )
         }
         return SwiftDarwinLiteralPreflight.exitCode(
@@ -1902,7 +1924,8 @@ struct RipgrepCommand {
             lineNumber: lineNumber,
             asciiBoundary: asciiBoundary,
             lineNumberFieldSeparator: parsedFieldMatchSeparator,
-            linePrefix: parsedLinePrefix
+            linePrefix: parsedLinePrefix,
+            headingPrefix: parsedHeadingPrefix
         )
     }
     #endif

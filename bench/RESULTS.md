@@ -1040,6 +1040,16 @@ measured `--heading needle` at 3.2 ms versus 31.6 ms before and 2.9 ms for
 Rust; `--heading -n needle` measured 3.0 ms versus 35.5 ms before and 2.9 ms
 for Rust.
 
+Single-file `--heading --with-filename` matching-line searches now use a
+one-time Swift heading prefix instead of falling back for the path header.
+Release byte checks matched Rust for plain, numbered, path-separator, NUL,
+CRLF-heading, custom field separator, max-count, safe multi-literal,
+exact-line, word-regexp, no-match, quiet, count, and path-only controls. On the
+50 KiB dense fixture, five-run checks measured `--heading --with-filename
+needle` at 3.2 ms versus 29.9 ms before and 2.8 ms for Rust; `--heading
+--with-filename -n needle` measured 3.2 ms versus 28.9 ms before and 2.7 ms
+for Rust.
+
 Explicit single-file `--with-filename --path-separator` matching-line searches
 now use the same Swift executable preflight by applying the escaped one-byte
 path separator directly to the emitted path prefix. Release byte checks matched

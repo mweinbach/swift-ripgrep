@@ -1442,6 +1442,88 @@ struct MiscTests {
         ], fixture: {})
         #expect(headingPathSeparatorOutput == output)
 
+        let headingWithFilenameOutput = try runExecutableData([
+            "--heading",
+            "--with-filename",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(headingWithFilenameOutput == Data("""
+        \(root.path("dense.txt"))
+        needle needle needle
+        NEEDLE needle Needle
+        tail needle
+
+        """.utf8))
+
+        let headingWithFilenameLineNumberOutput = try runExecutableData([
+            "--heading",
+            "--with-filename",
+            "-n",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(headingWithFilenameLineNumberOutput == Data("""
+        \(root.path("dense.txt"))
+        1:needle needle needle
+        3:NEEDLE needle Needle
+        4:tail needle
+
+        """.utf8))
+
+        let headingWithFilenameNullOutput = try runExecutableData([
+            "--heading",
+            "--with-filename",
+            "--null",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(headingWithFilenameNullOutput == Data((
+            "\(root.path("dense.txt"))\0" +
+            "needle needle needle\n" +
+            "NEEDLE needle Needle\n" +
+            "tail needle\n"
+        ).utf8))
+
+        let headingWithFilenamePathSeparatorOutput = try runExecutableData([
+            "--heading",
+            "--with-filename",
+            "--path-separator=Z",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(headingWithFilenamePathSeparatorOutput == Data("""
+        \(pathSeparatedName)
+        needle needle needle
+        NEEDLE needle Needle
+        tail needle
+
+        """.utf8))
+
+        let headingWithFilenameCrlfOutput = try runExecutableData([
+            "--crlf",
+            "--heading",
+            "--with-filename",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(headingWithFilenameCrlfOutput == Data((
+            "\(root.path("dense.txt"))\r\n" +
+            "needle needle needle\n" +
+            "NEEDLE needle Needle\n" +
+            "tail needle\n"
+        ).utf8))
+
+        let headingWithFilenameNoMatch = try runExecutableResult([
+            "--heading",
+            "--with-filename",
+            "missing",
+            root.path("dense.txt"),
+        ])
+        #expect(headingWithFilenameNoMatch.stdout.isEmpty)
+        #expect(headingWithFilenameNoMatch.stderr.isEmpty)
+        #expect(headingWithFilenameNoMatch.status == 1)
+
         let noFilenameOutput = try runExecutableData([
             "--no-filename",
             "needle",
@@ -1588,6 +1670,7 @@ struct MiscTests {
             (["--line-buffered", "-m1", "needle", root.path("dense.txt")], Data("needle needle needle\n".utf8)),
             (["-n", "-m1", "needle", root.path("dense.txt")], Data("1:needle needle needle\n".utf8)),
             (["--with-filename", "-m1", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt")):needle needle needle\n".utf8)),
+            (["--heading", "--with-filename", "-m1", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt"))\nneedle needle needle\n".utf8)),
             (["--max-count=2", "needle", root.path("dense.txt")], Data("""
             needle needle needle
             NEEDLE needle Needle
@@ -1644,6 +1727,7 @@ struct MiscTests {
             (["-nx", "needle", root.path("exact.txt")], Data("1:needle\n3:needle\n".utf8)),
             (["-m1", "-x", "needle", root.path("exact.txt")], Data("needle\n".utf8)),
             (["--heading", "-x", "needle", root.path("exact.txt")], Data("needle\nneedle\n".utf8)),
+            (["--heading", "--with-filename", "-x", "needle", root.path("exact.txt")], Data("\(root.path("exact.txt"))\nneedle\nneedle\n".utf8)),
             (["-x", "last", root.path("exact.txt")], Data("last\n".utf8)),
             (["--crlf", "-x", "needle", root.path("crlf.txt")], Data("needle\r\n".utf8)),
         ] {
