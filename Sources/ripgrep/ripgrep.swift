@@ -534,6 +534,15 @@ struct RipgrepCommand {
                 ? String(argument.dropFirst("--pre=".count))
                 : nil
         }
+        func inlineReplacementValue(_ argument: String) -> String? {
+            if argument.hasPrefix("--replace=") {
+                return String(argument.dropFirst("--replace=".count))
+            }
+            if argument.hasPrefix("-r"), argument.count > 2 {
+                return String(argument.dropFirst(2))
+            }
+            return nil
+        }
         func inlinePreGlobValue(_ argument: String) -> String? {
             argument.hasPrefix("--pre-glob=")
                 ? String(argument.dropFirst("--pre-glob=".count))
@@ -1040,6 +1049,7 @@ struct RipgrepCommand {
         var parsedPathSeparator: UInt8?
         var parsedPassthru = false
         var parsedQuiet = false
+        var parsedReplacement = false
         var parsedSearchZip = false
         var parsedMaxCount: Int?
         var parsedCount = false
@@ -1237,6 +1247,14 @@ struct RipgrepCommand {
                 parsedHasExplicitPatternSource = true
                 parsedRegexpPatterns.append(inlineRegexp)
                 patternCanStartWithDash = true
+            } else if argument == "-r" || argument == "--replace" {
+                guard argumentIndex < arguments.count else {
+                    return nil
+                }
+                parsedReplacement = true
+                argumentIndex += 1
+            } else if inlineReplacementValue(argument) != nil {
+                parsedReplacement = true
             } else if argument == "-f" || argument == "--file" {
                 guard argumentIndex < arguments.count,
                       appendPreflightPatternFile(arguments[argumentIndex]) else {
@@ -1637,6 +1655,7 @@ struct RipgrepCommand {
         }
         if (parsedAfterContext > 0 || parsedBeforeContext > 0),
            !parsedPassthru,
+           !parsedReplacement,
            parsedPrintMode == .matchingLines,
            !parsedOnlyMatching,
            !parsedQuiet,
@@ -1704,6 +1723,7 @@ struct RipgrepCommand {
         if parsedAfterContext > 0,
            parsedBeforeContext > 0,
            !parsedPassthru,
+           !parsedReplacement,
            parsedPrintMode == .matchingLines,
            !parsedOnlyMatching,
            !parsedQuiet,
@@ -1760,6 +1780,7 @@ struct RipgrepCommand {
         if parsedAfterContext > 0,
            parsedBeforeContext == 0,
            !parsedPassthru,
+           !parsedReplacement,
            parsedPrintMode == .matchingLines,
            !parsedOnlyMatching,
            !parsedQuiet,
@@ -1815,6 +1836,7 @@ struct RipgrepCommand {
         if parsedBeforeContext > 0,
            parsedAfterContext == 0,
            !parsedPassthru,
+           !parsedReplacement,
            parsedPrintMode == .matchingLines,
            !parsedOnlyMatching,
            !parsedQuiet,
@@ -1882,6 +1904,7 @@ struct RipgrepCommand {
            parsedMaxColumns == 0,
            !parsedNullData,
            !parsedPassthru,
+           !parsedReplacement,
            !parsedSearchZip,
            !parsedStats,
            !parsedTrim,
@@ -1972,6 +1995,7 @@ struct RipgrepCommand {
            parsedMaxColumns == 0,
            !parsedNullData,
            !parsedPassthru,
+           !parsedReplacement,
            !parsedSearchZip,
            !parsedStats,
            !parsedStopOnNonmatch,
@@ -2155,6 +2179,7 @@ struct RipgrepCommand {
            !parsedJson,
            parsedMaxColumns == 0,
            !parsedNullData,
+           !parsedReplacement,
            !parsedSearchZip,
            !parsedStats,
            !parsedStopOnNonmatch,
@@ -2256,6 +2281,11 @@ struct RipgrepCommand {
             && parsedPathOnlyMode == nil
             && !parsedCount
             && parsedPrintMode != .countMatches
+        let parsedReplacementAffectsPreflightOutput = parsedReplacement
+            && !parsedQuiet
+            && parsedPathOnlyMode == nil
+            && !parsedCount
+            && parsedPrintMode != .countMatches
         guard !(parsedLineRegexp && wordRegexp) else {
             return nil
         }
@@ -2273,6 +2303,7 @@ struct RipgrepCommand {
               !parsedMaxColumnsAffectsPreflightOutput,
               !parsedNullDataAffectsPreflightOutput,
               !parsedPassthru,
+              !parsedReplacementAffectsPreflightOutput,
               !parsedSearchZip,
               !parsedStats,
               (!parsedStopOnNonmatch || parsedQuiet || parsedPathOnlyMode != nil),

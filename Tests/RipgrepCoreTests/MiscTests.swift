@@ -1941,6 +1941,21 @@ struct MiscTests {
 
         """.utf8))
 
+        let passthruReplacementOutput = try runExecutableData([
+            "-n",
+            "--passthru",
+            "--replace",
+            "X",
+            "needle",
+            root.path("passthru.txt"),
+        ], fixture: {})
+        #expect(passthruReplacementOutput == Data("""
+        1-alpha
+        2:X one
+        3-omega
+
+        """.utf8))
+
         let passthruWithFilenameOutput = try runExecutableData([
             "--with-filename",
             "--passthru",
@@ -2111,6 +2126,23 @@ struct MiscTests {
         after one
         --
         needle two
+        after two
+
+        """.utf8))
+
+        let afterContextReplacementOutput = try runExecutableData([
+            "--replace",
+            "X",
+            "-A",
+            "1",
+            "needle",
+            root.path("after-context.txt"),
+        ], fixture: {})
+        #expect(afterContextReplacementOutput == Data("""
+        X one
+        after one
+        --
+        X two
         after two
 
         """.utf8))
@@ -3035,10 +3067,24 @@ struct MiscTests {
         ], fixture: {})
         #expect(noMessagesOutput == output)
 
+        let replacementMatchingOutput = try runExecutableData([
+            "--replace",
+            "X",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(replacementMatchingOutput == Data("""
+        X X X
+        NEEDLE X Needle
+        tail X
+
+        """.utf8))
+
         for (quietArguments, expectedStatus) in [
             (["-q", "needle", root.path("dense.txt")], Int32(0)),
             (["--line-buffered", "-q", "needle", root.path("dense.txt")], Int32(0)),
             (["--quiet", "missing", root.path("quiet-no-match.txt")], Int32(1)),
+            (["--replace", "X", "-q", "needle", root.path("dense.txt")], Int32(0)),
             (["-qn", "needle", root.path("dense.txt")], Int32(0)),
             (["-qi", "needle", root.path("dense.txt")], Int32(0)),
             (["-qi", "NEEDLE", root.path("dense.txt")], Int32(0)),
@@ -3106,6 +3152,7 @@ struct MiscTests {
             (["--trim", "--files-without-match", "missing", root.path("trim.txt")], Data("\(root.path("trim.txt"))\n".utf8), Int32(0)),
             (["--null-data", "-l", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
             (["-M1", "-l", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
+            (["--replace=X", "-l", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
             (["--files-without-match", "needle", root.path("dense.txt")], Data(), Int32(1)),
             (["--heading", "--with-filename", "--files-without-match", "needle", root.path("dense.txt")], Data(), Int32(1)),
             (["-li", "NEEDLE", root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
@@ -3497,6 +3544,7 @@ struct MiscTests {
             (["--trim", "-c", "needle", root.path("trim.txt")], Data("3\n".utf8), Int32(0)),
             (["--trim", "-c", "-i", "NEEDLE|QUIET", root.path("trim-case.txt")], Data("3\n".utf8), Int32(0)),
             (["-M1", "-c", "needle", root.path("dense.txt")], Data("3\n".utf8), Int32(0)),
+            (["-rX", "-c", "needle", root.path("dense.txt")], Data("3\n".utf8), Int32(0)),
             (["-c", "-m1", "-i", "NEEDLE", root.path("dense.txt")], Data("1\n".utf8), Int32(0)),
             (["-ci", "-m1", "NEEDLE", root.path("dense.txt")], Data("1\n".utf8), Int32(0)),
             (["-c", "-m1", "-i", "missing", root.path("dense.txt")], Data(), Int32(1)),
@@ -3730,6 +3778,15 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(maxColumnsCountMatchesOutput == countMatchesOutput)
+
+        let replacementCountMatchesOutput = try runExecutableData([
+            "--replace",
+            "X",
+            "--count-matches",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(replacementCountMatchesOutput == countMatchesOutput)
 
         let exactLineCountMatchesOutput = try runExecutableData([
             "--count-matches",
