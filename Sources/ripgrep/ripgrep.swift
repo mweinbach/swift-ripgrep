@@ -2281,6 +2281,11 @@ struct RipgrepCommand {
             && parsedPathOnlyMode == nil
             && !parsedCount
             && parsedPrintMode != .countMatches
+        let parsedPassthruAffectsPreflightOutput = parsedPassthru
+            && !parsedQuiet
+            && parsedPathOnlyMode == nil
+            && !parsedCount
+            && parsedPrintMode != .countMatches
         let parsedReplacementAffectsPreflightOutput = parsedReplacement
             && !parsedQuiet
             && parsedPathOnlyMode == nil
@@ -2302,7 +2307,7 @@ struct RipgrepCommand {
               !parsedJson,
               !parsedMaxColumnsAffectsPreflightOutput,
               !parsedNullDataAffectsPreflightOutput,
-              !parsedPassthru,
+              !parsedPassthruAffectsPreflightOutput,
               !parsedReplacementAffectsPreflightOutput,
               !parsedSearchZip,
               !parsedStats,

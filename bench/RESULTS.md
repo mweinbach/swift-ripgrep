@@ -100,6 +100,9 @@ only-matching forms still fall back so omitted-line output is preserved.
 Output-neutral `--replace` combinations now stay eligible for quiet, path-only,
 count, and count-matches literal preflights; matching-line and only-matching
 replacement output remains on the existing replacement writer.
+Output-neutral `--passthru` combinations now stay eligible for quiet,
+path-only, count, and count-matches literal preflights; matching-line passthru
+output remains on the existing mapped passthru writer.
 Case-sensitive repeated `-e`/`-f` and top-level literal alternation `--trim`
 forms now use the same mapped trim writer.
 Literal `--invert-match` matching-line output now has its own mapped Swift line
@@ -1286,6 +1289,17 @@ bypassed via `RIPGREP_CONFIG_PATH=`:
 | `--replace=X -l needle` | 1.569 s | 6.1 ms | 4.8 ms |
 | `-rX -c needle` | 1.596 s | 11.6 ms | 12.0 ms |
 | `--replace X --count-matches needle` | 1.603 s | 8.7 ms | 20.7 ms |
+
+Output-neutral passthru checks used the same fixture and 3 warmups plus 10 timed
+runs. The before column is the same binary with executable preflight bypassed
+via `RIPGREP_CONFIG_PATH=`:
+
+| Flags | Swift before | Swift after | rg |
+|---|---:|---:|---:|
+| `--passthru -q needle` | 1.542 s | 6.5 ms | 5.3 ms |
+| `--passthru -l needle` | 1.554 s | 6.8 ms | 5.1 ms |
+| `--passthru -c needle` | 1.558 s | 11.8 ms | 10.5 ms |
+| `--passthru --count-matches needle` | 1.559 s | 8.6 ms | 19.4 ms |
 
 The multi-literal trim check used the same fixture and 3 warmups plus 10 timed
 runs. The before column is the same binary with executable preflight bypassed
