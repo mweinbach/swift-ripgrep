@@ -2040,6 +2040,65 @@ struct RipgrepCommand {
             }
         }
 
+        if !fixedStrings,
+           (patternCanStartWithDash || !pattern.hasPrefix("-")),
+           path != "-",
+           !asciiCaseInsensitive,
+           !wordRegexp,
+           !parsedLineRegexp,
+           parsedMaxCount != 0,
+           let fixedResetStart = fixedResetStartLiteral(
+            pattern,
+            allowPCREQuotedLiterals: allowPCREQuotedLiterals
+           ) {
+            if parsedQuiet {
+                return SwiftDarwinLiteralPreflight.fixedLookbehindQuietExitCode(
+                    path: path,
+                    prefix: fixedResetStart.prefix,
+                    literal: fixedResetStart.literal,
+                    prefixShouldMatch: true
+                )
+            }
+            if let parsedPathOnlyMode {
+                return SwiftDarwinLiteralPreflight.fixedLookbehindPathOnlyExitCode(
+                    path: path,
+                    prefix: fixedResetStart.prefix,
+                    literal: fixedResetStart.literal,
+                    prefixShouldMatch: true,
+                    printWhenMatched: parsedPathOnlyMode == .matching,
+                    nullTerminated: parsedNullPathTerminator,
+                    crlfTerminated: parsedCrlf,
+                    outputPath: parsedPathOnlyOutputPath
+                )
+            }
+            if parsedPrintMode == .countMatches {
+                guard parsedMaxCount == nil else {
+                    return nil
+                }
+                return SwiftDarwinLiteralPreflight.fixedLookbehindCountMatchesExitCode(
+                    path: path,
+                    prefix: fixedResetStart.prefix,
+                    literal: fixedResetStart.literal,
+                    prefixShouldMatch: true,
+                    includeZero: parsedIncludeZero,
+                    countPrefix: parsedCountPrefix,
+                    crlfTerminated: parsedCrlf
+                )
+            }
+            if parsedCount {
+                return SwiftDarwinLiteralPreflight.fixedLookbehindCountLineExitCode(
+                    path: path,
+                    prefix: fixedResetStart.prefix,
+                    literal: fixedResetStart.literal,
+                    prefixShouldMatch: true,
+                    includeZero: parsedIncludeZero,
+                    maxCount: parsedMaxCount,
+                    countPrefix: parsedCountPrefix,
+                    crlfTerminated: parsedCrlf
+                )
+            }
+        }
+
         let asciiBoundaryLiteralPattern = (fixedStrings || asciiCaseInsensitive) ? nil : asciiBoundaryLiteral(
             pattern,
             allowPCREQuotedLiterals: allowPCREQuotedLiterals
@@ -2936,6 +2995,41 @@ struct RipgrepCommand {
             return nil
         }
         return (literalBytes, suffixBytes, suffixShouldMatch)
+    }
+
+    private static func fixedResetStartLiteral(
+        _ pattern: String,
+        allowPCREQuotedLiterals: Bool
+    ) -> (prefix: [UInt8], literal: [UInt8])? {
+        guard allowPCREQuotedLiterals,
+              let resetRange = RegexLiteralParser.firstUnescapedResetStart(in: pattern) else {
+            return nil
+        }
+        let rawPrefix = String(pattern[..<resetRange.lowerBound])
+        let rawLiteral = String(pattern[resetRange.upperBound...])
+        guard let prefix = RegexLiteralParser.literal(
+            fromPlainRegexPattern: rawPrefix,
+            allowPCREQuotedLiterals: allowPCREQuotedLiterals
+        ),
+              let literal = RegexLiteralParser.literal(
+                fromPlainRegexPattern: rawLiteral,
+                allowPCREQuotedLiterals: allowPCREQuotedLiterals
+              ) else {
+            return nil
+        }
+        let prefixBytes = Array(prefix.utf8)
+        let literalBytes = Array(literal.utf8)
+        guard !prefixBytes.isEmpty,
+              !literalBytes.isEmpty,
+              !prefixBytes.contains(UInt8(ascii: "\n")),
+              !literalBytes.contains(UInt8(ascii: "\n")),
+              !prefixBytes.contains(UInt8(ascii: "\r")),
+              !literalBytes.contains(UInt8(ascii: "\r")),
+              prefixBytes.allSatisfy({ $0 < 0x80 }),
+              literalBytes.allSatisfy({ $0 < 0x80 }) else {
+            return nil
+        }
+        return (prefixBytes, literalBytes)
     }
 
     private static func firstUnescapedClosingParen(in text: Substring) -> String.Index? {

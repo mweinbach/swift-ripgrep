@@ -584,6 +584,36 @@ struct PCRE2Tests {
         #expect(output == Data("bar\n".utf8))
     }
 
+    @Test func pcre2ResetStartExecutableFastPathSummaryOutputs() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("prefixneedle\notherneedle\nprefixneedle prefixneedle\n", to: "pcre.txt")
+
+        let filesWithMatches = try runExecutableData([
+            "-P",
+            "--files-with-matches",
+            #"prefix\Kneedle"#,
+            temp.path("pcre.txt"),
+        ]) {}
+        let filesWithoutMatch = try runExecutableData([
+            "-P",
+            "--files-without-match",
+            #"missing\Kneedle"#,
+            temp.path("pcre.txt"),
+        ]) {}
+        let countLines = try runExecutableData(["-P", "-c", #"prefix\Kneedle"#, temp.path("pcre.txt")]) {}
+        let countMatches = try runExecutableData([
+            "-P",
+            "--count-matches",
+            #"prefix\Kneedle"#,
+            temp.path("pcre.txt"),
+        ]) {}
+
+        #expect(filesWithMatches == Data("\(temp.path("pcre.txt"))\n".utf8))
+        #expect(filesWithoutMatch == Data("\(temp.path("pcre.txt"))\n".utf8))
+        #expect(countLines == Data("2\n".utf8))
+        #expect(countMatches == Data("3\n".utf8))
+    }
+
     @Test func pcre2ResetStartAllowsEmptyPrefixOrLiteral() throws {
         let temp = try TemporaryDirectory()
         try temp.write("foo\nbarfoo\nfoofoo\n", to: "pcre.txt")

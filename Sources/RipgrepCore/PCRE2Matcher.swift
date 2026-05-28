@@ -583,7 +583,7 @@ final class PCRE2CompiledPattern {
     }
 
     private static func fixedLiteralResetStart(_ pattern: String) -> (prefix: String, literal: String)? {
-        guard let resetRange = firstUnescapedResetStart(in: pattern) else {
+        guard let resetRange = RegexLiteralParser.firstUnescapedResetStart(in: pattern) else {
             return nil
         }
         let rawPrefix = String(pattern[..<resetRange.lowerBound])
@@ -615,14 +615,14 @@ final class PCRE2CompiledPattern {
         options: RipgrepOptions,
         regexOptions: NSRegularExpression.Options
     ) throws -> (prefixUTF16Length: Int, regex: NSRegularExpression)? {
-        guard let resetRange = firstUnescapedResetStart(in: pattern) else {
+        guard let resetRange = RegexLiteralParser.firstUnescapedResetStart(in: pattern) else {
             return nil
         }
         let rawPrefix = String(pattern[..<resetRange.lowerBound])
         let rawSuffix = String(pattern[resetRange.upperBound...])
         guard !rawPrefix.isEmpty,
               !rawSuffix.isEmpty,
-              firstUnescapedResetStart(in: rawSuffix) == nil,
+              RegexLiteralParser.firstUnescapedResetStart(in: rawSuffix) == nil,
               let prefix = RegexLiteralParser.literal(
                 fromPlainRegexPattern: rawPrefix,
                 allowPCREQuotedLiterals: true
@@ -650,13 +650,13 @@ final class PCRE2CompiledPattern {
         options: RipgrepOptions,
         regexOptions: NSRegularExpression.Options
     ) throws -> NSRegularExpression? {
-        guard let resetRange = firstUnescapedResetStart(in: pattern) else {
+        guard let resetRange = RegexLiteralParser.firstUnescapedResetStart(in: pattern) else {
             return nil
         }
         let rawPrefix = String(pattern[..<resetRange.lowerBound])
         let rawSuffix = String(pattern[resetRange.upperBound...])
         guard !rawPrefix.isEmpty || !rawSuffix.isEmpty,
-              firstUnescapedResetStart(in: rawSuffix) == nil else {
+              RegexLiteralParser.firstUnescapedResetStart(in: rawSuffix) == nil else {
             return nil
         }
 
@@ -1425,48 +1425,6 @@ final class PCRE2CompiledPattern {
             return nil
         }
         return (name, pattern.index(after: close))
-    }
-
-    private static func firstUnescapedResetStart(in pattern: String) -> Range<String.Index>? {
-        var escaped = false
-        var escapeStart: String.Index?
-        var index = pattern.startIndex
-        while index < pattern.endIndex {
-            let character = pattern[index]
-            if escaped {
-                if character == "Q" {
-                    var quotedIndex = pattern.index(after: index)
-                    var closedQuote = false
-                    while quotedIndex < pattern.endIndex {
-                        if pattern[quotedIndex] == "\\" {
-                            let quoteEscapeIndex = pattern.index(after: quotedIndex)
-                            if quoteEscapeIndex < pattern.endIndex,
-                               pattern[quoteEscapeIndex] == "E" {
-                                index = pattern.index(after: quoteEscapeIndex)
-                                closedQuote = true
-                                break
-                            }
-                        }
-                        quotedIndex = pattern.index(after: quotedIndex)
-                    }
-                    guard closedQuote else {
-                        return nil
-                    }
-                    escaped = false
-                    continue
-                }
-                if character == "K", let escapeStart {
-                    return escapeStart..<pattern.index(after: index)
-                }
-                escaped = false
-                escapeStart = nil
-            } else if character == "\\" {
-                escaped = true
-                escapeStart = index
-            }
-            index = pattern.index(after: index)
-        }
-        return nil
     }
 
     private static func firstUnescapedClosingParen(in text: Substring) -> String.Index? {

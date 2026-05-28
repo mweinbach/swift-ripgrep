@@ -65,6 +65,9 @@ lookahead.
 ASCII fixed-lookaround PCRE count and count-matches forms now use mapped Swift
 counting preflights too, preserving prefixed counts, CRLF summaries,
 `--include-zero`, bounded line counts, and overlap-safe rejected assertions.
+ASCII PCRE reset-start `prefix\Kliteral` quiet, path-only, count, and
+count-matches summaries now reuse the fixed-lookbehind mapped Swift preflights
+for non-empty ASCII prefix/literal pairs.
 
 A targeted 20-run A/B against the previous Swift checkpoint and Rust used the
 same 4.8 MiB fixture:
@@ -104,6 +107,18 @@ preflight bypassed via `RIPGREP_CONFIG_PATH=`:
 | `-P --count-matches '(?<=prefix)needle'` | 42.4 ms | 9.7 ms | 20.4 ms |
 | `-P -c 'needle(?=suffix)'` | 44.9 ms | 6.9 ms | 9.8 ms |
 | `-P --count-matches 'needle(?=suffix)'` | 42.0 ms | 7.2 ms | 20.5 ms |
+
+The fixed reset-start check used
+`/tmp/swift-rg-bench/pcre-reset-small.txt`, a 6.4 MiB ASCII fixture, with
+3 warmups and 10 timed runs. The before column is the same binary with the
+executable preflight bypassed via `RIPGREP_CONFIG_PATH=`:
+
+| Flags | Swift before | Swift after | rg |
+|---|---:|---:|---:|
+| `-P --files-with-matches 'prefix\Kneedle'` | 36.4 ms | 4.5 ms | 3.6 ms |
+| `-P -q 'prefix\Kneedle'` | 32.5 ms | 4.2 ms | 3.8 ms |
+| `-P -c 'prefix\Kneedle'` | 39.8 ms | 8.6 ms | 8.6 ms |
+| `-P --count-matches 'prefix\Kneedle'` | 40.4 ms | 9.1 ms | 19.4 ms |
 
 Benchmarks used `/tmp/swift-rg-bench/stop-on-nonmatch-small.txt`, a 4.8 MiB
 dense ASCII fixture, with 2 warmups and 5 timed runs:
