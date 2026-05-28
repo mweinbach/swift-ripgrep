@@ -2068,17 +2068,20 @@ struct RipgrepCommand {
            (patternCanStartWithDash || !pattern.hasPrefix("-")),
            path != "-" {
             if explicitRegexpPatterns.count > 1 {
-                if !asciiCaseInsensitive,
-                   let invertedLiterals = explicitRegexpPatternLiterals(
+                if let invertedLiterals = explicitRegexpPatternLiterals(
                     explicitRegexpPatterns,
                     fixedStrings: fixedStrings,
                     allowPCREQuotedLiterals: allowPCREQuotedLiterals
                    ),
-                   invertedLiterals.allSatisfy({ !$0.contains(UInt8(ascii: "\n")) }) {
+                   invertedLiterals.allSatisfy({
+                       !$0.contains(UInt8(ascii: "\n"))
+                           && (!asciiCaseInsensitive || $0.allSatisfy({ $0 < 0x80 }))
+                   }) {
                     return SwiftDarwinLiteralPreflight.invertedMultiLiteralLineExitCode(
                         path: path,
                         literals: invertedLiterals,
                         maxCount: parsedMaxCount ?? Int.max,
+                        asciiCaseInsensitive: asciiCaseInsensitive,
                         lineNumber: lineNumber,
                         lineNumberFieldSeparator: parsedFieldMatchSeparator,
                         linePrefix: parsedLinePrefix,
@@ -2086,17 +2089,20 @@ struct RipgrepCommand {
                     )
                 }
             } else {
-                if !asciiCaseInsensitive,
-                   !fixedStrings,
+                if !fixedStrings,
                    let invertedLiterals = multiLiteralAlternation(
                     pattern,
                     allowPCREQuotedLiterals: allowPCREQuotedLiterals
                    ),
-                   invertedLiterals.allSatisfy({ !$0.contains(UInt8(ascii: "\n")) }) {
+                   invertedLiterals.allSatisfy({
+                       !$0.contains(UInt8(ascii: "\n"))
+                           && (!asciiCaseInsensitive || $0.allSatisfy({ $0 < 0x80 }))
+                   }) {
                     return SwiftDarwinLiteralPreflight.invertedMultiLiteralLineExitCode(
                         path: path,
                         literals: invertedLiterals,
                         maxCount: parsedMaxCount ?? Int.max,
+                        asciiCaseInsensitive: asciiCaseInsensitive,
                         lineNumber: lineNumber,
                         lineNumberFieldSeparator: parsedFieldMatchSeparator,
                         linePrefix: parsedLinePrefix,

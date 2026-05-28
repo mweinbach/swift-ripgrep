@@ -1855,6 +1855,31 @@ struct MiscTests {
         ], fixture: {})
         #expect(invertMultiLiteralMaxCountOutput == Data("quiet one\n".utf8))
 
+        let invertMultiLiteralIgnoreCaseOutput = try runExecutableData([
+            "-n",
+            "-v",
+            "-i",
+            "-e",
+            "NEEDLE",
+            "-e",
+            "TAIL",
+            root.path("invert-case.txt"),
+        ], fixture: {})
+        #expect(invertMultiLiteralIgnoreCaseOutput == Data("""
+        1:quiet one
+        3:after one
+
+        """.utf8))
+
+        let invertAlternationIgnoreCaseOutput = try runExecutableData([
+            "-n",
+            "-v",
+            "-i",
+            "NEEDLE|TAIL",
+            root.path("invert-case.txt"),
+        ], fixture: {})
+        #expect(invertAlternationIgnoreCaseOutput == invertMultiLiteralIgnoreCaseOutput)
+
         let invertAllFilteredResult = try runExecutableResult([
             "-v",
             "needle",
