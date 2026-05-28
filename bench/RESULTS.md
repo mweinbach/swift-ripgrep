@@ -745,6 +745,19 @@ Unicode fallback forms. On the 4.8 MiB dense fixture,
 48.2 ms, versus 12.7 ms for Rust, and `--count-matches -i -x ...` improved
 from 3.825 s to 48.0 ms, versus 25.9 ms for Rust.
 
+Case-insensitive exact-line quiet and path-only modes now also accept safe
+literal alternations, repeated `-e`, and pattern-file inputs. The path uses the
+same ASCII folded exact-line probe, prints only path output for `-l`/
+`--files-without-match`, and keeps CRLF, binary, and non-ASCII cases on the
+existing fallback. Direct byte/status checks matched Rust for quiet match and
+no-match, repeated `-e`, pattern-file, path-only, custom path separators, NUL
+path output, files-without-match, CRLF fallback, binary fallback, and Unicode
+fallback forms. On the 4.8 MiB dense fixture,
+`-q -i -x 'NEEDLE NEEDLE...|MISSING'` improved from 7.246 s to 19.2 ms, versus
+2.9 ms for Rust; `-l -i -x ...` improved from 7.248 s to 19.9 ms, versus
+2.9 ms for Rust; and no-match `--files-without-match -i -x 'ABSENT|MISSING'`
+improved from 954.8 ms to 35.0 ms, versus 3.6 ms for Rust.
+
 Type-definition flags that do not activate a type filter now also stay
 eligible for the executable preflight. The preflight replays
 `--type-add`/`--type-clear` through `FileTypeRegistry.apply`, so invalid

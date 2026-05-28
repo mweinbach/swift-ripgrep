@@ -210,7 +210,14 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literal: [UInt8]
     ) -> Int32? {
-        guard let matched = containsASCIICaseInsensitiveExactLine(path: path, literal: literal) else {
+        asciiCaseInsensitiveExactLineQuietExitCode(path: path, literals: [literal])
+    }
+
+    public static func asciiCaseInsensitiveExactLineQuietExitCode(
+        path: String,
+        literals: [[UInt8]]
+    ) -> Int32? {
+        guard let matched = asciiCaseInsensitiveExactLineMatched(path: path, literals: literals) else {
             return nil
         }
         return matched ? 0 : 1
@@ -224,7 +231,25 @@ public enum SwiftDarwinLiteralPreflight {
         crlfTerminated: Bool = false,
         outputPath: [UInt8]? = nil
     ) -> Int32? {
-        guard let matched = containsASCIICaseInsensitiveExactLine(path: path, literal: literal) else {
+        asciiCaseInsensitiveExactLinePathOnlyExitCode(
+            path: path,
+            literals: [literal],
+            printWhenMatched: printWhenMatched,
+            nullTerminated: nullTerminated,
+            crlfTerminated: crlfTerminated,
+            outputPath: outputPath
+        )
+    }
+
+    public static func asciiCaseInsensitiveExactLinePathOnlyExitCode(
+        path: String,
+        literals: [[UInt8]],
+        printWhenMatched: Bool,
+        nullTerminated: Bool,
+        crlfTerminated: Bool = false,
+        outputPath: [UInt8]? = nil
+    ) -> Int32? {
+        guard let matched = asciiCaseInsensitiveExactLineMatched(path: path, literals: literals) else {
             return nil
         }
         guard matched == printWhenMatched else {
@@ -1233,9 +1258,12 @@ public enum SwiftDarwinLiteralPreflight {
     }
 
     private static func containsASCIICaseInsensitiveExactLine(path: String, literal: [UInt8]) -> Bool? {
-        guard !literal.isEmpty,
-              !literal.contains(UInt8(ascii: "\n")),
-              literal.allSatisfy({ $0 < 0x80 }) else {
+        asciiCaseInsensitiveExactLineMatched(path: path, literals: [literal])
+    }
+
+    private static func asciiCaseInsensitiveExactLineMatched(path: String, literals: [[UInt8]]) -> Bool? {
+        guard let literals = distinctASCIICaseInsensitiveExactLineLiterals(literals),
+              !literals.isEmpty else {
             return nil
         }
         guard let data = mappedPreflightData(path: path) else {
@@ -1244,15 +1272,11 @@ public enum SwiftDarwinLiteralPreflight {
         guard !data.isEmpty else {
             return false
         }
-        guard !hasBinaryDetectionPrefix(data) else {
+        guard !hasBinaryDetectionPrefix(data),
+              !data.contains(where: { $0 >= 0x80 }) else {
             return nil
         }
-        let variants = asciiCaseVariants(for: literal)
-        for variant in variants
-            where exactLineCount(data: data, literal: variant, maxCount: 1) > 0 {
-            return true
-        }
-        return variants.count == 1 ? false : nil
+        return asciiCaseInsensitiveExactLineCount(data: data, foldedLiterals: literals, maxCount: 1) > 0
     }
 
     private static func asciiCaseVariants(for literal: [UInt8]) -> [[UInt8]] {
