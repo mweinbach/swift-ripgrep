@@ -37,6 +37,9 @@ has been proven.
 Case-insensitive exact-line matching output now uses the same raw byte line
 loop for line detection and prefix emission, while retaining the conservative
 binary and non-ASCII fallback before writing.
+Mapped ASCII haystack guards now use a Swift SIMD byte scan instead of
+`Data.contains(where:)`, removing the guard as the dominant cost for dense
+ASCII case-insensitive preflight modes.
 
 Benchmarks used `/tmp/swift-rg-bench/stop-on-nonmatch-small.txt`, a 4.8 MiB
 dense ASCII fixture, with 2 warmups and 5 timed runs:
@@ -59,20 +62,20 @@ dense ASCII fixture, with 2 warmups and 5 timed runs:
 | `--heading -H -o "needle\|quiet"` | 2.325 s | 17.8 ms | 32.6 ms |
 | `--heading -H -c needle` | 144.8 ms | 5.7 ms | 5.3 ms |
 | `--heading -H --count-matches needle` | 152.5 ms | 6.6 ms | 13.6 ms |
-| `-o -i NEEDLE` | 68.6 ms | 26.1 ms | 41.3 ms |
-| `-n -o -i NEEDLE` | 81.4 ms | 35.2 ms | 51.8 ms |
-| `--count-matches -i NEEDLE` | 35.5 ms | 24.1 ms | 33.0 ms |
-| `--heading -H --count-matches -i NEEDLE` | 142.5 ms | 23.5 ms | 31.9 ms |
-| `-c -i NEEDLE` | 35.2 ms | 22.0 ms | 7.6 ms |
-| `--heading -H -c -i NEEDLE` | 141.3 ms | 21.5 ms | 7.8 ms |
-| `-c -i "NEEDLE\|QUIET"` | 36.6 ms | 22.8 ms | 7.8 ms |
-| `-c -i -x "NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE"` | 48.2 ms | 22.9 ms | 14.1 ms |
-| `--count-matches -i -x "NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE"` | 48.0 ms | 24.1 ms | 27.4 ms |
-| `-i -x "NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE"` | 62.3 ms | 31.3 ms | 15.4 ms |
-| `-n -i -x "NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE"` | 80.2 ms | 47.8 ms | 20.1 ms |
-| `-i -x "NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE\|MISSING"` | 57.3 ms | 31.5 ms | 15.2 ms |
-| `-o -i "NEEDLE\|QUIET"` | 7.718 s | 34.7 ms | 53.4 ms |
-| `-n -o -i "NEEDLE\|QUIET"` | 7.894 s | 44.2 ms | 65.1 ms |
+| `-o -i NEEDLE` | 68.6 ms | 11.2 ms | 43.5 ms |
+| `-n -o -i NEEDLE` | 81.4 ms | 20.7 ms | 54.3 ms |
+| `--count-matches -i NEEDLE` | 35.5 ms | 8.5 ms | 32.8 ms |
+| `--heading -H --count-matches -i NEEDLE` | 142.5 ms | 8.2 ms | 33.3 ms |
+| `-c -i NEEDLE` | 35.2 ms | 8.4 ms | 8.5 ms |
+| `--heading -H -c -i NEEDLE` | 141.3 ms | 6.8 ms | 8.2 ms |
+| `-c -i "NEEDLE\|QUIET"` | 36.6 ms | 7.2 ms | 8.6 ms |
+| `-c -i -x "NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE"` | 48.2 ms | 7.2 ms | 13.5 ms |
+| `--count-matches -i -x "NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE"` | 48.0 ms | 7.0 ms | 26.7 ms |
+| `-i -x "NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE"` | 62.3 ms | 15.2 ms | 16.1 ms |
+| `-n -i -x "NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE"` | 80.2 ms | 31.4 ms | 18.3 ms |
+| `-i -x "NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE\|MISSING"` | 57.3 ms | 14.7 ms | 15.4 ms |
+| `-o -i "NEEDLE\|QUIET"` | 7.718 s | 19.8 ms | 54.5 ms |
+| `-n -o -i "NEEDLE\|QUIET"` | 7.894 s | 29.8 ms | 66.6 ms |
 | `-q -w -i NEEDLE` | 99.3 ms | 5.2 ms | 2.7 ms |
 | `-l -w -i NEEDLE` | 125.7 ms | 5.7 ms | 2.7 ms |
 

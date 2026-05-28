@@ -324,7 +324,7 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         guard !hasBinaryDetectionPrefix(data),
-              !data.contains(where: { $0 >= 0x80 }) else {
+              !containsNonASCIIByte(data) else {
             return nil
         }
 
@@ -453,7 +453,7 @@ public enum SwiftDarwinLiteralPreflight {
               !literals.isEmpty,
               let data = mappedPreflightData(path: path),
               !hasBinaryDetectionPrefix(data),
-              !data.contains(where: { $0 >= 0x80 }),
+              !containsNonASCIIByte(data),
               let matchedLineCount = countASCIIWordMatchedLines(
                 in: data,
                 literals: literals,
@@ -556,7 +556,7 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         guard !hasBinaryDetectionPrefix(data),
-              !data.contains(where: { $0 >= 0x80 }) else {
+              !containsNonASCIIByte(data) else {
             return nil
         }
 
@@ -589,7 +589,7 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         guard !hasBinaryDetectionPrefix(data),
-              !data.contains(where: { $0 >= 0x80 }) else {
+              !containsNonASCIIByte(data) else {
             return nil
         }
 
@@ -615,7 +615,7 @@ public enum SwiftDarwinLiteralPreflight {
               !literals.isEmpty,
               let data = mappedPreflightData(path: path),
               !hasBinaryDetectionPrefix(data),
-              !data.contains(where: { $0 >= 0x80 }) else {
+              !containsNonASCIIByte(data) else {
             return nil
         }
         guard !data.isEmpty else {
@@ -1031,7 +1031,7 @@ public enum SwiftDarwinLiteralPreflight {
             return 1
         }
         guard !hasBinaryDetectionPrefix(data),
-              !data.contains(where: { $0 >= 0x80 }) else {
+              !containsNonASCIIByte(data) else {
             return nil
         }
 
@@ -1426,6 +1426,34 @@ public enum SwiftDarwinLiteralPreflight {
         return data.range(of: Data([0]), in: data.startIndex..<prefixEnd) != nil
     }
 
+    private static func containsNonASCIIByte(_ data: Data) -> Bool {
+        return data.withUnsafeBytes { (rawData: UnsafeRawBufferPointer) -> Bool in
+            guard let rawBase = rawData.baseAddress else {
+                return false
+            }
+            let base = rawBase.assumingMemoryBound(to: UInt8.self)
+            let highBit = SIMD16<UInt8>(repeating: 0x80)
+            var offset = 0
+            let vectorLimit = data.count >= 16 ? data.count - 15 : 0
+            while offset < vectorLimit {
+                let bytes = UnsafeRawPointer(base.advanced(by: offset))
+                    .loadUnaligned(as: SIMD16<UInt8>.self)
+                let highMask = bytes .>= highBit
+                if highMask._storage.min() < 0 {
+                    return true
+                }
+                offset += 16
+            }
+            while offset < data.count {
+                if base[offset] >= 0x80 {
+                    return true
+                }
+                offset += 1
+            }
+            return false
+        }
+    }
+
     private static func containsLiteral(path: String, literal: [UInt8]) -> Bool? {
         guard !literal.isEmpty else {
             return nil
@@ -1711,7 +1739,7 @@ public enum SwiftDarwinLiteralPreflight {
         if asciiCaseInsensitiveExactLineCount(data: data, foldedLiterals: literals, maxCount: 1) > 0 {
             return true
         }
-        return data.contains(where: { $0 >= 0x80 }) ? nil : false
+        return containsNonASCIIByte(data) ? nil : false
     }
 
     private static func asciiCaseVariants(for literal: [UInt8]) -> [[UInt8]] {
@@ -2141,7 +2169,7 @@ public enum SwiftDarwinLiteralPreflight {
         guard isSafeASCIIWordLiteral(literal),
               let data = mappedPreflightData(path: path),
               !hasBinaryDetectionPrefix(data),
-              !data.contains(where: { $0 >= 0x80 }),
+              !containsNonASCIIByte(data),
               let matchCount = countASCIIWordMatches(
                 in: data,
                 literal: literal,
@@ -2839,7 +2867,7 @@ public enum SwiftDarwinLiteralPreflight {
               !literals.isEmpty,
               let data = mappedPreflightData(path: path),
               !hasBinaryDetectionPrefix(data),
-              !data.contains(where: { $0 >= 0x80 }) else {
+              !containsNonASCIIByte(data) else {
             return nil
         }
 
