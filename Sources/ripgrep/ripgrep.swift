@@ -365,6 +365,7 @@ struct RipgrepCommand {
             switch argument {
             case "-.",
                  "-a",
+                 "-U",
                  "--hidden",
                  "--ignore",
                  "--ignore-dot",
@@ -398,6 +399,8 @@ struct RipgrepCommand {
                  "--no-invert-match",
                  "--no-json",
                  "--no-max-columns-preview",
+                 "--multiline",
+                 "--multiline-dotall",
                  "--no-multiline",
                  "--no-multiline-dotall",
                  "--no-search-zip",
@@ -572,6 +575,8 @@ struct RipgrepCommand {
                     caseMode = .sensitive
                 case UInt8(ascii: "S"):
                     caseMode = .smart
+                case UInt8(ascii: "U"):
+                    continue
                 case UInt8(ascii: "n"):
                     lineNumber = true
                 case UInt8(ascii: "N"):

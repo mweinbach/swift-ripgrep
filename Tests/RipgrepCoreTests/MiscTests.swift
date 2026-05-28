@@ -1281,6 +1281,25 @@ struct MiscTests {
         ], fixture: {})
         #expect(textBinaryFallbackOutput == Data("pre\0needle\n".utf8))
 
+        for (multilineArguments, expectedOutput) in [
+            (["-U"], output),
+            (["--multiline"], output),
+            (["--multiline-dotall"], output),
+            (["-Un"], lineNumberOutput),
+            (["-nU"], lineNumberOutput),
+            (["-U", "--multiline-dotall"], output),
+            (["--multiline", "--multiline-dotall", "-n"], lineNumberOutput),
+        ] {
+            let multilineOutput = try runExecutableData(
+                multilineArguments + [
+                    "needle",
+                    root.path("dense.txt"),
+                ],
+                fixture: {}
+            )
+            #expect(multilineOutput == expectedOutput)
+        }
+
         let messagesOutput = try runExecutableData([
             "--messages",
             "needle",

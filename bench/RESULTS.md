@@ -380,6 +380,23 @@ Sherlock` at 865.0 ms, `-a Sherlock` at 874.4 ms, and `--binary Sherlock` at
 31.3 ms. After the change, the same current forms measured 26.7 ms, 26.4 ms,
 and 26.6 ms respectively, versus 31.7 ms for Rust `--text Sherlock`.
 
+Multiline enable flags are now also accepted by the executable literal
+preflight when the parsed literal has no line terminator. This covers `-U`,
+`--multiline`, `--multiline-dotall`, and clustered forms such as `-Un`/`-nU`,
+while newline-sensitive patterns still fall back through the existing literal
+guard. Focused executable coverage checked matching-line and line-number forms,
+direct release byte checks matched Rust on small, large, clustered, dotall, and
+binary-fallback representatives, and the Rust parity harness remained green. On
+a 24 KB generated text fixture, three-run before checks measured `-U Sherlock`
+at 25.0 ms, `--multiline Sherlock` at 52.0 ms, and
+`--multiline-dotall Sherlock` at 42.6 ms versus 5.3 ms for plain Swift and
+3.9 ms for Rust `-U`; larger pre-change probes were slow enough to stop before
+completion. After the change, five-run checks on the same 24 KB fixture measured
+3.8 ms, 4.0 ms, and 3.7 ms respectively, with Rust `-U` at 3.6 ms. On the same
+24,000,000-byte fixture used for binary-mode toggles, current `-U`,
+`--multiline`, and `--multiline-dotall` measured 26.4 ms, 26.2 ms, and 26.4 ms
+respectively, versus 30.6 ms for Rust `-U`.
+
 The Swift-only Darwin mmap/stdout preflight now also covers line-numbered
 medium bounded multi-literal output when no filename, byte-offset, column,
 replacement, only-matching, or vimgrep formatting is requested. Output for
