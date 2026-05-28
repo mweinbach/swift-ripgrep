@@ -395,6 +395,23 @@ struct RipgrepCommand {
                 ? String(argument.dropFirst("--pre=".count))
                 : nil
         }
+        func inlineTypeAddValue(_ argument: String) -> String? {
+            argument.hasPrefix("--type-add=")
+                ? String(argument.dropFirst("--type-add=".count))
+                : nil
+        }
+        func inlineTypeClearValue(_ argument: String) -> String? {
+            argument.hasPrefix("--type-clear=")
+                ? String(argument.dropFirst("--type-clear=".count))
+                : nil
+        }
+        func typeDefinitionChangesAreValid(_ changes: [TypeChange]) -> Bool {
+            guard !changes.isEmpty else {
+                return true
+            }
+            var registry = FileTypeRegistry()
+            return registry.apply(changes).isEmpty
+        }
         func isOutputNeutralSingleFileFlag(_ argument: String) -> Bool {
             switch argument {
             case "-.",
@@ -703,6 +720,7 @@ struct RipgrepCommand {
         var parsedLineNumber = false
         var parsedNoMmap = false
         var parsedTrim = false
+        var parsedTypeDefinitionChanges: [TypeChange] = []
         var parsedUnrestrictedCount = 0
         var parsedWithFilename = false
         var parsedWordRegexp = false
@@ -817,6 +835,22 @@ struct RipgrepCommand {
                 guard preprocessor.isEmpty else {
                     return nil
                 }
+            } else if argument == "--type-add" {
+                guard argumentIndex < arguments.count else {
+                    return nil
+                }
+                parsedTypeDefinitionChanges.append(.add(arguments[argumentIndex]))
+                argumentIndex += 1
+            } else if let typeAdd = inlineTypeAddValue(argument) {
+                parsedTypeDefinitionChanges.append(.add(typeAdd))
+            } else if argument == "--type-clear" {
+                guard argumentIndex < arguments.count else {
+                    return nil
+                }
+                parsedTypeDefinitionChanges.append(.clear(arguments[argumentIndex]))
+                argumentIndex += 1
+            } else if let typeClear = inlineTypeClearValue(argument) {
+                parsedTypeDefinitionChanges.append(.clear(typeClear))
             } else if argument == "--sort" || argument == "--sortr" {
                 guard argumentIndex < arguments.count,
                       isValidSortValue(arguments[argumentIndex]) else {
@@ -945,6 +979,9 @@ struct RipgrepCommand {
             }
             pattern = valueArguments[0]
             path = valueArguments[1]
+        }
+        guard typeDefinitionChangesAreValid(parsedTypeDefinitionChanges) else {
+            return nil
         }
         switch parsedCaseMode {
         case .sensitive:

@@ -1559,6 +1559,23 @@ struct MiscTests {
             #expect(metadataOutput == expectedOutput)
         }
 
+        for (typeDefinitionArguments, expectedOutput) in [
+            (["--type-add", "foo:*.foo"], output),
+            (["--type-add=foo:*.foo", "-n"], lineNumberOutput),
+            (["--type-clear", "rust"], output),
+            (["--type-clear=rust"], output),
+            (["--type-add", "wat:*.wat", "--type-add", "combo:include:wat,py"], output),
+        ] {
+            let typeDefinitionOutput = try runExecutableData(
+                typeDefinitionArguments + [
+                    "needle",
+                    root.path("dense.txt"),
+                ],
+                fixture: {}
+            )
+            #expect(typeDefinitionOutput == expectedOutput)
+        }
+
         let noUnicodeOutput = try runExecutableData([
             "--no-unicode",
             "needle",

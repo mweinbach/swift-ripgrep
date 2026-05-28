@@ -350,6 +350,14 @@ parser. On the same fixture, `--hyperlink-format=grep+ needle` improved from
 1.515 s to 38.2 ms, and `--pre= needle` improved from 88.3 ms to 37.9 ms,
 versus 48.7 ms for Rust `--hyperlink-format=grep+`.
 
+Type-definition flags that do not activate a type filter now also stay
+eligible for the executable preflight. The preflight replays
+`--type-add`/`--type-clear` through `FileTypeRegistry.apply`, so invalid
+definitions and follow-on `-t`/`-T` filters still use the normal parser and
+diagnostics. On the same fixture, `--type-clear rust needle` improved from
+6.141 s to 35.6 ms, and `--type-add foo:*.foo needle` improved from 6.165 s
+to 36.0 ms, versus 44.6 ms and 47.0 ms for the same Rust commands.
+
 Regex-mode toggles that do not affect plain literal line output now also stay
 eligible for the executable preflight. `--unicode`/`--no-unicode`,
 `--pcre2-unicode`/`--no-pcre2-unicode`, and `--crlf`/`--no-crlf` are still
