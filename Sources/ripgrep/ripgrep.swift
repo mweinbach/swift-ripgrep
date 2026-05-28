@@ -528,6 +528,11 @@ struct RipgrepCommand {
         func isResourceLimitFlag(_ argument: String) -> Bool {
             argument == "--dfa-size-limit" || argument == "--regex-size-limit"
         }
+        func maxFilesizeValue(_ argument: String) -> String? {
+            argument.hasPrefix("--max-filesize=")
+                ? String(argument.dropFirst("--max-filesize=".count))
+                : nil
+        }
         func isValidHumanReadableSize(_ raw: String) -> Bool {
             guard !raw.isEmpty else {
                 return false
@@ -745,6 +750,16 @@ struct RipgrepCommand {
                 argumentIndex += 1
             } else if let resourceLimit = resourceLimitValue(argument) {
                 guard isValidHumanReadableSize(resourceLimit) else {
+                    return nil
+                }
+            } else if argument == "--max-filesize" {
+                guard argumentIndex < arguments.count,
+                      isValidHumanReadableSize(arguments[argumentIndex]) else {
+                    return nil
+                }
+                argumentIndex += 1
+            } else if let maxFilesize = maxFilesizeValue(argument) {
+                guard isValidHumanReadableSize(maxFilesize) else {
                     return nil
                 }
             } else if isOutputNeutralSingleFileFlag(argument) {

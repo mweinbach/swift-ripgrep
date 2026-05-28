@@ -1554,6 +1554,22 @@ struct MiscTests {
         ], fixture: {})
         #expect(regexSizeLimitOutput == output)
 
+        for maxFilesizeArguments in [
+            ["--max-filesize=1"],
+            ["--max-filesize", "1"],
+            ["--max-filesize=1K"],
+            ["--max-filesize", "1K"],
+        ] {
+            let maxFilesizeOutput = try runExecutableData(
+                maxFilesizeArguments + [
+                    "needle",
+                    root.path("dense.txt"),
+                ],
+                fixture: {}
+            )
+            #expect(maxFilesizeOutput == output)
+        }
+
         for zeroValueArguments in [
             ["--max-columns=0"],
             ["--max-columns", "0"],

@@ -409,6 +409,17 @@ about 0.82 s and `-0 Sherlock` at about 0.85 s. Seven-run current checks on the
 same fixture shape measured 8.3 ms and 8.4 ms respectively, in line with the
 plain Swift preflight at 8.6 ms and Rust `--null Sherlock` at 9.0 ms.
 
+Explicit-file `--max-filesize` values now stay on the executable literal
+preflight because the limit applies only to non-explicit files. The parser
+accepts inline and separated K/M/G size values and leaves invalid values on the
+normal parser path. Focused executable tests covered values smaller than the
+file, direct release byte checks matched Rust on small and large explicit-file
+representatives, and invalid `--max-filesize=45k` still matched Rust's parser
+error. On the same generated 4.8 MiB text fixture, single-run before probes
+measured both inline and separated `--max-filesize 1K Sherlock` at about
+0.04 s; seven-run current checks measured both forms at 8.2 ms, in line with
+plain Swift at 8.3 ms and Rust `--max-filesize=1K Sherlock` at 8.7 ms.
+
 The Swift-only Darwin mmap/stdout preflight now also covers line-numbered
 medium bounded multi-literal output when no filename, byte-offset, column,
 replacement, only-matching, or vimgrep formatting is requested. Output for
