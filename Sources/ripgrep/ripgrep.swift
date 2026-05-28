@@ -1831,21 +1831,41 @@ struct RipgrepCommand {
            !wordRegexp,
            !parsedLineRegexp,
            !asciiCaseInsensitive,
-           explicitRegexpPatterns.count <= 1,
            (patternCanStartWithDash || !pattern.hasPrefix("-")),
            path != "-" {
-            let passthruLiteralPattern = fixedStrings
-                ? pattern
-                : RegexLiteralParser.literal(
-                    fromPlainRegexPattern: pattern,
+            if parsedMaxCount == 0 {
+                return 1
+            }
+
+            if explicitRegexpPatterns.count > 1 {
+                if let passthruLiterals = explicitRegexpPatternLiterals(
+                    explicitRegexpPatterns,
+                    fixedStrings: fixedStrings,
                     allowPCREQuotedLiterals: allowPCREQuotedLiterals
-                )
-            if let passthruLiteralPattern {
-                let passthruLiteral = Array(passthruLiteralPattern.utf8)
-                if !passthruLiteral.isEmpty,
-                   !passthruLiteral.contains(UInt8(ascii: "\n")) {
-                    if parsedMaxCount == 0 {
-                        return 1
+                ) {
+                    return SwiftDarwinLiteralPreflight.multiLiteralPassthruLineExitCode(
+                        path: path,
+                        literals: passthruLiterals,
+                        lineNumber: lineNumber,
+                        lineNumberFieldMatchSeparator: parsedFieldMatchSeparator,
+                        lineNumberFieldContextSeparator: parsedFieldContextSeparator,
+                        lineMatchPrefix: parsedLinePrefix,
+                        lineContextPrefix: parsedContextLinePrefix,
+                        headingPrefix: parsedHeadingPrefix
+                    )
+                }
+            } else {
+                let passthruLiteralPattern = fixedStrings
+                    ? pattern
+                    : RegexLiteralParser.literal(
+                        fromPlainRegexPattern: pattern,
+                        allowPCREQuotedLiterals: allowPCREQuotedLiterals
+                    )
+                if let passthruLiteralPattern {
+                    let passthruLiteral = Array(passthruLiteralPattern.utf8)
+                    guard !passthruLiteral.isEmpty,
+                          !passthruLiteral.contains(UInt8(ascii: "\n")) else {
+                        return nil
                     }
                     return SwiftDarwinLiteralPreflight.passthruLiteralLineExitCode(
                         path: path,

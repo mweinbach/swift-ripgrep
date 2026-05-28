@@ -98,6 +98,10 @@ match/context separators and returning status from whether any line matched.
 It preserves line numbers, filename prefixes, headings, custom field match and
 context separators, fixed-string literals, no-final-newline output, `-m0`
 literal status, and binary/BOM fallback behavior.
+Explicit multi-literal `--passthru` now uses the same Swift-first treatment for
+literal `-e` and `-f` inputs, classifying each output line by whether any
+literal source matched while keeping unsupported or ambiguous patterns on the
+full matcher.
 
 A targeted 20-run A/B against the previous Swift checkpoint and Rust used the
 same 4.8 MiB fixture:
@@ -1214,6 +1218,25 @@ A larger current/Rust check on `/tmp/swift-rg-candidates/passthru.txt`, a
 |---|---:|---:|
 | `--passthru needle` | 12.6 ms | 16.2 ms |
 | `-n --passthru needle` | 16.1 ms | 25.3 ms |
+
+The explicit multi-literal passthru check used
+`/tmp/swift-rg-candidates/passthru-multi-50k.txt`, a 50,000-line / 823 KiB
+fixture with `needle` every tenth line and `alpha` every fifteenth line. The
+before column is the same binary with executable preflight bypassed via
+`RIPGREP_CONFIG_PATH=`:
+
+| Flags | Swift before | Swift after | rg |
+|---|---:|---:|---:|
+| `--passthru -e needle -e alpha` | 1.500 s | 8.7 ms | 8.8 ms |
+
+A larger current/Rust check on
+`/tmp/swift-rg-candidates/passthru-multi-250k.txt`, a 250,000-line / 4.20 MiB
+fixture, used 3 warmups and 10 timed runs:
+
+| Flags | Swift | rg |
+|---|---:|---:|
+| `--passthru -e needle -e alpha` | 13.0 ms | 16.6 ms |
+| `-n --passthru -e needle -e alpha` | 15.1 ms | 23.0 ms |
 
 Null path terminator flags now stay on the executable literal preflight when
 the command shape cannot print a path. This covers standalone `--null` and

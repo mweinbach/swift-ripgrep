@@ -1234,6 +1234,7 @@ struct MiscTests {
         try root.write("needle\nlast\n", to: "exact-patterns.txt")
         try root.write("needle\n", to: "one-pattern.txt")
         try root.write("missing\nabsent\n", to: "missing-patterns.txt")
+        try root.write("needle\nalpha\n", to: "passthru-patterns.txt")
         try root.write("needle needle\nquiet line\n", to: "fixed-patterns.txt")
         try root.write("needlex xneedle needle_ _needle needle\n", to: "word-count.txt")
         try root.write("éneedle\npre NEEDLE\nNEEDLE\n", to: "unicode-word-ci.txt")
@@ -1844,6 +1845,16 @@ struct MiscTests {
         #expect(passthruMaxCountZeroResult.stderr.isEmpty)
         #expect(passthruMaxCountZeroResult.status == 1)
 
+        let passthruMaxCountZeroInvalidPatternResult = try runExecutableResult([
+            "--passthru",
+            "-m0",
+            "[",
+            root.path("passthru.txt"),
+        ])
+        #expect(passthruMaxCountZeroInvalidPatternResult.stdout.isEmpty)
+        #expect(passthruMaxCountZeroInvalidPatternResult.stderr.isEmpty)
+        #expect(passthruMaxCountZeroInvalidPatternResult.status == 1)
+
         let passthruMultiplePatternOutput = try runExecutableData([
             "-n",
             "--passthru",
@@ -1857,6 +1868,21 @@ struct MiscTests {
         1:alpha
         2:needle one
         3-omega
+
+        """.utf8))
+
+        let passthruPatternFileOutput = try runExecutableData([
+            "--with-filename",
+            "-n",
+            "--passthru",
+            "-f",
+            root.path("passthru-patterns.txt"),
+            root.path("passthru.txt"),
+        ], fixture: {})
+        #expect(passthruPatternFileOutput == Data("""
+        \(root.path("passthru.txt")):1:alpha
+        \(root.path("passthru.txt")):2:needle one
+        \(root.path("passthru.txt"))-3-omega
 
         """.utf8))
 
