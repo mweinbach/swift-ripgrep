@@ -1888,6 +1888,63 @@ public enum SwiftDarwinLiteralPreflight {
         return matchedLineCount > 0 ? 0 : 1
     }
 
+    public static func asciiCaseInsensitiveWordOnlyMatchingExitCode(
+        path: String,
+        literal: [UInt8],
+        lineNumber: Bool,
+        lineNumberFieldSeparator: [UInt8] = [58],
+        linePrefix: [UInt8] = []
+    ) -> Int32? {
+        guard isSafeASCIIWordLiteral(literal) else {
+            return nil
+        }
+
+        let fd = path.withCString { Darwin.open($0, O_RDONLY) }
+        guard fd >= 0 else {
+            return nil
+        }
+        defer {
+            Darwin.close(fd)
+        }
+
+        var fileStat = stat()
+        guard Darwin.fstat(fd, &fileStat) == 0 else {
+            return nil
+        }
+        guard (fileStat.st_mode & S_IFMT) == S_IFREG else {
+            return nil
+        }
+        guard fileStat.st_size > 0 else {
+            return 1
+        }
+        guard UInt64(fileStat.st_size) <= UInt64(Int.max) else {
+            return nil
+        }
+
+        let haystackLength = Int(fileStat.st_size)
+        guard let mapped = Darwin.mmap(nil, haystackLength, PROT_READ, MAP_PRIVATE, fd, 0),
+              mapped != MAP_FAILED else {
+            return nil
+        }
+        defer {
+            Darwin.munmap(mapped, haystackLength)
+        }
+
+        guard let matchCount = literal.withUnsafeBufferPointer({ literalBuffer in
+            rgSwiftDarwinWriteASCIICaseInsensitiveWordOnlyMatches(
+                UnsafeRawPointer(mapped).assumingMemoryBound(to: UInt8.self),
+                haystackLength: haystackLength,
+                literal: literalBuffer,
+                lineNumber: lineNumber,
+                lineNumberFieldSeparator: lineNumberFieldSeparator,
+                linePrefix: linePrefix
+            )
+        }) else {
+            return nil
+        }
+        return matchCount > 0 ? 0 : 1
+    }
+
     public static func wordLineNumberExitCode(
         path: String,
         literal: [UInt8]
@@ -3452,6 +3509,133 @@ private func rgSwiftDarwinWriteLiteralBytes(
         }
     }
     return matchedLineCount
+}
+
+private func rgSwiftDarwinWriteASCIICaseInsensitiveWordOnlyMatches(
+    _ base: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    literal: UnsafeBufferPointer<UInt8>,
+    lineNumber: Bool,
+    lineNumberFieldSeparator: [UInt8],
+    linePrefix: [UInt8]
+) -> Int? {
+    guard let literalBase = literal.baseAddress,
+          literal.count > 0 else {
+        return nil
+    }
+    if haystackLength >= 3,
+       base[0] == 0xEF,
+       base[1] == 0xBB,
+       base[2] == 0xBF {
+        return nil
+    }
+    if haystackLength >= 2,
+       (base[0] == 0xFF && base[1] == 0xFE
+        || base[0] == 0xFE && base[1] == 0xFF) {
+        return nil
+    }
+    if memchr(base, 0, haystackLength) != nil {
+        return nil
+    }
+    for offset in 0..<haystackLength where base[offset] >= 0x80 {
+        return nil
+    }
+
+    guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+        return nil
+    }
+    defer {
+        output.deallocate()
+    }
+
+    let foldedLiteral = (0..<literal.count).map { rgSwiftASCIILower(literalBase[$0]) }
+    var caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
+    if foldedLiteral.count > 1 {
+        for index in 0..<(foldedLiteral.count - 1) {
+            caseInsensitiveShifts[Int(foldedLiteral[index])] = foldedLiteral.count - 1 - index
+        }
+    }
+
+    var searchOffset = 0
+    var currentLineNumber = 1
+    var matchCount = 0
+    var rejectedBoundaryCandidates = 0
+    let maxRejectedBoundaryCandidates = 128
+
+    while searchOffset < haystackLength {
+        var found: UnsafePointer<UInt8>?
+        var newlinesBeforeMatch = 0
+        foldedLiteral.withUnsafeBufferPointer { foldedNeedle in
+            caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
+                if lineNumber {
+                    let result = rg_memcasemem_ascii_count_byte_before(
+                        base.advanced(by: searchOffset),
+                        haystackLength - searchOffset,
+                        foldedNeedle.baseAddress,
+                        foldedNeedle.count,
+                        UInt8(ascii: "\n")
+                    )
+                    found = result.match
+                    newlinesBeforeMatch = result.count
+                } else {
+                    found = rg_memcasemem_ascii_prepared(
+                        base.advanced(by: searchOffset),
+                        haystackLength - searchOffset,
+                        foldedNeedle.baseAddress,
+                        foldedNeedle.count,
+                        shifts.baseAddress
+                    )
+                    newlinesBeforeMatch = 0
+                }
+            }
+        }
+        guard let found else {
+            break
+        }
+
+        let matchStart = base.distance(to: found)
+        let matchEnd = matchStart + literal.count
+        guard let bounded = isASCIIWordBoundaryMatch(
+            base: base,
+            dataCount: haystackLength,
+            matchStart: matchStart,
+            matchEnd: matchEnd
+        ) else {
+            return nil
+        }
+        let matchedLineNumber = currentLineNumber + newlinesBeforeMatch
+        if bounded {
+            guard output.writeBytes(linePrefix) else {
+                return nil
+            }
+            if lineNumber,
+               !output.writeLineNumberPrefix(
+                matchedLineNumber,
+                fieldSeparator: lineNumberFieldSeparator
+               ) {
+                return nil
+            }
+            guard output.write(base.advanced(by: matchStart), count: literal.count),
+                  output.writeByte(UInt8(ascii: "\n")) else {
+                return nil
+            }
+            matchCount += 1
+            currentLineNumber = matchedLineNumber
+            searchOffset = matchEnd
+        } else {
+            rejectedBoundaryCandidates += 1
+            guard rejectedBoundaryCandidates <= maxRejectedBoundaryCandidates else {
+                return nil
+            }
+            currentLineNumber = matchedLineNumber
+            searchOffset = matchStart + 1
+        }
+    }
+
+    guard output.flush() else {
+        return nil
+    }
+    return matchCount
 }
 
 private func rgSwiftDarwinWriteWordLiteralLineBytes(

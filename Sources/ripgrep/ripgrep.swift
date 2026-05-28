@@ -1621,13 +1621,23 @@ struct RipgrepCommand {
             return nil
         }
         if parsedOnlyMatching {
-            guard parsedLineRegexp,
-                  parsedPrintMode == .matchingLines,
+            guard parsedPrintMode == .matchingLines,
                   !parsedQuiet,
                   parsedPathOnlyMode == nil,
-                  !wordRegexp,
                   !parsedCrlf else {
                 return nil
+            }
+            if parsedLineRegexp {
+                guard !wordRegexp else {
+                    return nil
+                }
+            } else {
+                guard asciiCaseInsensitive,
+                      wordRegexp,
+                      parsedMaxCount == nil,
+                      parsedHeadingPrefix.isEmpty else {
+                    return nil
+                }
             }
         }
 
@@ -2142,6 +2152,24 @@ struct RipgrepCommand {
         }
         if parsedMaxCount == 0 {
             return nil
+        }
+        if parsedOnlyMatching, !parsedLineRegexp {
+            guard asciiCaseInsensitive,
+                  wordRegexp,
+                  parsedPrintMode == .matchingLines,
+                  parsedPathOnlyMode == nil,
+                  !parsedQuiet,
+                  parsedMaxCount == nil,
+                  !parsedCrlf else {
+                return nil
+            }
+            return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveWordOnlyMatchingExitCode(
+                path: path,
+                literal: literal,
+                lineNumber: lineNumber,
+                lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                linePrefix: parsedLinePrefix
+            )
         }
         if parsedQuiet {
             guard !asciiBoundary else {

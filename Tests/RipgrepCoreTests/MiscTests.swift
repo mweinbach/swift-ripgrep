@@ -1342,6 +1342,37 @@ struct MiscTests {
 
         """.utf8))
 
+        let caseInsensitiveWordOnlyMatchingOutput = try runExecutableData([
+            "-o",
+            "-w",
+            "-i",
+            "NEEDLE",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(caseInsensitiveWordOnlyMatchingOutput == Data("""
+        needle
+        needle
+        needle
+        NEEDLE
+        needle
+        Needle
+        needle
+
+        """.utf8))
+
+        let unicodeCaseInsensitiveWordOnlyMatchingOutput = try runExecutableData([
+            "-o",
+            "-w",
+            "-i",
+            "NEEDLE",
+            root.path("unicode-word-ci.txt"),
+        ], fixture: {})
+        #expect(unicodeCaseInsensitiveWordOnlyMatchingOutput == Data("""
+        NEEDLE
+        NEEDLE
+
+        """.utf8))
+
         let lineNumberOutput = try runExecutableData([
             "-n",
             "needle",
@@ -1362,6 +1393,25 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(caseInsensitiveWordLineNumberOutput == lineNumberOutput)
+
+        let caseInsensitiveWordOnlyMatchingLineNumberOutput = try runExecutableData([
+            "-n",
+            "-o",
+            "-w",
+            "-i",
+            "NEEDLE",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(caseInsensitiveWordOnlyMatchingLineNumberOutput == Data("""
+        1:needle
+        1:needle
+        1:needle
+        3:NEEDLE
+        3:needle
+        3:Needle
+        4:needle
+
+        """.utf8))
 
         let lineBufferedLineNumberOutput = try runExecutableData([
             "--line-buffered",
