@@ -34,6 +34,9 @@ Case-insensitive exact-line count summaries now search folded full-line needles
 directly instead of walking every line with `Data` indices, and exact-line
 existence probes defer the full non-ASCII scan until no ASCII whole-line match
 has been proven.
+Case-insensitive exact-line matching output now uses the same raw byte line
+loop for line detection and prefix emission, while retaining the conservative
+binary and non-ASCII fallback before writing.
 
 Benchmarks used `/tmp/swift-rg-bench/stop-on-nonmatch-small.txt`, a 4.8 MiB
 dense ASCII fixture, with 2 warmups and 5 timed runs:
@@ -65,6 +68,9 @@ dense ASCII fixture, with 2 warmups and 5 timed runs:
 | `-c -i "NEEDLE\|QUIET"` | 36.6 ms | 22.8 ms | 7.8 ms |
 | `-c -i -x "NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE"` | 48.2 ms | 22.9 ms | 14.1 ms |
 | `--count-matches -i -x "NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE"` | 48.0 ms | 24.1 ms | 27.4 ms |
+| `-i -x "NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE"` | 62.3 ms | 31.3 ms | 15.4 ms |
+| `-n -i -x "NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE"` | 80.2 ms | 47.8 ms | 20.1 ms |
+| `-i -x "NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE\|MISSING"` | 57.3 ms | 31.5 ms | 15.2 ms |
 | `-o -i "NEEDLE\|QUIET"` | 7.718 s | 34.7 ms | 53.4 ms |
 | `-n -o -i "NEEDLE\|QUIET"` | 7.894 s | 44.2 ms | 65.1 ms |
 | `-q -w -i NEEDLE` | 99.3 ms | 5.2 ms | 2.7 ms |

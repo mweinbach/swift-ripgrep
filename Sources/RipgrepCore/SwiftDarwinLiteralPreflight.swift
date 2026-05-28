@@ -1037,43 +1037,66 @@ public enum SwiftDarwinLiteralPreflight {
 
         let limit = maxCount ?? Int.max
         let newline = UInt8(ascii: "\n")
-        var lineStart = data.startIndex
-        var lineNumberValue = 1
         var matchedLineCount = 0
-        var emittedHeading = false
         var output = Data()
         output.reserveCapacity(64 * 1024)
 
-        while lineStart < data.endIndex, matchedLineCount < limit {
-            let lineEnd = data[lineStart..<data.endIndex].firstIndex(of: newline) ?? data.endIndex
-            if asciiCaseInsensitiveExactLineRangeMatches(
-                data: data,
-                lineStart: lineStart,
-                lineEnd: lineEnd,
-                foldedLiterals: literals
-            ) {
-                appendHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading, to: &output)
-                appendLinePrefix(linePrefix, to: &output)
-                if lineNumber {
-                    appendLineNumberPrefix(
-                        lineNumberValue,
-                        to: &output,
-                        fieldSeparator: lineNumberFieldSeparator
-                    )
-                }
-                output.append(contentsOf: data[lineStart..<lineEnd])
-                output.append(newline)
-                matchedLineCount += 1
-                if output.count >= 64 * 1024 {
-                    FileHandle.standardOutput.write(output)
-                    output.removeAll(keepingCapacity: true)
-                }
+        data.withUnsafeBytes { rawData in
+            guard let rawBase = rawData.baseAddress else {
+                return
             }
-            if lineEnd < data.endIndex {
-                lineStart = data.index(after: lineEnd)
-                lineNumberValue += 1
-            } else {
-                lineStart = data.endIndex
+            let base = rawBase.assumingMemoryBound(to: UInt8.self)
+            var lineStart = 0
+            var lineNumberValue = 1
+            var emittedHeading = false
+
+            while lineStart < data.count, matchedLineCount < limit {
+                let remaining = data.count - lineStart
+                let lineEnd: Int
+                let nextLineStart: Int
+                if let newlinePointer = memchr(
+                    base.advanced(by: lineStart),
+                    Int32(newline),
+                    remaining
+                ) {
+                    lineEnd = base.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self))
+                    nextLineStart = lineEnd + 1
+                } else {
+                    lineEnd = data.count
+                    nextLineStart = data.count
+                }
+
+                if asciiCaseInsensitiveExactLineRangeMatches(
+                    base: base,
+                    lineStart: lineStart,
+                    lineEnd: lineEnd,
+                    foldedLiterals: literals
+                ) {
+                    appendHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading, to: &output)
+                    appendLinePrefix(linePrefix, to: &output)
+                    if lineNumber {
+                        appendLineNumberPrefix(
+                            lineNumberValue,
+                            to: &output,
+                            fieldSeparator: lineNumberFieldSeparator
+                        )
+                    }
+                    output.append(contentsOf: UnsafeBufferPointer(
+                        start: base.advanced(by: lineStart),
+                        count: lineEnd - lineStart
+                    ))
+                    output.append(newline)
+                    matchedLineCount += 1
+                    if output.count >= 64 * 1024 {
+                        FileHandle.standardOutput.write(output)
+                        output.removeAll(keepingCapacity: true)
+                    }
+                }
+
+                lineStart = nextLineStart
+                if lineStart < data.count {
+                    lineNumberValue += 1
+                }
             }
         }
 
@@ -1286,31 +1309,29 @@ public enum SwiftDarwinLiteralPreflight {
     }
 
     private static func asciiCaseInsensitiveExactLineRangeMatches(
-        data: Data,
-        lineStart: Data.Index,
-        lineEnd: Data.Index,
+        base: UnsafePointer<UInt8>,
+        lineStart: Int,
+        lineEnd: Int,
         foldedLiterals: [[UInt8]]
     ) -> Bool {
-        let lineLength = data.distance(from: lineStart, to: lineEnd)
+        let lineLength = lineEnd - lineStart
         guard lineLength > 0 else {
             return false
         }
         for literal in foldedLiterals where literal.count == lineLength {
-            guard rgSwiftASCIILower(data[lineStart]) == literal[0] else {
+            guard rgSwiftASCIILower(base[lineStart]) == literal[0] else {
                 continue
             }
             if literal.count > 1,
-               rgSwiftASCIILower(data[data.index(before: lineEnd)]) != literal[literal.count - 1] {
+               rgSwiftASCIILower(base[lineEnd - 1]) != literal[literal.count - 1] {
                 continue
             }
-            var cursor = lineStart
             var matched = true
-            for byte in literal {
-                if rgSwiftASCIILower(data[cursor]) != byte {
+            for offset in 0..<literal.count {
+                if rgSwiftASCIILower(base[lineStart + offset]) != literal[offset] {
                     matched = false
                     break
                 }
-                cursor = data.index(after: cursor)
             }
             if matched {
                 return true
