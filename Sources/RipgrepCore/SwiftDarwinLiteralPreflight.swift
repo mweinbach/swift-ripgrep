@@ -117,7 +117,12 @@ public enum SwiftDarwinLiteralPreflight {
         crlfTerminated: Bool = false,
         outputPath: [UInt8]? = nil
     ) -> Int32? {
-        guard let matched = containsLiteral(path: path, literal: literal) else {
+        let matched = if printWhenMatched {
+            containsLiteral(path: path, literal: literal)
+        } else {
+            containsLiteralUsingSIMD(path: path, literal: literal)
+        }
+        guard let matched else {
             return nil
         }
         guard matched == printWhenMatched else {
@@ -764,7 +769,12 @@ public enum SwiftDarwinLiteralPreflight {
         crlfTerminated: Bool = false,
         outputPath: [UInt8]? = nil
     ) -> Int32? {
-        guard let matched = containsAnyLiteral(path: path, literals: literals) else {
+        let matched = if printWhenMatched {
+            containsAnyLiteral(path: path, literals: literals)
+        } else {
+            containsAnyLiteralUsingSIMD(path: path, literals: literals)
+        }
+        guard let matched else {
             return nil
         }
         guard matched == printWhenMatched else {
@@ -1760,6 +1770,43 @@ public enum SwiftDarwinLiteralPreflight {
         return true
     }
 
+    private static func containsLiteralUsingSIMD(path: String, literal: [UInt8]) -> Bool? {
+        guard !literal.isEmpty else {
+            return nil
+        }
+
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return false
+        }
+        return dataContainsLiteralUsingSIMD(data, literal: literal)
+    }
+
+    private static func dataContainsLiteralUsingSIMD(_ data: Data, literal: [UInt8]) -> Bool {
+        guard !literal.isEmpty,
+              data.count >= literal.count else {
+            return false
+        }
+        return data.withUnsafeBytes { rawData in
+            guard let rawBase = rawData.baseAddress else {
+                return false
+            }
+            return literal.withUnsafeBufferPointer { literalBytes in
+                guard let literalBase = literalBytes.baseAddress else {
+                    return false
+                }
+                return rg_memmem_simple(
+                    rawBase.assumingMemoryBound(to: UInt8.self),
+                    data.count,
+                    literalBase,
+                    literal.count
+                ) != nil
+            }
+        }
+    }
+
     private static func containsFixedLookbehindLiteral(
         path: String,
         prefix: [UInt8],
@@ -2440,6 +2487,28 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         for literal in literals where data.range(of: Data(literal)) != nil {
+            return true
+        }
+        return false
+    }
+
+    private static func containsAnyLiteralUsingSIMD(path: String, literals: [[UInt8]]) -> Bool? {
+        guard (2...8).contains(literals.count),
+              literals.allSatisfy({
+                !$0.isEmpty && !$0.contains(UInt8(ascii: "\n"))
+              }) else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return false
+        }
+        guard !hasBinaryDetectionPrefix(data) else {
+            return nil
+        }
+        for literal in literals where dataContainsLiteralUsingSIMD(data, literal: literal) {
             return true
         }
         return false

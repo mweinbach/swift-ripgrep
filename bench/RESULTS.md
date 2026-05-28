@@ -49,6 +49,9 @@ the fallback searcher before proving no-match or Unicode-adjacent candidates.
 Path-only preflights now write path bytes and terminators directly through
 stdout instead of allocating a tiny `Data` buffer and handing it to
 `FileHandle`.
+Single-file `--files-without-match` probes now use the existing Swift SIMD
+literal scanner for the full-file absence check while leaving positive
+path-only existence probes on the Foundation search path.
 Count preflights now use the same raw stdout buffer for prefix, decimal count,
 and LF/CRLF output instead of allocating a tiny `Data` buffer for the count
 line.
@@ -76,6 +79,14 @@ same 4.8 MiB fixture:
 |---|---:|---:|---:|
 | `--files-with-matches needle` | 4.2 ms | 3.1 ms | 2.8 ms |
 | `--files-without-match absent` | 7.8 ms | 7.6 ms | 3.5 ms |
+
+A follow-up 30-run shell-free check on the same fixture after narrowing the
+SIMD scanner to absence probes measured:
+
+| Flags | Swift | rg |
+|---|---:|---:|
+| `--files-with-matches needle` | 4.1 ms | 3.8 ms |
+| `--files-without-match absent` | 4.5 ms | 4.1 ms |
 
 The fixed-lookbehind check used
 `/tmp/swift-rg-bench/pcre-lookbehind-small.txt`, a 5.7 MiB ASCII fixture, with
