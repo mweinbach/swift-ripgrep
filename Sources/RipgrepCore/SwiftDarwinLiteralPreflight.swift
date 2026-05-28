@@ -440,6 +440,37 @@ public enum SwiftDarwinLiteralPreflight {
         return matchedLineCount > 0 ? 0 : 1
     }
 
+    public static func asciiCaseInsensitiveMultiLiteralWordCountLineExitCode(
+        path: String,
+        literals: [[UInt8]],
+        includeZero: Bool,
+        maxCount: Int? = nil,
+        countPrefix: [UInt8] = [],
+        crlfTerminated: Bool = false
+    ) -> Int32? {
+        guard maxCount.map({ $0 > 0 }) ?? true,
+              let literals = distinctASCIICaseInsensitiveWordLiterals(literals),
+              !literals.isEmpty,
+              let data = mappedPreflightData(path: path),
+              !hasBinaryDetectionPrefix(data),
+              !data.contains(where: { $0 >= 0x80 }),
+              let matchedLineCount = countASCIIWordMatchedLines(
+                in: data,
+                literals: literals,
+                maxCount: maxCount,
+                asciiCaseInsensitive: true
+              ) else {
+            return nil
+        }
+
+        if matchedLineCount > 0 || includeZero {
+            var output = Data(countPrefix)
+            output.append(countOutput(matchedLineCount, crlfTerminated: crlfTerminated))
+            FileHandle.standardOutput.write(output)
+        }
+        return matchedLineCount > 0 ? 0 : 1
+    }
+
     public static func multiLiteralQuietExitCode(
         path: String,
         literals: [[UInt8]]
@@ -2442,6 +2473,41 @@ public enum SwiftDarwinLiteralPreflight {
         return matchCount > 0 ? 0 : 1
     }
 
+    public static func asciiCaseInsensitiveMultiLiteralWordCountMatchesExitCode(
+        path: String,
+        literals: [[UInt8]],
+        includeZero: Bool,
+        countPrefix: [UInt8] = [],
+        crlfTerminated: Bool = false
+    ) -> Int32? {
+        guard let literals = nonOverlappingDistinctASCIICaseInsensitiveWordLiterals(literals),
+              !literals.isEmpty,
+              let data = mappedPreflightData(path: path),
+              !hasBinaryDetectionPrefix(data),
+              !data.contains(where: { $0 >= 0x80 }) else {
+            return nil
+        }
+
+        var matchCount = 0
+        for literal in literals {
+            guard let literalCount = countASCIIWordMatches(
+                in: data,
+                literal: literal,
+                asciiCaseInsensitive: true
+            ) else {
+                return nil
+            }
+            matchCount += literalCount
+        }
+
+        if matchCount > 0 || includeZero {
+            var output = Data(countPrefix)
+            output.append(countOutput(matchCount, crlfTerminated: crlfTerminated))
+            FileHandle.standardOutput.write(output)
+        }
+        return matchCount > 0 ? 0 : 1
+    }
+
     public static func multiLiteralCountMatchesExitCode(
         path: String,
         literals: [[UInt8]],
@@ -2628,6 +2694,41 @@ private func distinctASCIICaseInsensitiveLiterals(_ literals: [[UInt8]]) -> [[UI
         let folded = literal.map(rgSwiftASCIILower)
         if !distinct.contains(folded) {
             distinct.append(folded)
+        }
+    }
+    return distinct
+}
+
+private func distinctASCIICaseInsensitiveWordLiterals(_ literals: [[UInt8]]) -> [[UInt8]]? {
+    var distinct: [[UInt8]] = []
+    distinct.reserveCapacity(literals.count)
+    for literal in literals {
+        guard !literal.isEmpty,
+              !literal.contains(UInt8(ascii: "\n")),
+              literal.allSatisfy({ $0 < 0x80 }),
+              let first = literal.first,
+              let last = literal.last,
+              rgSwiftIsASCIIRegexWordByte(first),
+              rgSwiftIsASCIIRegexWordByte(last) else {
+            return nil
+        }
+        let folded = literal.map(rgSwiftASCIILower)
+        if !distinct.contains(folded) {
+            distinct.append(folded)
+        }
+    }
+    return distinct
+}
+
+private func nonOverlappingDistinctASCIICaseInsensitiveWordLiterals(_ literals: [[UInt8]]) -> [[UInt8]]? {
+    guard let distinct = distinctASCIICaseInsensitiveWordLiterals(literals) else {
+        return nil
+    }
+    for leftIndex in distinct.indices {
+        for rightIndex in distinct.indices where leftIndex != rightIndex {
+            if literalsCanOverlap(distinct[leftIndex], distinct[rightIndex]) {
+                return nil
+            }
         }
     }
     return distinct
@@ -2865,12 +2966,29 @@ private func countASCIIWordMatchedLines(
 private func countASCIIWordMatchedLines(
     in data: Data,
     literals: [[UInt8]],
-    maxCount: Int?
+    maxCount: Int?,
+    asciiCaseInsensitive: Bool = false
 ) -> Int? {
     guard !literals.isEmpty else {
         return 0
     }
     let limit = maxCount ?? Int.max
+    let searchLiterals = asciiCaseInsensitive
+        ? literals.map { $0.map(rgSwiftASCIILower) }
+        : literals
+    let caseInsensitiveShifts: [[Int]] = if asciiCaseInsensitive {
+        searchLiterals.map { literal -> [Int] in
+            var shifts = [Int](repeating: literal.count, count: 256)
+            if literal.count > 1 {
+                for index in 0..<(literal.count - 1) {
+                    shifts[Int(literal[index])] = literal.count - 1 - index
+                }
+            }
+            return shifts
+        }
+    } else {
+        []
+    }
     return data.withUnsafeBytes { rawData in
         guard let rawBase = rawData.baseAddress else {
             return 0
@@ -2887,7 +3005,8 @@ private func countASCIIWordMatchedLines(
             var bestEnd = Int.max
             var needsFallback = false
 
-            for literal in literals {
+            for literalIndex in searchLiterals.indices {
+                let literal = searchLiterals[literalIndex]
                 literal.withUnsafeBufferPointer { needle in
                     guard !needsFallback,
                           let needleBase = needle.baseAddress else {
@@ -2895,12 +3014,26 @@ private func countASCIIWordMatchedLines(
                     }
                     var literalSearchOffset = searchOffset
                     while literalSearchOffset < data.count {
-                        guard let found = rg_memmem_simple(
-                            base.advanced(by: literalSearchOffset),
-                            data.count - literalSearchOffset,
-                            needleBase,
-                            literal.count
-                        ) else {
+                        let found: UnsafePointer<UInt8>?
+                        if asciiCaseInsensitive {
+                            found = caseInsensitiveShifts[literalIndex].withUnsafeBufferPointer { shifts in
+                                rg_memcasemem_ascii_prepared(
+                                    base.advanced(by: literalSearchOffset),
+                                    data.count - literalSearchOffset,
+                                    needleBase,
+                                    literal.count,
+                                    shifts.baseAddress
+                                )
+                            }
+                        } else {
+                            found = rg_memmem_simple(
+                                base.advanced(by: literalSearchOffset),
+                                data.count - literalSearchOffset,
+                                needleBase,
+                                literal.count
+                            )
+                        }
+                        guard let found else {
                             break
                         }
 

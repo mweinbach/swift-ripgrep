@@ -2113,6 +2113,15 @@ struct MiscTests {
         ], fixture: {})
         #expect(multiLiteralWordCountOutput == Data("4\n".utf8))
 
+        let caseInsensitiveMultiLiteralWordCountOutput = try runExecutableData([
+            "-c",
+            "-w",
+            "-i",
+            "NEEDLE|QUIET",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(caseInsensitiveMultiLiteralWordCountOutput == multiLiteralWordCountOutput)
+
         let multiLiteralWordMaxCountOutput = try runExecutableData([
             "-c",
             "-m2",
@@ -2122,6 +2131,16 @@ struct MiscTests {
         ], fixture: {})
         #expect(multiLiteralWordMaxCountOutput == Data("2\n".utf8))
 
+        let caseInsensitiveMultiLiteralWordMaxCountOutput = try runExecutableData([
+            "-c",
+            "-m2",
+            "-w",
+            "-i",
+            "NEEDLE|QUIET",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(caseInsensitiveMultiLiteralWordMaxCountOutput == multiLiteralWordMaxCountOutput)
+
         let patternFileWordCountOutput = try runExecutableData([
             "-c",
             "-w",
@@ -2130,6 +2149,16 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(patternFileWordCountOutput == multiLiteralWordCountOutput)
+
+        let caseInsensitivePatternFileWordCountOutput = try runExecutableData([
+            "-c",
+            "-w",
+            "-i",
+            "-f",
+            root.path("patterns.txt"),
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(caseInsensitivePatternFileWordCountOutput == multiLiteralWordCountOutput)
 
         let singleLiteralPrefixedCountOutput = try runExecutableData([
             "-H",
@@ -2302,6 +2331,15 @@ struct MiscTests {
         ], fixture: {})
         #expect(multiLiteralWordCountMatchesOutput == Data("6\n".utf8))
 
+        let caseInsensitiveMultiLiteralWordCountMatchesOutput = try runExecutableData([
+            "--count-matches",
+            "-w",
+            "-i",
+            "NEEDLE|QUIET",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(caseInsensitiveMultiLiteralWordCountMatchesOutput == Data("8\n".utf8))
+
         let patternFileWordCountMatchesOutput = try runExecutableData([
             "--count-matches",
             "-w",
@@ -2310,6 +2348,16 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(patternFileWordCountMatchesOutput == multiLiteralWordCountMatchesOutput)
+
+        let caseInsensitivePatternFileWordCountMatchesOutput = try runExecutableData([
+            "--count-matches",
+            "-w",
+            "-i",
+            "-f",
+            root.path("patterns.txt"),
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(caseInsensitivePatternFileWordCountMatchesOutput == caseInsensitiveMultiLiteralWordCountMatchesOutput)
 
         let embeddedWordCountMatchesOutput = try runExecutableData([
             "--count-matches",

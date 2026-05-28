@@ -1733,7 +1733,29 @@ struct RipgrepCommand {
                 )
             }
             if wordRegexp {
-                guard !asciiCaseInsensitive else {
+                if asciiCaseInsensitive {
+                    if parsedPrintMode == .countMatches {
+                        guard parsedMaxCount == nil else {
+                            return nil
+                        }
+                        return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveMultiLiteralWordCountMatchesExitCode(
+                            path: path,
+                            literals: literals,
+                            includeZero: parsedIncludeZero,
+                            countPrefix: parsedCountPrefix,
+                            crlfTerminated: parsedCrlf
+                        )
+                    }
+                    if parsedCount {
+                        return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveMultiLiteralWordCountLineExitCode(
+                            path: path,
+                            literals: literals,
+                            includeZero: parsedIncludeZero,
+                            maxCount: parsedMaxCount,
+                            countPrefix: parsedCountPrefix,
+                            crlfTerminated: parsedCrlf
+                        )
+                    }
                     return nil
                 }
                 if parsedPrintMode == .countMatches {
@@ -1976,7 +1998,29 @@ struct RipgrepCommand {
                 )
             }
             if wordRegexp {
-                guard !asciiCaseInsensitive else {
+                if asciiCaseInsensitive {
+                    if parsedPrintMode == .countMatches {
+                        guard parsedMaxCount == nil else {
+                            return nil
+                        }
+                        return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveMultiLiteralWordCountMatchesExitCode(
+                            path: path,
+                            literals: literals,
+                            includeZero: parsedIncludeZero,
+                            countPrefix: parsedCountPrefix,
+                            crlfTerminated: parsedCrlf
+                        )
+                    }
+                    if parsedCount {
+                        return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveMultiLiteralWordCountLineExitCode(
+                            path: path,
+                            literals: literals,
+                            includeZero: parsedIncludeZero,
+                            maxCount: parsedMaxCount,
+                            countPrefix: parsedCountPrefix,
+                            crlfTerminated: parsedCrlf
+                        )
+                    }
                     return nil
                 }
                 if parsedPrintMode == .countMatches {

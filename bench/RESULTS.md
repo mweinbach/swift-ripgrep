@@ -15,9 +15,9 @@ Swift literal writer with word-boundary checks. It rejects non-ASCII haystacks
 so Unicode word-boundary cases fall back to the existing matcher. Direct
 release comparisons against Rust `rg` were byte-identical for output, line
 numbers, counts, quiet mode, path-only mode, files-without-match, and a
-Unicode-adjacent fallback fixture. A follow-up extends the same ASCII-only
-guard to single-literal `--count-matches -w -i`, also falling back for
-non-ASCII haystacks.
+Unicode-adjacent fallback fixture. Follow-ups extend the same ASCII-only guard
+to single-literal `--count-matches -w -i` and multi-literal word/count modes,
+also falling back for non-ASCII haystacks.
 
 Benchmarks used `/tmp/swift-rg-bench/stop-on-nonmatch-small.txt`, a 4.8 MiB
 dense ASCII fixture, with 2 warmups and 5 timed runs:
@@ -28,6 +28,8 @@ dense ASCII fixture, with 2 warmups and 5 timed runs:
 | `-n -w -i NEEDLE` | 209.3 ms | 11.9 ms | 19.2 ms |
 | `-c -w -i NEEDLE` | 136.4 ms | 7.4 ms | 12.2 ms |
 | `--count-matches -w -i NEEDLE` | 154.8 ms | 25.0 ms | 40.1 ms |
+| `-c -w -i "NEEDLE\|QUIET"` | 184.8 ms | 24.0 ms | 12.3 ms |
+| `--count-matches -w -i "NEEDLE\|QUIET"` | 173.8 ms | 24.9 ms | 57.1 ms |
 | `-q -w -i NEEDLE` | 99.3 ms | 5.2 ms | 2.7 ms |
 | `-l -w -i NEEDLE` | 125.7 ms | 5.7 ms | 2.7 ms |
 
