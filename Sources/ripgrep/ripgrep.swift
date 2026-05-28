@@ -385,11 +385,13 @@ struct RipgrepCommand {
                  "--include-zero",
                  "--binary",
                  "--crlf",
+                 "--follow",
                  "--glob-case-insensitive",
                  "--no-block-buffered",
                  "--no-binary",
                  "--no-context-separator",
                  "--no-crlf",
+                 "--no-follow",
                  "--no-hidden",
                  "--no-ignore",
                  "--no-ignore-dot",
@@ -643,6 +645,8 @@ struct RipgrepCommand {
                     wordRegexp = true
                 case UInt8(ascii: "F"):
                     fixedStrings = true
+                case UInt8(ascii: "L"):
+                    continue
                 case UInt8(ascii: "P"):
                     allowPCREQuotedLiterals = true
                 case UInt8(ascii: "a"):

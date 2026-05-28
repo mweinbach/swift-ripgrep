@@ -334,6 +334,13 @@ includes non-leading selectors, ordering with `--no-pcre2`, short-cluster
 improved from 115.8 ms to 51.2 ms, and `-Pn needle` improved from 110.9 ms to
 50.6 ms, versus 94.5 ms for Rust `-n -P`.
 
+Explicit-file follow toggles now stay on the Swift executable preflight as
+well. This covers `--follow`, `--no-follow`, `-L`, and `L` inside short
+clusters, with symlink operand parity checked against Rust. On the same
+fixture, `--follow needle` improved from 6.177 s to 38.6 ms,
+`--no-follow needle` improved from 87.9 ms to 36.9 ms, and `-Ln needle`
+improved from 1.762 s to 54.1 ms, versus 48.3 ms for Rust `--follow`.
+
 Regex-mode toggles that do not affect plain literal line output now also stay
 eligible for the executable preflight. `--unicode`/`--no-unicode`,
 `--pcre2-unicode`/`--no-pcre2-unicode`, and `--crlf`/`--no-crlf` are still

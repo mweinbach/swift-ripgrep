@@ -1169,6 +1169,10 @@ struct MiscTests {
         NEEDLE needle Needle
         tail needle
         """, to: "dense.txt")
+        try FileManager.default.createSymbolicLink(
+            atPath: root.path("dense-link.txt"),
+            withDestinationPath: root.path("dense.txt")
+        )
         try root.write("""
         a.b
         aXb
@@ -1511,6 +1515,30 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(pcreQuotedEngineOutput == lineNumberOutput)
+
+        for (followArguments, expectedOutput) in [
+            (["--follow"], output),
+            (["--no-follow"], output),
+            (["-L"], output),
+            (["-Ln"], lineNumberOutput),
+            (["-nL"], lineNumberOutput),
+        ] {
+            let followOutput = try runExecutableData(
+                followArguments + [
+                    "needle",
+                    root.path("dense.txt"),
+                ],
+                fixture: {}
+            )
+            #expect(followOutput == expectedOutput)
+        }
+
+        let symlinkFollowOutput = try runExecutableData([
+            "--no-follow",
+            "needle",
+            root.path("dense-link.txt"),
+        ], fixture: {})
+        #expect(symlinkFollowOutput == output)
 
         let noUnicodeOutput = try runExecutableData([
             "--no-unicode",
