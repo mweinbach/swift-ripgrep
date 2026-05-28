@@ -386,6 +386,12 @@ detection. On the same fixture, `-m1 needle` improved from 81.6 ms to 2.9 ms,
 matching Rust at 2.9 ms. A no-match `-m1 absent_literal` scan improved from
 84.1 ms to 18.0 ms, versus 6.0 ms for Rust.
 
+Bounded count output now reuses the same Swift-first max-count idea for
+`-c -mN`/`--count --max-count N` literal searches. Plain unbounded count stays
+on the existing full path because repeated high-level line counting regressed
+that case. On the same fixture, `-c -m1 needle` improved from 26.4 ms to
+3.3 ms, versus 3.0 ms for Rust.
+
 Type-definition flags that do not activate a type filter now also stay
 eligible for the executable preflight. The preflight replays
 `--type-add`/`--type-clear` through `FileTypeRegistry.apply`, so invalid

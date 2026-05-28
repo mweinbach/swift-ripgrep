@@ -349,6 +349,9 @@ struct RipgrepCommand {
         func isQuietFlag(_ argument: String) -> Bool {
             argument == "-q" || argument == "--quiet"
         }
+        func isCountFlag(_ argument: String) -> Bool {
+            argument == "-c" || argument == "--count"
+        }
         func colorModeMayEmitForPreflight(_ value: String) -> Bool? {
             switch value {
             case "never":
@@ -797,6 +800,7 @@ struct RipgrepCommand {
         var parsedFixedStrings = false
         var parsedFieldMatchSeparator = false
         var parsedHeading = false
+        var parsedIncludeZero = false
         var parsedLineNumber = false
         var parsedNullPathTerminator = false
         var parsedNoMmap = false
@@ -804,6 +808,7 @@ struct RipgrepCommand {
         var parsedPathSeparator = false
         var parsedQuiet = false
         var parsedMaxCount: Int?
+        var parsedCount = false
         var parsedTrim = false
         var parsedTypeDefinitionChanges: [TypeChange] = []
         var parsedUnrestrictedCount = 0
@@ -854,6 +859,12 @@ struct RipgrepCommand {
                 parsedPathOnlyMode = .matching
             } else if argument == "--files-without-match" {
                 parsedPathOnlyMode = .nonMatching
+            } else if isCountFlag(argument) {
+                parsedCount = true
+            } else if argument == "--include-zero" {
+                parsedIncludeZero = true
+            } else if argument == "--no-include-zero" {
+                parsedIncludeZero = false
             } else if argument == "-0" || argument == "--null" {
                 parsedNullPathTerminator = true
             } else if argument == "-nw" || argument == "-wn" {
@@ -1143,6 +1154,7 @@ struct RipgrepCommand {
            !asciiCaseInsensitive,
            !wordRegexp,
            !noMmap,
+           !parsedCount,
            parsedMaxCount == nil,
            let surroundingLiteral = surroundingWordsLiteral(
             pattern,
@@ -1174,6 +1186,7 @@ struct RipgrepCommand {
            !asciiCaseInsensitive,
            !wordRegexp,
            !asciiBoundary,
+           !parsedCount,
            parsedMaxCount == nil,
            let literals = multiLiteralAlternation(
             pattern,
@@ -1211,6 +1224,21 @@ struct RipgrepCommand {
             return SwiftDarwinLiteralPreflight.quietExitCode(
                 path: path,
                 literal: literal
+            )
+        }
+        if parsedCount {
+            guard let parsedMaxCount,
+                  parsedPathOnlyMode == nil,
+                  !wordRegexp,
+                  !asciiCaseInsensitive,
+                  !asciiBoundary else {
+                return nil
+            }
+            return SwiftDarwinLiteralPreflight.countLineExitCode(
+                path: path,
+                literal: literal,
+                includeZero: parsedIncludeZero,
+                maxCount: parsedMaxCount
             )
         }
         if let parsedPathOnlyMode {

@@ -108,6 +108,47 @@ public enum SwiftDarwinLiteralPreflight {
         return matchedLineCount > 0 ? 0 : 1
     }
 
+    public static func countLineExitCode(
+        path: String,
+        literal: [UInt8],
+        includeZero: Bool,
+        maxCount: Int? = nil
+    ) -> Int32? {
+        guard !literal.isEmpty,
+              !literal.contains(UInt8(ascii: "\n")),
+              maxCount.map({ $0 > 0 }) ?? true else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+
+        let needle = Data(literal)
+        let newline = UInt8(ascii: "\n")
+        let limit = maxCount ?? Int.max
+        var searchStart = data.startIndex
+        var matchedLineCount = 0
+
+        while matchedLineCount < limit,
+              searchStart < data.endIndex,
+              let matchRange = data.range(of: needle, in: searchStart..<data.endIndex) {
+            guard !matchRange.isEmpty else {
+                return nil
+            }
+            matchedLineCount += 1
+            let lineEnd = data[matchRange.upperBound...]
+                .firstIndex(of: newline) ?? data.endIndex
+            searchStart = lineEnd < data.endIndex
+                ? data.index(after: lineEnd)
+                : data.endIndex
+        }
+
+        if matchedLineCount > 0 || includeZero {
+            FileHandle.standardOutput.write(Data("\(matchedLineCount)\n".utf8))
+        }
+        return matchedLineCount > 0 ? 0 : 1
+    }
+
     private static func hasBinaryDetectionPrefix(_ data: Data) -> Bool {
         let prefixLength = min(data.count, 64 * 1024)
         let prefixEnd = data.index(data.startIndex, offsetBy: prefixLength)

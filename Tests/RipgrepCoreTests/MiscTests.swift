@@ -1327,6 +1327,18 @@ struct MiscTests {
         #expect(maxCountNoMatch.stderr.isEmpty)
         #expect(maxCountNoMatch.status == 1)
 
+        for (countArguments, expectedOutput, expectedStatus) in [
+            (["-c", "needle", root.path("dense.txt")], Data("3\n".utf8), Int32(0)),
+            (["--count", "missing", root.path("quiet-no-match.txt")], Data(), Int32(1)),
+            (["--count", "--include-zero", "missing", root.path("quiet-no-match.txt")], Data("0\n".utf8), Int32(1)),
+            (["-c", "-m1", "needle", root.path("dense.txt")], Data("1\n".utf8), Int32(0)),
+        ] {
+            let countResult = try runExecutableResult(countArguments)
+            #expect(countResult.stdout == expectedOutput)
+            #expect(countResult.stderr.isEmpty)
+            #expect(countResult.status == expectedStatus)
+        }
+
         for (includeZeroArguments, expectedOutput) in [
             (["--include-zero"], output),
             (["--include-zero", "-n"], lineNumberOutput),
