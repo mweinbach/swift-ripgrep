@@ -239,10 +239,27 @@ public enum SwiftDarwinLiteralPreflight {
         defer {
             try? handle.close()
         }
+        while true {
+            let chunk = handle.readData(ofLength: 2 * 1024 * 1024)
+            guard !chunk.isEmpty else {
+                break
+            }
+            let containsNUL = chunk.withUnsafeBytes { rawChunk -> Bool in
+                guard let rawBase = rawChunk.baseAddress else {
+                    return false
+                }
+                return memchr(rawBase, 0, rawChunk.count) != nil
+            }
+            guard !containsNUL else {
+                return nil
+            }
+        }
+        guard Darwin.lseek(handle.fileDescriptor, 0, SEEK_SET) >= 0 else {
+            return nil
+        }
 
         var matchedLineCount = 0
         var carry = Data()
-        var bytesCheckedForNUL = 0
         var isFirstChunk = true
         var rejected = false
         var writeFailed = false
@@ -300,14 +317,6 @@ public enum SwiftDarwinLiteralPreflight {
                     rejected = true
                     return false
                 }
-            }
-            if bytesCheckedForNUL < 64 * 1024 {
-                let checkCount = min(count, 64 * 1024 - bytesCheckedForNUL)
-                if memchr(base, 0, checkCount) != nil {
-                    rejected = true
-                    return false
-                }
-                bytesCheckedForNUL += checkCount
             }
             return true
         }
@@ -651,7 +660,7 @@ private func rgSwiftDarwinWriteLiteralBytes(
         || base[0] == 0xFE && base[1] == 0xFF) {
         return nil
     }
-    if memchr(base, 0, min(haystackLength, 64 * 1024)) != nil {
+    if memchr(base, 0, haystackLength) != nil {
         return nil
     }
 
@@ -838,7 +847,7 @@ private func rgSwiftDarwinWriteWordLiteralLineNumberBytes(
         || base[0] == 0xFE && base[1] == 0xFF) {
         return nil
     }
-    if memchr(base, 0, min(haystackLength, 64 * 1024)) != nil {
+    if memchr(base, 0, haystackLength) != nil {
         return nil
     }
 
@@ -981,7 +990,7 @@ private func rgSwiftDarwinWriteSurroundingWordsBytes(
         || base[0] == 0xFE && base[1] == 0xFF) {
         return nil
     }
-    if memchr(base, 0, min(haystackLength, 64 * 1024)) != nil {
+    if memchr(base, 0, haystackLength) != nil {
         return nil
     }
 
@@ -1323,7 +1332,7 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
         || base[0] == 0xFE && base[1] == 0xFF) {
         return nil
     }
-    if memchr(base, 0, min(haystackLength, 64 * 1024)) != nil {
+    if memchr(base, 0, haystackLength) != nil {
         return nil
     }
 

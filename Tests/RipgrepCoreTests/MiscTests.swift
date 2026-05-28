@@ -1506,6 +1506,41 @@ struct MiscTests {
             #expect(zeroValueOutput == output)
         }
 
+        for neutralValueArguments in [
+            ["--field-match-separator=|"],
+            ["--field-match-separator", "|"],
+            ["--field-context-separator=|"],
+            ["--field-context-separator", "|"],
+            ["--context-separator=SEP"],
+            ["--context-separator", "SEP"],
+            ["--path-separator=/"],
+            ["--path-separator", "/"],
+            ["--hostname-bin=hostname"],
+            ["--hostname-bin", "hostname"],
+        ] {
+            let neutralValueOutput = try runExecutableData(
+                neutralValueArguments + [
+                    "needle",
+                    root.path("dense.txt"),
+                ],
+                fixture: {}
+            )
+            #expect(neutralValueOutput == output)
+        }
+
+        let fieldSeparatorLineNumberOutput = try runExecutableData([
+            "--field-match-separator=|",
+            "-n",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(fieldSeparatorLineNumberOutput == Data("""
+        1|needle needle needle
+        3|NEEDLE needle Needle
+        4|tail needle
+
+        """.utf8))
+
         let hiddenFlagOutput = try runExecutableData([
             "--hidden",
             "--no-ignore",

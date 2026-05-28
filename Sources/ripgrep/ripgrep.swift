@@ -479,6 +479,35 @@ struct RipgrepCommand {
             }
             return number == 0
         }
+        func isSeparatedNeutralValueFlag(_ argument: String) -> Bool {
+            switch argument {
+            case "--context-separator",
+                 "--field-context-separator",
+                 "--hostname-bin":
+                return true
+            default:
+                return false
+            }
+        }
+        func isInlineNeutralValueFlag(_ argument: String) -> Bool {
+            let prefixes = [
+                "--context-separator=",
+                "--field-context-separator=",
+                "--hostname-bin=",
+            ]
+            return prefixes.contains { argument.hasPrefix($0) }
+        }
+        func isInlineFieldMatchSeparator(_ argument: String) -> Bool {
+            argument.hasPrefix("--field-match-separator=")
+        }
+        func pathSeparatorValue(_ argument: String) -> String? {
+            argument.hasPrefix("--path-separator=")
+                ? String(argument.dropFirst("--path-separator=".count))
+                : nil
+        }
+        func isValidSimplePathSeparator(_ value: String) -> Bool {
+            value.isEmpty || value.utf8.count == 1
+        }
         func resourceLimitValue(_ argument: String) -> String? {
             if argument.hasPrefix("--dfa-size-limit=") {
                 return String(argument.dropFirst("--dfa-size-limit=".count))
@@ -559,6 +588,7 @@ struct RipgrepCommand {
         var parsedColumn = false
         var parsedColorMayEmit = false
         var parsedFixedStrings = false
+        var parsedFieldMatchSeparator = false
         var parsedHeading = false
         var parsedLineNumber = false
         var parsedNoMmap = false
@@ -670,6 +700,31 @@ struct RipgrepCommand {
                 guard isZeroInteger(zeroValue) else {
                     return nil
                 }
+            } else if argument == "--field-match-separator" {
+                guard argumentIndex < arguments.count else {
+                    return nil
+                }
+                parsedFieldMatchSeparator = true
+                argumentIndex += 1
+            } else if isInlineFieldMatchSeparator(argument) {
+                parsedFieldMatchSeparator = true
+            } else if isSeparatedNeutralValueFlag(argument) {
+                guard argumentIndex < arguments.count else {
+                    return nil
+                }
+                argumentIndex += 1
+            } else if isInlineNeutralValueFlag(argument) {
+                continue
+            } else if argument == "--path-separator" {
+                guard argumentIndex < arguments.count,
+                      isValidSimplePathSeparator(arguments[argumentIndex]) else {
+                    return nil
+                }
+                argumentIndex += 1
+            } else if let separator = pathSeparatorValue(argument) {
+                guard isValidSimplePathSeparator(separator) else {
+                    return nil
+                }
             } else if isResourceLimitFlag(argument) {
                 guard argumentIndex < arguments.count,
                       isValidHumanReadableSize(arguments[argumentIndex]) else {
@@ -727,6 +782,7 @@ struct RipgrepCommand {
         guard !parsedByteOffset,
               !parsedColumn,
               !parsedColorMayEmit,
+              !(parsedFieldMatchSeparator && lineNumber),
               !parsedHeading,
               !parsedTrim,
               !parsedWithFilename else {

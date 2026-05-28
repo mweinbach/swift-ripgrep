@@ -347,6 +347,26 @@ dense fixture measured current `--max-columns=0 Sherlock` at 444.5 ms versus
 before and 540.6 ms for Rust, and current `--max-depth=0 Sherlock` at
 449.9 ms versus 557.5 ms before.
 
+Separator and metadata value flags that cannot affect plain matching-line
+bytes now also remain eligible for the executable literal preflight. The parser
+consumes inline and separated `--field-match-separator`,
+`--field-context-separator`, `--context-separator`, `--path-separator`, and
+`--hostname-bin` only while filename, field, and context output are otherwise
+absent; `--field-match-separator` combined with line numbers still falls back.
+Small previous/current/Rust checks covered every accepted form, large
+current/Rust checks covered field, path, and hostname representatives, invalid
+`--path-separator=//` still reported the normal parser error, and
+`--field-match-separator='|' -n` matched Rust through fallback. Five-run
+before checks on the 252 MiB dense fixture measured the old
+`--field-match-separator='|' Sherlock` and `--path-separator=/ Sherlock` paths
+at 21.720 s and 21.696 s, with `--hostname-bin=hostname Sherlock` at 692.4 ms.
+Ten-run current checks measured those same forms at 468.2 ms, 507.1 ms, and
+488.9 ms respectively, versus 610.6 ms for Rust field-separator output. After
+tightening mapped preflight binary detection to reject NUL bytes anywhere
+before writing, those current checks measured 492.4 ms, 509.7 ms, and
+451.3 ms respectively, versus 536.3 ms for Rust field-separator output; the
+Rust parity harness binary fixtures also stayed on the binary-aware fallback.
+
 The Swift-only Darwin mmap/stdout preflight now also covers line-numbered
 medium bounded multi-literal output when no filename, byte-offset, column,
 replacement, only-matching, or vimgrep formatting is requested. Output for
