@@ -1070,6 +1070,15 @@ reset. On the 50 KiB dense fixture, five-run checks measured
 Rust; `--files-without-match --path-separator Z missing` measured 3.0 ms
 versus 30.3 ms before and 2.9 ms for Rust.
 
+Path-only `--heading --with-filename` forms now remain on that same Swift
+preflight because heading layout is output-neutral for `-l` and
+`--files-without-match`. Release byte checks matched Rust for matching,
+nonmatching, NUL-terminated, path-separated, quiet, and ignore-case path-only
+forms. On the 50 KiB dense fixture, five-run checks measured `--heading
+--with-filename -l needle` at 4.7 ms versus 30.9 ms before and 3.4 ms for
+Rust; `--heading --with-filename --files-without-match missing` measured
+3.5 ms versus 33.6 ms before and 2.7 ms for Rust.
+
 Filename-prefixed literal count output now also stays on the direct Swift
 writer for `-c` and `--count-matches`, including `--include-zero path:0`
 semantics. Output and exit status for matching, no-match, include-zero,

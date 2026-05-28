@@ -1556,7 +1556,7 @@ struct RipgrepCommand {
               parsedEncodingIsAutomatic,
               parsedAfterContext == 0,
               parsedBeforeContext == 0,
-              !parsedHeading || !parsedWithFilename || parsedPrintMode == .matchingLines,
+              !parsedHeading || !parsedWithFilename || parsedPrintMode == .matchingLines || parsedPathOnlyMode != nil,
               !parsedInvertMatch,
               !parsedJson,
               parsedMaxColumns == 0,
