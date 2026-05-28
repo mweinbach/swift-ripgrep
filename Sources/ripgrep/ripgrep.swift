@@ -747,6 +747,22 @@ struct RipgrepCommand {
             }
             return nil
         }
+        func normalizedEncodingValue(_ raw: String) -> String {
+            raw.trimmingCharacters(
+                in: CharacterSet(charactersIn: "\u{0009}\u{000A}\u{000C}\u{000D}\u{0020}")
+            ).lowercased()
+        }
+        func isKnownPreflightEncodingValue(_ raw: String) -> Bool {
+            switch normalizedEncodingValue(raw) {
+            case "auto", "none":
+                return true
+            default:
+                return TextEncoding.isKnownLabel(raw)
+            }
+        }
+        func isAutomaticEncodingValue(_ raw: String) -> Bool {
+            normalizedEncodingValue(raw) == "auto"
+        }
         func isValidHumanReadableSize(_ raw: String) -> Bool {
             guard !raw.isEmpty else {
                 return false
@@ -874,6 +890,7 @@ struct RipgrepCommand {
         var parsedFixedStrings = false
         var parsedFieldMatchSeparator = false
         var parsedHeading = false
+        var parsedEncodingIsAutomatic = true
         var parsedIncludeZero = false
         var parsedInvertMatch = false
         var parsedJson = false
@@ -1246,16 +1263,20 @@ struct RipgrepCommand {
                 guard isValidHumanReadableSize(maxFilesize) else {
                     return nil
                 }
+            } else if argument == "--no-encoding" {
+                parsedEncodingIsAutomatic = true
             } else if argument == "-E" || argument == "--encoding" {
                 guard argumentIndex < arguments.count,
-                      arguments[argumentIndex] == "auto" else {
+                      isKnownPreflightEncodingValue(arguments[argumentIndex]) else {
                     return nil
                 }
+                parsedEncodingIsAutomatic = isAutomaticEncodingValue(arguments[argumentIndex])
                 argumentIndex += 1
             } else if let encoding = encodingValue(argument) {
-                guard encoding == "auto" else {
+                guard isKnownPreflightEncodingValue(encoding) else {
                     return nil
                 }
+                parsedEncodingIsAutomatic = isAutomaticEncodingValue(encoding)
             } else if let unrestrictedCount = unrestrictedRepeatCount(argument) {
                 parsedUnrestrictedCount += unrestrictedCount
                 guard parsedUnrestrictedCount <= 3 else {
@@ -1338,6 +1359,7 @@ struct RipgrepCommand {
         guard !parsedByteOffset,
               !parsedColumn,
               !parsedColorMayEmit,
+              parsedEncodingIsAutomatic,
               parsedAfterContext == 0,
               parsedBeforeContext == 0,
               !(parsedFieldMatchSeparator && lineNumber),

@@ -665,15 +665,22 @@ plain Swift at 8.3 ms and Rust `--max-filesize=1K Sherlock` at 8.7 ms.
 
 Explicit default encoding selections now stay on the executable literal
 preflight. The parser accepts `--encoding auto`, `--encoding=auto`, `-E auto`,
-and `-Eauto`, while non-default labels still fall back. Focused executable
-tests covered all four forms, direct release byte checks matched Rust on small
-and large text fixtures, BOM input still returned to the normal BOM-aware
-searcher, and invalid `--encoding=bogus` still matched Rust's parser error. On
-the generated 4.8 MiB text fixture, single-run before probes measured the
-explicit-auto forms at about 0.04 s; seven-run current checks measured
+and `-Eauto`; it also validates explicit encoding labels that are later reset
+by `--no-encoding`, while final non-default labels and invalid labels still
+fall back. Focused executable tests covered all four auto forms, valid reset
+forms, and invalid reset diagnostics; direct release byte checks matched Rust
+on small and large text fixtures, BOM input still returned to the normal
+BOM-aware searcher, and invalid `--encoding=bogus` still matched Rust's parser
+error. On the generated 4.8 MiB text fixture, single-run before probes measured
+the explicit-auto forms at about 0.04 s; seven-run current checks measured
 `--encoding=auto`, `--encoding auto`, and `-Eauto` at 8.3 ms, 8.8 ms, and
 8.2 ms respectively, in line with plain Swift at 8.2 ms and Rust
-`--encoding=auto Sherlock` at 8.9 ms.
+`--encoding=auto Sherlock` at 8.9 ms. On the 45 MiB fixture,
+`--encoding utf-8 --no-encoding needle` improved from 83.2 ms to 36.6 ms,
+versus 45.2 ms for Rust; `-Eutf-8 --no-encoding needle` improved from
+81.0 ms to 35.6 ms, versus 44.9 ms for Rust; and
+`--encoding none --no-encoding needle` improved from 85.4 ms to 35.7 ms,
+versus 44.1 ms for Rust.
 
 The Swift-only Darwin mmap/stdout preflight now also covers line-numbered
 medium bounded multi-literal output when no filename, byte-offset, column,

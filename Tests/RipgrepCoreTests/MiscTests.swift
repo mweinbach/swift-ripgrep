@@ -1970,6 +1970,38 @@ struct MiscTests {
             #expect(encodingAutoOutput == output)
         }
 
+        for orderedEncodingResetArguments in [
+            ["--encoding=utf-8", "--no-encoding"],
+            ["--encoding", "utf-8", "--no-encoding"],
+            ["-Eutf-8", "--no-encoding"],
+            ["-E", "utf-8", "--no-encoding"],
+            ["--encoding=latin1", "--no-encoding"],
+            ["--encoding", "none", "--no-encoding"],
+        ] {
+            let orderedEncodingResetOutput = try runExecutableData(
+                orderedEncodingResetArguments + [
+                    "needle",
+                    root.path("dense.txt"),
+                ],
+                fixture: {}
+            )
+            #expect(orderedEncodingResetOutput == output)
+        }
+
+        let invalidEncodingResetOutput = try runExecutableResult([
+            "--encoding",
+            "bogus",
+            "--no-encoding",
+            "needle",
+            root.path("dense.txt"),
+        ])
+        #expect(invalidEncodingResetOutput.stdout.isEmpty)
+        #expect(
+            invalidEncodingResetOutput.stderr
+                == Data("rg: error parsing flag --encoding: grep config error: unknown encoding: bogus\n".utf8)
+        )
+        #expect(invalidEncodingResetOutput.status == 2)
+
         for maxFilesizeArguments in [
             ["--max-filesize=1"],
             ["--max-filesize", "1"],

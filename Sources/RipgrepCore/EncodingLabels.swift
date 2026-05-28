@@ -58,6 +58,10 @@ public struct TextEncoding: Equatable, Sendable {
         labelTable[normalizedLabel(raw)]
     }
 
+    public static func isKnownLabel(_ raw: String) -> Bool {
+        encoding(forLabel: raw) != nil
+    }
+
     private static func normalizedLabel(_ raw: String) -> String {
         raw.trimmingCharacters(in: asciiWhitespace).lowercased()
     }
