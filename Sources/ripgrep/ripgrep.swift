@@ -584,7 +584,13 @@ struct RipgrepCommand {
         }
         func shortFlagCluster(
             _ argument: String
-        ) -> (caseMode: CaseMode?, lineNumber: Bool?, wordRegexp: Bool, fixedStrings: Bool)? {
+        ) -> (
+            caseMode: CaseMode?,
+            lineNumber: Bool?,
+            wordRegexp: Bool,
+            fixedStrings: Bool,
+            unrestrictedCount: Int
+        )? {
             let bytes = Array(argument.utf8)
             guard bytes.count > 2,
                   bytes.first == UInt8(ascii: "-"),
@@ -596,6 +602,7 @@ struct RipgrepCommand {
             var lineNumber: Bool?
             var wordRegexp = false
             var fixedStrings = false
+            var unrestrictedCount = 0
             for byte in bytes.dropFirst() {
                 switch byte {
                 case UInt8(ascii: "i"):
@@ -616,11 +623,16 @@ struct RipgrepCommand {
                     fixedStrings = true
                 case UInt8(ascii: "a"):
                     continue
+                case UInt8(ascii: "u"):
+                    unrestrictedCount += 1
+                    guard unrestrictedCount <= 3 else {
+                        return nil
+                    }
                 default:
                     return nil
                 }
             }
-            return (caseMode, lineNumber, wordRegexp, fixedStrings)
+            return (caseMode, lineNumber, wordRegexp, fixedStrings, unrestrictedCount)
         }
         var parsedCaseMode = CaseMode.sensitive
         var parsedByteOffset = false
@@ -811,6 +823,10 @@ struct RipgrepCommand {
                 }
                 parsedWordRegexp = parsedWordRegexp || cluster.wordRegexp
                 parsedFixedStrings = parsedFixedStrings || cluster.fixedStrings
+                parsedUnrestrictedCount += cluster.unrestrictedCount
+                guard parsedUnrestrictedCount <= 3 else {
+                    return nil
+                }
             } else if argument == "--" {
                 valueArguments.append(contentsOf: arguments[argumentIndex...])
                 patternCanStartWithDash = true

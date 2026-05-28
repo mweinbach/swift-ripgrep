@@ -1276,6 +1276,10 @@ struct MiscTests {
             (["-uuu"], output),
             (["--unrestricted"], output),
             (["-u", "-n"], lineNumberOutput),
+            (["-un"], lineNumberOutput),
+            (["-nuu"], lineNumberOutput),
+            (["-u", "-uun"], lineNumberOutput),
+            (["-uuuF"], output),
             (["--unrestricted", "--unrestricted", "--unrestricted", "-n"], lineNumberOutput),
         ] {
             let unrestrictedOutput = try runExecutableData(
