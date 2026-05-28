@@ -288,9 +288,9 @@ missing enabled ignore-file paths still fall back. On the 45 MiB fixture,
 Output-neutral formatting disables and explicit block-buffering are parsed
 conservatively in the same preflight. The parser tracks ordered formatting
 toggles and only dispatches when the final state does not request filenames,
-headings, byte offsets, columns, trimming, or color; explicit
-`--line-buffered` remains on the full CLI path because it changes flush
-semantics. Dense-fixture output and exit status for `--messages`,
+headings, byte offsets, columns, trimming, or color; explicit streaming
+`--line-buffered` line output remains on the full CLI path because it changes
+flush semantics. Dense-fixture output and exit status for `--messages`,
 `--block-buffered`, `--no-line-buffered`, `--no-byte-offset`, `--no-column`,
 `--no-trim`, `--color=never`, `--with-filename --no-filename`,
 `--heading --no-heading`, `--column --no-column`,
@@ -301,6 +301,13 @@ neutral-format form at 258.3 ms versus 359.7 ms before and 329.1 ms for Rust;
 `--block-buffered --messages Sherlock` measured 265.3 ms versus 355.6 ms
 before and 308.7 ms for Rust; `--no-line-buffered Sherlock` measured 235.1 ms
 versus 349.6 ms before and 335.7 ms for Rust.
+Quiet, path-only, and count output are now allowed to reuse the executable
+preflight with `--line-buffered`, since no streaming matching-line flushes are
+observable in those modes. On the 45 MiB fixture, `--line-buffered -q needle`
+improved from 27.9 ms to 5.3 ms, versus 3.0 ms for Rust;
+`--line-buffered -l needle` improved from 43.7 ms to 4.1 ms, versus 3.3 ms for
+Rust; and `--line-buffered -c -m1 needle` improved from a forced fallback at
+33.9 ms to 4.0-5.7 ms, versus 3.2 ms for Rust.
 
 `--include-zero` now stays on the executable literal preflight for normal
 matching-line output, where it only affects count summaries. Focused tests

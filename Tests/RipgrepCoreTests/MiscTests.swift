@@ -1279,6 +1279,7 @@ struct MiscTests {
 
         for (quietArguments, expectedStatus) in [
             (["-q", "needle", root.path("dense.txt")], Int32(0)),
+            (["--line-buffered", "-q", "needle", root.path("dense.txt")], Int32(0)),
             (["--quiet", "missing", root.path("quiet-no-match.txt")], Int32(1)),
             (["-qn", "needle", root.path("dense.txt")], Int32(0)),
             (["-qi", "needle", root.path("dense.txt")], Int32(0)),
@@ -1308,6 +1309,7 @@ struct MiscTests {
 
         for (pathOnlyArguments, expectedOutput, expectedStatus) in [
             (["-l", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
+            (["--line-buffered", "-l", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
             (["--files-with-matches", "--null", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt"))\0".utf8), Int32(0)),
             (["-l", "missing", root.path("dense.txt")], Data(), Int32(1)),
             (["--files-without-match", "missing", root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
@@ -1373,6 +1375,7 @@ struct MiscTests {
             (["--count", "missing", root.path("quiet-no-match.txt")], Data(), Int32(1)),
             (["--count", "--include-zero", "missing", root.path("quiet-no-match.txt")], Data("0\n".utf8), Int32(1)),
             (["-c", "-m1", "needle", root.path("dense.txt")], Data("1\n".utf8), Int32(0)),
+            (["--line-buffered", "-c", "-m1", "needle", root.path("dense.txt")], Data("1\n".utf8), Int32(0)),
             (["-c", "-m1", "-i", "NEEDLE", root.path("dense.txt")], Data("1\n".utf8), Int32(0)),
             (["-ci", "-m1", "NEEDLE", root.path("dense.txt")], Data("1\n".utf8), Int32(0)),
             (["-c", "-m1", "-i", "missing", root.path("dense.txt")], Data(), Int32(1)),
@@ -1541,12 +1544,28 @@ struct MiscTests {
         ], fixture: {})
         #expect(noLineBufferedOutput == output)
 
+        let orderedNoLineBufferedOutput = try runExecutableData([
+            "--line-buffered",
+            "--no-line-buffered",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(orderedNoLineBufferedOutput == output)
+
         let blockBufferedOutput = try runExecutableData([
             "--block-buffered",
             "needle",
             root.path("dense.txt"),
         ], fixture: {})
         #expect(blockBufferedOutput == output)
+
+        let orderedBlockBufferedOutput = try runExecutableData([
+            "--line-buffered",
+            "--block-buffered",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(orderedBlockBufferedOutput == output)
 
         let noColumnOutput = try runExecutableData([
             "--no-column",
