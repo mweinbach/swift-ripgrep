@@ -401,6 +401,19 @@ measured 8.8 ms versus 41.1 ms before and 3.7 ms for Rust; final
 `--files-with-matches --count-matches needle` measured 8.0 ms versus 53.2 ms
 before; and `-H --count-matches needle` measured 7.9 ms versus 57.7 ms before.
 
+The same mapped counter now covers safe multi-literal count-matches inputs from
+repeated explicit regexps, simple alternations, and literal-only pattern files.
+The preflight first deduplicates identical literals and proves that distinct
+literals cannot overlap or contain one another, so ambiguous ordered-overlap
+cases stay on the prior fallback. Dense-fixture byte checks matched Rust for
+repeated-regexp, alternation, pattern-file, filename-prefixed, and include-zero
+no-match forms;
+overlapping `aa`/`a` controls stayed on the prior fallback. On the 50 KiB dense
+fixture, `--count-matches -e needle -e quiet` measured 9.6 ms versus 54.0 ms
+before and 3.6 ms for Rust, `--count-matches 'needle|quiet'` measured 10.1 ms
+versus 3.7 ms for Rust, while `--count-matches -f patterns.txt` measured
+10.1 ms and `-H --count-matches -f patterns.txt` measured 10.2 ms.
+
 `--include-zero` now stays on the executable literal preflight for normal
 matching-line output, where it only affects count summaries. Focused tests
 cover plain output, `-n`, and `--include-zero --no-include-zero`; byte checks

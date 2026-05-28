@@ -1622,7 +1622,17 @@ struct RipgrepCommand {
                 return nil
             }
             if parsedPrintMode == .countMatches {
-                return nil
+                guard !asciiCaseInsensitive,
+                      parsedMaxCount == nil else {
+                    return nil
+                }
+                return SwiftDarwinLiteralPreflight.multiLiteralCountMatchesExitCode(
+                    path: path,
+                    literals: literals,
+                    includeZero: parsedIncludeZero,
+                    countPrefix: parsedCountPrefix,
+                    crlfTerminated: parsedCrlf
+                )
             }
             if asciiCaseInsensitive {
                 if parsedQuiet {
@@ -1728,7 +1738,17 @@ struct RipgrepCommand {
             allowPCREQuotedLiterals: allowPCREQuotedLiterals
            ) {
             if parsedPrintMode == .countMatches {
-                return nil
+                guard !asciiCaseInsensitive,
+                      parsedMaxCount == nil else {
+                    return nil
+                }
+                return SwiftDarwinLiteralPreflight.multiLiteralCountMatchesExitCode(
+                    path: path,
+                    literals: literals,
+                    includeZero: parsedIncludeZero,
+                    countPrefix: parsedCountPrefix,
+                    crlfTerminated: parsedCrlf
+                )
             }
             if asciiCaseInsensitive {
                 if parsedQuiet {

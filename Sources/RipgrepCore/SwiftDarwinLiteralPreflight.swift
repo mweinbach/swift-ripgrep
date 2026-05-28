@@ -1569,16 +1569,34 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
 
-        let needle = Data(literal)
-        var searchStart = data.startIndex
+        let matchCount = countNonOverlappingMatches(in: data, literal: literal)
+
+        if matchCount > 0 || includeZero {
+            var output = Data(countPrefix)
+            output.append(countOutput(matchCount, crlfTerminated: crlfTerminated))
+            FileHandle.standardOutput.write(output)
+        }
+        return matchCount > 0 ? 0 : 1
+    }
+
+    public static func multiLiteralCountMatchesExitCode(
+        path: String,
+        literals: [[UInt8]],
+        includeZero: Bool,
+        countPrefix: [UInt8] = [],
+        crlfTerminated: Bool = false
+    ) -> Int32? {
+        guard let literals = nonOverlappingDistinctLiterals(literals),
+              !literals.isEmpty else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+
         var matchCount = 0
-        while searchStart < data.endIndex,
-              let matchRange = data.range(of: needle, in: searchStart..<data.endIndex) {
-            guard !matchRange.isEmpty else {
-                return nil
-            }
-            matchCount += 1
-            searchStart = matchRange.upperBound
+        for literal in literals {
+            matchCount += countNonOverlappingMatches(in: data, literal: literal)
         }
 
         if matchCount > 0 || includeZero {
@@ -1654,6 +1672,91 @@ public enum SwiftDarwinLiteralPreflight {
             emitLines: emitLines
         )
     }
+}
+
+private func countNonOverlappingMatches(in data: Data, literal: [UInt8]) -> Int {
+    let needle = Data(literal)
+    var searchStart = data.startIndex
+    var matchCount = 0
+    while searchStart < data.endIndex,
+          let matchRange = data.range(of: needle, in: searchStart..<data.endIndex) {
+        guard !matchRange.isEmpty else {
+            break
+        }
+        matchCount += 1
+        searchStart = matchRange.upperBound
+    }
+    return matchCount
+}
+
+private func nonOverlappingDistinctLiterals(_ literals: [[UInt8]]) -> [[UInt8]]? {
+    var distinct: [[UInt8]] = []
+    distinct.reserveCapacity(literals.count)
+    for literal in literals {
+        guard !literal.isEmpty,
+              !literal.contains(UInt8(ascii: "\n")) else {
+            return nil
+        }
+        if !distinct.contains(literal) {
+            distinct.append(literal)
+        }
+    }
+
+    for leftIndex in distinct.indices {
+        for rightIndex in distinct.indices where leftIndex != rightIndex {
+            if literalsCanOverlap(distinct[leftIndex], distinct[rightIndex]) {
+                return nil
+            }
+        }
+    }
+    return distinct
+}
+
+private func literalsCanOverlap(_ left: [UInt8], _ right: [UInt8]) -> Bool {
+    if containsLiteral(left, in: right) || containsLiteral(right, in: left) {
+        return true
+    }
+
+    let maxOverlap = min(left.count, right.count)
+    guard maxOverlap > 0 else {
+        return false
+    }
+    for length in 1...maxOverlap {
+        if suffix(left, length).elementsEqual(prefix(right, length))
+            || suffix(right, length).elementsEqual(prefix(left, length)) {
+            return true
+        }
+    }
+    return false
+}
+
+private func containsLiteral(_ needle: [UInt8], in haystack: [UInt8]) -> Bool {
+    guard !needle.isEmpty,
+          needle.count <= haystack.count else {
+        return false
+    }
+    if needle.count == haystack.count {
+        return needle == haystack
+    }
+    for offset in 0...(haystack.count - needle.count) {
+        var matches = true
+        for index in needle.indices where haystack[offset + index] != needle[index] {
+            matches = false
+            break
+        }
+        if matches {
+            return true
+        }
+    }
+    return false
+}
+
+private func prefix(_ bytes: [UInt8], _ count: Int) -> ArraySlice<UInt8> {
+    bytes[..<bytes.index(bytes.startIndex, offsetBy: count)]
+}
+
+private func suffix(_ bytes: [UInt8], _ count: Int) -> ArraySlice<UInt8> {
+    bytes[bytes.index(bytes.endIndex, offsetBy: -count)..<bytes.endIndex]
 }
 
 @inline(__always)

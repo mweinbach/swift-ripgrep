@@ -1808,6 +1808,31 @@ struct MiscTests {
         ], fixture: {})
         #expect(explicitRegexpCountMatchesOutput == countMatchesOutput)
 
+        let repeatedRegexpCountMatchesOutput = try runExecutableData([
+            "--count-matches",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(repeatedRegexpCountMatchesOutput == Data("6\n".utf8))
+
+        let patternFileCountMatchesOutput = try runExecutableData([
+            "--count-matches",
+            "-f",
+            root.path("patterns.txt"),
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(patternFileCountMatchesOutput == repeatedRegexpCountMatchesOutput)
+
+        let alternationCountMatchesOutput = try runExecutableData([
+            "--count-matches",
+            "needle|quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(alternationCountMatchesOutput == repeatedRegexpCountMatchesOutput)
+
         let prefixedCountMatchesOutput = try runExecutableData([
             "-H",
             "--count-matches",
@@ -1815,6 +1840,15 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(prefixedCountMatchesOutput == Data("\(root.path("dense.txt")):5\n".utf8))
+
+        let prefixedPatternFileCountMatchesOutput = try runExecutableData([
+            "-H",
+            "--count-matches",
+            "-f",
+            root.path("patterns.txt"),
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(prefixedPatternFileCountMatchesOutput == Data("\(root.path("dense.txt")):6\n".utf8))
 
         let includeZeroCountMatchesResult = try runExecutableResult([
             "--include-zero",
@@ -1825,6 +1859,19 @@ struct MiscTests {
         #expect(includeZeroCountMatchesResult.status == 1)
         #expect(includeZeroCountMatchesResult.stdout == Data("0\n".utf8))
         #expect(includeZeroCountMatchesResult.stderr.isEmpty)
+
+        let includeZeroRepeatedRegexpCountMatchesResult = try runExecutableResult([
+            "--include-zero",
+            "--count-matches",
+            "-e",
+            "missing",
+            "-e",
+            "absent",
+            root.path("dense.txt"),
+        ])
+        #expect(includeZeroRepeatedRegexpCountMatchesResult.status == 1)
+        #expect(includeZeroRepeatedRegexpCountMatchesResult.stdout == Data("0\n".utf8))
+        #expect(includeZeroRepeatedRegexpCountMatchesResult.stderr.isEmpty)
 
         let quietCountMatchesResult = try runExecutableResult([
             "-q",
