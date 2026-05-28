@@ -1861,6 +1861,22 @@ struct MiscTests {
             #expect(neutralResetOutput == output)
         }
 
+        for orderedResetArguments in [
+            ["--json", "--no-json"],
+            ["--stats", "--no-stats"],
+            ["--search-zip", "--no-search-zip"],
+            ["-z", "--no-search-zip"],
+        ] {
+            let orderedResetOutput = try runExecutableData(
+                orderedResetArguments + [
+                    "needle",
+                    root.path("dense.txt"),
+                ],
+                fixture: {}
+            )
+            #expect(orderedResetOutput == output)
+        }
+
         let inlineSortNoneOutput = try runExecutableData([
             "--sort=none",
             "needle",

@@ -537,15 +537,21 @@ Default-reset and no-op selection flags now also stay eligible for the
 executable literal preflight when the command is still a single explicit file
 search. This covers buffering/search/output resets such as
 `--no-block-buffered`, `--no-json`, `--no-stats`, `--no-search-zip`, glob-case
-toggles without globs, `--sort none`/`--sortr none`, and validated
-`--threads N` forms. Small previous/current/Rust checks covered each accepted
-form, large current/Rust checks covered `--no-block-buffered`, `--sort=none`,
-and `--threads=1`, and invalid `--threads=bogus` still fell through to the
-normal parser error. Ten-run checks on the 252 MiB dense fixture measured
-current `--no-block-buffered Sherlock` at 313.7 ms versus 443.0 ms before,
+toggles without globs, ordered output/search toggles that finish disabled,
+`--sort none`/`--sortr none`, and validated `--threads N` forms. Small
+previous/current/Rust checks covered each accepted form, large current/Rust
+checks covered `--no-block-buffered`, `--sort=none`, and `--threads=1`, and
+invalid `--threads=bogus` still fell through to the normal parser error.
+Ten-run checks on the 252 MiB dense fixture measured current
+`--no-block-buffered Sherlock` at 313.7 ms versus 443.0 ms before,
 `--sort=none Sherlock` at 319.8 ms versus 449.3 ms before and 418.7 ms for
 Rust, and a noisy `--threads=1 Sherlock` rerun at 380.1 ms versus 480.0 ms
-before and 401.8 ms for Rust.
+before and 401.8 ms for Rust. Ordered reset checks on the 45 MiB fixture
+measured `--json --no-json needle` improving from 84.3 ms to 35.9 ms, versus
+42.3 ms for Rust; `--stats --no-stats needle` from 83.4 ms to 34.5 ms, versus
+43.0 ms for Rust; `--search-zip --no-search-zip needle` from 85.2 ms to
+35.5 ms, versus 42.3 ms for Rust; and `-z --no-search-zip needle` at 34.0 ms,
+versus 42.3 ms for Rust.
 
 Valid regex/DFA resource limit flags now also remain eligible for the
 executable literal preflight. The preflight parser accepts separated and inline

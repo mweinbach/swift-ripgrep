@@ -860,6 +860,7 @@ struct RipgrepCommand {
         var parsedFieldMatchSeparator = false
         var parsedHeading = false
         var parsedIncludeZero = false
+        var parsedJson = false
         var parsedLineNumber = false
         var parsedLineRegexp = false
         var parsedLineBuffered = false
@@ -868,8 +869,10 @@ struct RipgrepCommand {
         var parsedPathOnlyMode: PathOnlyMode?
         var parsedPathSeparator = false
         var parsedQuiet = false
+        var parsedSearchZip = false
         var parsedMaxCount: Int?
         var parsedCount = false
+        var parsedStats = false
         var parsedTrim = false
         var parsedTypeDefinitionChanges: [TypeChange] = []
         var parsedUnrestrictedCount = 0
@@ -943,6 +946,18 @@ struct RipgrepCommand {
                 parsedLineRegexp = false
             } else if isQuietFlag(argument) {
                 parsedQuiet = true
+            } else if argument == "--json" {
+                parsedJson = true
+            } else if argument == "--no-json" {
+                parsedJson = false
+            } else if argument == "--stats" {
+                parsedStats = true
+            } else if argument == "--no-stats" {
+                parsedStats = false
+            } else if argument == "-z" || argument == "--search-zip" {
+                parsedSearchZip = true
+            } else if argument == "--no-search-zip" {
+                parsedSearchZip = false
             } else if argument == "--line-buffered" {
                 parsedLineBuffered = true
             } else if argument == "--block-buffered" || argument == "--no-line-buffered" {
@@ -1269,6 +1284,9 @@ struct RipgrepCommand {
               !parsedColorMayEmit,
               !(parsedFieldMatchSeparator && lineNumber),
               !parsedHeading,
+              !parsedJson,
+              !parsedSearchZip,
+              !parsedStats,
               !parsedTrim,
               !parsedWithFilename else {
             return nil
