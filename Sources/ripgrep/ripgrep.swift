@@ -1604,6 +1604,52 @@ struct RipgrepCommand {
         } else {
             []
         }
+        if parsedStopOnNonmatch,
+           parsedPrintMode == .matchingLines,
+           !parsedOnlyMatching,
+           !parsedQuiet,
+           !parsedByteOffset,
+           !parsedColumn,
+           !parsedColorMayEmit,
+           parsedEncodingIsAutomatic,
+           parsedAfterContext == 0,
+           parsedBeforeContext == 0,
+           !parsedInvertMatch,
+           !parsedJson,
+           parsedMaxColumns == 0,
+           !parsedNullData,
+           !parsedPassthru,
+           !parsedSearchZip,
+           !parsedStats,
+           !parsedTrim,
+           !wordRegexp,
+           !parsedLineRegexp,
+           !asciiCaseInsensitive,
+           !parsedCrlf,
+           parsedMaxCount != 0,
+           path != "-" {
+            let stopLiteralPattern = fixedStrings
+                ? pattern
+                : RegexLiteralParser.literal(
+                    fromPlainRegexPattern: pattern,
+                    allowPCREQuotedLiterals: allowPCREQuotedLiterals
+                )
+            if let stopLiteralPattern {
+                let stopLiteral = Array(stopLiteralPattern.utf8)
+                if !stopLiteral.isEmpty,
+                   !stopLiteral.contains(UInt8(ascii: "\n")) {
+                    return SwiftDarwinLiteralPreflight.stopOnNonmatchLineExitCode(
+                        path: path,
+                        literal: stopLiteral,
+                        maxCount: parsedMaxCount,
+                        lineNumber: lineNumber,
+                        lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                        linePrefix: parsedLinePrefix,
+                        headingPrefix: parsedHeadingPrefix
+                    )
+                }
+            }
+        }
         guard !(parsedLineRegexp && wordRegexp) else {
             return nil
         }

@@ -1160,6 +1160,68 @@ public enum SwiftDarwinLiteralPreflight {
         return matchedLineCount > 0 ? 0 : 1
     }
 
+    public static func stopOnNonmatchLineExitCode(
+        path: String,
+        literal: [UInt8],
+        maxCount: Int? = nil,
+        lineNumber: Bool = false,
+        lineNumberFieldSeparator: [UInt8] = [58],
+        linePrefix: [UInt8] = [],
+        headingPrefix: [UInt8] = []
+    ) -> Int32? {
+        guard !literal.isEmpty,
+              maxCount != 0 else {
+            return nil
+        }
+
+        let fd = path.withCString { Darwin.open($0, O_RDONLY) }
+        guard fd >= 0 else {
+            return nil
+        }
+        defer {
+            Darwin.close(fd)
+        }
+
+        var fileStat = stat()
+        guard Darwin.fstat(fd, &fileStat) == 0 else {
+            return nil
+        }
+        guard (fileStat.st_mode & S_IFMT) == S_IFREG else {
+            return nil
+        }
+        guard fileStat.st_size > 0 else {
+            return 1
+        }
+        guard UInt64(fileStat.st_size) <= UInt64(Int.max) else {
+            return nil
+        }
+
+        let haystackLength = Int(fileStat.st_size)
+        guard let mapped = Darwin.mmap(nil, haystackLength, PROT_READ, MAP_PRIVATE, fd, 0),
+              mapped != MAP_FAILED else {
+            return nil
+        }
+        defer {
+            Darwin.munmap(mapped, haystackLength)
+        }
+
+        guard let matchedLineCount = literal.withUnsafeBufferPointer({ literalBuffer in
+            rgSwiftDarwinWriteStopOnNonmatchLiteralLines(
+                UnsafeRawPointer(mapped).assumingMemoryBound(to: UInt8.self),
+                haystackLength: haystackLength,
+                literal: literalBuffer,
+                maxCount: maxCount ?? Int.max,
+                lineNumber: lineNumber,
+                lineNumberFieldSeparator: lineNumberFieldSeparator,
+                linePrefix: linePrefix,
+                headingPrefix: headingPrefix
+            )
+        }) else {
+            return nil
+        }
+        return matchedLineCount > 0 ? 0 : 1
+    }
+
     public static func countLineExitCode(
         path: String,
         literal: [UInt8],
@@ -4839,6 +4901,126 @@ private func rgSwiftDarwinWriteLiteralBytes(
         guard output?.flush() == true else {
             return nil
         }
+    }
+    return matchedLineCount
+}
+
+private func rgSwiftDarwinWriteStopOnNonmatchLiteralLines(
+    _ base: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    literal: UnsafeBufferPointer<UInt8>,
+    maxCount: Int,
+    lineNumber: Bool,
+    lineNumberFieldSeparator: [UInt8],
+    linePrefix: [UInt8],
+    headingPrefix: [UInt8]
+) -> Int? {
+    guard let literalBase = literal.baseAddress,
+          literal.count > 0,
+          maxCount > 0 else {
+        return nil
+    }
+    if haystackLength >= 3,
+       base[0] == 0xEF,
+       base[1] == 0xBB,
+       base[2] == 0xBF {
+        return nil
+    }
+    if haystackLength >= 2,
+       (base[0] == 0xFF && base[1] == 0xFE
+        || base[0] == 0xFE && base[1] == 0xFF) {
+        return nil
+    }
+    if memchr(base, 0, haystackLength) != nil {
+        return nil
+    }
+
+    guard let firstMatch = rg_memmem_simple(
+        base,
+        haystackLength,
+        literalBase,
+        literal.count
+    ) else {
+        return 0
+    }
+    guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+        return nil
+    }
+    defer {
+        output.deallocate()
+    }
+
+    let newline = UInt8(ascii: "\n")
+    var firstLineStart = base.distance(to: firstMatch)
+    while firstLineStart > 0, base[firstLineStart - 1] != newline {
+        firstLineStart -= 1
+    }
+    var nextLineNumber = lineNumber
+        ? Int(rg_memcount_byte(base, firstLineStart, newline)) + 1
+        : 1
+    var lineStart = firstLineStart
+    var matchedLineCount = 0
+    var emittedHeading = false
+
+    func emitLine(lineStart: Int, outputEnd: Int, hasNewline: Bool) -> Bool {
+        guard output.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading),
+              output.writeBytes(linePrefix) else {
+            return false
+        }
+        if lineNumber {
+            guard output.writeLineNumberPrefix(
+                nextLineNumber,
+                fieldSeparator: lineNumberFieldSeparator
+            ) else {
+                return false
+            }
+        }
+        guard output.write(base.advanced(by: lineStart), count: outputEnd - lineStart) else {
+            return false
+        }
+        if !hasNewline,
+           !output.writeByte(newline) {
+            return false
+        }
+        return true
+    }
+
+    while matchedLineCount < maxCount,
+          lineStart < haystackLength {
+        let newlinePointer = memchr(base.advanced(by: lineStart), Int32(newline), haystackLength - lineStart)
+        let lineEnd: Int
+        let outputEnd: Int
+        let hasNewline: Bool
+        if let newlinePointer {
+            lineEnd = base.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self))
+            outputEnd = lineEnd + 1
+            hasNewline = true
+        } else {
+            lineEnd = haystackLength
+            outputEnd = haystackLength
+            hasNewline = false
+        }
+
+        let lineLength = lineEnd - lineStart
+        guard rg_memmem_simple(
+            base.advanced(by: lineStart),
+            lineLength,
+            literalBase,
+            literal.count
+        ) != nil else {
+            break
+        }
+        guard emitLine(lineStart: lineStart, outputEnd: outputEnd, hasNewline: hasNewline) else {
+            return nil
+        }
+
+        matchedLineCount += 1
+        nextLineNumber += 1
+        lineStart = outputEnd
+    }
+
+    guard output.flush() else {
+        return nil
     }
     return matchedLineCount
 }

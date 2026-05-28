@@ -1243,6 +1243,14 @@ struct MiscTests {
         try root.write("needle\n", to: "ignored.txt")
         try root.write(Data("pre\0needle\n".utf8), to: "binary-mode.dat")
         try root.write("quiet\n", to: "quiet-no-match.txt")
+        try root.write("""
+        hay
+        needle one
+        needle two
+        needle three
+        quiet
+        needle four
+        """, to: "stop-run.txt")
 
         func runExecutableResult(_ arguments: [String]) throws -> (stdout: Data, stderr: Data, status: Int32) {
             let executable = ripgrepPackageRootURL().appendingPathComponent(".build/debug/ripgrep")
@@ -3046,6 +3054,31 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(activeStopOnNonmatchOutput == Data("needle needle needle\n".utf8))
+
+        let stopOnNonmatchOutput = try runExecutableData([
+            "--stop-on-nonmatch",
+            "needle",
+            root.path("stop-run.txt"),
+        ], fixture: {})
+        #expect(stopOnNonmatchOutput == Data("needle one\nneedle two\nneedle three\n".utf8))
+
+        let stopOnNonmatchLineNumberMaxOutput = try runExecutableData([
+            "-n",
+            "--stop-on-nonmatch",
+            "-m2",
+            "needle",
+            root.path("stop-run.txt"),
+        ], fixture: {})
+        #expect(stopOnNonmatchLineNumberMaxOutput == Data("2:needle one\n3:needle two\n".utf8))
+
+        let stopOnNonmatchNoMatch = try runExecutableResult([
+            "--stop-on-nonmatch",
+            "missing",
+            root.path("stop-run.txt"),
+        ])
+        #expect(stopOnNonmatchNoMatch.stdout.isEmpty)
+        #expect(stopOnNonmatchNoMatch.stderr.isEmpty)
+        #expect(stopOnNonmatchNoMatch.status == 1)
 
         let messagesOutput = try runExecutableData([
             "--messages",
