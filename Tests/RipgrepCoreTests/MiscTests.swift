@@ -4492,6 +4492,15 @@ struct MiscTests {
         ], fixture: {})
         #expect(stopOnNonmatchCountOutput == Data("3\n".utf8))
 
+        let stopOnNonmatchAfterContextCountOutput = try runExecutableData([
+            "-c",
+            "--stop-on-nonmatch",
+            "--after-context=1",
+            "needle",
+            root.path("stop-run.txt"),
+        ], fixture: {})
+        #expect(stopOnNonmatchAfterContextCountOutput == stopOnNonmatchCountOutput)
+
         let stopOnNonmatchMaxCountOutput = try runExecutableData([
             "-c",
             "--stop-on-nonmatch",
@@ -4500,6 +4509,16 @@ struct MiscTests {
             root.path("stop-run.txt"),
         ], fixture: {})
         #expect(stopOnNonmatchMaxCountOutput == Data("2\n".utf8))
+
+        let stopOnNonmatchContextMaxCountOutput = try runExecutableData([
+            "-c",
+            "--stop-on-nonmatch",
+            "--context=1",
+            "-m2",
+            "needle",
+            root.path("stop-run.txt"),
+        ], fixture: {})
+        #expect(stopOnNonmatchContextMaxCountOutput == stopOnNonmatchMaxCountOutput)
 
         let stopOnNonmatchPrefixedCountOutput = try runExecutableData([
             "-H",

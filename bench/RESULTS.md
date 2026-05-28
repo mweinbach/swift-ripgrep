@@ -173,6 +173,17 @@ stay on their existing literal preflights; matching-line output, including
 | `--after-context=1 -c needle` | 1.536 s | 8.5 ms | 9.2 ms |
 | `--before-context=1 --count-matches needle` | 1.582 s | 6.0 ms | 18.3 ms |
 
+`--stop-on-nonmatch -c` already had a Swift literal preflight; context flags now
+stay on that count preflight too because they do not change Rust's count output.
+Visible stop-on-nonmatch context output stays on the context-aware/fallback path.
+
+10 timed runs on `/tmp/swift-rg-candidates/trim.txt` with 3 warmups:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--stop-on-nonmatch --after-context=1 -c needle` | 1.533 s | 6.1 ms | 7.6 ms |
+| `--stop-on-nonmatch --context=1 -c -m2 needle` | 823.4 ms | 4.0 ms | 2.9 ms |
+
 Case-sensitive repeated `-e`/`-f` and top-level literal alternation `--trim`
 forms now use the same mapped trim writer.
 Literal `--invert-match` matching-line output now has its own mapped Swift line

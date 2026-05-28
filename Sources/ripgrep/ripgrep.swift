@@ -1961,8 +1961,6 @@ struct RipgrepCommand {
            !parsedColumn,
            !parsedColorMayEmit,
            parsedEncodingIsAutomatic,
-           parsedAfterContext == 0,
-           parsedBeforeContext == 0,
            !parsedInvertMatch,
            !parsedJson,
            parsedMaxColumns == 0,
