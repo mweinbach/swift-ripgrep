@@ -183,6 +183,55 @@ public enum SwiftDarwinLiteralPreflight {
         return 0
     }
 
+    public static func fixedLookaheadQuietExitCode(
+        path: String,
+        literal: [UInt8],
+        suffix: [UInt8],
+        suffixShouldMatch: Bool
+    ) -> Int32? {
+        guard let matched = containsFixedLookaheadLiteral(
+            path: path,
+            literal: literal,
+            suffix: suffix,
+            suffixShouldMatch: suffixShouldMatch
+        ) else {
+            return nil
+        }
+        return matched ? 0 : 1
+    }
+
+    public static func fixedLookaheadPathOnlyExitCode(
+        path: String,
+        literal: [UInt8],
+        suffix: [UInt8],
+        suffixShouldMatch: Bool,
+        printWhenMatched: Bool,
+        nullTerminated: Bool,
+        crlfTerminated: Bool,
+        outputPath: [UInt8]? = nil
+    ) -> Int32? {
+        guard let matched = containsFixedLookaheadLiteral(
+            path: path,
+            literal: literal,
+            suffix: suffix,
+            suffixShouldMatch: suffixShouldMatch
+        ) else {
+            return nil
+        }
+        guard matched == printWhenMatched else {
+            return 1
+        }
+        guard writePathOnlyOutput(
+            path: path,
+            outputPath: outputPath,
+            nullTerminated: nullTerminated,
+            crlfTerminated: crlfTerminated
+        ) else {
+            return nil
+        }
+        return 0
+    }
+
     public static func asciiCaseInsensitiveQuietExitCode(
         path: String,
         literal: [UInt8]
@@ -1635,6 +1684,67 @@ public enum SwiftDarwinLiteralPreflight {
                                 prefix.count
                             ) == 0
                         if hasPrefix == prefixShouldMatch {
+                            return true
+                        }
+                        searchOffset = matchStart + 1
+                    }
+                    return false
+                }
+            }
+        }
+    }
+
+    private static func containsFixedLookaheadLiteral(
+        path: String,
+        literal: [UInt8],
+        suffix: [UInt8],
+        suffixShouldMatch: Bool
+    ) -> Bool? {
+        guard !literal.isEmpty,
+              !suffix.isEmpty,
+              !literal.contains(UInt8(ascii: "\n")),
+              !suffix.contains(UInt8(ascii: "\n")),
+              !literal.contains(UInt8(ascii: "\r")),
+              !suffix.contains(UInt8(ascii: "\r")) else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard data.count >= literal.count else {
+            return false
+        }
+
+        return data.withUnsafeBytes { rawData in
+            guard let rawBase = rawData.baseAddress else {
+                return false
+            }
+            let base = rawBase.assumingMemoryBound(to: UInt8.self)
+            return literal.withUnsafeBufferPointer { literalBytes in
+                suffix.withUnsafeBufferPointer { suffixBytes in
+                    guard let literalBase = literalBytes.baseAddress,
+                          let suffixBase = suffixBytes.baseAddress else {
+                        return false
+                    }
+                    var searchOffset = 0
+                    while searchOffset <= data.count - literal.count {
+                        guard let found = rg_memmem_simple(
+                            base.advanced(by: searchOffset),
+                            data.count - searchOffset,
+                            literalBase,
+                            literal.count
+                        ) else {
+                            return false
+                        }
+                        let matchStart = base.distance(to: found)
+                        let suffixStart = matchStart + literal.count
+                        let hasSuffix = suffixStart + suffix.count <= data.count
+                            && memcmp(
+                                base.advanced(by: suffixStart),
+                                suffixBase,
+                                suffix.count
+                            ) == 0
+                        if hasSuffix == suffixShouldMatch {
                             return true
                         }
                         searchOffset = matchStart + 1

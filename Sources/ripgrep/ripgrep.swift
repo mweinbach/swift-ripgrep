@@ -1955,6 +1955,39 @@ struct RipgrepCommand {
             }
         }
 
+        if !fixedStrings,
+           (patternCanStartWithDash || !pattern.hasPrefix("-")),
+           path != "-",
+           !asciiCaseInsensitive,
+           !wordRegexp,
+           !parsedLineRegexp,
+           parsedMaxCount != 0,
+           let fixedLookahead = fixedLookaheadLiteral(
+            pattern,
+            allowPCREQuotedLiterals: allowPCREQuotedLiterals
+           ) {
+            if parsedQuiet {
+                return SwiftDarwinLiteralPreflight.fixedLookaheadQuietExitCode(
+                    path: path,
+                    literal: fixedLookahead.literal,
+                    suffix: fixedLookahead.suffix,
+                    suffixShouldMatch: fixedLookahead.suffixShouldMatch
+                )
+            }
+            if let parsedPathOnlyMode {
+                return SwiftDarwinLiteralPreflight.fixedLookaheadPathOnlyExitCode(
+                    path: path,
+                    literal: fixedLookahead.literal,
+                    suffix: fixedLookahead.suffix,
+                    suffixShouldMatch: fixedLookahead.suffixShouldMatch,
+                    printWhenMatched: parsedPathOnlyMode == .matching,
+                    nullTerminated: parsedNullPathTerminator,
+                    crlfTerminated: parsedCrlf,
+                    outputPath: parsedPathOnlyOutputPath
+                )
+            }
+        }
+
         let asciiBoundaryLiteralPattern = (fixedStrings || asciiCaseInsensitive) ? nil : asciiBoundaryLiteral(
             pattern,
             allowPCREQuotedLiterals: allowPCREQuotedLiterals
@@ -2806,6 +2839,51 @@ struct RipgrepCommand {
             return nil
         }
         return (prefixBytes, literalBytes, prefixShouldMatch)
+    }
+
+    private static func fixedLookaheadLiteral(
+        _ pattern: String,
+        allowPCREQuotedLiterals: Bool
+    ) -> (literal: [UInt8], suffix: [UInt8], suffixShouldMatch: Bool)? {
+        let positiveMarker = "(?="
+        let negativeMarker = "(?!"
+        let markerRange: Range<String.Index>
+        let suffixShouldMatch: Bool
+        if pattern.hasSuffix(")"), let range = pattern.range(of: positiveMarker) {
+            markerRange = range
+            suffixShouldMatch = true
+        } else if pattern.hasSuffix(")"), let range = pattern.range(of: negativeMarker) {
+            markerRange = range
+            suffixShouldMatch = false
+        } else {
+            return nil
+        }
+        let rawLiteral = String(pattern[..<markerRange.lowerBound])
+        let suffixEnd = pattern.index(before: pattern.endIndex)
+        let rawSuffix = String(pattern[markerRange.upperBound..<suffixEnd])
+        guard let literal = RegexLiteralParser.literal(
+            fromPlainRegexPattern: rawLiteral,
+            allowPCREQuotedLiterals: allowPCREQuotedLiterals
+        ),
+              let suffix = RegexLiteralParser.literal(
+                fromPlainRegexPattern: rawSuffix,
+                allowPCREQuotedLiterals: allowPCREQuotedLiterals
+              ) else {
+            return nil
+        }
+        let literalBytes = Array(literal.utf8)
+        let suffixBytes = Array(suffix.utf8)
+        guard !literalBytes.isEmpty,
+              !suffixBytes.isEmpty,
+              !literalBytes.contains(UInt8(ascii: "\n")),
+              !suffixBytes.contains(UInt8(ascii: "\n")),
+              !literalBytes.contains(UInt8(ascii: "\r")),
+              !suffixBytes.contains(UInt8(ascii: "\r")),
+              literalBytes.allSatisfy({ $0 < 0x80 }),
+              suffixBytes.allSatisfy({ $0 < 0x80 }) else {
+            return nil
+        }
+        return (literalBytes, suffixBytes, suffixShouldMatch)
     }
 
     private static func firstUnescapedClosingParen(in text: Substring) -> String.Index? {

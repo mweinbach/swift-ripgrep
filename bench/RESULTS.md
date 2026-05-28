@@ -59,6 +59,9 @@ stack buffer instead of allocating `Array(path.utf8) + newline`.
 ASCII fixed-lookbehind PCRE quiet and path-only forms now enter a Swift
 executable preflight too, avoiding the generic searcher setup when the result
 only needs an exit status or a path.
+ASCII fixed-lookahead PCRE quiet and path-only forms use the same mapped Swift
+existence preflight, including overlap-safe rejected candidates for negative
+lookahead.
 
 A targeted 20-run A/B against the previous Swift checkpoint and Rust used the
 same 4.8 MiB fixture:
@@ -77,6 +80,16 @@ executable preflight bypassed via `RIPGREP_CONFIG_PATH=`:
 |---|---:|---:|---:|
 | `-P --files-with-matches '(?<=prefix)needle'` | 32.1 ms | 3.1 ms | 2.5 ms |
 | `-P -q '(?<=prefix)needle'` | 36.0 ms | 3.2 ms | 2.6 ms |
+
+The fixed-lookahead check used
+`/tmp/swift-rg-bench/pcre-lookahead-small.txt`, a 6.4 MiB ASCII fixture, with
+3 warmups and 20 timed runs. The before column is the same binary with the
+executable preflight bypassed via `RIPGREP_CONFIG_PATH=`:
+
+| Flags | Swift before | Swift after | rg |
+|---|---:|---:|---:|
+| `-P --files-with-matches 'needle(?=suffix)'` | 31.2 ms | 3.5 ms | 2.9 ms |
+| `-P -q 'needle(?=suffix)'` | 32.0 ms | 3.4 ms | 2.9 ms |
 
 Benchmarks used `/tmp/swift-rg-bench/stop-on-nonmatch-small.txt`, a 4.8 MiB
 dense ASCII fixture, with 2 warmups and 5 timed runs:

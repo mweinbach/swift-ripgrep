@@ -1178,6 +1178,42 @@ struct PCRE2Tests {
         #expect(output == Data("Sherlock\nSherlock\n".utf8))
     }
 
+    @Test func pcre2FixedLookaheadExecutableFastPathPathOutputs() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("Sherlock Watson\nSherlock Holmes\nSherlock\n", to: "pcre.txt")
+        try temp.write("aaa\n", to: "overlap.txt")
+
+        let matchingOutput = try runExecutableData([
+            "-P",
+            "--files-with-matches",
+            "Sherlock(?= Holmes)",
+            temp.path("pcre.txt"),
+        ]) {}
+        let nonmatchingOutput = try runExecutableData([
+            "-P",
+            "--files-without-match",
+            "Sherlock(?= Missing)",
+            temp.path("pcre.txt"),
+        ]) {}
+        let negativeMatchingOutput = try runExecutableData([
+            "-P",
+            "--files-with-matches",
+            "Sherlock(?! Holmes)",
+            temp.path("pcre.txt"),
+        ]) {}
+        let overlappingNegativeOutput = try runExecutableData([
+            "-P",
+            "--files-with-matches",
+            "aa(?!a)",
+            temp.path("overlap.txt"),
+        ]) {}
+
+        #expect(matchingOutput == Data("\(temp.path("pcre.txt"))\n".utf8))
+        #expect(nonmatchingOutput == Data("\(temp.path("pcre.txt"))\n".utf8))
+        #expect(negativeMatchingOutput == Data("\(temp.path("pcre.txt"))\n".utf8))
+        #expect(overlappingNegativeOutput == Data("\(temp.path("overlap.txt"))\n".utf8))
+    }
+
     @Test func pcre2FixedNegativeLookaheadLiteralOnlyMatchesWithoutSuffix() throws {
         let temp = try TemporaryDirectory()
         try temp.write("Sherlock Holmes\nSherlock Watson\nSherlock\n", to: "pcre.txt")
