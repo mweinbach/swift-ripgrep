@@ -307,6 +307,12 @@ measured 265.3 ms versus 355.6 ms before and 308.7 ms for Rust;
 36.8 ms, versus 43.6 ms for Rust, and
 `-p --color=never --no-heading -N needle` improved from 79.1 ms to 33.8 ms,
 versus 42.4 ms for Rust.
+Valid `--colors` specs now stay on the same path when final color output is
+disabled, while invalid specs continue through the full parser for diagnostics.
+On the 45 MiB fixture, `--colors match:fg:red --color=never needle` improved
+from 78.1 ms to 34.8 ms, versus 43.9 ms for Rust, and
+`--colors match:none --color=never needle` improved from 89.4 ms to 34.6 ms,
+versus 46.8 ms for Rust.
 Quiet, path-only, and count output are now allowed to reuse the executable
 preflight with `--line-buffered`, since no streaming matching-line flushes are
 observable in those modes. On the 45 MiB fixture, `--line-buffered -q needle`

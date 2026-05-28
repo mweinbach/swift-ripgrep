@@ -1603,6 +1603,39 @@ struct MiscTests {
         ], fixture: {})
         #expect(separateColorNeverOutput == output)
 
+        let colorsResetOutput = try runExecutableData([
+            "--colors",
+            "match:fg:red",
+            "--color=never",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(colorsResetOutput == output)
+
+        let inlineColorsResetOutput = try runExecutableData([
+            "--colors=match:none",
+            "--color=never",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(inlineColorsResetOutput == output)
+
+        let invalidColorsOutput = try runExecutableResult([
+            "--colors",
+            "bogus",
+            "--color=never",
+            "needle",
+            root.path("dense.txt"),
+        ])
+        #expect(invalidColorsOutput.stdout.isEmpty)
+        let expectedInvalidColorsError = "rg: error parsing flag --colors: invalid color spec format: 'bogus'. "
+            + "Valid format is '(path|line|column|match|highlight):(fg|bg|style):(value)'.\n"
+        #expect(
+            invalidColorsOutput.stderr
+                == Data(expectedInvalidColorsError.utf8)
+        )
+        #expect(invalidColorsOutput.status == 2)
+
         let orderedNoColumnOutput = try runExecutableData([
             "--column",
             "--no-column",
@@ -1661,6 +1694,7 @@ struct MiscTests {
         for prettyResetArguments in [
             ["--pretty", "--color=never", "--no-heading", "-N"],
             ["-p", "--color", "never", "--no-heading", "--no-line-number"],
+            ["--pretty", "--colors", "match:fg:red", "--color=never", "--no-heading", "-N"],
         ] {
             let prettyResetOutput = try runExecutableData(
                 prettyResetArguments + [

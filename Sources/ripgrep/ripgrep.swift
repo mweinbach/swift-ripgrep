@@ -385,6 +385,11 @@ struct RipgrepCommand {
                 ? String(argument.dropFirst("--hyperlink-format=".count))
                 : nil
         }
+        func inlineColorsValue(_ argument: String) -> String? {
+            argument.hasPrefix("--colors=")
+                ? String(argument.dropFirst("--colors=".count))
+                : nil
+        }
         func isPreflightNeutralHyperlinkFormat(_ value: String) -> Bool {
             switch value {
             case "",
@@ -1097,6 +1102,16 @@ struct RipgrepCommand {
                     return nil
                 }
                 parsedColorMayEmit = mayEmit
+            } else if argument == "--colors" {
+                guard argumentIndex < arguments.count,
+                      RipgrepArgumentParser.isValidColorChange(arguments[argumentIndex]) else {
+                    return nil
+                }
+                argumentIndex += 1
+            } else if let colorChange = inlineColorsValue(argument) {
+                guard RipgrepArgumentParser.isValidColorChange(colorChange) else {
+                    return nil
+                }
             } else if argument == "--hyperlink-format" {
                 guard argumentIndex < arguments.count,
                       isPreflightNeutralHyperlinkFormat(arguments[argumentIndex]) else {

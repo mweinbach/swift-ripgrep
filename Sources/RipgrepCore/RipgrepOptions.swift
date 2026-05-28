@@ -1843,6 +1843,10 @@ public enum RipgrepArgumentParser {
         }
     }
 
+    public static func isValidColorChange(_ raw: String) -> Bool {
+        parseColorChange(raw).change != nil
+    }
+
     private static func parseColorChange(_ raw: String) -> (change: ColorChange?, error: String?) {
         let pieces = raw.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
         guard pieces.count >= 2, pieces.count <= 3 else {
