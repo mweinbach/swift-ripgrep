@@ -234,6 +234,17 @@ struct MiscTests {
         ], fixture: {})
         #expect(splitFlagOutput == compactFlagOutput)
 
+        let plainWordOutput = try runExecutableData([
+            "-w",
+            "Sherlock Holmes",
+            root.path("ascii-word-literal.txt"),
+        ], fixture: {})
+        #expect(String(decoding: plainWordOutput, as: UTF8.self) == """
+        Sherlock Holmes
+        Sherlock Holmes again
+
+        """)
+
         try root.write("Sherlock Holmes", to: "word-literal-no-final-newline.txt")
         let noFinalNewlineOutput = try runExecutableData([
             "-nw",
@@ -241,6 +252,13 @@ struct MiscTests {
             root.path("word-literal-no-final-newline.txt"),
         ], fixture: {})
         #expect(noFinalNewlineOutput == Data("1:Sherlock Holmes\n".utf8))
+
+        let plainNoFinalNewlineOutput = try runExecutableData([
+            "-w",
+            "Sherlock Holmes",
+            root.path("word-literal-no-final-newline.txt"),
+        ], fixture: {})
+        #expect(plainNoFinalNewlineOutput == Data("Sherlock Holmes\n".utf8))
 
         try root.write("""
         Sherlock Holmes
@@ -259,6 +277,13 @@ struct MiscTests {
         4:Sherlock Holmes again
 
         """)
+
+        let plainUnicodeBoundaryOutput = try runExecutableData([
+            "-w",
+            "Sherlock Holmes",
+            root.path("unicode-word-literal.txt"),
+        ], fixture: {})
+        #expect(plainUnicodeBoundaryOutput == plainWordOutput)
     }
 
     @Test("ASCII boundary literal regex preserves byte boundary output")

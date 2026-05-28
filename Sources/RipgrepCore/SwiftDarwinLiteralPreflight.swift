@@ -889,6 +889,14 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literal: [UInt8]
     ) -> Int32? {
+        wordLineExitCode(path: path, literal: literal, lineNumber: true)
+    }
+
+    public static func wordLineExitCode(
+        path: String,
+        literal: [UInt8],
+        lineNumber: Bool
+    ) -> Int32? {
         guard !literal.isEmpty,
               !literal.contains(UInt8(ascii: "\n")),
               let first = literal.first,
@@ -930,10 +938,11 @@ public enum SwiftDarwinLiteralPreflight {
         }
 
         guard let matchedLineCount = literal.withUnsafeBufferPointer({ literalBuffer in
-            rgSwiftDarwinWriteWordLiteralLineNumberBytes(
+            rgSwiftDarwinWriteWordLiteralLineBytes(
                 UnsafeRawPointer(mapped).assumingMemoryBound(to: UInt8.self),
                 haystackLength: haystackLength,
-                literal: literalBuffer
+                literal: literalBuffer,
+                lineNumber: lineNumber
             )
         }) else {
             return nil
@@ -1635,10 +1644,11 @@ private func rgSwiftDarwinWriteLiteralBytes(
     return matchedLineCount
 }
 
-private func rgSwiftDarwinWriteWordLiteralLineNumberBytes(
+private func rgSwiftDarwinWriteWordLiteralLineBytes(
     _ base: UnsafePointer<UInt8>,
     haystackLength: Int,
-    literal: UnsafeBufferPointer<UInt8>
+    literal: UnsafeBufferPointer<UInt8>,
+    lineNumber: Bool
 ) -> Int? {
     guard let literalBase = literal.baseAddress, literal.count > 0 else {
         return nil
@@ -1760,8 +1770,11 @@ private func rgSwiftDarwinWriteWordLiteralLineNumberBytes(
     }
 
     for line in pendingLines {
-        guard output.writeLineNumberPrefix(line.number),
-              output.write(base.advanced(by: line.start), count: line.outputEnd - line.start) else {
+        if lineNumber,
+           !output.writeLineNumberPrefix(line.number) {
+            return nil
+        }
+        guard output.write(base.advanced(by: line.start), count: line.outputEnd - line.start) else {
             return nil
         }
         if line.needsFinalNewline,

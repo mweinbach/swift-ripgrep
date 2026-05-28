@@ -1682,15 +1682,15 @@ struct RipgrepCommand {
             )
         }
         if wordRegexp {
-            guard lineNumber,
-                  !asciiCaseInsensitive,
+            guard !asciiCaseInsensitive,
                   !noMmap,
                   !asciiBoundary else {
                 return nil
             }
-            return SwiftDarwinLiteralPreflight.wordLineNumberExitCode(
+            return SwiftDarwinLiteralPreflight.wordLineExitCode(
                 path: path,
-                literal: literal
+                literal: literal,
+                lineNumber: lineNumber
             )
         }
         if noMmap {

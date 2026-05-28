@@ -1455,6 +1455,14 @@ regex at 215.8 ms. The focused upstream `subtitles_en_literal_word` harness
 now measures both Unicode and ASCII labels in the same band: Unicode
 214.52 ms versus Rust 198.16 ms, and ASCII 215.91 ms versus Rust 197.59 ms.
 
+Plain Unicode word literals now reuse that executable preflight when line
+number prefixes are not requested. The scanner still falls back before writing
+if a boundary needs Unicode decoding or the buffered matching-line set grows
+too large. On a 57 MiB sparse word fixture, `-w needle` improved from a forced
+fallback at 4.236 s to 12.5 ms, versus 10.7 ms for Rust; the no-match
+`-w absentword` form improved from 4.118 s to 12.6 ms, versus 10.2 ms for
+Rust.
+
 The executable Swift preflight now also handles ASCII-scoped surrounding-word
 regexes of the form `(?-u)\w+\s+LITERAL\s+\w+` for plain and line-numbered
 single-file searches. It scans for the literal directly, verifies ASCII word
