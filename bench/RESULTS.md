@@ -428,6 +428,14 @@ measured 43.1 ms versus 1.142 s before and 250.4 ms for Rust; and safe
 multi-literal `--count-matches -e needle -e quiet` measured 44.5 ms, with
 `--count-matches 'needle|quiet'` at 43.7 ms, versus 195.6 ms for Rust.
 
+Word-boundary count-line output now uses the same conservative scanner without
+emitting matching lines. It counts each matching line once, skips the rest of a
+line after a proven bounded match, honors `-m`, and falls back before printing
+for ambiguous boundaries. Byte/status checks matched Rust for plain, prefixed,
+bounded, include-zero, embedded-word, and binary forms. On the 48 MiB dense
+fixture, `-c -w needle` improved from 1.142 s to 17.2 ms, versus 53.8 ms for
+Rust; bounded `-c -m2 -w needle` measured 4.0 ms, versus 2.8 ms for Rust.
+
 `--include-zero` now stays on the executable literal preflight for normal
 matching-line output, where it only affects count summaries. Focused tests
 cover plain output, `-n`, and `--include-zero --no-include-zero`; byte checks

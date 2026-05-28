@@ -288,6 +288,40 @@ public enum SwiftDarwinLiteralPreflight {
         return 0
     }
 
+    public static func wordCountLineExitCode(
+        path: String,
+        literal: [UInt8],
+        includeZero: Bool,
+        maxCount: Int? = nil,
+        countPrefix: [UInt8] = [],
+        crlfTerminated: Bool = false
+    ) -> Int32? {
+        guard !literal.isEmpty,
+              !literal.contains(UInt8(ascii: "\n")),
+              maxCount.map({ $0 > 0 }) ?? true,
+              let first = literal.first,
+              let last = literal.last,
+              rgSwiftIsASCIIRegexWordByte(first),
+              rgSwiftIsASCIIRegexWordByte(last) else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path),
+              let matchedLineCount = countASCIIWordMatchedLines(
+                in: data,
+                literal: literal,
+                maxCount: maxCount
+              ) else {
+            return nil
+        }
+
+        if matchedLineCount > 0 || includeZero {
+            var output = Data(countPrefix)
+            output.append(countOutput(matchedLineCount, crlfTerminated: crlfTerminated))
+            FileHandle.standardOutput.write(output)
+        }
+        return matchedLineCount > 0 ? 0 : 1
+    }
+
     public static func multiLiteralQuietExitCode(
         path: String,
         literals: [[UInt8]]
@@ -1860,6 +1894,74 @@ private func countASCIIWordMatches(in data: Data, literal: [UInt8]) -> Int? {
                 }
             }
             return matchCount
+        }
+    }
+}
+
+private func countASCIIWordMatchedLines(
+    in data: Data,
+    literal: [UInt8],
+    maxCount: Int?
+) -> Int? {
+    guard !literal.isEmpty,
+          data.count >= literal.count else {
+        return 0
+    }
+    let limit = maxCount ?? Int.max
+    return data.withUnsafeBytes { rawData in
+        guard let rawBase = rawData.baseAddress else {
+            return 0
+        }
+        let base = rawBase.assumingMemoryBound(to: UInt8.self)
+        return literal.withUnsafeBufferPointer { needle -> Int? in
+            guard let needleBase = needle.baseAddress else {
+                return 0
+            }
+
+            var searchOffset = 0
+            var matchedLineCount = 0
+            var rejectedBoundaryCandidates = 0
+            let maxRejectedBoundaryCandidates = 128
+            while searchOffset < data.count,
+                  matchedLineCount < limit {
+                guard let found = rg_memmem_simple(
+                    base.advanced(by: searchOffset),
+                    data.count - searchOffset,
+                    needleBase,
+                    literal.count
+                ) else {
+                    break
+                }
+
+                let matchStart = base.distance(to: found)
+                let matchEnd = matchStart + literal.count
+                guard let bounded = isASCIIWordBoundaryMatch(
+                    base: base,
+                    dataCount: data.count,
+                    matchStart: matchStart,
+                    matchEnd: matchEnd
+                ) else {
+                    return nil
+                }
+                if bounded {
+                    matchedLineCount += 1
+                    guard let newline = memchr(
+                        base.advanced(by: matchEnd),
+                        Int32(UInt8(ascii: "\n")),
+                        data.count - matchEnd
+                    ) else {
+                        break
+                    }
+                    searchOffset = base.distance(to: newline.assumingMemoryBound(to: UInt8.self)) + 1
+                } else {
+                    rejectedBoundaryCandidates += 1
+                    guard rejectedBoundaryCandidates <= maxRejectedBoundaryCandidates else {
+                        return nil
+                    }
+                    searchOffset = matchStart + 1
+                }
+            }
+            return matchedLineCount
         }
     }
 }

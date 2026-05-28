@@ -1726,6 +1726,7 @@ struct MiscTests {
             (["-c", "-m1", "-i", "missing", root.path("dense.txt")], Data(), Int32(1)),
             (["-c", "-m1", "-i", "12345", root.path("dense.txt")], Data(), Int32(1)),
             (["-c", "-m1", "-i", "--include-zero", "12345", root.path("dense.txt")], Data("0\n".utf8), Int32(1)),
+            (["-c", "-w", "--include-zero", "missing", root.path("dense.txt")], Data("0\n".utf8), Int32(1)),
             (["-c", "-x", "needle", root.path("exact.txt")], Data("2\n".utf8), Int32(0)),
             (["-c", "-m1", "-x", "needle", root.path("exact.txt")], Data("1\n".utf8), Int32(0)),
             (["-c", "-m1", "-i", "-x", "NEEDLE", root.path("exact.txt")], Data("1\n".utf8), Int32(0)),
@@ -1755,6 +1756,22 @@ struct MiscTests {
         ], fixture: {})
         #expect(singleLiteralCrlfCountOutput == Data("3\r\n".utf8))
 
+        let wordCountOutput = try runExecutableData([
+            "-c",
+            "-w",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(wordCountOutput == Data("3\n".utf8))
+
+        let embeddedWordCountOutput = try runExecutableData([
+            "-c",
+            "-w",
+            "needle",
+            root.path("word-count.txt"),
+        ], fixture: {})
+        #expect(embeddedWordCountOutput == Data("1\n".utf8))
+
         let singleLiteralPrefixedCountOutput = try runExecutableData([
             "-H",
             "-c",
@@ -1762,6 +1779,15 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(singleLiteralPrefixedCountOutput == Data("\(root.path("dense.txt")):3\n".utf8))
+
+        let prefixedWordCountOutput = try runExecutableData([
+            "-H",
+            "-c",
+            "-w",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(prefixedWordCountOutput == singleLiteralPrefixedCountOutput)
 
         let singleLiteralNullPrefixedCountOutput = try runExecutableData([
             "-H",
@@ -1783,6 +1809,15 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(singleLiteralPrefixedMaxCountOutput == Data("\(root.path("dense.txt")):2\n".utf8))
+
+        let wordMaxCountOutput = try runExecutableData([
+            "-c",
+            "-m2",
+            "-w",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(wordMaxCountOutput == Data("2\n".utf8))
 
         let singleLiteralPrefixedCaseInsensitiveMaxCountOutput = try runExecutableData([
             "-H",
