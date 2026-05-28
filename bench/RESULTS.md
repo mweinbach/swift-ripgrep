@@ -341,6 +341,15 @@ fixture, `--follow needle` improved from 6.177 s to 38.6 ms,
 `--no-follow needle` improved from 87.9 ms to 36.9 ms, and `-Ln needle`
 improved from 1.762 s to 54.1 ms, versus 48.3 ms for Rust `--follow`.
 
+Output-neutral metadata flags now stay preflight-eligible when their values
+cannot affect the matching-line stream. This covers known
+`--hyperlink-format` aliases or empty values while filenames are suppressed,
+plus empty `--pre`/`--pre=` and `--no-pre`; custom hyperlink formats,
+invalid aliases, and non-empty preprocessors still fall through to the normal
+parser. On the same fixture, `--hyperlink-format=grep+ needle` improved from
+1.515 s to 38.2 ms, and `--pre= needle` improved from 88.3 ms to 37.9 ms,
+versus 48.7 ms for Rust `--hyperlink-format=grep+`.
+
 Regex-mode toggles that do not affect plain literal line output now also stay
 eligible for the executable preflight. `--unicode`/`--no-unicode`,
 `--pcre2-unicode`/`--no-pcre2-unicode`, and `--crlf`/`--no-crlf` are still

@@ -366,6 +366,35 @@ struct RipgrepCommand {
                 ? String(argument.dropFirst("--engine=".count))
                 : nil
         }
+        func inlineHyperlinkFormatValue(_ argument: String) -> String? {
+            argument.hasPrefix("--hyperlink-format=")
+                ? String(argument.dropFirst("--hyperlink-format=".count))
+                : nil
+        }
+        func isPreflightNeutralHyperlinkFormat(_ value: String) -> Bool {
+            switch value {
+            case "",
+                 "default",
+                 "none",
+                 "cursor",
+                 "file",
+                 "grep+",
+                 "kitty",
+                 "macvim",
+                 "textmate",
+                 "vscode",
+                 "vscode-insiders",
+                 "vscodium":
+                return true
+            default:
+                return false
+            }
+        }
+        func inlinePreprocessorValue(_ argument: String) -> String? {
+            argument.hasPrefix("--pre=")
+                ? String(argument.dropFirst("--pre=".count))
+                : nil
+        }
         func isOutputNeutralSingleFileFlag(_ argument: String) -> Bool {
             switch argument {
             case "-.",
@@ -420,6 +449,7 @@ struct RipgrepCommand {
                  "--no-config",
                  "--null",
                  "--no-one-file-system",
+                 "--no-pre",
                  "--no-require-git",
                  "--no-pcre2-unicode",
                  "--no-unicode",
@@ -767,6 +797,26 @@ struct RipgrepCommand {
                     return nil
                 }
                 parsedColorMayEmit = mayEmit
+            } else if argument == "--hyperlink-format" {
+                guard argumentIndex < arguments.count,
+                      isPreflightNeutralHyperlinkFormat(arguments[argumentIndex]) else {
+                    return nil
+                }
+                argumentIndex += 1
+            } else if let hyperlinkFormat = inlineHyperlinkFormatValue(argument) {
+                guard isPreflightNeutralHyperlinkFormat(hyperlinkFormat) else {
+                    return nil
+                }
+            } else if argument == "--pre" {
+                guard argumentIndex < arguments.count,
+                      arguments[argumentIndex].isEmpty else {
+                    return nil
+                }
+                argumentIndex += 1
+            } else if let preprocessor = inlinePreprocessorValue(argument) {
+                guard preprocessor.isEmpty else {
+                    return nil
+                }
             } else if argument == "--sort" || argument == "--sortr" {
                 guard argumentIndex < arguments.count,
                       isValidSortValue(arguments[argumentIndex]) else {

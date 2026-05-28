@@ -1540,6 +1540,25 @@ struct MiscTests {
         ], fixture: {})
         #expect(symlinkFollowOutput == output)
 
+        for (metadataArguments, expectedOutput) in [
+            (["--hyperlink-format=grep+"], output),
+            (["--hyperlink-format", "vscode"], output),
+            (["--hyperlink-format="], output),
+            (["--hyperlink-format=none", "-n"], lineNumberOutput),
+            (["--pre="], output),
+            (["--pre", ""], output),
+            (["--no-pre"], output),
+        ] {
+            let metadataOutput = try runExecutableData(
+                metadataArguments + [
+                    "needle",
+                    root.path("dense.txt"),
+                ],
+                fixture: {}
+            )
+            #expect(metadataOutput == expectedOutput)
+        }
+
         let noUnicodeOutput = try runExecutableData([
             "--no-unicode",
             "needle",
