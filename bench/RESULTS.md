@@ -121,6 +121,10 @@ ASCII case-insensitive single-literal context output now reuses those same
 mapped writers for `-A`, `-B`, and `-C` when the literal and haystack are ASCII,
 falling back for Unicode case-folding candidates instead of widening the byte
 scanner's semantics.
+Case-sensitive multi-literal context output now uses a shared mapped Swift
+writer for `-A`, `-B`, and `-C`, covering repeated `-e`/`-f` literal sources
+and top-level literal alternations while preserving group separators,
+match/context markers, max-count behavior, and binary/BOM fallback.
 
 A targeted 20-run A/B against the previous Swift checkpoint and Rust used the
 same 4.8 MiB fixture:
@@ -1320,6 +1324,16 @@ The ASCII ignore-case context checks used the same fixture with uppercase
 | `-i -A 1 NEEDLE` | 7.920 s | 9.2 ms | 7.1 ms |
 | `-i -B 1 NEEDLE` | 7.896 s | 9.4 ms | 7.0 ms |
 | `-i -C 1 NEEDLE` | 11.281 s | 9.4 ms | 7.0 ms |
+
+The multi-literal context checks used the same fixture with `needle` plus a
+missing second literal:
+
+| Flags | Swift before | Swift after | rg |
+|---|---:|---:|---:|
+| `-A 1 -e needle -e absent` | 7.348 s | 10.2 ms | 6.7 ms |
+| `-B 1 -e needle -e absent` | 7.384 s | 10.7 ms | 7.1 ms |
+| `-C 1 -e needle -e absent` | 11.025 s | 11.1 ms | 7.1 ms |
+| `-C 1 'needle|absent'` | 11.025 s | 10.2 ms | 7.0 ms |
 
 Null path terminator flags now stay on the executable literal preflight when
 the command shape cannot print a path. This covers standalone `--null` and

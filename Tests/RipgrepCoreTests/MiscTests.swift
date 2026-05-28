@@ -1249,6 +1249,8 @@ struct MiscTests {
         try root.write("quiet one\nneedle one\nquiet\nquiet\nbefore two\nneedle two\nquiet", to: "before-context.txt")
         try root.write("needle one\nneedle two\nafter\n", to: "before-max.txt")
         try root.write("quiet one\nNeedle one\nafter one\nquiet\nbefore two\nNEEDLE two\nafter two", to: "case-context.txt")
+        try root.write("alpha\nneedle one\nbeta\nquiet\nzeta\nhay one\nomega", to: "multi-context.txt")
+        try root.write("needle one\nhay two\nafter\n", to: "multi-context-max.txt")
         try root.write("needle\n", to: ".hidden.txt")
         try root.write("*.txt\n", to: ".ignore")
         try root.write("needle\n", to: "ignored.txt")
@@ -2364,6 +2366,127 @@ struct MiscTests {
         7-after two
 
         """.utf8))
+
+        let multiAfterContextOutput = try runExecutableData([
+            "-A",
+            "1",
+            "-e",
+            "needle",
+            "-e",
+            "hay",
+            root.path("multi-context.txt"),
+        ], fixture: {})
+        #expect(multiAfterContextOutput == Data("""
+        needle one
+        beta
+        --
+        hay one
+        omega
+
+        """.utf8))
+
+        let multiBeforeContextOutput = try runExecutableData([
+            "-B",
+            "1",
+            "-e",
+            "needle",
+            "-e",
+            "hay",
+            root.path("multi-context.txt"),
+        ], fixture: {})
+        #expect(multiBeforeContextOutput == Data("""
+        alpha
+        needle one
+        --
+        zeta
+        hay one
+
+        """.utf8))
+
+        let multiContextOutput = try runExecutableData([
+            "-n",
+            "--context=1",
+            "--field-match-separator=|",
+            "--field-context-separator=_",
+            "--context-separator=ZZ",
+            "-e",
+            "needle",
+            "-e",
+            "hay",
+            root.path("multi-context.txt"),
+        ], fixture: {})
+        #expect(multiContextOutput == Data("""
+        1_alpha
+        2|needle one
+        3_beta
+        ZZ
+        5_zeta
+        6|hay one
+        7_omega
+
+        """.utf8))
+
+        let multiAlternationContextOutput = try runExecutableData([
+            "-C",
+            "1",
+            "needle|hay",
+            root.path("multi-context.txt"),
+        ], fixture: {})
+        #expect(multiAlternationContextOutput == Data("""
+        alpha
+        needle one
+        beta
+        --
+        zeta
+        hay one
+        omega
+
+        """.utf8))
+
+        let multiContextMaxCountOutput = try runExecutableData([
+            "-n",
+            "-C",
+            "1",
+            "-m",
+            "1",
+            "-e",
+            "needle",
+            "-e",
+            "hay",
+            root.path("multi-context-max.txt"),
+        ], fixture: {})
+        #expect(multiContextMaxCountOutput == Data("""
+        1:needle one
+        2:hay two
+
+        """.utf8))
+
+        let multiContextMissingResult = try runExecutableResult([
+            "-C",
+            "1",
+            "-e",
+            "absent",
+            "-e",
+            "missing",
+            root.path("multi-context.txt"),
+        ])
+        #expect(multiContextMissingResult.stdout.isEmpty)
+        #expect(multiContextMissingResult.stderr.isEmpty)
+        #expect(multiContextMissingResult.status == 1)
+
+        let multiContextMaxCountZeroResult = try runExecutableResult([
+            "-C",
+            "1",
+            "-m0",
+            "-e",
+            "[",
+            "-e",
+            "needle",
+            root.path("multi-context.txt"),
+        ])
+        #expect(multiContextMaxCountZeroResult.stdout.isEmpty)
+        #expect(multiContextMaxCountZeroResult.stderr.isEmpty)
+        #expect(multiContextMaxCountZeroResult.status == 1)
 
         let plainOnlyMatchingLineNumberOutput = try runExecutableData([
             "-n",
