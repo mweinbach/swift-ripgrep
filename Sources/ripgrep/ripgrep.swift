@@ -1612,13 +1612,40 @@ struct RipgrepCommand {
         if explicitRegexpPatterns.count > 1 {
             guard parsedMaxCount != 0,
                   path != "-",
-                  !wordRegexp,
                   !parsedLineRegexp,
                   let literals = explicitRegexpPatternLiterals(
                     explicitRegexpPatterns,
                     fixedStrings: fixedStrings,
                     allowPCREQuotedLiterals: allowPCREQuotedLiterals
                   ) else {
+                return nil
+            }
+            if wordRegexp {
+                guard !asciiCaseInsensitive else {
+                    return nil
+                }
+                if parsedPrintMode == .countMatches {
+                    guard parsedMaxCount == nil else {
+                        return nil
+                    }
+                    return SwiftDarwinLiteralPreflight.multiLiteralWordCountMatchesExitCode(
+                        path: path,
+                        literals: literals,
+                        includeZero: parsedIncludeZero,
+                        countPrefix: parsedCountPrefix,
+                        crlfTerminated: parsedCrlf
+                    )
+                }
+                if parsedCount {
+                    return SwiftDarwinLiteralPreflight.multiLiteralWordCountLineExitCode(
+                        path: path,
+                        literals: literals,
+                        includeZero: parsedIncludeZero,
+                        maxCount: parsedMaxCount,
+                        countPrefix: parsedCountPrefix,
+                        crlfTerminated: parsedCrlf
+                    )
+                }
                 return nil
             }
             if parsedPrintMode == .countMatches {
@@ -1729,7 +1756,6 @@ struct RipgrepCommand {
         if !fixedStrings,
            (patternCanStartWithDash || !pattern.hasPrefix("-")),
            path != "-",
-           !wordRegexp,
            !parsedLineRegexp,
            !asciiBoundary,
            parsedMaxCount != 0,
@@ -1737,6 +1763,34 @@ struct RipgrepCommand {
             pattern,
             allowPCREQuotedLiterals: allowPCREQuotedLiterals
            ) {
+            if wordRegexp {
+                guard !asciiCaseInsensitive else {
+                    return nil
+                }
+                if parsedPrintMode == .countMatches {
+                    guard parsedMaxCount == nil else {
+                        return nil
+                    }
+                    return SwiftDarwinLiteralPreflight.multiLiteralWordCountMatchesExitCode(
+                        path: path,
+                        literals: literals,
+                        includeZero: parsedIncludeZero,
+                        countPrefix: parsedCountPrefix,
+                        crlfTerminated: parsedCrlf
+                    )
+                }
+                if parsedCount {
+                    return SwiftDarwinLiteralPreflight.multiLiteralWordCountLineExitCode(
+                        path: path,
+                        literals: literals,
+                        includeZero: parsedIncludeZero,
+                        maxCount: parsedMaxCount,
+                        countPrefix: parsedCountPrefix,
+                        crlfTerminated: parsedCrlf
+                    )
+                }
+                return nil
+            }
             if parsedPrintMode == .countMatches {
                 guard !asciiCaseInsensitive,
                       parsedMaxCount == nil else {

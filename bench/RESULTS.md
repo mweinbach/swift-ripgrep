@@ -436,6 +436,17 @@ bounded, include-zero, embedded-word, and binary forms. On the 48 MiB dense
 fixture, `-c -w needle` improved from 1.142 s to 17.2 ms, versus 53.8 ms for
 Rust; bounded `-c -m2 -w needle` measured 4.0 ms, versus 2.8 ms for Rust.
 
+Multi-literal word-boundary count summaries now use the same no-output scanner
+for simple alternations, repeated explicit regexps, and literal pattern files.
+Count-line mode counts each line once after the first bounded literal, while
+count-matches mode keeps the existing non-overlap proof before summing bounded
+literal totals. Byte/status checks matched Rust for alternation, pattern-file,
+bounded count-line, include-zero, embedded-word, and overlapping count-matches
+fallback controls. On the 48 MiB dense fixture, `-c -w 'needle|quiet'`
+improved from 1.373 s to 45.1 ms, versus 67.6 ms for Rust;
+`--count-matches -w 'needle|quiet'` improved from 1.367 s to 50.0 ms, versus
+373.2 ms for Rust. The pattern-file forms measured 46.6 ms and 52.0 ms.
+
 `--include-zero` now stays on the executable literal preflight for normal
 matching-line output, where it only affects count summaries. Focused tests
 cover plain output, `-n`, and `--include-zero --no-include-zero`; byte checks

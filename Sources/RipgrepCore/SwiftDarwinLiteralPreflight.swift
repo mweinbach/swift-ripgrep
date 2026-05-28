@@ -322,6 +322,36 @@ public enum SwiftDarwinLiteralPreflight {
         return matchedLineCount > 0 ? 0 : 1
     }
 
+    public static func multiLiteralWordCountLineExitCode(
+        path: String,
+        literals: [[UInt8]],
+        includeZero: Bool,
+        maxCount: Int? = nil,
+        countPrefix: [UInt8] = [],
+        crlfTerminated: Bool = false
+    ) -> Int32? {
+        guard maxCount.map({ $0 > 0 }) ?? true,
+              let literals = distinctASCIIWordLiterals(literals),
+              !literals.isEmpty else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path),
+              let matchedLineCount = countASCIIWordMatchedLines(
+                in: data,
+                literals: literals,
+                maxCount: maxCount
+              ) else {
+            return nil
+        }
+
+        if matchedLineCount > 0 || includeZero {
+            var output = Data(countPrefix)
+            output.append(countOutput(matchedLineCount, crlfTerminated: crlfTerminated))
+            FileHandle.standardOutput.write(output)
+        }
+        return matchedLineCount > 0 ? 0 : 1
+    }
+
     public static func multiLiteralQuietExitCode(
         path: String,
         literals: [[UInt8]]
@@ -1664,6 +1694,38 @@ public enum SwiftDarwinLiteralPreflight {
         return matchCount > 0 ? 0 : 1
     }
 
+    public static func multiLiteralWordCountMatchesExitCode(
+        path: String,
+        literals: [[UInt8]],
+        includeZero: Bool,
+        countPrefix: [UInt8] = [],
+        crlfTerminated: Bool = false
+    ) -> Int32? {
+        guard let literals = nonOverlappingDistinctLiterals(literals),
+              distinctASCIIWordLiterals(literals) != nil,
+              !literals.isEmpty else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+
+        var matchCount = 0
+        for literal in literals {
+            guard let literalCount = countASCIIWordMatches(in: data, literal: literal) else {
+                return nil
+            }
+            matchCount += literalCount
+        }
+
+        if matchCount > 0 || includeZero {
+            var output = Data(countPrefix)
+            output.append(countOutput(matchCount, crlfTerminated: crlfTerminated))
+            FileHandle.standardOutput.write(output)
+        }
+        return matchCount > 0 ? 0 : 1
+    }
+
     public static func multiLiteralCountMatchesExitCode(
         path: String,
         literals: [[UInt8]],
@@ -1814,6 +1876,25 @@ private func nonOverlappingDistinctLiterals(_ literals: [[UInt8]]) -> [[UInt8]]?
             if literalsCanOverlap(distinct[leftIndex], distinct[rightIndex]) {
                 return nil
             }
+        }
+    }
+    return distinct
+}
+
+private func distinctASCIIWordLiterals(_ literals: [[UInt8]]) -> [[UInt8]]? {
+    var distinct: [[UInt8]] = []
+    distinct.reserveCapacity(literals.count)
+    for literal in literals {
+        guard !literal.isEmpty,
+              !literal.contains(UInt8(ascii: "\n")),
+              let first = literal.first,
+              let last = literal.last,
+              rgSwiftIsASCIIRegexWordByte(first),
+              rgSwiftIsASCIIRegexWordByte(last) else {
+            return nil
+        }
+        if !distinct.contains(literal) {
+            distinct.append(literal)
         }
     }
     return distinct
@@ -1986,6 +2067,97 @@ private func countASCIIWordMatchedLines(
             }
             return matchedLineCount
         }
+    }
+}
+
+private func countASCIIWordMatchedLines(
+    in data: Data,
+    literals: [[UInt8]],
+    maxCount: Int?
+) -> Int? {
+    guard !literals.isEmpty else {
+        return 0
+    }
+    let limit = maxCount ?? Int.max
+    return data.withUnsafeBytes { rawData in
+        guard let rawBase = rawData.baseAddress else {
+            return 0
+        }
+        let base = rawBase.assumingMemoryBound(to: UInt8.self)
+        var searchOffset = 0
+        var matchedLineCount = 0
+        var rejectedBoundaryCandidates = 0
+        let maxRejectedBoundaryCandidates = 128
+
+        while searchOffset < data.count,
+              matchedLineCount < limit {
+            var bestStart = Int.max
+            var bestEnd = Int.max
+            var needsFallback = false
+
+            for literal in literals {
+                literal.withUnsafeBufferPointer { needle in
+                    guard !needsFallback,
+                          let needleBase = needle.baseAddress else {
+                        return
+                    }
+                    var literalSearchOffset = searchOffset
+                    while literalSearchOffset < data.count {
+                        guard let found = rg_memmem_simple(
+                            base.advanced(by: literalSearchOffset),
+                            data.count - literalSearchOffset,
+                            needleBase,
+                            literal.count
+                        ) else {
+                            break
+                        }
+
+                        let matchStart = base.distance(to: found)
+                        let matchEnd = matchStart + literal.count
+                        guard let bounded = isASCIIWordBoundaryMatch(
+                            base: base,
+                            dataCount: data.count,
+                            matchStart: matchStart,
+                            matchEnd: matchEnd
+                        ) else {
+                            needsFallback = true
+                            return
+                        }
+                        if bounded {
+                            if matchStart < bestStart {
+                                bestStart = matchStart
+                                bestEnd = matchEnd
+                            }
+                            break
+                        }
+
+                        rejectedBoundaryCandidates += 1
+                        guard rejectedBoundaryCandidates <= maxRejectedBoundaryCandidates else {
+                            needsFallback = true
+                            return
+                        }
+                        literalSearchOffset = matchStart + 1
+                    }
+                }
+                if needsFallback {
+                    return nil
+                }
+            }
+
+            guard bestStart != Int.max else {
+                break
+            }
+            matchedLineCount += 1
+            guard let newline = memchr(
+                base.advanced(by: bestEnd),
+                Int32(UInt8(ascii: "\n")),
+                data.count - bestEnd
+            ) else {
+                break
+            }
+            searchOffset = base.distance(to: newline.assumingMemoryBound(to: UInt8.self)) + 1
+        }
+        return matchedLineCount
     }
 }
 
