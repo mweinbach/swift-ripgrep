@@ -1559,6 +1559,21 @@ struct MiscTests {
             #expect(metadataOutput == expectedOutput)
         }
 
+        for preGlobArguments in [
+            ["--pre-glob", "*.pdf"],
+            ["--pre-glob=*.txt"],
+            ["--pre-glob", "*.pdf", "--pre", ""],
+        ] {
+            let preGlobOutput = try runExecutableData(
+                preGlobArguments + [
+                    "needle",
+                    root.path("dense.txt"),
+                ],
+                fixture: {}
+            )
+            #expect(preGlobOutput == output)
+        }
+
         for (typeDefinitionArguments, expectedOutput) in [
             (["--type-add", "foo:*.foo"], output),
             (["--type-add=foo:*.foo", "-n"], lineNumberOutput),

@@ -395,6 +395,42 @@ struct RipgrepCommand {
                 ? String(argument.dropFirst("--pre=".count))
                 : nil
         }
+        func inlinePreGlobValue(_ argument: String) -> String? {
+            argument.hasPrefix("--pre-glob=")
+                ? String(argument.dropFirst("--pre-glob=".count))
+                : nil
+        }
+        func hasUnclosedCharacterClass(in pattern: String) -> Bool {
+            var escaped = false
+            var index = pattern.startIndex
+            while index < pattern.endIndex {
+                let character = pattern[index]
+                if escaped {
+                    escaped = false
+                } else if character == "\\" {
+                    escaped = true
+                } else if character == "[" {
+                    var cursor = pattern.index(after: index)
+                    var foundClose = false
+                    while cursor < pattern.endIndex {
+                        if pattern[cursor] == "]" {
+                            foundClose = true
+                            break
+                        }
+                        cursor = pattern.index(after: cursor)
+                    }
+                    if !foundClose {
+                        return true
+                    }
+                    index = cursor
+                }
+                index = pattern.index(after: index)
+            }
+            return false
+        }
+        func isValidStrictGlob(_ raw: String) -> Bool {
+            !hasUnclosedCharacterClass(in: raw)
+        }
         func inlineTypeAddValue(_ argument: String) -> String? {
             argument.hasPrefix("--type-add=")
                 ? String(argument.dropFirst("--type-add=".count))
@@ -833,6 +869,16 @@ struct RipgrepCommand {
                 argumentIndex += 1
             } else if let preprocessor = inlinePreprocessorValue(argument) {
                 guard preprocessor.isEmpty else {
+                    return nil
+                }
+            } else if argument == "--pre-glob" {
+                guard argumentIndex < arguments.count,
+                      isValidStrictGlob(arguments[argumentIndex]) else {
+                    return nil
+                }
+                argumentIndex += 1
+            } else if let preGlob = inlinePreGlobValue(argument) {
+                guard isValidStrictGlob(preGlob) else {
                     return nil
                 }
             } else if argument == "--type-add" {

@@ -350,6 +350,12 @@ parser. On the same fixture, `--hyperlink-format=grep+ needle` improved from
 1.515 s to 38.2 ms, and `--pre= needle` improved from 88.3 ms to 37.9 ms,
 versus 48.7 ms for Rust `--hyperlink-format=grep+`.
 
+Preprocessor globs now stay preflight-eligible when no active preprocessor can
+consume them. The parser validates `--pre-glob` with the same unclosed-class
+check as the full option parser, and still falls back for invalid globs or any
+non-empty `--pre` command. On the same fixture, `--pre-glob '*.pdf' needle`
+improved from 6.211 s to 35.0 ms, versus 48.3 ms for Rust.
+
 Type-definition flags that do not activate a type filter now also stay
 eligible for the executable preflight. The preflight replays
 `--type-add`/`--type-clear` through `FileTypeRegistry.apply`, so invalid
