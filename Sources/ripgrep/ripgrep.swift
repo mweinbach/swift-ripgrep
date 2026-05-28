@@ -1608,7 +1608,9 @@ struct RipgrepCommand {
               parsedEncodingIsAutomatic,
               parsedAfterContext == 0,
               parsedBeforeContext == 0,
-              !parsedHeading || !parsedWithFilename || parsedPrintMode == .matchingLines || parsedPathOnlyMode != nil,
+              !parsedHeading || !parsedWithFilename || parsedPrintMode == .matchingLines
+                  || parsedPrintMode == .count || parsedPrintMode == .countMatches
+                  || parsedPathOnlyMode != nil,
               !parsedInvertMatch,
               !parsedJson,
               parsedMaxColumns == 0,

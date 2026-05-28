@@ -1297,6 +1297,34 @@ struct MiscTests {
 
         """.utf8))
 
+        let headingCountOutput = try runExecutableData([
+            "--heading",
+            "-H",
+            "-c",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(headingCountOutput == Data("\(root.path("dense.txt")):3\n".utf8))
+
+        let headingCountMatchesOutput = try runExecutableData([
+            "--heading",
+            "-H",
+            "--count-matches",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(headingCountMatchesOutput == Data("\(root.path("dense.txt")):5\n".utf8))
+
+        let caseInsensitiveHeadingCountMatchesOutput = try runExecutableData([
+            "--heading",
+            "-H",
+            "--count-matches",
+            "-i",
+            "NEEDLE",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(caseInsensitiveHeadingCountMatchesOutput == Data("\(root.path("dense.txt")):7\n".utf8))
+
         for nullDataResetArguments in [
             ["--null-data", "--crlf"],
             ["--null-data", "--crlf", "--no-crlf"],
