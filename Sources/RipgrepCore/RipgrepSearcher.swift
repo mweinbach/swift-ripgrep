@@ -3335,7 +3335,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             } else if countOnly && (matchedLineCount > 0 || options.includeZero) {
                 writeCountLine(matchedLineCount)
             } else if (filesWithMatches && matchedLineCount > 0) || (filesWithoutMatch && matchedLineCount == 0) {
-                writeDarwinPathLine(fileURL.path, writeBytes: writeBytes)
+                writeDarwinPathLine(fileURL, options: options, writeBytes: writeBytes)
             }
         }
 
@@ -3950,7 +3950,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             } else if countOnly && matchedLineCount > 0 {
                 writeDarwinDecimalLine(matchedLineCount, writeBytes: writeBytes)
             } else if (filesWithMatches && matchedLineCount > 0) || (filesWithoutMatch && matchedLineCount == 0) {
-                writeDarwinPathLine(fileURL.path, writeBytes: writeBytes)
+                writeDarwinPathLine(fileURL, options: options, writeBytes: writeBytes)
             }
         }
 
@@ -4140,7 +4140,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             } else if countOnly && matchedLineCount > 0 {
                 writeDarwinDecimalLine(matchedLineCount, writeBytes: writeBytes)
             } else if (filesWithMatches && matchedLineCount > 0) || (filesWithoutMatch && matchedLineCount == 0) {
-                writeDarwinPathLine(fileURL.path, writeBytes: writeBytes)
+                writeDarwinPathLine(fileURL, options: options, writeBytes: writeBytes)
             }
         }
 
@@ -4317,7 +4317,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             } else if countOnly && matchedLineCount > 0 {
                 writeDarwinDecimalLine(matchedLineCount, writeBytes: writeBytes)
             } else if (filesWithMatches && matchedLineCount > 0) || (filesWithoutMatch && matchedLineCount == 0) {
-                writeDarwinPathLine(fileURL.path, writeBytes: writeBytes)
+                writeDarwinPathLine(fileURL, options: options, writeBytes: writeBytes)
             }
         }
 
@@ -4526,7 +4526,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             } else if countOnly && matchedLineCount > 0 {
                 writeDarwinDecimalLine(matchedLineCount, writeBytes: writeBytes)
             } else if (filesWithMatches && matchedLineCount > 0) || (filesWithoutMatch && matchedLineCount == 0) {
-                writeDarwinPathLine(fileURL.path, writeBytes: writeBytes)
+                writeDarwinPathLine(fileURL, options: options, writeBytes: writeBytes)
             }
         }
 
@@ -4922,7 +4922,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             } else if countOnly && matchedLineCount > 0 {
                 writeDarwinDecimalLine(matchedLineCount, writeBytes: writeBytes)
             } else if (filesWithMatches && matchedLineCount > 0) || (filesWithoutMatch && matchedLineCount == 0) {
-                writeDarwinPathLine(fileURL.path, writeBytes: writeBytes)
+                writeDarwinPathLine(fileURL, options: options, writeBytes: writeBytes)
             }
         }
 
@@ -5354,10 +5354,41 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
     }
 
+    private func writeDarwinPathLine(
+        _ fileURL: URL,
+        options: RipgrepOptions,
+        writeBytes: (UnsafeRawBufferPointer) -> Void
+    ) {
+        writeDarwinPathLine(
+            OutputPathFormatter(options: options).displayPath(for: fileURL),
+            writeBytes: writeBytes
+        )
+    }
+
     private func writeDarwinPathLine(_ path: String, writeBytes: (UnsafeRawBufferPointer) -> Void) {
-        let bytes = Array(path.utf8) + [UInt8(ascii: "\n")]
-        bytes.withUnsafeBytes { buffer in
-            writeBytes(buffer)
+        var path = path
+        path.withUTF8 { pathBytes in
+            let outputCount = pathBytes.count + 1
+            if outputCount <= 4096 {
+                withUnsafeTemporaryAllocation(of: UInt8.self, capacity: outputCount) { output in
+                    guard let outputBase = output.baseAddress else {
+                        return
+                    }
+                    if let pathBase = pathBytes.baseAddress, !pathBytes.isEmpty {
+                        outputBase.initialize(from: pathBase, count: pathBytes.count)
+                    }
+                    outputBase[pathBytes.count] = UInt8(ascii: "\n")
+                    writeBytes(UnsafeRawBufferPointer(start: outputBase, count: outputCount))
+                }
+            } else {
+                pathBytes.withUnsafeBytes { buffer in
+                    writeBytes(buffer)
+                }
+                withUnsafeTemporaryAllocation(of: UInt8.self, capacity: 1) { newline in
+                    newline[0] = UInt8(ascii: "\n")
+                    writeBytes(UnsafeRawBufferPointer(start: newline.baseAddress, count: 1))
+                }
+            }
         }
     }
 

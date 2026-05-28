@@ -52,6 +52,18 @@ stdout instead of allocating a tiny `Data` buffer and handing it to
 Count preflights now use the same raw stdout buffer for prefix, decimal count,
 and LF/CRLF output instead of allocating a tiny `Data` buffer for the count
 line.
+Direct searcher path-only output now goes through `OutputPathFormatter` before
+writing, matching Rust's composed Unicode path bytes for explicit path-only
+PCRE fast paths. The writer emits normal path-length lines through one Swift
+stack buffer instead of allocating `Array(path.utf8) + newline`.
+
+A targeted 20-run A/B against the previous Swift checkpoint and Rust used the
+same 4.8 MiB fixture:
+
+| Flags | Swift before | Swift after | rg |
+|---|---:|---:|---:|
+| `--files-with-matches needle` | 4.2 ms | 3.1 ms | 2.8 ms |
+| `--files-without-match absent` | 7.8 ms | 7.6 ms | 3.5 ms |
 
 Benchmarks used `/tmp/swift-rg-bench/stop-on-nonmatch-small.txt`, a 4.8 MiB
 dense ASCII fixture, with 2 warmups and 5 timed runs:

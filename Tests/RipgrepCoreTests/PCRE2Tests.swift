@@ -1112,6 +1112,29 @@ struct PCRE2Tests {
         #expect(nonmatchingOutput == Data("\(temp.path("pcre.txt"))\n".utf8))
     }
 
+    @Test func pcre2FixedLookbehindPathOutputPrecomposesUnicodeRootArgument() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("prefixneedle\nordinary\n", to: "café.txt")
+        let path = temp.path("café.txt").precomposedStringWithCanonicalMapping
+        let expected = Data("\(path)\n".utf8)
+
+        let matchingOutput = try runExecutableData([
+            "-P",
+            "--files-with-matches",
+            "(?<=prefix)needle",
+            path,
+        ]) {}
+        let nonmatchingOutput = try runExecutableData([
+            "-P",
+            "--files-without-match",
+            "(?<=missing)needle",
+            path,
+        ]) {}
+
+        #expect(matchingOutput == expected)
+        #expect(nonmatchingOutput == expected)
+    }
+
     @Test func pcre2FixedNegativeLookbehindLiteralOnlyMatchesWithoutPrefix() throws {
         let temp = try TemporaryDirectory()
         try temp.write("Sherlock Holmes\nMycroft Holmes\nHolmes\n", to: "pcre.txt")
