@@ -1689,6 +1689,60 @@ struct RipgrepCommand {
                 }
             }
         }
+        if parsedBeforeContext > 0,
+           parsedAfterContext == 0,
+           !parsedPassthru,
+           parsedPrintMode == .matchingLines,
+           !parsedOnlyMatching,
+           !parsedQuiet,
+           !parsedByteOffset,
+           !parsedColumn,
+           !parsedColorMayEmit,
+           parsedEncodingIsAutomatic,
+           !parsedInvertMatch,
+           !parsedJson,
+           parsedMaxColumns == 0,
+           !parsedNullData,
+           !parsedSearchZip,
+           !parsedStats,
+           !parsedStopOnNonmatch,
+           !parsedCrlf,
+           !parsedTrim,
+           !wordRegexp,
+           !parsedLineRegexp,
+           !asciiCaseInsensitive,
+           explicitRegexpPatterns.count <= 1,
+           (patternCanStartWithDash || !pattern.hasPrefix("-")),
+           path != "-" {
+            if parsedMaxCount == 0 {
+                return 1
+            }
+            let beforeContextLiteralPattern = fixedStrings
+                ? pattern
+                : RegexLiteralParser.literal(
+                    fromPlainRegexPattern: pattern,
+                    allowPCREQuotedLiterals: allowPCREQuotedLiterals
+                )
+            if let beforeContextLiteralPattern {
+                let beforeContextLiteral = Array(beforeContextLiteralPattern.utf8)
+                if !beforeContextLiteral.isEmpty,
+                   !beforeContextLiteral.contains(UInt8(ascii: "\n")) {
+                    return SwiftDarwinLiteralPreflight.beforeContextLiteralLineExitCode(
+                        path: path,
+                        literal: beforeContextLiteral,
+                        beforeContext: parsedBeforeContext,
+                        maxCount: parsedMaxCount ?? Int.max,
+                        lineNumber: lineNumber,
+                        lineNumberFieldMatchSeparator: parsedFieldMatchSeparator,
+                        lineNumberFieldContextSeparator: parsedFieldContextSeparator,
+                        lineMatchPrefix: parsedLinePrefix,
+                        lineContextPrefix: parsedContextLinePrefix,
+                        headingPrefix: parsedHeadingPrefix,
+                        contextSeparator: parsedContextSeparator
+                    )
+                }
+            }
+        }
         if parsedStopOnNonmatch,
            parsedPrintMode == .matchingLines,
            !parsedOnlyMatching,

@@ -108,6 +108,10 @@ Single-literal `-A`/`--after-context` matching-line output now has a mapped
 Swift writer for explicit files when no before-context is active, preserving
 match/context field separators, heading and filename layout, context separator
 chunks, max-count, no-final-newline output, and binary/BOM fallback behavior.
+Single-literal `-B`/`--before-context` now has the symmetric mapped Swift writer
+for explicit files when no after-context is active, buffering prior line ranges
+until a literal match selects them and preserving the same formatting and
+fallback behavior.
 
 A targeted 20-run A/B against the previous Swift checkpoint and Rust used the
 same 4.8 MiB fixture:
@@ -1272,6 +1276,19 @@ Additional current/Rust checks used 3 warmups and 10 timed runs:
 |---|---:|---:|
 | `-n -A 1 needle` | 11.1 ms | 9.8 ms |
 | `--no-context-separator -A 1 needle` | 9.8 ms | 7.7 ms |
+
+The before-context form used the same fixture:
+
+| Flags | Swift before | Swift after | rg |
+|---|---:|---:|---:|
+| `-B 1 needle` | 7.094 s | 11.0 ms | 8.4 ms |
+
+Additional current/Rust checks used 3 warmups and 10 timed runs:
+
+| Flags | Swift | rg |
+|---|---:|---:|
+| `-n -B 1 needle` | 11.1 ms | 9.8 ms |
+| `--no-context-separator -B 1 needle` | 9.6 ms | 6.8 ms |
 
 Null path terminator flags now stay on the executable literal preflight when
 the command shape cannot print a path. This covers standalone `--null` and
