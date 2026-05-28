@@ -1954,6 +1954,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
                fastPathByteSet == nil,
                !countMatchesOnly,
                !onlyMatching,
+               !options.quiet,
+               !pathOnly,
                !canDirectWriteTransformedMultiLiteralLines {
                 if maxCount <= finiteMultiLiteralMaxCountFastPathLimit {
                     var searchOffset = 0
@@ -5522,6 +5524,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         return nil
         #else
         guard options.printMode == .matchingLines,
+              !options.quiet,
               options.mmapMode != .never,
               options.withFilename != true,
               !options.vimgrep,

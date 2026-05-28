@@ -1222,13 +1222,31 @@ struct RipgrepCommand {
            let literals = multiLiteralAlternation(
             pattern,
             allowPCREQuotedLiterals: allowPCREQuotedLiterals
-           ),
-           let exitCode = SwiftDarwinLiteralPreflight.multiLiteralExitCode(
-            path: path,
-            literals: literals,
-            lineNumber: lineNumber
            ) {
-            return exitCode
+            if parsedQuiet {
+                return SwiftDarwinLiteralPreflight.multiLiteralQuietExitCode(
+                    path: path,
+                    literals: literals
+                )
+            }
+            if let parsedPathOnlyMode {
+                guard !parsedPathSeparator else {
+                    return nil
+                }
+                return SwiftDarwinLiteralPreflight.multiLiteralPathOnlyExitCode(
+                    path: path,
+                    literals: literals,
+                    printWhenMatched: parsedPathOnlyMode == .matching,
+                    nullTerminated: parsedNullPathTerminator
+                )
+            }
+            if let exitCode = SwiftDarwinLiteralPreflight.multiLiteralExitCode(
+                path: path,
+                literals: literals,
+                lineNumber: lineNumber
+            ) {
+                return exitCode
+            }
         }
 
         guard (patternCanStartWithDash || !pattern.hasPrefix("-")),

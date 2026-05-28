@@ -390,6 +390,16 @@ versus 6.6 ms for Rust. The boundary-heavy `-w eed` substring no-match falls
 back and stayed effectively tied with the full Swift path at 134.6 ms for
 quiet and 165.6 ms for path-only.
 
+Small multi-literal quiet and path-only alternations now avoid the line-output
+multi-literal writer and use a bounded high-level mapped contains check for up
+to eight alternatives. This fixes the previous default-path parity leak where
+`-q 'needle|tail'` and `-l 'needle|tail'` printed matching lines, while the
+core direct stdout path now also declines quiet mode when config disables the
+executable preflight. On the same fixture, `-q 'needle|tail'` now emits no
+stdout and measures 2.9 ms, versus 2.4 ms for Rust; `-l 'needle|tail'` emits
+only the file path and measures 3.4 ms, versus 2.5 ms for Rust. The two-literal
+no-match form measured 59.3-62.2 ms, versus 8.8 ms for Rust.
+
 Positive `-m`/`--max-count` explicit-file literal searches now have a bounded
 Swift line-output preflight. It uses high-level mapped `Data` searches, emits
 each matching line at most once, preserves optional line numbers, and falls
