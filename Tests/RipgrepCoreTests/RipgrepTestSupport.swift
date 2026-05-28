@@ -68,12 +68,19 @@ func jsonObject(_ line: String) throws -> [String: Any] {
     return try #require(object as? [String: Any])
 }
 
-func runExecutableData(_ arguments: [String], fixture: () throws -> Void) throws -> Data {
+func runExecutableData(
+    _ arguments: [String],
+    environment: [String: String] = [:],
+    fixture: () throws -> Void
+) throws -> Data {
     try fixture()
     let executable = ripgrepPackageRootURL().appendingPathComponent(".build/debug/ripgrep")
     let process = Process()
     process.executableURL = executable
     process.arguments = arguments
+    if !environment.isEmpty {
+        process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
+    }
     let output = Pipe()
     let error = Pipe()
     process.standardOutput = output

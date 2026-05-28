@@ -1231,6 +1231,7 @@ struct MiscTests {
         try root.write("needle\npre needle\nneedle\nneedle tail\nlast", to: "exact.txt")
         try root.write(Data("needle\r\nquiet\r\n".utf8), to: "crlf.txt")
         try root.write("needle\nquiet\n", to: "patterns.txt")
+        try root.write("--ignore-case\n--line-number\n", to: "ripgreprc")
         try root.write("needle\nlast\n", to: "exact-patterns.txt")
         try root.write("needle\n", to: "one-pattern.txt")
         try root.write("missing\nabsent\n", to: "missing-patterns.txt")
@@ -5634,6 +5635,16 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(noConfigRegexpOutput == output)
+
+        let noConfigEnvironmentRegexpOutput = try runExecutableData([
+            "--no-config",
+            "-e",
+            "needle",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(noConfigEnvironmentRegexpOutput == output)
 
         let regexpLineNumberOutput = try runExecutableData([
             "-e",

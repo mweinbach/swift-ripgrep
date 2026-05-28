@@ -272,6 +272,24 @@ count, and count-matches modes, plus bad `.gz` and real gzip fallback controls.
 | `--search-zip -c needle` | 111.0 ms | 10.1 ms | 12.7 ms |
 | `--search-zip --count-matches needle` | 108.1 ms | 6.1 ms | 18.6 ms |
 
+Leading `--no-config` now keeps the Swift executable preflight available even
+when `RIPGREP_CONFIG_PATH` is set. The preflight still falls back for configured
+invocations without a leading `--no-config`, and a `--no-config` pattern passed
+after `--` or through `-e` is not treated as the flag by this outer guard.
+Direct byte/status checks matched Rust for active config, leading `--no-config`,
+line-numbered `--no-config`, leading engine selector plus `--no-config`, and a
+neutral-flag-before-`--no-config` fallback control.
+
+10 timed runs on `/tmp/swift-rg-candidates/trim.txt` with
+`RIPGREP_CONFIG_PATH=/tmp/swift-rg-candidates/ripgreprc-no-config` and 3
+warmups. The bypass proxy uses leading `--line-buffered --no-config`, which is
+output-neutral but conservatively prevents the leading-`--no-config` guard from
+firing:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--no-config needle` | 165.4 ms | 14.6 ms | 12.9 ms |
+
 Case-sensitive repeated `-e`/`-f` and top-level literal alternation `--trim`
 forms now use the same mapped trim writer.
 Literal `--invert-match` matching-line output now has its own mapped Swift line

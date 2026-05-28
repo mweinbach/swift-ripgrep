@@ -364,14 +364,14 @@ struct RipgrepCommand {
     }
 
     private static func runSwiftDarwinLiteralPreflight(arguments: [String]) -> Int32? {
-        guard getenv("RIPGREP_CONFIG_PATH") == nil else {
-            return nil
-        }
-
         let preflightArguments = darwinLiteralPreflightArguments(
             afterStrippingLeadingEngineSelectorFrom: arguments
         )
         let arguments = preflightArguments.arguments
+        guard getenv("RIPGREP_CONFIG_PATH") == nil || arguments.first == "--no-config" else {
+            return nil
+        }
+
         let asciiCaseInsensitive: Bool
         let lineNumber: Bool
         let noMmap: Bool
