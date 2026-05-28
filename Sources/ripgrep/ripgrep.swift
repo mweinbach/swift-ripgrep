@@ -1485,6 +1485,11 @@ struct RipgrepCommand {
         default:
             parsedPathOnlyMode = nil
         }
+        let parsedLinePrefix: [UInt8] = if parsedWithFilename {
+            Array(path.utf8) + (parsedNullPathTerminator ? [0] : parsedFieldMatchSeparator)
+        } else {
+            []
+        }
         guard !(parsedLineRegexp && wordRegexp) else {
             return nil
         }
@@ -1505,7 +1510,7 @@ struct RipgrepCommand {
               !parsedStats,
               (!parsedStopOnNonmatch || parsedQuiet || parsedPathOnlyMode != nil),
               !parsedTrim,
-              !parsedWithFilename,
+              !(parsedWithFilename && parsedPathSeparator),
               parsedPrintMode != .countMatches else {
             return nil
         }
@@ -1528,7 +1533,8 @@ struct RipgrepCommand {
                 literal: Array(surroundingLiteral.utf8),
                 lineNumber: lineNumber,
                 asciiOnly: pattern.hasPrefix("(?-u)"),
-                lineNumberFieldSeparator: parsedFieldMatchSeparator
+                lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                linePrefix: parsedLinePrefix
             )
         }
 
@@ -1598,7 +1604,8 @@ struct RipgrepCommand {
                     path: path,
                     literals: literals,
                     lineNumber: lineNumber,
-                    lineNumberFieldSeparator: parsedFieldMatchSeparator
+                    lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                    linePrefix: parsedLinePrefix
                 ) {
                     return exitCode
                 }
@@ -1665,6 +1672,7 @@ struct RipgrepCommand {
         if parsedCount {
             guard parsedPathOnlyMode == nil,
                   !wordRegexp,
+                  !parsedWithFilename,
                   !asciiBoundary else {
                 return nil
             }
@@ -1787,7 +1795,8 @@ struct RipgrepCommand {
                 literal: literal,
                 maxCount: parsedMaxCount,
                 lineNumber: lineNumber,
-                lineNumberFieldSeparator: parsedFieldMatchSeparator
+                lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                linePrefix: parsedLinePrefix
             )
         }
         if let parsedMaxCount {
@@ -1801,7 +1810,8 @@ struct RipgrepCommand {
                 literal: literal,
                 maxCount: parsedMaxCount,
                 lineNumber: lineNumber,
-                lineNumberFieldSeparator: parsedFieldMatchSeparator
+                lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                linePrefix: parsedLinePrefix
             )
         }
         if wordRegexp {
@@ -1814,7 +1824,8 @@ struct RipgrepCommand {
                 path: path,
                 literal: literal,
                 lineNumber: lineNumber,
-                lineNumberFieldSeparator: parsedFieldMatchSeparator
+                lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                linePrefix: parsedLinePrefix
             )
         }
         if noMmap {
@@ -1826,7 +1837,8 @@ struct RipgrepCommand {
                 asciiCaseInsensitive: asciiCaseInsensitive,
                 lineNumber: lineNumber,
                 asciiBoundary: asciiBoundary,
-                lineNumberFieldSeparator: parsedFieldMatchSeparator
+                lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                linePrefix: parsedLinePrefix
             ) {
                 return mappedExitCode
             }
@@ -1838,7 +1850,8 @@ struct RipgrepCommand {
                 literal: literal,
                 asciiCaseInsensitive: asciiCaseInsensitive,
                 lineNumber: lineNumber,
-                lineNumberFieldSeparator: parsedFieldMatchSeparator
+                lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                linePrefix: parsedLinePrefix
             )
         }
         return SwiftDarwinLiteralPreflight.exitCode(
@@ -1847,7 +1860,8 @@ struct RipgrepCommand {
             asciiCaseInsensitive: asciiCaseInsensitive,
             lineNumber: lineNumber,
             asciiBoundary: asciiBoundary,
-            lineNumberFieldSeparator: parsedFieldMatchSeparator
+            lineNumberFieldSeparator: parsedFieldMatchSeparator,
+            linePrefix: parsedLinePrefix
         )
     }
     #endif

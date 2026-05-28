@@ -1023,6 +1023,14 @@ at 67.3 ms versus 15.865 s before and 39.2 ms for Rust; and
 `--with-filename -n --column --byte-offset 'Sherlock|Watson'` at 80.2 ms
 versus 15.853 s before and 43.5 ms for Rust.
 
+Explicit single-file `--with-filename` matching-line searches now stay on the
+Swift executable preflight for plain literal, numbered, NUL path prefix, custom
+field separator, max-count, safe multi-literal, exact-line, word-regexp, and
+line-buffered forms. Release byte checks matched Rust stdout, stderr, and exit
+status for each form. On the 50 KiB dense fixture, five-run checks measured
+`-H needle` at 3.4 ms versus a noisy fallback baseline around 54.4 ms and
+3.0 ms for Rust; `-H -n needle` measured 3.1 ms versus 3.0 ms for Rust.
+
 Filename-prefixed literal count output now also stays on the direct Swift
 writer for `-c` and `--count-matches`, including `--include-zero path:0`
 semantics. Output and exit status for matching, no-match, include-zero,

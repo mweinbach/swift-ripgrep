@@ -647,6 +647,18 @@ struct MiscTests {
         ], fixture: {})
         #expect(lineBufferedOutput == output)
 
+        let filenameOutput = try runExecutableData([
+            "--with-filename",
+            "-n",
+            #"\w+\s+Holmes\s+\w+"#,
+            root.path("sherlock.txt"),
+        ], fixture: {})
+        #expect(String(decoding: filenameOutput, as: UTF8.self) == """
+        \(root.path("sherlock.txt")):2:Mr Holmes returns
+        \(root.path("sherlock.txt")):4:Doctor Holmes arrives
+
+        """)
+
         try root.write("""
         Mr Holmes.Jr returns
         Mr HolmesxJr returns
@@ -1265,6 +1277,18 @@ struct MiscTests {
         ], fixture: {})
         #expect(lineBufferedAlternationOutput == output)
 
+        let withFilenameOutput = try runExecutableData([
+            "--with-filename",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(withFilenameOutput == Data("""
+        \(root.path("dense.txt")):needle needle needle
+        \(root.path("dense.txt")):NEEDLE needle Needle
+        \(root.path("dense.txt")):tail needle
+
+        """.utf8))
+
         for nullDataResetArguments in [
             ["--null-data", "--crlf"],
             ["--null-data", "--crlf", "--no-crlf"],
@@ -1310,6 +1334,31 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(lineBufferedLineNumberOutput == lineNumberOutput)
+
+        let withFilenameLineNumberOutput = try runExecutableData([
+            "--with-filename",
+            "-n",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(withFilenameLineNumberOutput == Data("""
+        \(root.path("dense.txt")):1:needle needle needle
+        \(root.path("dense.txt")):3:NEEDLE needle Needle
+        \(root.path("dense.txt")):4:tail needle
+
+        """.utf8))
+
+        let withFilenameNullOutput = try runExecutableData([
+            "--with-filename",
+            "--null",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(withFilenameNullOutput == Data((
+            "\(root.path("dense.txt"))\0needle needle needle\n" +
+            "\(root.path("dense.txt"))\0NEEDLE needle Needle\n" +
+            "\(root.path("dense.txt"))\0tail needle\n"
+        ).utf8))
 
         let explicitNoLineNumberOutput = try runExecutableData([
             "-N",
@@ -1472,6 +1521,7 @@ struct MiscTests {
             (["-m1", "needle", root.path("dense.txt")], Data("needle needle needle\n".utf8)),
             (["--line-buffered", "-m1", "needle", root.path("dense.txt")], Data("needle needle needle\n".utf8)),
             (["-n", "-m1", "needle", root.path("dense.txt")], Data("1:needle needle needle\n".utf8)),
+            (["--with-filename", "-m1", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt")):needle needle needle\n".utf8)),
             (["--max-count=2", "needle", root.path("dense.txt")], Data("""
             needle needle needle
             NEEDLE needle Needle
@@ -1522,7 +1572,9 @@ struct MiscTests {
 
         for (exactLineArguments, expectedOutput) in [
             (["-x", "needle", root.path("exact.txt")], Data("needle\nneedle\n".utf8)),
+            (["--with-filename", "-x", "needle", root.path("exact.txt")], Data("\(root.path("exact.txt")):needle\n\(root.path("exact.txt")):needle\n".utf8)),
             (["-n", "-x", "needle", root.path("exact.txt")], Data("1:needle\n3:needle\n".utf8)),
+            (["--with-filename", "-n", "-x", "needle", root.path("exact.txt")], Data("\(root.path("exact.txt")):1:needle\n\(root.path("exact.txt")):3:needle\n".utf8)),
             (["-nx", "needle", root.path("exact.txt")], Data("1:needle\n3:needle\n".utf8)),
             (["-m1", "-x", "needle", root.path("exact.txt")], Data("needle\n".utf8)),
             (["-x", "last", root.path("exact.txt")], Data("last\n".utf8)),
@@ -2324,6 +2376,15 @@ struct MiscTests {
                 1|needle needle needle
                 3|NEEDLE needle Needle
                 4|tail needle
+
+                """.utf8)
+            ),
+            (
+                ["--with-filename", "--field-match-separator=|"],
+                Data("""
+                \(root.path("dense.txt"))|1|needle needle needle
+                \(root.path("dense.txt"))|3|NEEDLE needle Needle
+                \(root.path("dense.txt"))|4|tail needle
 
                 """.utf8)
             ),
