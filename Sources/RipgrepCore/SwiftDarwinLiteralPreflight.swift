@@ -594,9 +594,9 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         guard !data.isEmpty else {
-            return nil
+            return asciiCaseVariants(for: literal).count == 1 ? false : nil
         }
-        return containsASCIICaseInsensitiveLiteral(data: data, literal: literal) ? true : nil
+        return containsASCIICaseInsensitiveLiteral(data: data, literal: literal)
     }
 
     private static func containsAnyASCIICaseInsensitiveLiteral(
@@ -617,23 +617,25 @@ public enum SwiftDarwinLiteralPreflight {
         guard !data.isEmpty else {
             return nil
         }
-        for literal in literals where containsASCIICaseInsensitiveLiteral(data: data, literal: literal) {
-            return true
+        var canProveNoMatch = true
+        for literal in literals {
+            guard let matched = containsASCIICaseInsensitiveLiteral(data: data, literal: literal) else {
+                canProveNoMatch = false
+                continue
+            }
+            if matched {
+                return true
+            }
         }
-        return nil
+        return canProveNoMatch ? false : nil
     }
 
-    private static func containsASCIICaseInsensitiveLiteral(data: Data, literal: [UInt8]) -> Bool {
-        if data.range(of: Data(literal)) != nil {
+    private static func containsASCIICaseInsensitiveLiteral(data: Data, literal: [UInt8]) -> Bool? {
+        let variants = asciiCaseVariants(for: literal)
+        for variant in variants where data.range(of: Data(variant)) != nil {
             return true
         }
-        let lowercase = literal.map(rgSwiftASCIILower)
-        if lowercase != literal,
-           data.range(of: Data(lowercase)) != nil {
-            return true
-        }
-        let uppercase = literal.map(rgSwiftASCIIUpper)
-        return uppercase != literal && data.range(of: Data(uppercase)) != nil
+        return variants.count == 1 ? false : nil
     }
 
     private static func containsASCIICaseInsensitiveExactLine(path: String, literal: [UInt8]) -> Bool? {
@@ -651,11 +653,12 @@ public enum SwiftDarwinLiteralPreflight {
         guard !hasBinaryDetectionPrefix(data) else {
             return nil
         }
-        for variant in asciiCaseVariants(for: literal)
+        let variants = asciiCaseVariants(for: literal)
+        for variant in variants
             where exactLineCount(data: data, literal: variant, maxCount: 1) > 0 {
             return true
         }
-        return nil
+        return variants.count == 1 ? false : nil
     }
 
     private static func asciiCaseVariants(for literal: [UInt8]) -> [[UInt8]] {

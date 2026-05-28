@@ -409,7 +409,13 @@ the full searcher. The executable parser also recognizes clustered lowercase
 the same fixture, `-qi NEEDLE` improved from 113.8 ms to 11.0 ms, versus
 3.1 ms for Rust; `-li NEEDLE` measured 10.8 ms, versus 2.7 ms for Rust; and
 `-li 'NEEDLE|TAIL'` improved from 2.434 s to 10.7 ms, versus 3.0 ms for Rust.
-The no-match forms still fall back and measured 60.2-83.7 ms.
+Alphabetic no-match forms still fall back and measured 60.2-83.7 ms.
+No-letter ASCII ignore-case literals now prove no-match because their
+case-folded variants collapse to the original bytes. On the 45 MiB fixture,
+`-q -i 1234567890` improved from 43.9 ms to 9.9 ms, versus 6.2 ms for Rust;
+`-l -i 1234567890` improved from 39.5 ms to 9.3 ms, versus 7.0 ms for Rust;
+and `--files-without-match -i 1234567890` improved from 40.8 ms to 9.2 ms,
+versus 7.1 ms for Rust.
 
 Positive `-m`/`--max-count` explicit-file literal searches now have a bounded
 Swift line-output preflight. It uses high-level mapped `Data` searches, emits
@@ -475,6 +481,11 @@ measured 7.8 ms, versus 2.8 ms for Rust, and `-l -i -x` measured 8.3 ms,
 versus 3.5 ms for Rust. On a 3.7 MiB fixture, forcing the full fallback with an
 empty `RIPGREP_CONFIG_PATH` measured 2.852-2.902 s for the same quiet/path-only
 forms, while the default Swift preflight measured 3.7-5.1 ms.
+No-letter ASCII no-match exact-line forms can now also prove false instead of
+falling back. On the 45 MiB fixture, `-q -i -x 1234567890` measured 8.8 ms,
+versus 4.879 s for the forced fallback and 7.4 ms for Rust; the matching
+`--files-without-match -i -x 1234567890` form measured 9.1 ms, versus
+5.044 s for the forced fallback and 8.5 ms for Rust.
 
 Type-definition flags that do not activate a type filter now also stay
 eligible for the executable preflight. The preflight replays
