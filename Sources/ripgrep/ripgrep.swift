@@ -1850,9 +1850,6 @@ struct RipgrepCommand {
                 return nil
             }
             if asciiCaseInsensitive {
-                guard !parsedWithFilename else {
-                    return nil
-                }
                 guard let parsedMaxCount else {
                     return nil
                 }
@@ -1865,6 +1862,7 @@ struct RipgrepCommand {
                         literal: literal,
                         includeZero: parsedIncludeZero,
                         maxCount: parsedMaxCount,
+                        countPrefix: parsedCountPrefix,
                         crlfTerminated: parsedCrlf
                     )
                 }
@@ -1873,13 +1871,11 @@ struct RipgrepCommand {
                     literal: literal,
                     includeZero: parsedIncludeZero,
                     maxCount: parsedMaxCount,
+                    countPrefix: parsedCountPrefix,
                     crlfTerminated: parsedCrlf
                 )
             }
             if parsedLineRegexp {
-                guard !parsedWithFilename else {
-                    return nil
-                }
                 guard !parsedCrlf else {
                     return nil
                 }
@@ -1888,6 +1884,7 @@ struct RipgrepCommand {
                     literal: literal,
                     includeZero: parsedIncludeZero,
                     maxCount: parsedMaxCount,
+                    countPrefix: parsedCountPrefix,
                     crlfTerminated: parsedCrlf
                 )
             }

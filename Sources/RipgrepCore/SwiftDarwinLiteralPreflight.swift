@@ -211,6 +211,7 @@ public enum SwiftDarwinLiteralPreflight {
         literal: [UInt8],
         includeZero: Bool,
         maxCount: Int,
+        countPrefix: [UInt8] = [],
         crlfTerminated: Bool = false
     ) -> Int32? {
         guard maxCount == 1,
@@ -218,9 +219,13 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         if matched {
-            FileHandle.standardOutput.write(countOutput(1, crlfTerminated: crlfTerminated))
+            var output = Data(countPrefix)
+            output.append(countOutput(1, crlfTerminated: crlfTerminated))
+            FileHandle.standardOutput.write(output)
         } else if includeZero {
-            FileHandle.standardOutput.write(countOutput(0, crlfTerminated: crlfTerminated))
+            var output = Data(countPrefix)
+            output.append(countOutput(0, crlfTerminated: crlfTerminated))
+            FileHandle.standardOutput.write(output)
         }
         return matched ? 0 : 1
     }
@@ -230,6 +235,7 @@ public enum SwiftDarwinLiteralPreflight {
         literal: [UInt8],
         includeZero: Bool,
         maxCount: Int,
+        countPrefix: [UInt8] = [],
         crlfTerminated: Bool = false
     ) -> Int32? {
         guard maxCount == 1,
@@ -237,9 +243,13 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         if matched {
-            FileHandle.standardOutput.write(countOutput(1, crlfTerminated: crlfTerminated))
+            var output = Data(countPrefix)
+            output.append(countOutput(1, crlfTerminated: crlfTerminated))
+            FileHandle.standardOutput.write(output)
         } else if includeZero {
-            FileHandle.standardOutput.write(countOutput(0, crlfTerminated: crlfTerminated))
+            var output = Data(countPrefix)
+            output.append(countOutput(0, crlfTerminated: crlfTerminated))
+            FileHandle.standardOutput.write(output)
         }
         return matched ? 0 : 1
     }
@@ -583,6 +593,7 @@ public enum SwiftDarwinLiteralPreflight {
         literal: [UInt8],
         includeZero: Bool,
         maxCount: Int? = nil,
+        countPrefix: [UInt8] = [],
         crlfTerminated: Bool = false
     ) -> Int32? {
         guard !literal.isEmpty,
@@ -603,7 +614,9 @@ public enum SwiftDarwinLiteralPreflight {
             maxCount: maxCount
         )
         if matchedLineCount > 0 || includeZero {
-            FileHandle.standardOutput.write(countOutput(matchedLineCount, crlfTerminated: crlfTerminated))
+            var output = Data(countPrefix)
+            output.append(countOutput(matchedLineCount, crlfTerminated: crlfTerminated))
+            FileHandle.standardOutput.write(output)
         }
         return matchedLineCount > 0 ? 0 : 1
     }

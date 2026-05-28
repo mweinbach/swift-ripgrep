@@ -1773,6 +1773,16 @@ struct MiscTests {
         ], fixture: {})
         #expect(singleLiteralPrefixedMaxCountOutput == Data("\(root.path("dense.txt")):2\n".utf8))
 
+        let singleLiteralPrefixedCaseInsensitiveMaxCountOutput = try runExecutableData([
+            "-H",
+            "-c",
+            "-m1",
+            "-i",
+            "NEEDLE",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(singleLiteralPrefixedCaseInsensitiveMaxCountOutput == Data("\(root.path("dense.txt")):1\n".utf8))
+
         for (exactLineArguments, expectedOutput) in [
             (["-x", "needle", root.path("exact.txt")], Data("needle\nneedle\n".utf8)),
             (["--with-filename", "-x", "needle", root.path("exact.txt")], Data("\(root.path("exact.txt")):needle\n\(root.path("exact.txt")):needle\n".utf8)),
@@ -1796,6 +1806,61 @@ struct MiscTests {
         #expect(exactLineNoMatch.stdout.isEmpty)
         #expect(exactLineNoMatch.stderr.isEmpty)
         #expect(exactLineNoMatch.status == 1)
+
+        let exactLinePrefixedCountOutput = try runExecutableData([
+            "-H",
+            "-c",
+            "-x",
+            "needle",
+            root.path("exact.txt"),
+        ], fixture: {})
+        #expect(exactLinePrefixedCountOutput == Data("\(root.path("exact.txt")):2\n".utf8))
+
+        let exactLineNullPrefixedCountOutput = try runExecutableData([
+            "-H",
+            "--null",
+            "-c",
+            "-x",
+            "needle",
+            root.path("exact.txt"),
+        ], fixture: {})
+        #expect(exactLineNullPrefixedCountOutput == Data((
+            "\(root.path("exact.txt"))\0" +
+            "2\n"
+        ).utf8))
+
+        let exactLinePrefixedMaxCountOutput = try runExecutableData([
+            "-H",
+            "-c",
+            "-m1",
+            "-x",
+            "needle",
+            root.path("exact.txt"),
+        ], fixture: {})
+        #expect(exactLinePrefixedMaxCountOutput == Data("\(root.path("exact.txt")):1\n".utf8))
+
+        let exactLinePrefixedCaseInsensitiveMaxCountOutput = try runExecutableData([
+            "-H",
+            "-c",
+            "-m1",
+            "-i",
+            "-x",
+            "NEEDLE",
+            root.path("exact.txt"),
+        ], fixture: {})
+        #expect(exactLinePrefixedCaseInsensitiveMaxCountOutput == Data("\(root.path("exact.txt")):1\n".utf8))
+
+        let exactLinePrefixedIncludeZeroResult = try runExecutableResult([
+            "--include-zero",
+            "-H",
+            "-c",
+            "-x",
+            "missing",
+            root.path("exact.txt"),
+        ])
+        #expect(exactLinePrefixedIncludeZeroResult.status == 1)
+        #expect(exactLinePrefixedIncludeZeroResult.stdout == Data("\(root.path("exact.txt")):0\n".utf8))
+        #expect(exactLinePrefixedIncludeZeroResult.stderr.isEmpty)
 
         for (includeZeroArguments, expectedOutput) in [
             (["--include-zero"], output),

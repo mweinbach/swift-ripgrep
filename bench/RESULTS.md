@@ -548,6 +548,15 @@ NEEDLE QUIET TAIL NEEDLE'` measured 7.3 ms, versus 2.8 ms for Rust. On a
 3.7 MiB exact-line fixture, the exact-line count form improved from a forced
 fallback at 1.490 s to 4.1 ms.
 
+Filename-prefixed count summaries now reuse that same count-prefix formatting in
+the exact-line and bounded ASCII case-insensitive count helpers. This covers
+`-H -c -x`, NUL-prefixed count summaries, include-zero prefixed exact-line
+summaries, and bounded `-H -c -m1 -i`/`-ix` forms, while unbounded
+case-insensitive counts stay on the prior fallback. On the 50 KiB exact-line
+fixture, `-H -c -x needle` measured 7.6 ms versus 84.4 ms before and 3.4 ms for
+Rust, `-H -c -m1 -x needle` measured 3.9 ms versus 58.2 ms before, and
+`-H -c -m1 -ix NEEDLE` measured 4.0 ms versus the previous prefixed fallback.
+
 Clustered short count flags now reach the same executable preflight parser, so
 common spellings like `-ci -m1 NEEDLE` and `-cix -m1 ...` no longer fall back
 just because `c` was packed into the short-flag cluster. On the same 45 MiB
@@ -560,10 +569,10 @@ Exact line-regexp literals now get a Swift-first executable preflight for
 `-x`/`--line-regexp` when CRLF mode and formatted output modes are inactive.
 The scanner uses mapped `Data`, searches for `literal + "\\n"` in the common
 no-line-number path, preserves `-n` and positive `-m`, and falls through for
-`--crlf`, quiet/path-only/count forms, and early binary detection. On the same
-fixture, `-x 'needle needle needle quiet tail needle'` improved from 13.783 s
-to 397.9 ms, versus 115.5 ms for Rust. A no-match exact-line scan improved
-from 2.241 s to 22.5 ms, versus 8.1 ms for Rust.
+`--crlf`, quiet/path-only forms, unsupported count variants, and early binary
+detection. On the same fixture, `-x 'needle needle needle quiet tail needle'`
+improved from 13.783 s to 397.9 ms, versus 115.5 ms for Rust. A no-match
+exact-line scan improved from 2.241 s to 22.5 ms, versus 8.1 ms for Rust.
 
 Exact line count output now uses the same full-line scanner without emitting
 matched lines. On the same fixture,
