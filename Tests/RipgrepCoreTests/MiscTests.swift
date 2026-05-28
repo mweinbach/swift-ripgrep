@@ -1230,6 +1230,10 @@ struct MiscTests {
         """, to: "dash-pattern.txt")
         try root.write("needle\npre needle\nneedle\nneedle tail\nlast", to: "exact.txt")
         try root.write(Data("needle\r\nquiet\r\n".utf8), to: "crlf.txt")
+        try root.write("needle\nquiet\n", to: "patterns.txt")
+        try root.write("needle\n", to: "one-pattern.txt")
+        try root.write("missing\nabsent\n", to: "missing-patterns.txt")
+        try root.write("needle needle\nquiet line\n", to: "fixed-patterns.txt")
         try root.write("needle\n", to: ".hidden.txt")
         try root.write("*.txt\n", to: ".ignore")
         try root.write("needle\n", to: "ignored.txt")
@@ -2897,6 +2901,93 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(repeatedIgnoreCaseRegexpOutput == repeatedRegexpOutput)
+
+        let patternFileOutput = try runExecutableData([
+            "-f",
+            root.path("patterns.txt"),
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(patternFileOutput == repeatedRegexpOutput)
+
+        let longPatternFileOutput = try runExecutableData([
+            "--file",
+            root.path("patterns.txt"),
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(longPatternFileOutput == repeatedRegexpOutput)
+
+        let inlineLongPatternFileOutput = try runExecutableData([
+            "--file=\(root.path("patterns.txt"))",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(inlineLongPatternFileOutput == repeatedRegexpOutput)
+
+        let inlineShortPatternFileOutput = try runExecutableData([
+            "-f\(root.path("patterns.txt"))",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(inlineShortPatternFileOutput == repeatedRegexpOutput)
+
+        let singlePatternFileOutput = try runExecutableData([
+            "-f",
+            root.path("one-pattern.txt"),
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(singlePatternFileOutput == output)
+
+        let patternFileLineNumberOutput = try runExecutableData([
+            "-n",
+            "-f",
+            root.path("patterns.txt"),
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(patternFileLineNumberOutput == repeatedRegexpLineNumberOutput)
+
+        let patternFileHeadingOutput = try runExecutableData([
+            "--heading",
+            "--with-filename",
+            "-f",
+            root.path("patterns.txt"),
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(patternFileHeadingOutput == repeatedRegexpHeadingOutput)
+
+        let patternFilePathOnlyResult = try runExecutableResult([
+            "-l",
+            "-f",
+            root.path("patterns.txt"),
+            root.path("dense.txt"),
+        ])
+        #expect(patternFilePathOnlyResult.status == 0)
+        #expect(patternFilePathOnlyResult.stdout == Data("\(root.path("dense.txt"))\n".utf8))
+        #expect(patternFilePathOnlyResult.stderr.isEmpty)
+
+        let patternFileWithoutMatchResult = try runExecutableResult([
+            "--files-without-match",
+            "-f",
+            root.path("missing-patterns.txt"),
+            root.path("dense.txt"),
+        ])
+        #expect(patternFileWithoutMatchResult.status == 0)
+        #expect(patternFileWithoutMatchResult.stdout == Data("\(root.path("dense.txt"))\n".utf8))
+        #expect(patternFileWithoutMatchResult.stderr.isEmpty)
+
+        let fixedPatternFileOutput = try runExecutableData([
+            "-F",
+            "-f",
+            root.path("fixed-patterns.txt"),
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(fixedPatternFileOutput == repeatedFixedRegexpOutput)
+
+        let mixedRegexpPatternFileOutput = try runExecutableData([
+            "-e",
+            "tail",
+            "-f",
+            root.path("patterns.txt"),
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(mixedRegexpPatternFileOutput == repeatedRegexpOutput)
 
         let orderedNoLineNumberOutput = try runExecutableData([
             "-n",

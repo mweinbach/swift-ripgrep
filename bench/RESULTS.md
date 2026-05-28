@@ -280,6 +280,18 @@ line-regexp, counts, and max-count still fall back. Dense-fixture byte checks fo
 while `-n -e needle -e quiet` measured 3.2 ms versus 26.9 ms before and 2.8 ms
 for Rust.
 
+Literal-only pattern files now feed the same executable preflight. The parser
+accepts separated `-f`/`--file`, inline `--file=...`, short `-fPATH`, and mixed
+explicit `-e` plus `-f` sources when the loaded patterns reduce to bounded
+non-empty literal bytes; unreadable files, stdin pattern files, empty pattern
+sets, and semantic modes outside the existing multi-literal preflight still
+fall back. Dense-fixture byte checks matched Rust for plain, line-numbered,
+filename/heading, path-only, files-without-match, quiet, ASCII ignore-case quiet,
+fixed-string pattern files, literal alternation pattern lines, one-pattern
+files, and mixed `-e`/`-f` forms. On the 50 KiB dense fixture, `-f patterns.txt`
+measured 6.0 ms versus 35.3 ms before and 2.7 ms for Rust, while
+`-n -f patterns.txt` measured 5.2 ms versus 35.3 ms before and 2.8 ms for Rust.
+
 Traversal-only flags that do not affect an explicit regular file now stay
 eligible for the executable preflight. The parser treats hidden, ignore-family,
 require-git, and one-file-system toggles as neutral only in this single-path

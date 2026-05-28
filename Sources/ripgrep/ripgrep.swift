@@ -480,6 +480,15 @@ struct RipgrepCommand {
             }
             return nil
         }
+        func inlinePatternFileValue(_ argument: String) -> String? {
+            if argument.hasPrefix("--file=") {
+                return String(argument.dropFirst("--file=".count))
+            }
+            if argument.hasPrefix("-f"), argument.count > 2 {
+                return String(argument.dropFirst(2))
+            }
+            return nil
+        }
         func inlineEngineSelectorValue(_ argument: String) -> String? {
             argument.hasPrefix("--engine=")
                 ? String(argument.dropFirst("--engine=".count))
@@ -1031,9 +1040,23 @@ struct RipgrepCommand {
         var parsedCrlf = false
         var parsedIgnoreFilesEnabled = true
         var parsedIgnoreFilePaths: [String] = []
+        var parsedHasExplicitPatternSource = false
         var parsedRegexpPatterns: [String] = []
         var patternCanStartWithDash = false
         var valueArguments: [String] = []
+        func appendPreflightPatternFile(_ path: String) -> Bool {
+            guard path != "-",
+                  isReadableRegularFile(path),
+                  let data = FileManager.default.contents(atPath: path) else {
+                return false
+            }
+            parsedHasExplicitPatternSource = true
+            let contents = String(decoding: data, as: UTF8.self)
+            parsedRegexpPatterns.append(
+                contentsOf: RipgrepOptions.patterns(fromPatternFileContents: contents)
+            )
+            return true
+        }
         func applyNumericPreflightOption(_ option: NumericPreflightOption, value: Int) {
             switch option {
             case .afterContext:
@@ -1190,12 +1213,24 @@ struct RipgrepCommand {
                 guard argumentIndex < arguments.count else {
                     return nil
                 }
+                parsedHasExplicitPatternSource = true
                 parsedRegexpPatterns.append(arguments[argumentIndex])
                 patternCanStartWithDash = true
                 argumentIndex += 1
             } else if let inlineRegexp = inlineRegexpPattern(argument) {
+                parsedHasExplicitPatternSource = true
                 parsedRegexpPatterns.append(inlineRegexp)
                 patternCanStartWithDash = true
+            } else if argument == "-f" || argument == "--file" {
+                guard argumentIndex < arguments.count,
+                      appendPreflightPatternFile(arguments[argumentIndex]) else {
+                    return nil
+                }
+                argumentIndex += 1
+            } else if let patternFile = inlinePatternFileValue(argument) {
+                guard appendPreflightPatternFile(patternFile) else {
+                    return nil
+                }
             } else if argument == "-p" || argument == "--pretty" {
                 parsedColorMayEmit = true
                 parsedHeading = true
@@ -1475,8 +1510,9 @@ struct RipgrepCommand {
             }
         }
         let explicitRegexpPatterns = parsedRegexpPatterns
-        if !explicitRegexpPatterns.isEmpty {
-            guard valueArguments.count == 1 else {
+        if parsedHasExplicitPatternSource {
+            guard !explicitRegexpPatterns.isEmpty,
+                  valueArguments.count == 1 else {
                 return nil
             }
             pattern = explicitRegexpPatterns[0]
