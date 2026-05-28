@@ -1869,6 +1869,23 @@ struct RipgrepCommand {
             )
         }
         if parsedPrintMode == .countMatches {
+            if parsedLineRegexp {
+                guard parsedPathOnlyMode == nil,
+                      !wordRegexp,
+                      !asciiBoundary,
+                      !asciiCaseInsensitive,
+                      !parsedCrlf else {
+                    return nil
+                }
+                return SwiftDarwinLiteralPreflight.exactLineCountExitCode(
+                    path: path,
+                    literal: literal,
+                    includeZero: parsedIncludeZero,
+                    maxCount: parsedMaxCount,
+                    countPrefix: parsedCountPrefix,
+                    crlfTerminated: parsedCrlf
+                )
+            }
             guard parsedPathOnlyMode == nil,
                   !parsedLineRegexp,
                   !asciiBoundary,

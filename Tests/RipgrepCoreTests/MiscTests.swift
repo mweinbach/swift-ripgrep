@@ -1836,6 +1836,32 @@ struct MiscTests {
         ], fixture: {})
         #expect(countMatchesOutput == Data("5\n".utf8))
 
+        let exactLineCountMatchesOutput = try runExecutableData([
+            "--count-matches",
+            "-x",
+            "needle",
+            root.path("exact.txt"),
+        ], fixture: {})
+        #expect(exactLineCountMatchesOutput == Data("2\n".utf8))
+
+        let exactLineBoundedCountMatchesOutput = try runExecutableData([
+            "--count-matches",
+            "-m1",
+            "-x",
+            "needle",
+            root.path("exact.txt"),
+        ], fixture: {})
+        #expect(exactLineBoundedCountMatchesOutput == Data("1\n".utf8))
+
+        let exactLinePrefixedCountMatchesOutput = try runExecutableData([
+            "-H",
+            "--count-matches",
+            "-x",
+            "needle",
+            root.path("exact.txt"),
+        ], fixture: {})
+        #expect(exactLinePrefixedCountMatchesOutput == Data("\(root.path("exact.txt")):2\n".utf8))
+
         let explicitRegexpCountMatchesOutput = try runExecutableData([
             "--count-matches",
             "-e",
@@ -1920,6 +1946,17 @@ struct MiscTests {
         #expect(includeZeroCountMatchesResult.status == 1)
         #expect(includeZeroCountMatchesResult.stdout == Data("0\n".utf8))
         #expect(includeZeroCountMatchesResult.stderr.isEmpty)
+
+        let includeZeroExactLineCountMatchesResult = try runExecutableResult([
+            "--include-zero",
+            "--count-matches",
+            "-x",
+            "missing",
+            root.path("exact.txt"),
+        ])
+        #expect(includeZeroExactLineCountMatchesResult.status == 1)
+        #expect(includeZeroExactLineCountMatchesResult.stdout == Data("0\n".utf8))
+        #expect(includeZeroExactLineCountMatchesResult.stderr.isEmpty)
 
         let includeZeroWordCountMatchesResult = try runExecutableResult([
             "--include-zero",

@@ -718,35 +718,58 @@ public enum SwiftDarwinLiteralPreflight {
         literal: [UInt8],
         maxCount: Int?
     ) -> Int {
-        let newline = UInt8(ascii: "\n")
+        guard !literal.isEmpty,
+              data.count >= literal.count else {
+            return 0
+        }
         let limit = maxCount ?? Int.max
-        let needle = Data(literal)
-        var lineNeedle = needle
-        lineNeedle.append(newline)
-        var searchStart = data.startIndex
-        var matchedLineCount = 0
-
-        while matchedLineCount < limit,
-              searchStart < data.endIndex,
-              let matchRange = data.range(of: lineNeedle, in: searchStart..<data.endIndex) {
-            if matchRange.lowerBound == data.startIndex
-                || data[data.index(before: matchRange.lowerBound)] == newline {
-                matchedLineCount += 1
+        return data.withUnsafeBytes { rawData in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
             }
-            searchStart = matchRange.upperBound
-        }
+            let base = rawBase.assumingMemoryBound(to: UInt8.self)
+            return literal.withUnsafeBufferPointer { literalBuffer in
+                guard let literalBase = literalBuffer.baseAddress else {
+                    return 0
+                }
 
-        if matchedLineCount < limit,
-           data.last != newline,
-           data.count >= needle.count {
-            let suffixStart = data.index(data.endIndex, offsetBy: -needle.count)
-            if (suffixStart == data.startIndex || data[data.index(before: suffixStart)] == newline),
-               data[suffixStart..<data.endIndex].elementsEqual(needle) {
-                matchedLineCount += 1
+                let newline = UInt8(ascii: "\n")
+                var lineNeedle = literal
+                lineNeedle.append(newline)
+                var searchOffset = 0
+                var matchedLineCount = 0
+                lineNeedle.withUnsafeBufferPointer { lineNeedleBuffer in
+                    guard let lineNeedleBase = lineNeedleBuffer.baseAddress else {
+                        return
+                    }
+                    while matchedLineCount < limit,
+                          searchOffset < data.count,
+                          let found = rg_memmem_simple(
+                            base.advanced(by: searchOffset),
+                            data.count - searchOffset,
+                            lineNeedleBase,
+                            lineNeedle.count
+                          ) {
+                        let matchStart = base.distance(to: found)
+                        if matchStart == 0 || base[matchStart - 1] == newline {
+                            matchedLineCount += 1
+                        }
+                        searchOffset = matchStart + lineNeedle.count
+                    }
+                }
+
+                if matchedLineCount < limit,
+                   base[data.count - 1] != newline {
+                    let suffixStart = data.count - literal.count
+                    if (suffixStart == 0 || base[suffixStart - 1] == newline),
+                       memcmp(base.advanced(by: suffixStart), literalBase, literal.count) == 0 {
+                        matchedLineCount += 1
+                    }
+                }
+
+                return matchedLineCount
             }
         }
-
-        return matchedLineCount
     }
 
     private static func hasBinaryDetectionPrefix(_ data: Data) -> Bool {

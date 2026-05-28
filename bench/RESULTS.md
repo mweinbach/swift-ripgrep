@@ -624,6 +624,17 @@ matched lines. On the same fixture,
 `-c -x 'needle needle needle quiet tail needle'` improved from 13.070 s to
 370.6 ms, versus 99.2 ms for Rust.
 
+The exact-line count scanner now uses the existing Swift literal scanner for
+`literal + "\\n"` instead of repeated `Data.range(of:)`, and final
+`--count-matches -x` routes to the same count because each exact-line match
+contributes one match. Byte/status checks matched Rust for plain, bounded,
+prefixed, include-zero, and final-line-without-newline forms. On the 48 MiB
+dense fixture, `-c -x 'needle needle needle quiet tail needle'` measured
+13.1 ms, versus 104.9 ms for Rust; `--count-matches -x ...` measured 12.0 ms
+after a pre-route forced-fallback probe was still running after 60 seconds,
+versus 238.8 ms for Rust; and bounded `--count-matches -m2 -x ...` measured
+3.6 ms.
+
 Exact-line quiet and path-only explicit-file searches now use the same
 Swift-first full-line existence check. The preflight writes no output for
 `-q -x`, prints only the file path for `-l -x`, preserves
