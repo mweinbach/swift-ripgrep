@@ -397,6 +397,18 @@ completion. After the change, five-run checks on the same 24 KB fixture measured
 `--multiline`, and `--multiline-dotall` measured 26.4 ms, 26.2 ms, and 26.4 ms
 respectively, versus 30.6 ms for Rust `-U`.
 
+Null path terminator flags now stay on the executable literal preflight when
+the command shape cannot print a path. This covers standalone `--null` and
+`-0`; clustered `-0n` remains on the current parser path because Rust accepts
+it but the current Swift CLI does not. Focused executable coverage checked
+matching-line, line-number, and binary-fallback forms, and direct release byte
+checks matched Rust on small, large, and binary representatives while confirming
+clustered `-0n` still falls through to the existing parser error. On a generated
+4.8 MiB text fixture, single-run before probes measured `--null Sherlock` at
+about 0.82 s and `-0 Sherlock` at about 0.85 s. Seven-run current checks on the
+same fixture shape measured 8.3 ms and 8.4 ms respectively, in line with the
+plain Swift preflight at 8.6 ms and Rust `--null Sherlock` at 9.0 ms.
+
 The Swift-only Darwin mmap/stdout preflight now also covers line-numbered
 medium bounded multi-literal output when no filename, byte-offset, column,
 replacement, only-matching, or vimgrep formatting is requested. Output for

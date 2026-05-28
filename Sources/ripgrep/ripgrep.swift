@@ -364,6 +364,7 @@ struct RipgrepCommand {
         func isOutputNeutralSingleFileFlag(_ argument: String) -> Bool {
             switch argument {
             case "-.",
+                 "-0",
                  "-a",
                  "-U",
                  "--hidden",
@@ -409,6 +410,7 @@ struct RipgrepCommand {
                  "--text",
                  "--no-text",
                  "--no-config",
+                 "--null",
                  "--no-one-file-system",
                  "--no-require-git",
                  "--no-pcre2-unicode",

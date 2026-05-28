@@ -1255,6 +1255,33 @@ struct MiscTests {
         ], fixture: {})
         #expect(noMessagesOutput == output)
 
+        for (nullPathArguments, expectedOutput) in [
+            (["--null"], output),
+            (["-0"], output),
+            (["--null", "-n"], lineNumberOutput),
+            (["-0", "-n"], lineNumberOutput),
+            (["-n", "-0"], lineNumberOutput),
+        ] {
+            let nullPathOutput = try runExecutableData(
+                nullPathArguments + [
+                    "needle",
+                    root.path("dense.txt"),
+                ],
+                fixture: {}
+            )
+            #expect(nullPathOutput == expectedOutput)
+        }
+
+        let nullPathBinaryFallbackOutput = try runExecutableData([
+            "--null",
+            "needle",
+            root.path("binary-mode.dat"),
+        ], fixture: {})
+        #expect(nullPathBinaryFallbackOutput == Data("""
+        binary file matches (found "\\0" byte around offset 3)
+
+        """.utf8))
+
         for (binaryModeArguments, expectedOutput) in [
             (["--text"], output),
             (["-a"], output),
