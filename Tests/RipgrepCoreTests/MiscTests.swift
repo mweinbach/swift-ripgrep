@@ -1251,6 +1251,7 @@ struct MiscTests {
         try root.write("quiet one\nNeedle one\nafter one\nquiet\nbefore two\nNEEDLE two\nafter two", to: "case-context.txt")
         try root.write("alpha\nneedle one\nbeta\nquiet\nzeta\nhay one\nomega", to: "multi-context.txt")
         try root.write("needle one\nhay two\nafter\n", to: "multi-context-max.txt")
+        try root.write("alpha\nNeedle one\nbeta\nquiet\nzeta\nHAY one\nomega", to: "multi-case-context.txt")
         try root.write("needle\n", to: ".hidden.txt")
         try root.write("*.txt\n", to: ".ignore")
         try root.write("needle\n", to: "ignored.txt")
@@ -2487,6 +2488,46 @@ struct MiscTests {
         #expect(multiContextMaxCountZeroResult.stdout.isEmpty)
         #expect(multiContextMaxCountZeroResult.stderr.isEmpty)
         #expect(multiContextMaxCountZeroResult.status == 1)
+
+        let multiIgnoreCaseContextOutput = try runExecutableData([
+            "-n",
+            "-i",
+            "-C",
+            "1",
+            "-e",
+            "NEEDLE",
+            "-e",
+            "hay",
+            root.path("multi-case-context.txt"),
+        ], fixture: {})
+        #expect(multiIgnoreCaseContextOutput == Data("""
+        1-alpha
+        2:Needle one
+        3-beta
+        --
+        5-zeta
+        6:HAY one
+        7-omega
+
+        """.utf8))
+
+        let multiIgnoreCaseAlternationOutput = try runExecutableData([
+            "-i",
+            "-C",
+            "1",
+            "NEEDLE|hay",
+            root.path("multi-case-context.txt"),
+        ], fixture: {})
+        #expect(multiIgnoreCaseAlternationOutput == Data("""
+        alpha
+        Needle one
+        beta
+        --
+        zeta
+        HAY one
+        omega
+
+        """.utf8))
 
         let plainOnlyMatchingLineNumberOutput = try runExecutableData([
             "-n",

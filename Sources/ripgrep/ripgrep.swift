@@ -1655,7 +1655,6 @@ struct RipgrepCommand {
            !parsedTrim,
            !wordRegexp,
            !parsedLineRegexp,
-           !asciiCaseInsensitive,
            (patternCanStartWithDash || !pattern.hasPrefix("-")),
            path != "-" {
             if parsedMaxCount == 0,
@@ -1678,7 +1677,10 @@ struct RipgrepCommand {
                 contextLiterals = nil
             }
             if let contextLiterals,
-               contextLiterals.allSatisfy({ !$0.contains(UInt8(ascii: "\n")) }) {
+               contextLiterals.allSatisfy({
+                   !$0.contains(UInt8(ascii: "\n"))
+                       && (!asciiCaseInsensitive || $0.allSatisfy({ $0 < 0x80 }))
+               }) {
                 if parsedMaxCount == 0 {
                     return 1
                 }
@@ -1688,6 +1690,7 @@ struct RipgrepCommand {
                     beforeContext: parsedBeforeContext,
                     afterContext: parsedAfterContext,
                     maxCount: parsedMaxCount ?? Int.max,
+                    asciiCaseInsensitive: asciiCaseInsensitive,
                     lineNumber: lineNumber,
                     lineNumberFieldMatchSeparator: parsedFieldMatchSeparator,
                     lineNumberFieldContextSeparator: parsedFieldContextSeparator,

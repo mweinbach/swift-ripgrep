@@ -4303,6 +4303,7 @@ public enum SwiftDarwinLiteralPreflight {
         beforeContext: Int,
         afterContext: Int,
         maxCount: Int,
+        asciiCaseInsensitive: Bool = false,
         lineNumber: Bool = false,
         lineNumberFieldMatchSeparator: [UInt8] = [58],
         lineNumberFieldContextSeparator: [UInt8] = [45],
@@ -4315,6 +4316,10 @@ public enum SwiftDarwinLiteralPreflight {
               literals.allSatisfy({ !$0.isEmpty }),
               beforeContext > 0 || afterContext > 0,
               maxCount > 0 else {
+            return nil
+        }
+        if asciiCaseInsensitive,
+           !literals.allSatisfy({ $0.allSatisfy { $0 < 0x80 } }) {
             return nil
         }
 
@@ -4356,6 +4361,7 @@ public enum SwiftDarwinLiteralPreflight {
             beforeContext: beforeContext,
             afterContext: afterContext,
             maxCount: maxCount,
+            asciiCaseInsensitive: asciiCaseInsensitive,
             lineNumber: lineNumber,
             lineNumberFieldMatchSeparator: lineNumberFieldMatchSeparator,
             lineNumberFieldContextSeparator: lineNumberFieldContextSeparator,
@@ -7730,6 +7736,7 @@ private func rgSwiftDarwinWriteMultiLiteralContextLines(
     beforeContext: Int,
     afterContext: Int,
     maxCount: Int,
+    asciiCaseInsensitive: Bool,
     lineNumber: Bool,
     lineNumberFieldMatchSeparator: [UInt8],
     lineNumberFieldContextSeparator: [UInt8],
@@ -7758,6 +7765,14 @@ private func rgSwiftDarwinWriteMultiLiteralContextLines(
     if memchr(base, 0, haystackLength) != nil {
         return nil
     }
+    if asciiCaseInsensitive {
+        guard literals.allSatisfy({ $0.allSatisfy { $0 < 0x80 } }) else {
+            return nil
+        }
+        if rgSwiftContainsNonASCIIByte(base, count: haystackLength) {
+            return nil
+        }
+    }
 
     guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
         return nil
@@ -7774,7 +7789,31 @@ private func rgSwiftDarwinWriteMultiLiteralContextLines(
         }
         return bytes
     }()
-    guard !firstBytes.isEmpty else {
+    let foldedLiterals = asciiCaseInsensitive
+        ? literals.map { $0.map(rgSwiftASCIILower) }
+        : []
+    let caseInsensitiveFirstBytes: [UInt8] = if asciiCaseInsensitive {
+        {
+            var bytes: [UInt8] = []
+            bytes.reserveCapacity(foldedLiterals.count * 2)
+            for literal in foldedLiterals {
+                let first = literal[0]
+                if !bytes.contains(first) {
+                    bytes.append(first)
+                }
+                if first >= UInt8(ascii: "a"), first <= UInt8(ascii: "z") {
+                    let upper = first - 32
+                    if !bytes.contains(upper) {
+                        bytes.append(upper)
+                    }
+                }
+            }
+            return bytes
+        }()
+    } else {
+        []
+    }
+    guard !firstBytes.isEmpty || !caseInsensitiveFirstBytes.isEmpty else {
         return nil
     }
 
@@ -7825,27 +7864,58 @@ private func rgSwiftDarwinWriteMultiLiteralContextLines(
         return true
     }
 
+    func foldedLiteral(_ literal: [UInt8], matchesAt offset: Int, lineEnd: Int) -> Bool {
+        guard literal.count <= lineEnd - offset else {
+            return false
+        }
+        for index in literal.indices where rgSwiftASCIILower(base[offset + index]) != literal[index] {
+            return false
+        }
+        return true
+    }
+
     func lineContainsAnyLiteral(lineStart: Int, lineEnd: Int) -> Bool {
         var searchOffset = lineStart
         while searchOffset < lineEnd {
-            let foundPointer = firstBytes.withUnsafeBufferPointer { firstByteBuffer in
-                rg_memchr_any_bytes(
-                    base.advanced(by: searchOffset),
-                    lineEnd - searchOffset,
-                    firstByteBuffer.baseAddress,
-                    firstByteBuffer.count
-                )
+            let foundPointer: UnsafePointer<UInt8>?
+            if asciiCaseInsensitive {
+                foundPointer = caseInsensitiveFirstBytes.withUnsafeBufferPointer { firstByteBuffer in
+                    rg_memchr_any_bytes(
+                        base.advanced(by: searchOffset),
+                        lineEnd - searchOffset,
+                        firstByteBuffer.baseAddress,
+                        firstByteBuffer.count
+                    )
+                }
+            } else {
+                foundPointer = firstBytes.withUnsafeBufferPointer { firstByteBuffer in
+                    rg_memchr_any_bytes(
+                        base.advanced(by: searchOffset),
+                        lineEnd - searchOffset,
+                        firstByteBuffer.baseAddress,
+                        firstByteBuffer.count
+                    )
+                }
             }
             guard let foundPointer else {
                 return false
             }
 
             let matchStart = base.distance(to: foundPointer)
-            let firstByte = base[matchStart]
-            for candidateLiteral in literals
-                where candidateLiteral[0] == firstByte
-                    && literal(candidateLiteral, matchesAt: matchStart, lineEnd: lineEnd) {
-                return true
+            if asciiCaseInsensitive {
+                let foldedFirstByte = rgSwiftASCIILower(base[matchStart])
+                for candidateLiteral in foldedLiterals
+                    where candidateLiteral[0] == foldedFirstByte
+                        && foldedLiteral(candidateLiteral, matchesAt: matchStart, lineEnd: lineEnd) {
+                    return true
+                }
+            } else {
+                let firstByte = base[matchStart]
+                for candidateLiteral in literals
+                    where candidateLiteral[0] == firstByte
+                        && literal(candidateLiteral, matchesAt: matchStart, lineEnd: lineEnd) {
+                    return true
+                }
             }
             searchOffset = matchStart + 1
         }
