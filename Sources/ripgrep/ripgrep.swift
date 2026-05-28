@@ -2097,6 +2097,18 @@ struct RipgrepCommand {
                     crlfTerminated: parsedCrlf
                 )
             }
+            if parsedPrintMode == .matchingLines,
+               !parsedOnlyMatching {
+                return SwiftDarwinLiteralPreflight.multiLiteralExitCode(
+                    path: path,
+                    literals: [fixedResetStart.prefix + fixedResetStart.literal],
+                    maxCount: parsedMaxCount,
+                    lineNumber: lineNumber,
+                    lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                    linePrefix: parsedLinePrefix,
+                    headingPrefix: parsedHeadingPrefix
+                )
+            }
         }
 
         let asciiBoundaryLiteralPattern = (fixedStrings || asciiCaseInsensitive) ? nil : asciiBoundaryLiteral(

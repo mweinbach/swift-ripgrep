@@ -614,6 +614,19 @@ struct PCRE2Tests {
         #expect(countMatches == Data("3\n".utf8))
     }
 
+    @Test func pcre2ResetStartExecutableFastPathMatchingLines() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("prefixneedle\notherneedle\nprefixneedle prefixneedle\n", to: "pcre.txt")
+
+        let output = try runExecutableData(["-P", #"prefix\Kneedle"#, temp.path("pcre.txt")]) {}
+        let lineNumberOutput = try runExecutableData(["-P", "-n", #"prefix\Kneedle"#, temp.path("pcre.txt")]) {}
+        let maxCountOutput = try runExecutableData(["-P", "-m1", #"prefix\Kneedle"#, temp.path("pcre.txt")]) {}
+
+        #expect(output == Data("prefixneedle\nprefixneedle prefixneedle\n".utf8))
+        #expect(lineNumberOutput == Data("1:prefixneedle\n3:prefixneedle prefixneedle\n".utf8))
+        #expect(maxCountOutput == Data("prefixneedle\n".utf8))
+    }
+
     @Test func pcre2ResetStartAllowsEmptyPrefixOrLiteral() throws {
         let temp = try TemporaryDirectory()
         try temp.write("foo\nbarfoo\nfoofoo\n", to: "pcre.txt")
