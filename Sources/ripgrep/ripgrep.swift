@@ -419,6 +419,7 @@ struct RipgrepCommand {
                  "--max-columns-preview",
                  "--one-file-system",
                  "--pcre2-unicode",
+                 "--sort-files",
                  "--unicode",
                  "--require-git":
                 return true
@@ -454,8 +455,22 @@ struct RipgrepCommand {
             }
             return nil
         }
-        func inlineSortNone(_ argument: String) -> Bool {
-            argument == "--sort=none" || argument == "--sortr=none"
+        func isValidSortValue(_ value: String) -> Bool {
+            switch value {
+            case "none", "path", "modified", "accessed", "created":
+                return true
+            default:
+                return false
+            }
+        }
+        func inlineSortValue(_ argument: String) -> String? {
+            if argument.hasPrefix("--sort=") {
+                return String(argument.dropFirst("--sort=".count))
+            }
+            if argument.hasPrefix("--sortr=") {
+                return String(argument.dropFirst("--sortr=".count))
+            }
+            return nil
         }
         func zeroValueOption(_ argument: String) -> String? {
             let inlinePrefixes = [
@@ -726,12 +741,14 @@ struct RipgrepCommand {
                 parsedColorMayEmit = mayEmit
             } else if argument == "--sort" || argument == "--sortr" {
                 guard argumentIndex < arguments.count,
-                      arguments[argumentIndex] == "none" else {
+                      isValidSortValue(arguments[argumentIndex]) else {
                     return nil
                 }
                 argumentIndex += 1
-            } else if inlineSortNone(argument) {
-                continue
+            } else if let sortValue = inlineSortValue(argument) {
+                guard isValidSortValue(sortValue) else {
+                    return nil
+                }
             } else if argument == "-j" || argument == "--threads" {
                 guard argumentIndex < arguments.count,
                       isValidNonNegativeInteger(arguments[argumentIndex]) else {

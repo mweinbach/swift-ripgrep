@@ -1538,6 +1538,7 @@ struct MiscTests {
             "--no-stats",
             "--no-text",
             "--max-columns-preview",
+            "--sort-files",
         ] {
             let neutralResetOutput = try runExecutableData([
                 neutralResetFlag,
@@ -1568,6 +1569,22 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(reverseSortNoneOutput == output)
+
+        for sortArguments in [
+            ["--sort=path"],
+            ["--sort", "modified"],
+            ["--sortr=accessed"],
+            ["--sortr", "created"],
+        ] {
+            let sortOutput = try runExecutableData(
+                sortArguments + [
+                    "needle",
+                    root.path("dense.txt"),
+                ],
+                fixture: {}
+            )
+            #expect(sortOutput == output)
+        }
 
         let threadCountOutput = try runExecutableData([
             "--threads=1",

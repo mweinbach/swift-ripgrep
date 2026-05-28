@@ -309,11 +309,20 @@ forms with `-n`, and NUL-containing binary fallback; release byte checks also
 compared the fourth-`-u` error path with Rust. On the 45 MiB dense fixture,
 `-u needle` improved from 84.5 ms to 34.9 ms, and `-uuu needle` improved from
 1.438 s to 34.9 ms, versus 43.5 ms for Rust `-uuu`.
+
 Short unrestricted clusters now share the same counted preflight path.
 Focused coverage includes `-un`, `-nuu`, combined exact-plus-cluster repeats,
 `-uuuF`, NUL-containing binary fallback, and over-repeated cluster errors. On
 the same fixture, `-un needle` improved from 121.7 ms to 54.7 ms, versus
 84.7 ms for Rust, and `-uuuF needle` improved from 1.438 s to 35.4 ms.
+
+Explicit-file sort flags are now validated as traversal-order no-ops for the
+executable preflight. This covers `--sort`/`--sortr` values `none`, `path`,
+`modified`, `accessed`, and `created`, plus `--sort-files`, while invalid sort
+values still fall through to the normal parser error. On the same fixture,
+`--sort path needle` improved from 1.459 s to 35.0 ms, and `--sort-files needle`
+improved from 1.438 s to 37.1 ms, versus 45.0 ms for Rust
+`--sort path`.
 
 Regex-mode toggles that do not affect plain literal line output now also stay
 eligible for the executable preflight. `--unicode`/`--no-unicode`,
