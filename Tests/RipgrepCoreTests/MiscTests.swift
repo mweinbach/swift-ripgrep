@@ -1554,6 +1554,22 @@ struct MiscTests {
         ], fixture: {})
         #expect(regexSizeLimitOutput == output)
 
+        for encodingAutoArguments in [
+            ["--encoding=auto"],
+            ["--encoding", "auto"],
+            ["-Eauto"],
+            ["-E", "auto"],
+        ] {
+            let encodingAutoOutput = try runExecutableData(
+                encodingAutoArguments + [
+                    "needle",
+                    root.path("dense.txt"),
+                ],
+                fixture: {}
+            )
+            #expect(encodingAutoOutput == output)
+        }
+
         for maxFilesizeArguments in [
             ["--max-filesize=1"],
             ["--max-filesize", "1"],

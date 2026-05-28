@@ -420,6 +420,18 @@ measured both inline and separated `--max-filesize 1K Sherlock` at about
 0.04 s; seven-run current checks measured both forms at 8.2 ms, in line with
 plain Swift at 8.3 ms and Rust `--max-filesize=1K Sherlock` at 8.7 ms.
 
+Explicit default encoding selections now stay on the executable literal
+preflight. The parser accepts `--encoding auto`, `--encoding=auto`, `-E auto`,
+and `-Eauto`, while non-default labels still fall back. Focused executable
+tests covered all four forms, direct release byte checks matched Rust on small
+and large text fixtures, BOM input still returned to the normal BOM-aware
+searcher, and invalid `--encoding=bogus` still matched Rust's parser error. On
+the generated 4.8 MiB text fixture, single-run before probes measured the
+explicit-auto forms at about 0.04 s; seven-run current checks measured
+`--encoding=auto`, `--encoding auto`, and `-Eauto` at 8.3 ms, 8.8 ms, and
+8.2 ms respectively, in line with plain Swift at 8.2 ms and Rust
+`--encoding=auto Sherlock` at 8.9 ms.
+
 The Swift-only Darwin mmap/stdout preflight now also covers line-numbered
 medium bounded multi-literal output when no filename, byte-offset, column,
 replacement, only-matching, or vimgrep formatting is requested. Output for

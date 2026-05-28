@@ -533,6 +533,15 @@ struct RipgrepCommand {
                 ? String(argument.dropFirst("--max-filesize=".count))
                 : nil
         }
+        func encodingValue(_ argument: String) -> String? {
+            if argument.hasPrefix("--encoding=") {
+                return String(argument.dropFirst("--encoding=".count))
+            }
+            if argument.hasPrefix("-E"), argument.count > 2 {
+                return String(argument.dropFirst(2))
+            }
+            return nil
+        }
         func isValidHumanReadableSize(_ raw: String) -> Bool {
             guard !raw.isEmpty else {
                 return false
@@ -760,6 +769,16 @@ struct RipgrepCommand {
                 argumentIndex += 1
             } else if let maxFilesize = maxFilesizeValue(argument) {
                 guard isValidHumanReadableSize(maxFilesize) else {
+                    return nil
+                }
+            } else if argument == "-E" || argument == "--encoding" {
+                guard argumentIndex < arguments.count,
+                      arguments[argumentIndex] == "auto" else {
+                    return nil
+                }
+                argumentIndex += 1
+            } else if let encoding = encodingValue(argument) {
+                guard encoding == "auto" else {
                     return nil
                 }
             } else if isOutputNeutralSingleFileFlag(argument) {
