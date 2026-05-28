@@ -3820,12 +3820,28 @@ struct MiscTests {
         ], fixture: {})
         #expect(disabledEncodingLineNumberOutput == lineNumberOutput)
 
+        let disabledEncodingIgnoreCaseOutput = try runExecutableData([
+            "--encoding=none",
+            "-i",
+            "NEEDLE",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(disabledEncodingIgnoreCaseOutput == ignoreCaseOutput)
+
         let disabledEncodingInvalidLineOutput = try runExecutableData([
             "--encoding=none",
             "needle",
             root.path("encoding-none-invalid.txt"),
         ], fixture: {})
         #expect(disabledEncodingInvalidLineOutput == Data([0xFF]) + Data("needle raw\n".utf8))
+
+        let disabledEncodingInvalidIgnoreCaseOutput = try runExecutableData([
+            "--encoding=none",
+            "-i",
+            "NEEDLE",
+            root.path("encoding-none-invalid.txt"),
+        ], fixture: {})
+        #expect(disabledEncodingInvalidIgnoreCaseOutput == disabledEncodingInvalidLineOutput)
 
         let disabledEncodingBOMLineOutput = try runExecutableData([
             "--encoding=none",

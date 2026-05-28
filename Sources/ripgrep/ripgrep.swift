@@ -2396,7 +2396,6 @@ struct RipgrepCommand {
             && (!parsedEncodingSupportsSummaryPreflight
                 || (parsedEncodingVisibleLineOutput
                     && (!parsedEncodingSupportsLinePreflight
-                        || asciiCaseInsensitive
                         || wordRegexp
                         || parsedLineRegexp
                         || parsedOnlyMatching)))

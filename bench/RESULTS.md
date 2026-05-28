@@ -214,6 +214,17 @@ an ignore-case fallback control, and an explicit UTF-8 invalid-byte control.
 | `--encoding=none -n needle` | 3.507 s | 22.4 ms | 23.5 ms |
 | `--encoding=none -m2 needle` | 1.396 s | 6.6 ms | 6.5 ms |
 
+A follow-up keeps ASCII ignore-case raw encoding on the same preflight. The
+non-ASCII literal guard still falls back naturally. Direct byte/status checks
+covered dense output, invalid raw-byte output, no-match status, and non-ASCII
+literal fallback.
+
+10 timed runs on `/tmp/swift-rg-candidates/trim.txt` with 3 warmups:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--encoding=none -i NEEDLE` | 6.403 s | 16.2 ms | 20.4 ms |
+
 `--search-zip` now stays on the executable preflight for explicit paths whose
 suffix cannot trigger decompression. Compressed suffixes still fall through to
 the normal searcher so real archives and decompressor errors keep matching
