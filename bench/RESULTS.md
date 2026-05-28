@@ -296,11 +296,17 @@ flush semantics. Dense-fixture output and exit status for `--messages`,
 `--heading --no-heading`, `--column --no-column`,
 `--byte-offset --no-byte-offset`, `--trim --no-trim`, and
 `--color=always --color=never` matched both the previous Swift binary and
-Rust. Ten-run checks on the 252 MiB dense fixture measured the combined
-neutral-format form at 258.3 ms versus 359.7 ms before and 329.1 ms for Rust;
-`--block-buffered --messages Sherlock` measured 265.3 ms versus 355.6 ms
-before and 308.7 ms for Rust; `--no-line-buffered Sherlock` measured 235.1 ms
-versus 349.6 ms before and 335.7 ms for Rust.
+Rust. Later reset checks also covered `--pretty`/`-p` when color, heading, and
+line numbering are all reset before the pattern. Ten-run checks on the 252 MiB
+dense fixture measured the combined neutral-format form at 258.3 ms versus
+359.7 ms before and 329.1 ms for Rust; `--block-buffered --messages Sherlock`
+measured 265.3 ms versus 355.6 ms before and 308.7 ms for Rust;
+`--no-line-buffered Sherlock` measured 235.1 ms versus 349.6 ms before and
+335.7 ms for Rust. On the 45 MiB fixture,
+`--pretty --color=never --no-heading -N needle` improved from 83.1 ms to
+36.8 ms, versus 43.6 ms for Rust, and
+`-p --color=never --no-heading -N needle` improved from 79.1 ms to 33.8 ms,
+versus 42.4 ms for Rust.
 Quiet, path-only, and count output are now allowed to reuse the executable
 preflight with `--line-buffered`, since no streaming matching-line flushes are
 observable in those modes. On the 45 MiB fixture, `--line-buffered -q needle`

@@ -1658,6 +1658,20 @@ struct MiscTests {
         ], fixture: {})
         #expect(orderedColorNeverOutput == output)
 
+        for prettyResetArguments in [
+            ["--pretty", "--color=never", "--no-heading", "-N"],
+            ["-p", "--color", "never", "--no-heading", "--no-line-number"],
+        ] {
+            let prettyResetOutput = try runExecutableData(
+                prettyResetArguments + [
+                    "needle",
+                    root.path("dense.txt"),
+                ],
+                fixture: {}
+            )
+            #expect(prettyResetOutput == output)
+        }
+
         for (engineArguments, expectedOutput) in [
             (["-n", "-P"], lineNumberOutput),
             (["-Pn"], lineNumberOutput),

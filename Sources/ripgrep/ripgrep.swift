@@ -1080,6 +1080,10 @@ struct RipgrepCommand {
                 }
                 parsedRegexpPattern = inlineRegexp
                 patternCanStartWithDash = true
+            } else if argument == "-p" || argument == "--pretty" {
+                parsedColorMayEmit = true
+                parsedHeading = true
+                parsedLineNumber = true
             } else if argument == "--color" {
                 guard argumentIndex < arguments.count,
                       let mayEmit = colorModeMayEmitForPreflight(arguments[argumentIndex]) else {
