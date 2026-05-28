@@ -1260,6 +1260,8 @@ struct MiscTests {
         try root.write("needle\n", to: "ignored.txt")
         try root.write(Data("pre\0needle\n".utf8), to: "binary-mode.dat")
         try root.write(Data("needle\0quiet\0needle\0".utf8), to: "nul-records.dat")
+        try root.write(Data([0xFF]) + Data("needle raw\nquiet\n".utf8), to: "encoding-none-invalid.txt")
+        try root.write(Data([0xEF, 0xBB, 0xBF]) + Data("needle\n".utf8), to: "encoding-none-bom.txt")
         try root.write("quiet\n", to: "quiet-no-match.txt")
         try root.write("""
         hay
@@ -3801,6 +3803,36 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(disabledEncodingPathOnlyOutput == Data("\(root.path("dense.txt"))\n".utf8))
+
+        let disabledEncodingLineOutput = try runExecutableData([
+            "--encoding=none",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(disabledEncodingLineOutput == output)
+
+        let disabledEncodingLineNumberOutput = try runExecutableData([
+            "--encoding",
+            "none",
+            "-n",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(disabledEncodingLineNumberOutput == lineNumberOutput)
+
+        let disabledEncodingInvalidLineOutput = try runExecutableData([
+            "--encoding=none",
+            "needle",
+            root.path("encoding-none-invalid.txt"),
+        ], fixture: {})
+        #expect(disabledEncodingInvalidLineOutput == Data([0xFF]) + Data("needle raw\n".utf8))
+
+        let disabledEncodingBOMLineOutput = try runExecutableData([
+            "--encoding=none",
+            "needle",
+            root.path("encoding-none-bom.txt"),
+        ], fixture: {})
+        #expect(disabledEncodingBOMLineOutput == Data([0xEF, 0xBB, 0xBF]) + Data("needle\n".utf8))
 
         let searchZipLineOutput = try runExecutableData([
             "--search-zip",
