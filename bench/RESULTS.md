@@ -303,15 +303,18 @@ single-pattern alternation forms. On the 50 KiB dense fixture,
 Rust, while `-n -m2 -f patterns.txt` measured 4.8 ms versus 36.7 ms before and
 2.5 ms for Rust.
 
-Bounded multi-literal count output now reuses that same mapped writer without
-emitting matched lines, then prints only the matched-line count summary. This
-covers `-c -mN`/`--count --max-count N` for safe alternations, repeated explicit
-regexps, and literal-only pattern files, while unbounded counts, `-m0`, quiet
-precedence, and unsupported semantic modes stay on the prior behavior.
-Dense-fixture byte checks matched Rust for repeated-regexp, pattern-file,
-single-pattern alternation, include-zero no-match, CRLF summary, quiet-count,
-filename-prefixed, heading-prefixed, NUL-prefixed, path-separated, ASCII
-ignore-case fallback, and zero-count forms. On the 50 KiB dense fixture,
+Multi-literal count output now reuses that same mapped writer without emitting
+matched lines, then prints only the matched-line count summary. This covers
+unbounded `-c` and bounded `-c -mN`/`--count --max-count N` for safe
+alternations, repeated explicit regexps, and literal-only pattern files, while
+`-m0`, quiet precedence, ASCII ignore-case fallback, and unsupported semantic
+modes stay on prior behavior. Dense-fixture byte checks matched Rust for
+repeated-regexp, pattern-file, single-pattern alternation, include-zero
+no-match, CRLF summary, quiet-count, filename-prefixed, heading-prefixed,
+NUL-prefixed, path-separated, ASCII ignore-case fallback, and zero-count forms.
+On the 50 KiB dense fixture, unbounded `-c -e needle -e quiet` measured 4.4 ms
+versus 56.2 ms before and 2.8 ms for Rust, while unbounded `-c -f patterns.txt`
+measured 4.8 ms versus 45.6 ms before and 2.7 ms for Rust. The bounded
 `-c -m2 -e needle -e quiet` measured 4.4 ms versus 22.7 ms before and 2.5 ms
 for Rust, while `-c -m2 -f patterns.txt` measured 4.6 ms versus 38.9 ms before
 and 2.8 ms for Rust; the neighboring `-H -c -m2 -e needle -e quiet` measured

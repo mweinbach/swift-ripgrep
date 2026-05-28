@@ -3084,6 +3084,79 @@ struct MiscTests {
         ], fixture: {})
         #expect(repeatedRegexpZeroMaxCountOutput.isEmpty)
 
+        let repeatedRegexpCountOutput = try runExecutableData([
+            "-c",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(repeatedRegexpCountOutput == Data("4\n".utf8))
+
+        let patternFileCountOutput = try runExecutableData([
+            "-c",
+            "-f",
+            root.path("patterns.txt"),
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(patternFileCountOutput == repeatedRegexpCountOutput)
+
+        let alternationCountOutput = try runExecutableData([
+            "-c",
+            "needle|quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(alternationCountOutput == repeatedRegexpCountOutput)
+
+        let crlfCountOutput = try runExecutableData([
+            "--crlf",
+            "-c",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(crlfCountOutput == Data("4\r\n".utf8))
+
+        let includeZeroCountResult = try runExecutableResult([
+            "--include-zero",
+            "-c",
+            "-e",
+            "missing",
+            "-e",
+            "absent",
+            root.path("dense.txt"),
+        ])
+        #expect(includeZeroCountResult.status == 1)
+        #expect(includeZeroCountResult.stdout == Data("0\n".utf8))
+        #expect(includeZeroCountResult.stderr.isEmpty)
+
+        let prefixedCountOutput = try runExecutableData([
+            "-H",
+            "-c",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(prefixedCountOutput == Data("\(root.path("dense.txt")):4\n".utf8))
+
+        let quietCountResult = try runExecutableResult([
+            "-q",
+            "-c",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ])
+        #expect(quietCountResult.status == 0)
+        #expect(quietCountResult.stdout.isEmpty)
+        #expect(quietCountResult.stderr.isEmpty)
+
         let repeatedRegexpMaxCountCountOutput = try runExecutableData([
             "-c",
             "-m2",

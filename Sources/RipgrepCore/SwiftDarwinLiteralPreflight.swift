@@ -1205,11 +1205,11 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literals: [[UInt8]],
         includeZero: Bool,
-        maxCount: Int,
+        maxCount: Int?,
         countPrefix: [UInt8] = [],
         crlfTerminated: Bool = false
     ) -> Int32? {
-        guard maxCount > 0,
+        guard maxCount != 0,
               let result = multiLiteralResult(
                 path: path,
                 literals: literals,

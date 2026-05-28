@@ -1648,9 +1648,6 @@ struct RipgrepCommand {
                 )
             }
             if parsedCount {
-                guard let parsedMaxCount else {
-                    return nil
-                }
                 return SwiftDarwinLiteralPreflight.multiLiteralCountLineExitCode(
                     path: path,
                     literals: literals,
@@ -1756,9 +1753,6 @@ struct RipgrepCommand {
                     )
                 }
                 if parsedCount {
-                    guard let parsedMaxCount else {
-                        return nil
-                    }
                     return SwiftDarwinLiteralPreflight.multiLiteralCountLineExitCode(
                         path: path,
                         literals: literals,
