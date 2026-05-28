@@ -4,18 +4,17 @@ import Foundation
 import Darwin
 
 public enum SwiftDarwinLiteralPreflight {
-    private static func appendPathTerminator(
-        to output: inout Data,
+    private static func writePathTerminator(
         nullTerminated: Bool,
         crlfTerminated: Bool
-    ) {
+    ) -> Bool {
         if nullTerminated {
-            output.append(0)
+            return fputc(0, Darwin.stdout) != EOF
         } else if crlfTerminated {
-            output.append(UInt8(ascii: "\r"))
-            output.append(UInt8(ascii: "\n"))
+            return fputc(Int32(UInt8(ascii: "\r")), Darwin.stdout) != EOF
+                && fputc(Int32(UInt8(ascii: "\n")), Darwin.stdout) != EOF
         } else {
-            output.append(UInt8(ascii: "\n"))
+            return fputc(Int32(UInt8(ascii: "\n")), Darwin.stdout) != EOF
         }
     }
 
@@ -51,23 +50,32 @@ public enum SwiftDarwinLiteralPreflight {
         output.append(contentsOf: headingPrefix)
     }
 
-    private static func pathOnlyOutput(
+    private static func writePathOnlyOutput(
         path: String,
         outputPath: [UInt8]?,
         nullTerminated: Bool,
         crlfTerminated: Bool
-    ) -> Data {
-        var output = if let outputPath {
-            Data(outputPath)
+    ) -> Bool {
+        let wrotePath = if let outputPath {
+            outputPath.withUnsafeBufferPointer { bytes in
+                guard let baseAddress = bytes.baseAddress else {
+                    return true
+                }
+                return fwrite(baseAddress, 1, bytes.count, Darwin.stdout) == bytes.count
+            }
         } else {
-            Data(path.utf8)
+            path.withCString { cString in
+                let byteCount = strlen(cString)
+                return fwrite(cString, 1, byteCount, Darwin.stdout) == byteCount
+            }
         }
-        appendPathTerminator(
-            to: &output,
+        guard wrotePath else {
+            return false
+        }
+        return writePathTerminator(
             nullTerminated: nullTerminated,
             crlfTerminated: crlfTerminated
         )
-        return output
     }
 
     public static func quietExitCode(
@@ -94,13 +102,14 @@ public enum SwiftDarwinLiteralPreflight {
         guard matched == printWhenMatched else {
             return 1
         }
-        let output = pathOnlyOutput(
+        guard writePathOnlyOutput(
             path: path,
             outputPath: outputPath,
             nullTerminated: nullTerminated,
             crlfTerminated: crlfTerminated
-        )
-        FileHandle.standardOutput.write(output)
+        ) else {
+            return nil
+        }
         return 0
     }
 
@@ -128,13 +137,14 @@ public enum SwiftDarwinLiteralPreflight {
         guard matched == printWhenMatched else {
             return 1
         }
-        let output = pathOnlyOutput(
+        guard writePathOnlyOutput(
             path: path,
             outputPath: outputPath,
             nullTerminated: nullTerminated,
             crlfTerminated: crlfTerminated
-        )
-        FileHandle.standardOutput.write(output)
+        ) else {
+            return nil
+        }
         return 0
     }
 
@@ -162,13 +172,14 @@ public enum SwiftDarwinLiteralPreflight {
         guard matched == printWhenMatched else {
             return 1
         }
-        let output = pathOnlyOutput(
+        guard writePathOnlyOutput(
             path: path,
             outputPath: outputPath,
             nullTerminated: nullTerminated,
             crlfTerminated: crlfTerminated
-        )
-        FileHandle.standardOutput.write(output)
+        ) else {
+            return nil
+        }
         return 0
     }
 
@@ -196,13 +207,14 @@ public enum SwiftDarwinLiteralPreflight {
         guard matched == printWhenMatched else {
             return 1
         }
-        let output = pathOnlyOutput(
+        guard writePathOnlyOutput(
             path: path,
             outputPath: outputPath,
             nullTerminated: nullTerminated,
             crlfTerminated: crlfTerminated
-        )
-        FileHandle.standardOutput.write(output)
+        ) else {
+            return nil
+        }
         return 0
     }
 
@@ -255,13 +267,14 @@ public enum SwiftDarwinLiteralPreflight {
         guard matched == printWhenMatched else {
             return 1
         }
-        let output = pathOnlyOutput(
+        guard writePathOnlyOutput(
             path: path,
             outputPath: outputPath,
             nullTerminated: nullTerminated,
             crlfTerminated: crlfTerminated
-        )
-        FileHandle.standardOutput.write(output)
+        ) else {
+            return nil
+        }
         return 0
     }
 
@@ -366,13 +379,14 @@ public enum SwiftDarwinLiteralPreflight {
         guard matched == printWhenMatched else {
             return 1
         }
-        let output = pathOnlyOutput(
+        guard writePathOnlyOutput(
             path: path,
             outputPath: outputPath,
             nullTerminated: nullTerminated,
             crlfTerminated: crlfTerminated
-        )
-        FileHandle.standardOutput.write(output)
+        ) else {
+            return nil
+        }
         return 0
     }
 
@@ -495,13 +509,14 @@ public enum SwiftDarwinLiteralPreflight {
         guard matched == printWhenMatched else {
             return 1
         }
-        let output = pathOnlyOutput(
+        guard writePathOnlyOutput(
             path: path,
             outputPath: outputPath,
             nullTerminated: nullTerminated,
             crlfTerminated: crlfTerminated
-        )
-        FileHandle.standardOutput.write(output)
+        ) else {
+            return nil
+        }
         return 0
     }
 
@@ -529,13 +544,14 @@ public enum SwiftDarwinLiteralPreflight {
         guard matched == printWhenMatched else {
             return 1
         }
-        let output = pathOnlyOutput(
+        guard writePathOnlyOutput(
             path: path,
             outputPath: outputPath,
             nullTerminated: nullTerminated,
             crlfTerminated: crlfTerminated
-        )
-        FileHandle.standardOutput.write(output)
+        ) else {
+            return nil
+        }
         return 0
     }
 
@@ -2099,13 +2115,14 @@ public enum SwiftDarwinLiteralPreflight {
         guard matched == printWhenMatched else {
             return 1
         }
-        let output = pathOnlyOutput(
+        guard writePathOnlyOutput(
             path: path,
             outputPath: outputPath,
             nullTerminated: nullTerminated,
             crlfTerminated: crlfTerminated
-        )
-        FileHandle.standardOutput.write(output)
+        ) else {
+            return nil
+        }
         return 0
     }
 
