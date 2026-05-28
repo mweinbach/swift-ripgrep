@@ -1371,6 +1371,49 @@ struct MiscTests {
             #expect(pathOnlyResult.status == expectedStatus)
         }
 
+        for (printModeArguments, expectedOutput, expectedStatus) in [
+            (
+                ["--count", "--files-with-matches", "needle", root.path("dense.txt")],
+                Data("\(root.path("dense.txt"))\n".utf8),
+                Int32(0)
+            ),
+            (
+                ["--count-matches", "--files-with-matches", "needle", root.path("dense.txt")],
+                Data("\(root.path("dense.txt"))\n".utf8),
+                Int32(0)
+            ),
+            (
+                ["--files-with-matches", "--count", "needle", root.path("dense.txt")],
+                Data("3\n".utf8),
+                Int32(0)
+            ),
+            (
+                ["--count-matches", "--count", "needle", root.path("dense.txt")],
+                Data("3\n".utf8),
+                Int32(0)
+            ),
+            (
+                ["--count", "--files-without-match", "needle", root.path("dense.txt")],
+                Data(),
+                Int32(1)
+            ),
+            (
+                ["--count", "--files-without-match", "missing", root.path("dense.txt")],
+                Data("\(root.path("dense.txt"))\n".utf8),
+                Int32(0)
+            ),
+            (
+                ["--files-without-match", "--count", "needle", root.path("dense.txt")],
+                Data("3\n".utf8),
+                Int32(0)
+            ),
+        ] {
+            let printModeResult = try runExecutableResult(printModeArguments)
+            #expect(printModeResult.stdout == expectedOutput)
+            #expect(printModeResult.stderr.isEmpty)
+            #expect(printModeResult.status == expectedStatus)
+        }
+
         for (maxCountArguments, expectedOutput) in [
             (["-m1", "needle", root.path("dense.txt")], Data("needle needle needle\n".utf8)),
             (["-n", "-m1", "needle", root.path("dense.txt")], Data("1:needle needle needle\n".utf8)),

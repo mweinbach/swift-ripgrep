@@ -320,6 +320,13 @@ improved from 27.9 ms to 5.3 ms, versus 3.0 ms for Rust;
 `--line-buffered -l needle` improved from 43.7 ms to 4.1 ms, versus 3.3 ms for
 Rust; and `--line-buffered -c -m1 needle` improved from a forced fallback at
 33.9 ms to 4.0-5.7 ms, versus 3.2 ms for Rust.
+Ordered print-mode overrides now update the executable preflight eligibility
+with last-flag-wins semantics when the final mode is path-only. Final
+count-matches output, short clusters that mix count and path modes, and
+unbounded final count output still fall back. On the 45 MiB fixture,
+`--count --files-with-matches needle` improved from 28.5 ms to 6.4 ms, versus
+3.6 ms for Rust, and `--count-matches --files-with-matches needle` improved
+from 32.2 ms to 4.2 ms, versus 3.3 ms for Rust.
 
 `--include-zero` now stays on the executable literal preflight for normal
 matching-line output, where it only affects count summaries. Focused tests

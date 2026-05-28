@@ -287,6 +287,13 @@ struct RipgrepCommand {
             case matching
             case nonMatching
         }
+        enum PrintMode {
+            case matchingLines
+            case count
+            case countMatches
+            case filesWithMatches
+            case filesWithoutMatch
+        }
         func isIgnoreCaseFlag(_ argument: String) -> Bool {
             argument == "-i" || argument == "--ignore-case"
         }
@@ -910,7 +917,7 @@ struct RipgrepCommand {
         var parsedMaxDepth = 0
         var parsedNullPathTerminator = false
         var parsedNoMmap = false
-        var parsedPathOnlyMode: PathOnlyMode?
+        var parsedPrintMode = PrintMode.matchingLines
         var parsedPathSeparator = false
         var parsedPassthru = false
         var parsedQuiet = false
@@ -995,11 +1002,13 @@ struct RipgrepCommand {
             } else if isNoTrimFlag(argument) {
                 parsedTrim = false
             } else if argument == "-l" || argument == "--files-with-matches" {
-                parsedPathOnlyMode = .matching
+                parsedPrintMode = .filesWithMatches
             } else if argument == "--files-without-match" {
-                parsedPathOnlyMode = .nonMatching
+                parsedPrintMode = .filesWithoutMatch
             } else if isCountFlag(argument) {
-                parsedCount = true
+                parsedPrintMode = .count
+            } else if argument == "--count-matches" {
+                parsedPrintMode = .countMatches
             } else if argument == "--include-zero" {
                 parsedIncludeZero = true
             } else if argument == "--no-include-zero" {
@@ -1304,6 +1313,9 @@ struct RipgrepCommand {
             } else if isOutputNeutralSingleFileFlag(argument) {
                 continue
             } else if let cluster = shortFlagCluster(argument) {
+                guard !(cluster.count && cluster.pathOnlyMode != nil) else {
+                    return nil
+                }
                 if let caseMode = cluster.caseMode {
                     parsedCaseMode = caseMode
                 }
@@ -1323,9 +1335,16 @@ struct RipgrepCommand {
                 }
                 parsedInvertMatch = parsedInvertMatch || cluster.invertMatch
                 parsedQuiet = parsedQuiet || cluster.quiet
-                parsedCount = parsedCount || cluster.count
+                if cluster.count {
+                    parsedPrintMode = .count
+                }
                 if let clusterPathOnlyMode = cluster.pathOnlyMode {
-                    parsedPathOnlyMode = clusterPathOnlyMode
+                    switch clusterPathOnlyMode {
+                    case .matching:
+                        parsedPrintMode = .filesWithMatches
+                    case .nonMatching:
+                        parsedPrintMode = .filesWithoutMatch
+                    }
                 }
                 parsedUnrestrictedCount += cluster.unrestrictedCount
                 guard parsedUnrestrictedCount <= 3 else {
@@ -1372,6 +1391,16 @@ struct RipgrepCommand {
         noMmap = parsedNoMmap
         wordRegexp = parsedWordRegexp
         fixedStrings = parsedFixedStrings
+        parsedCount = parsedPrintMode == .count
+        let parsedPathOnlyMode: PathOnlyMode?
+        switch parsedPrintMode {
+        case .filesWithMatches:
+            parsedPathOnlyMode = .matching
+        case .filesWithoutMatch:
+            parsedPathOnlyMode = .nonMatching
+        default:
+            parsedPathOnlyMode = nil
+        }
         guard !(parsedLineRegexp && wordRegexp) else {
             return nil
         }
@@ -1391,7 +1420,8 @@ struct RipgrepCommand {
               !parsedSearchZip,
               !parsedStats,
               !parsedTrim,
-              !parsedWithFilename else {
+              !parsedWithFilename,
+              parsedPrintMode != .countMatches else {
             return nil
         }
 
