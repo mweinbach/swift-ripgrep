@@ -362,6 +362,13 @@ invalid glob syntax still falls through to the normal parser diagnostic. On the
 same fixture, `-g '*.nomatch' needle` improved from 6.343 s to 38.0 ms,
 versus 46.8 ms for Rust.
 
+Quiet explicit-file literal searches now use a contains-only Swift mmap
+preflight that writes nothing and stops at the first match. Unsupported
+word-boundary/statistics forms still fall through to the normal searcher. On
+the same fixture, `-q needle` improved from 28.3 ms to 3.9 ms, versus 3.1 ms
+for Rust. A no-match quiet scan improved from 40.5 ms to 21.0 ms, versus
+8.1 ms for Rust.
+
 Type-definition flags that do not activate a type filter now also stay
 eligible for the executable preflight. The preflight replays
 `--type-add`/`--type-clear` through `FileTypeRegistry.apply`, so invalid

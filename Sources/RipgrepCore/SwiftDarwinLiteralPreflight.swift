@@ -4,6 +4,45 @@ import Foundation
 import Darwin
 
 public enum SwiftDarwinLiteralPreflight {
+    public static func quietExitCode(
+        path: String,
+        literal: [UInt8]
+    ) -> Int32? {
+        guard !literal.isEmpty else {
+            return nil
+        }
+
+        let data: Data
+        do {
+            data = try Data(contentsOf: URL(fileURLWithPath: path), options: .mappedIfSafe)
+        } catch {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return 1
+        }
+        if data.count >= 3,
+           data[data.startIndex] == 0xEF,
+           data[data.index(after: data.startIndex)] == 0xBB,
+           data[data.index(data.startIndex, offsetBy: 2)] == 0xBF {
+            return nil
+        }
+        if data.count >= 2 {
+            let second = data[data.index(after: data.startIndex)]
+            if data[data.startIndex] == 0xFF && second == 0xFE
+                || data[data.startIndex] == 0xFE && second == 0xFF {
+                return nil
+            }
+        }
+        guard let matchRange = data.range(of: Data(literal)) else {
+            return 1
+        }
+        guard !matchRange.isEmpty else {
+            return nil
+        }
+        return 0
+    }
+
     public static func exitCode(
         path: String,
         literal: [UInt8],

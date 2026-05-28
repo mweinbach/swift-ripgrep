@@ -342,6 +342,9 @@ struct RipgrepCommand {
         func isMessageFlag(_ argument: String) -> Bool {
             argument == "--no-messages" || argument == "--messages"
         }
+        func isQuietFlag(_ argument: String) -> Bool {
+            argument == "-q" || argument == "--quiet"
+        }
         func colorModeMayEmitForPreflight(_ value: String) -> Bool? {
             switch value {
             case "never":
@@ -709,6 +712,7 @@ struct RipgrepCommand {
             wordRegexp: Bool,
             fixedStrings: Bool,
             allowPCREQuotedLiterals: Bool?,
+            quiet: Bool,
             unrestrictedCount: Int
         )? {
             let bytes = Array(argument.utf8)
@@ -723,6 +727,7 @@ struct RipgrepCommand {
             var wordRegexp = false
             var fixedStrings = false
             var allowPCREQuotedLiterals: Bool?
+            var quiet = false
             var unrestrictedCount = 0
             for byte in bytes.dropFirst() {
                 switch byte {
@@ -748,6 +753,8 @@ struct RipgrepCommand {
                     allowPCREQuotedLiterals = true
                 case UInt8(ascii: "a"):
                     continue
+                case UInt8(ascii: "q"):
+                    quiet = true
                 case UInt8(ascii: "u"):
                     unrestrictedCount += 1
                     guard unrestrictedCount <= 3 else {
@@ -757,7 +764,7 @@ struct RipgrepCommand {
                     return nil
                 }
             }
-            return (caseMode, lineNumber, wordRegexp, fixedStrings, allowPCREQuotedLiterals, unrestrictedCount)
+            return (caseMode, lineNumber, wordRegexp, fixedStrings, allowPCREQuotedLiterals, quiet, unrestrictedCount)
         }
         var allowPCREQuotedLiterals = preflightArguments.allowPCREQuotedLiterals
         var parsedCaseMode = CaseMode.sensitive
@@ -769,6 +776,7 @@ struct RipgrepCommand {
         var parsedHeading = false
         var parsedLineNumber = false
         var parsedNoMmap = false
+        var parsedQuiet = false
         var parsedTrim = false
         var parsedTypeDefinitionChanges: [TypeChange] = []
         var parsedUnrestrictedCount = 0
@@ -820,6 +828,8 @@ struct RipgrepCommand {
                 parsedWordRegexp = true
             } else if argument == "-w" || argument == "--word-regexp" {
                 parsedWordRegexp = true
+            } else if isQuietFlag(argument) {
+                parsedQuiet = true
             } else if argument == "--no-mmap" {
                 parsedNoMmap = true
             } else if isMmapFlag(argument) {
@@ -1029,6 +1039,7 @@ struct RipgrepCommand {
                 if let clusterPCREQuotedLiterals = cluster.allowPCREQuotedLiterals {
                     allowPCREQuotedLiterals = clusterPCREQuotedLiterals
                 }
+                parsedQuiet = parsedQuiet || cluster.quiet
                 parsedUnrestrictedCount += cluster.unrestrictedCount
                 guard parsedUnrestrictedCount <= 3 else {
                     return nil
@@ -1138,6 +1149,17 @@ struct RipgrepCommand {
               !literal.contains(UInt8(ascii: "\n")),
               !asciiCaseInsensitive || literal.allSatisfy({ $0 < 0x80 }) else {
             return nil
+        }
+        if parsedQuiet {
+            guard !wordRegexp,
+                  !asciiCaseInsensitive,
+                  !asciiBoundary else {
+                return nil
+            }
+            return SwiftDarwinLiteralPreflight.quietExitCode(
+                path: path,
+                literal: literal
+            )
         }
         if wordRegexp {
             guard lineNumber,

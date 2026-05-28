@@ -1188,6 +1188,23 @@ struct MiscTests {
         try root.write("*.txt\n", to: ".ignore")
         try root.write("needle\n", to: "ignored.txt")
         try root.write(Data("pre\0needle\n".utf8), to: "binary-mode.dat")
+        try root.write("quiet\n", to: "quiet-no-match.txt")
+
+        func runExecutableResult(_ arguments: [String]) throws -> (stdout: Data, stderr: Data, status: Int32) {
+            let executable = ripgrepPackageRootURL().appendingPathComponent(".build/debug/ripgrep")
+            let process = Process()
+            process.executableURL = executable
+            process.arguments = arguments
+            let output = Pipe()
+            let error = Pipe()
+            process.standardOutput = output
+            process.standardError = error
+            try process.run()
+            let data = output.fileHandleForReading.readDataToEndOfFile()
+            let errorData = error.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            return (data, errorData, process.terminationStatus)
+        }
 
         let output = try runExecutableData([
             "needle",
@@ -1258,6 +1275,19 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(noMessagesOutput == output)
+
+        for (quietArguments, expectedStatus) in [
+            (["-q", "needle", root.path("dense.txt")], Int32(0)),
+            (["--quiet", "missing", root.path("quiet-no-match.txt")], Int32(1)),
+            (["-qn", "needle", root.path("dense.txt")], Int32(0)),
+            (["-qi", "needle", root.path("dense.txt")], Int32(0)),
+            (["-q", "needle", root.path("binary-mode.dat")], Int32(0)),
+        ] {
+            let quietResult = try runExecutableResult(quietArguments)
+            #expect(quietResult.stdout.isEmpty)
+            #expect(quietResult.stderr.isEmpty)
+            #expect(quietResult.status == expectedStatus)
+        }
 
         for (includeZeroArguments, expectedOutput) in [
             (["--include-zero"], output),
