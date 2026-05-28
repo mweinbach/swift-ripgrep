@@ -2241,6 +2241,12 @@ struct RipgrepCommand {
                 }
             }
         }
+        let parsedTrimAffectsPreflightOutput = parsedTrim
+            && !parsedQuiet
+            && parsedPathOnlyMode == nil
+            && !parsedCount
+            && parsedPrintMode != .countMatches
+            && !parsedOnlyMatching
         guard !(parsedLineRegexp && wordRegexp) else {
             return nil
         }
@@ -2261,7 +2267,7 @@ struct RipgrepCommand {
               !parsedSearchZip,
               !parsedStats,
               (!parsedStopOnNonmatch || parsedQuiet || parsedPathOnlyMode != nil),
-              !parsedTrim else {
+              !parsedTrimAffectsPreflightOutput else {
             return nil
         }
         if parsedOnlyMatching {

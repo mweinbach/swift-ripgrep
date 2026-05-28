@@ -88,6 +88,9 @@ line writer that trims leading ASCII space, tab, and CR bytes from line content
 before emitting the matched line, while preserving headings, line numbers, max-count,
 fixed-string literals, no-final-newline output, and the conservative binary/BOM
 fallbacks.
+Output-neutral `--trim` combinations now stay eligible for the existing quiet,
+path-only, count, count-matches, and only-matching preflights; full-line output
+still requires a trim-aware writer.
 Case-sensitive repeated `-e`/`-f` and top-level literal alternation `--trim`
 forms now use the same mapped trim writer.
 Literal `--invert-match` matching-line output now has its own mapped Swift line
@@ -1233,6 +1236,17 @@ eligible:
 |---|---:|---:|---:|
 | `--trim needle` | 376.5 ms | 13.8 ms | 15.4 ms |
 | `-n --trim needle` | 416.8 ms | 20.8 ms | 24.6 ms |
+
+Output-neutral trim checks used the same fixture and 3 warmups plus 10 timed
+runs. The before column is the same binary with executable preflight bypassed
+via `RIPGREP_CONFIG_PATH=`:
+
+| Flags | Swift before | Swift after | rg |
+|---|---:|---:|---:|
+| `--trim -q needle` | 176.9 ms | 4.3 ms | 3.4 ms |
+| `--trim -l needle` | 91.0 ms | 4.8 ms | 3.8 ms |
+| `--trim -c needle` | 118.1 ms | 10.1 ms | 10.4 ms |
+| `--trim --count-matches needle` | 117.5 ms | 6.9 ms | 19.2 ms |
 
 The multi-literal trim check used the same fixture and 3 warmups plus 10 timed
 runs. The before column is the same binary with executable preflight bypassed
