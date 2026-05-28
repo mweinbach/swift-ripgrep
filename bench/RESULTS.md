@@ -722,6 +722,20 @@ versus 4.879 s for the forced fallback and 7.4 ms for Rust; the matching
 `--files-without-match -i -x 1234567890` form measured 9.1 ms, versus
 5.044 s for the forced fallback and 8.5 ms for Rust.
 
+Case-insensitive exact-line matching output now has a conservative Swift
+line scanner for ASCII-only data and patterns. It emits the original line
+bytes while comparing folded bytes, covers literal alternations, repeated
+`-e`, pattern files, line numbers, headings, `-o`, and max-count, and falls
+back for CRLF, binary, non-ASCII, quiet/path-only, and count forms. Direct
+byte/status checks matched Rust for plain, numbered, only-matching, bounded,
+prefixed, heading, repeated `-e`, pattern-file, CRLF fallback, binary fallback,
+and Unicode fallback forms. On the 4.8 MiB dense fixture,
+`-i -x 'NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE'` improved from 3.900 s to
+62.3 ms, versus 16.4 ms for Rust, while `-n -i -x ...` improved from 3.909 s
+to 80.2 ms, versus 20.0 ms for Rust. The neighboring alternation
+`-i -x 'NEEDLE NEEDLE...|MISSING'` measured 57.3 ms, and numbered alternation
+measured 72.3 ms.
+
 Type-definition flags that do not activate a type filter now also stay
 eligible for the executable preflight. The preflight replays
 `--type-add`/`--type-clear` through `FileTypeRegistry.apply`, so invalid

@@ -786,6 +786,79 @@ public enum SwiftDarwinLiteralPreflight {
         return matchedLineCount > 0 ? 0 : 1
     }
 
+    public static func asciiCaseInsensitiveExactLineExitCode(
+        path: String,
+        literals: [[UInt8]],
+        maxCount: Int? = nil,
+        lineNumber: Bool = false,
+        lineNumberFieldSeparator: [UInt8] = [58],
+        linePrefix: [UInt8] = [],
+        headingPrefix: [UInt8] = []
+    ) -> Int32? {
+        guard maxCount.map({ $0 > 0 }) ?? true,
+              let literals = distinctASCIICaseInsensitiveExactLineLiterals(literals),
+              !literals.isEmpty else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return 1
+        }
+        guard !hasBinaryDetectionPrefix(data),
+              !data.contains(where: { $0 >= 0x80 }) else {
+            return nil
+        }
+
+        let limit = maxCount ?? Int.max
+        let newline = UInt8(ascii: "\n")
+        var lineStart = data.startIndex
+        var lineNumberValue = 1
+        var matchedLineCount = 0
+        var emittedHeading = false
+        var output = Data()
+        output.reserveCapacity(64 * 1024)
+
+        while lineStart < data.endIndex, matchedLineCount < limit {
+            let lineEnd = data[lineStart..<data.endIndex].firstIndex(of: newline) ?? data.endIndex
+            if asciiCaseInsensitiveExactLineRangeMatches(
+                data: data,
+                lineStart: lineStart,
+                lineEnd: lineEnd,
+                foldedLiterals: literals
+            ) {
+                appendHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading, to: &output)
+                appendLinePrefix(linePrefix, to: &output)
+                if lineNumber {
+                    appendLineNumberPrefix(
+                        lineNumberValue,
+                        to: &output,
+                        fieldSeparator: lineNumberFieldSeparator
+                    )
+                }
+                output.append(contentsOf: data[lineStart..<lineEnd])
+                output.append(newline)
+                matchedLineCount += 1
+                if output.count >= 64 * 1024 {
+                    FileHandle.standardOutput.write(output)
+                    output.removeAll(keepingCapacity: true)
+                }
+            }
+            if lineEnd < data.endIndex {
+                lineStart = data.index(after: lineEnd)
+                lineNumberValue += 1
+            } else {
+                lineStart = data.endIndex
+            }
+        }
+
+        if !output.isEmpty {
+            FileHandle.standardOutput.write(output)
+        }
+        return matchedLineCount > 0 ? 0 : 1
+    }
+
     public static func multiLiteralExactLineCountExitCode(
         path: String,
         literals: [[UInt8]],
@@ -976,6 +1049,40 @@ public enum SwiftDarwinLiteralPreflight {
             var matched = true
             for byte in literal {
                 if data[cursor] != byte {
+                    matched = false
+                    break
+                }
+                cursor = data.index(after: cursor)
+            }
+            if matched {
+                return true
+            }
+        }
+        return false
+    }
+
+    private static func asciiCaseInsensitiveExactLineRangeMatches(
+        data: Data,
+        lineStart: Data.Index,
+        lineEnd: Data.Index,
+        foldedLiterals: [[UInt8]]
+    ) -> Bool {
+        let lineLength = data.distance(from: lineStart, to: lineEnd)
+        guard lineLength > 0 else {
+            return false
+        }
+        for literal in foldedLiterals where literal.count == lineLength {
+            guard rgSwiftASCIILower(data[lineStart]) == literal[0] else {
+                continue
+            }
+            if literal.count > 1,
+               rgSwiftASCIILower(data[data.index(before: lineEnd)]) != literal[literal.count - 1] {
+                continue
+            }
+            var cursor = lineStart
+            var matched = true
+            for byte in literal {
+                if rgSwiftASCIILower(data[cursor]) != byte {
                     matched = false
                     break
                 }
@@ -2113,6 +2220,23 @@ private func distinctExactLineLiterals(_ literals: [[UInt8]]) -> [[UInt8]]? {
         }
         if !distinct.contains(literal) {
             distinct.append(literal)
+        }
+    }
+    return distinct
+}
+
+private func distinctASCIICaseInsensitiveExactLineLiterals(_ literals: [[UInt8]]) -> [[UInt8]]? {
+    var distinct: [[UInt8]] = []
+    distinct.reserveCapacity(literals.count)
+    for literal in literals {
+        guard !literal.isEmpty,
+              !literal.contains(UInt8(ascii: "\n")),
+              literal.allSatisfy({ $0 < 0x80 }) else {
+            return nil
+        }
+        let folded = literal.map(rgSwiftASCIILower)
+        if !distinct.contains(folded) {
+            distinct.append(folded)
         }
     }
     return distinct
