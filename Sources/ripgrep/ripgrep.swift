@@ -330,6 +330,36 @@ struct RipgrepCommand {
         return output
     }
 
+    private enum PreflightPathSeparator {
+        case automatic
+        case separator(UInt8)
+    }
+
+    private static func preflightPathSeparator(_ raw: String) -> PreflightPathSeparator? {
+        guard !raw.isEmpty else {
+            return .automatic
+        }
+        let bytes = preflightEscapedSeparatorBytes(raw)
+        guard bytes.count == 1,
+              let byte = bytes.first else {
+            return nil
+        }
+        return .separator(byte)
+    }
+
+    private static func preflightDisplayPathBytes(
+        _ path: String,
+        pathSeparator: UInt8?
+    ) -> [UInt8] {
+        let bytes = Array(path.utf8)
+        guard let pathSeparator else {
+            return bytes
+        }
+        return bytes.map { byte in
+            byte == UInt8(ascii: "/") ? pathSeparator : byte
+        }
+    }
+
     private static func runSwiftDarwinLiteralPreflight(arguments: [String]) -> Int32? {
         guard getenv("RIPGREP_CONFIG_PATH") == nil else {
             return nil
@@ -798,9 +828,6 @@ struct RipgrepCommand {
                 ? String(argument.dropFirst("--path-separator=".count))
                 : nil
         }
-        func isValidSimplePathSeparator(_ value: String) -> Bool {
-            value.isEmpty || value.utf8.count == 1
-        }
         func resourceLimitValue(_ argument: String) -> String? {
             if argument.hasPrefix("--dfa-size-limit=") {
                 return String(argument.dropFirst("--dfa-size-limit=".count))
@@ -988,7 +1015,7 @@ struct RipgrepCommand {
         var parsedNullPathTerminator = false
         var parsedNoMmap = false
         var parsedPrintMode = PrintMode.matchingLines
-        var parsedPathSeparator = false
+        var parsedPathSeparator: UInt8?
         var parsedPassthru = false
         var parsedQuiet = false
         var parsedSearchZip = false
@@ -1342,16 +1369,26 @@ struct RipgrepCommand {
                 continue
             } else if argument == "--path-separator" {
                 guard argumentIndex < arguments.count,
-                      isValidSimplePathSeparator(arguments[argumentIndex]) else {
+                      let pathSeparator = Self.preflightPathSeparator(arguments[argumentIndex]) else {
                     return nil
                 }
-                parsedPathSeparator = true
+                switch pathSeparator {
+                case .automatic:
+                    parsedPathSeparator = nil
+                case .separator(let separator):
+                    parsedPathSeparator = separator
+                }
                 argumentIndex += 1
             } else if let separator = pathSeparatorValue(argument) {
-                guard isValidSimplePathSeparator(separator) else {
+                guard let pathSeparator = Self.preflightPathSeparator(separator) else {
                     return nil
                 }
-                parsedPathSeparator = true
+                switch pathSeparator {
+                case .automatic:
+                    parsedPathSeparator = nil
+                case .separator(let separator):
+                    parsedPathSeparator = separator
+                }
             } else if isResourceLimitFlag(argument) {
                 guard argumentIndex < arguments.count,
                       isValidHumanReadableSize(arguments[argumentIndex]) else {
@@ -1486,7 +1523,10 @@ struct RipgrepCommand {
             parsedPathOnlyMode = nil
         }
         let parsedLinePrefix: [UInt8] = if parsedWithFilename {
-            Array(path.utf8) + (parsedNullPathTerminator ? [0] : parsedFieldMatchSeparator)
+            Self.preflightDisplayPathBytes(
+                path,
+                pathSeparator: parsedPathSeparator
+            ) + (parsedNullPathTerminator ? [0] : parsedFieldMatchSeparator)
         } else {
             []
         }
@@ -1510,7 +1550,6 @@ struct RipgrepCommand {
               !parsedStats,
               (!parsedStopOnNonmatch || parsedQuiet || parsedPathOnlyMode != nil),
               !parsedTrim,
-              !(parsedWithFilename && parsedPathSeparator),
               parsedPrintMode != .countMatches else {
             return nil
         }
@@ -1570,7 +1609,7 @@ struct RipgrepCommand {
                     )
                 }
                 if let parsedPathOnlyMode {
-                    guard !parsedPathSeparator else {
+                    guard parsedPathSeparator == nil else {
                         return nil
                     }
                     return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveMultiLiteralPathOnlyExitCode(
@@ -1589,7 +1628,7 @@ struct RipgrepCommand {
                     )
                 }
                 if let parsedPathOnlyMode {
-                    guard !parsedPathSeparator else {
+                    guard parsedPathSeparator == nil else {
                         return nil
                     }
                     return SwiftDarwinLiteralPreflight.multiLiteralPathOnlyExitCode(
@@ -1725,7 +1764,7 @@ struct RipgrepCommand {
         }
         if let parsedPathOnlyMode {
             guard !asciiBoundary,
-                  !parsedPathSeparator else {
+                  parsedPathSeparator == nil else {
                 return nil
             }
             if asciiCaseInsensitive {

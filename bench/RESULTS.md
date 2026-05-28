@@ -1031,6 +1031,16 @@ status for each form. On the 50 KiB dense fixture, five-run checks measured
 `-H needle` at 3.4 ms versus a noisy fallback baseline around 54.4 ms and
 3.0 ms for Rust; `-H -n needle` measured 3.1 ms versus 3.0 ms for Rust.
 
+Explicit single-file `--with-filename --path-separator` matching-line searches
+now use the same Swift executable preflight by applying the escaped one-byte
+path separator directly to the emitted path prefix. Release byte checks matched
+Rust for separated and inline separators, escaped `\x5A`, automatic reset,
+NUL path prefixes, max-count, safe multi-literal, exact-line, and word-regexp
+forms. On the 50 KiB dense fixture, five-run checks measured
+`-H --path-separator Z needle` at 3.5 ms versus 28.6 ms before and 3.0 ms for
+Rust; `-H --path-separator Z -n needle` measured 3.1 ms versus 49.6 ms before
+and 3.0 ms for Rust.
+
 Filename-prefixed literal count output now also stays on the direct Swift
 writer for `-c` and `--count-matches`, including `--include-zero path:0`
 semantics. Output and exit status for matching, no-match, include-zero,

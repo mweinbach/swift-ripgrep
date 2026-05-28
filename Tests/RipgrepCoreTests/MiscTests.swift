@@ -1360,6 +1360,44 @@ struct MiscTests {
             "\(root.path("dense.txt"))\0tail needle\n"
         ).utf8))
 
+        let pathSeparatedName = root.path("dense.txt").replacingOccurrences(of: "/", with: "Z")
+        let withFilenamePathSeparatorOutput = try runExecutableData([
+            "--with-filename",
+            "--path-separator",
+            "Z",
+            "-n",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(withFilenamePathSeparatorOutput == Data("""
+        \(pathSeparatedName):1:needle needle needle
+        \(pathSeparatedName):3:NEEDLE needle Needle
+        \(pathSeparatedName):4:tail needle
+
+        """.utf8))
+
+        let withFilenameEscapedPathSeparatorOutput = try runExecutableData([
+            "--with-filename",
+            #"--path-separator=\x5A"#,
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(withFilenameEscapedPathSeparatorOutput == Data("""
+        \(pathSeparatedName):needle needle needle
+        \(pathSeparatedName):NEEDLE needle Needle
+        \(pathSeparatedName):tail needle
+
+        """.utf8))
+
+        let withFilenameAutomaticPathSeparatorOutput = try runExecutableData([
+            "--with-filename",
+            "--path-separator=Z",
+            "--path-separator=",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(withFilenameAutomaticPathSeparatorOutput == withFilenameOutput)
+
         let explicitNoLineNumberOutput = try runExecutableData([
             "-N",
             "needle",
