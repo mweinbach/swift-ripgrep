@@ -276,6 +276,15 @@ versus 336.9 ms before and 288.9 ms for Rust; the
 `--ignore-dot --ignore-vcs --require-git Sherlock` form measured 235.2 ms
 versus 383.6 ms before and 307.0 ms for Rust.
 
+Explicit-file ignore-file controls now also stay eligible when they cannot
+change the searched operand. The parser accepts existing readable regular
+`--ignore-file` paths, `--ignore-file-case-insensitive`, `--ignore-files`, and
+final `--no-ignore-files` states that suppress missing ignore-file diagnostics;
+missing enabled ignore-file paths still fall back. On the 45 MiB fixture,
+`--ignore-file <existing> needle` improved from 86.8 ms to 36.0 ms, versus
+42.5 ms for Rust, while `--ignore-file-case-insensitive needle` measured
+35.4 ms, versus 46.7 ms for Rust.
+
 Output-neutral formatting disables and explicit block-buffering are parsed
 conservatively in the same preflight. The parser tracks ordered formatting
 toggles and only dispatches when the final state does not request filenames,

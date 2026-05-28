@@ -2020,6 +2020,49 @@ struct MiscTests {
         ], fixture: {})
         #expect(noIgnoreExplicitFileOutput == ignoreExplicitFileOutput)
 
+        let ignoreFileExplicitFileOutput = try runExecutableData([
+            "--ignore-file",
+            root.path(".ignore"),
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(ignoreFileExplicitFileOutput == output)
+
+        let inlineIgnoreFileExplicitFileOutput = try runExecutableData([
+            "--ignore-file=\(root.path(".ignore"))",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(inlineIgnoreFileExplicitFileOutput == output)
+
+        let ignoreFileCaseInsensitiveOutput = try runExecutableData([
+            "--ignore-file-case-insensitive",
+            "--ignore-files",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(ignoreFileCaseInsensitiveOutput == output)
+
+        let disabledMissingIgnoreFileOutput = try runExecutableResult([
+            "--ignore-file",
+            root.path("missing-ignore"),
+            "--no-ignore-files",
+            "needle",
+            root.path("dense.txt"),
+        ])
+        #expect(disabledMissingIgnoreFileOutput.stdout == output)
+        #expect(disabledMissingIgnoreFileOutput.stderr.isEmpty)
+        #expect(disabledMissingIgnoreFileOutput.status == 0)
+
+        let missingIgnoreFileOutput = try runExecutableResult([
+            "--ignore-file",
+            root.path("missing-ignore"),
+            "needle",
+            root.path("dense.txt"),
+        ])
+        #expect(missingIgnoreFileOutput.stdout == output)
+        #expect(missingIgnoreFileOutput.status == 0)
+
         let neutralFormattingOutput = try runExecutableData([
             "--no-byte-offset",
             "--no-column",

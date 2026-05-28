@@ -1,3 +1,4 @@
+import Foundation
 import RipgrepCore
 #if canImport(CRipgrepPlatform)
 import CRipgrepPlatform
@@ -444,6 +445,18 @@ struct RipgrepCommand {
         func isValidStrictGlob(_ raw: String) -> Bool {
             !hasUnclosedCharacterClass(in: raw)
         }
+        func inlineIgnoreFileValue(_ argument: String) -> String? {
+            argument.hasPrefix("--ignore-file=")
+                ? String(argument.dropFirst("--ignore-file=".count))
+                : nil
+        }
+        func isReadableRegularFile(_ path: String) -> Bool {
+            guard let type = try? FileManager.default.attributesOfItem(atPath: path)[.type] as? FileAttributeType,
+                  type == .typeRegular else {
+                return false
+            }
+            return FileManager.default.isReadableFile(atPath: path)
+        }
         func inlineGlobValue(_ argument: String) -> String? {
             if argument.hasPrefix("--glob=") {
                 return String(argument.dropFirst("--glob=".count))
@@ -844,6 +857,8 @@ struct RipgrepCommand {
         var parsedWithFilename = false
         var parsedWordRegexp = false
         var parsedCrlf = false
+        var parsedIgnoreFilesEnabled = true
+        var parsedIgnoreFilePaths: [String] = []
         var parsedRegexpPattern: String?
         var patternCanStartWithDash = false
         var valueArguments: [String] = []
@@ -1014,6 +1029,21 @@ struct RipgrepCommand {
                 guard isValidStrictGlob(caseInsensitiveGlob) else {
                     return nil
                 }
+            } else if argument == "--ignore-file" {
+                guard argumentIndex < arguments.count else {
+                    return nil
+                }
+                parsedIgnoreFilePaths.append(arguments[argumentIndex])
+                argumentIndex += 1
+            } else if let ignoreFile = inlineIgnoreFileValue(argument) {
+                parsedIgnoreFilePaths.append(ignoreFile)
+            } else if argument == "--ignore-file-case-insensitive"
+                        || argument == "--no-ignore-file-case-insensitive" {
+                continue
+            } else if argument == "--ignore-files" {
+                parsedIgnoreFilesEnabled = true
+            } else if argument == "--no-ignore-files" {
+                parsedIgnoreFilesEnabled = false
             } else if argument == "--type-add" {
                 guard argumentIndex < arguments.count else {
                     return nil
@@ -1171,6 +1201,11 @@ struct RipgrepCommand {
             }
             pattern = valueArguments[0]
             path = valueArguments[1]
+        }
+        if parsedIgnoreFilesEnabled {
+            guard parsedIgnoreFilePaths.allSatisfy(isReadableRegularFile) else {
+                return nil
+            }
         }
         guard typeDefinitionChangesAreValid(parsedTypeDefinitionChanges) else {
             return nil
