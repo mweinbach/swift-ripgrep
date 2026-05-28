@@ -1483,6 +1483,35 @@ struct MiscTests {
         ], fixture: {})
         #expect(orderedColorNeverOutput == output)
 
+        for (engineArguments, expectedOutput) in [
+            (["-n", "-P"], lineNumberOutput),
+            (["-Pn"], lineNumberOutput),
+            (["-n", "--pcre2"], lineNumberOutput),
+            (["--no-pcre2", "-P"], output),
+            (["-P", "--no-pcre2"], output),
+            (["-n", "--engine", "pcre2"], lineNumberOutput),
+            (["-n", "--engine=auto"], lineNumberOutput),
+            (["-n", "--auto-hybrid-regex"], lineNumberOutput),
+            (["-n", "--no-auto-hybrid-regex"], lineNumberOutput),
+        ] {
+            let engineOutput = try runExecutableData(
+                engineArguments + [
+                    "needle",
+                    root.path("dense.txt"),
+                ],
+                fixture: {}
+            )
+            #expect(engineOutput == expectedOutput)
+        }
+
+        let pcreQuotedEngineOutput = try runExecutableData([
+            "-n",
+            "-P",
+            #"\Qneedle\E"#,
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(pcreQuotedEngineOutput == lineNumberOutput)
+
         let noUnicodeOutput = try runExecutableData([
             "--no-unicode",
             "needle",

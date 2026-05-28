@@ -324,6 +324,16 @@ values still fall through to the normal parser error. On the same fixture,
 improved from 1.438 s to 37.1 ms, versus 45.0 ms for Rust
 `--sort path`.
 
+Engine selector flags now update the Swift executable preflight wherever they
+appear instead of only when they lead the command. This covers `-P`/`--pcre2`,
+`--no-pcre2`, `--auto-hybrid-regex`/`--no-auto-hybrid-regex`,
+`--engine`/`--engine=`, and `P` inside short clusters, while invalid engine
+values still fall through to the normal parser diagnostic. Focused coverage
+includes non-leading selectors, ordering with `--no-pcre2`, short-cluster
+`-Pn`, and PCRE quoted literals. On the 45 MiB dense fixture, `-n -P needle`
+improved from 115.8 ms to 51.2 ms, and `-Pn needle` improved from 110.9 ms to
+50.6 ms, versus 94.5 ms for Rust `-n -P`.
+
 Regex-mode toggles that do not affect plain literal line output now also stay
 eligible for the executable preflight. `--unicode`/`--no-unicode`,
 `--pcre2-unicode`/`--no-pcre2-unicode`, and `--crlf`/`--no-crlf` are still

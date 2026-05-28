@@ -361,6 +361,11 @@ struct RipgrepCommand {
             }
             return nil
         }
+        func inlineEngineSelectorValue(_ argument: String) -> String? {
+            argument.hasPrefix("--engine=")
+                ? String(argument.dropFirst("--engine=".count))
+                : nil
+        }
         func isOutputNeutralSingleFileFlag(_ argument: String) -> Bool {
             switch argument {
             case "-.",
@@ -604,6 +609,7 @@ struct RipgrepCommand {
             lineNumber: Bool?,
             wordRegexp: Bool,
             fixedStrings: Bool,
+            allowPCREQuotedLiterals: Bool?,
             unrestrictedCount: Int
         )? {
             let bytes = Array(argument.utf8)
@@ -617,6 +623,7 @@ struct RipgrepCommand {
             var lineNumber: Bool?
             var wordRegexp = false
             var fixedStrings = false
+            var allowPCREQuotedLiterals: Bool?
             var unrestrictedCount = 0
             for byte in bytes.dropFirst() {
                 switch byte {
@@ -636,6 +643,8 @@ struct RipgrepCommand {
                     wordRegexp = true
                 case UInt8(ascii: "F"):
                     fixedStrings = true
+                case UInt8(ascii: "P"):
+                    allowPCREQuotedLiterals = true
                 case UInt8(ascii: "a"):
                     continue
                 case UInt8(ascii: "u"):
@@ -647,8 +656,9 @@ struct RipgrepCommand {
                     return nil
                 }
             }
-            return (caseMode, lineNumber, wordRegexp, fixedStrings, unrestrictedCount)
+            return (caseMode, lineNumber, wordRegexp, fixedStrings, allowPCREQuotedLiterals, unrestrictedCount)
         }
+        var allowPCREQuotedLiterals = preflightArguments.allowPCREQuotedLiterals
         var parsedCaseMode = CaseMode.sensitive
         var parsedByteOffset = false
         var parsedColumn = false
@@ -712,6 +722,20 @@ struct RipgrepCommand {
                 parsedNoMmap = true
             } else if isMmapFlag(argument) {
                 parsedNoMmap = false
+            } else if argument == "--engine" {
+                guard argumentIndex < arguments.count,
+                      isEngineSelectorValue(arguments[argumentIndex]) else {
+                    return nil
+                }
+                allowPCREQuotedLiterals = engineSelectorValueAllowsPCREQuotedLiterals(arguments[argumentIndex])
+                argumentIndex += 1
+            } else if let engineValue = inlineEngineSelectorValue(argument) {
+                guard isEngineSelectorValue(engineValue) else {
+                    return nil
+                }
+                allowPCREQuotedLiterals = engineSelectorValueAllowsPCREQuotedLiterals(engineValue)
+            } else if isSingleArgumentEngineSelector(argument) {
+                allowPCREQuotedLiterals = singleArgumentEngineSelectorAllowsPCREQuotedLiterals(argument)
             } else if argument == "-e" || argument == "--regexp" {
                 guard argumentIndex < arguments.count,
                       parsedRegexpPattern == nil else {
@@ -840,6 +864,9 @@ struct RipgrepCommand {
                 }
                 parsedWordRegexp = parsedWordRegexp || cluster.wordRegexp
                 parsedFixedStrings = parsedFixedStrings || cluster.fixedStrings
+                if let clusterPCREQuotedLiterals = cluster.allowPCREQuotedLiterals {
+                    allowPCREQuotedLiterals = clusterPCREQuotedLiterals
+                }
                 parsedUnrestrictedCount += cluster.unrestrictedCount
                 guard parsedUnrestrictedCount <= 3 else {
                     return nil
@@ -895,7 +922,7 @@ struct RipgrepCommand {
            !noMmap,
            let surroundingLiteral = surroundingWordsLiteral(
             pattern,
-            allowPCREQuotedLiterals: preflightArguments.allowPCREQuotedLiterals
+            allowPCREQuotedLiterals: allowPCREQuotedLiterals
            ) {
             return SwiftDarwinLiteralPreflight.surroundingWordsExitCode(
                 path: path,
@@ -907,14 +934,14 @@ struct RipgrepCommand {
 
         let asciiBoundaryLiteralPattern = (fixedStrings || asciiCaseInsensitive) ? nil : asciiBoundaryLiteral(
             pattern,
-            allowPCREQuotedLiterals: preflightArguments.allowPCREQuotedLiterals
+            allowPCREQuotedLiterals: allowPCREQuotedLiterals
         )
         let asciiBoundary = asciiBoundaryLiteralPattern != nil
         let parsedLiteralPattern = fixedStrings
             ? pattern
             : asciiBoundaryLiteralPattern ?? RegexLiteralParser.literal(
                 fromPlainRegexPattern: pattern,
-                allowPCREQuotedLiterals: preflightArguments.allowPCREQuotedLiterals
+                allowPCREQuotedLiterals: allowPCREQuotedLiterals
             )
 
         if !fixedStrings,
@@ -925,7 +952,7 @@ struct RipgrepCommand {
            !asciiBoundary,
            let literals = multiLiteralAlternation(
             pattern,
-            allowPCREQuotedLiterals: preflightArguments.allowPCREQuotedLiterals
+            allowPCREQuotedLiterals: allowPCREQuotedLiterals
            ),
            let exitCode = SwiftDarwinLiteralPreflight.multiLiteralExitCode(
             path: path,
