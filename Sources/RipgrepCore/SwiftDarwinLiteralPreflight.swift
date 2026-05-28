@@ -1554,6 +1554,41 @@ public enum SwiftDarwinLiteralPreflight {
         return matchedLineCount > 0 ? 0 : 1
     }
 
+    public static func countMatchesExitCode(
+        path: String,
+        literal: [UInt8],
+        includeZero: Bool,
+        countPrefix: [UInt8] = [],
+        crlfTerminated: Bool = false
+    ) -> Int32? {
+        guard !literal.isEmpty,
+              !literal.contains(UInt8(ascii: "\n")) else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+
+        let needle = Data(literal)
+        var searchStart = data.startIndex
+        var matchCount = 0
+        while searchStart < data.endIndex,
+              let matchRange = data.range(of: needle, in: searchStart..<data.endIndex) {
+            guard !matchRange.isEmpty else {
+                return nil
+            }
+            matchCount += 1
+            searchStart = matchRange.upperBound
+        }
+
+        if matchCount > 0 || includeZero {
+            var output = Data(countPrefix)
+            output.append(countOutput(matchCount, crlfTerminated: crlfTerminated))
+            FileHandle.standardOutput.write(output)
+        }
+        return matchCount > 0 ? 0 : 1
+    }
+
     static func multiLiteralResult(
         path: String,
         literals: [[UInt8]],

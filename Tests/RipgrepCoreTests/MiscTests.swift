@@ -1653,6 +1653,16 @@ struct MiscTests {
                 Int32(0)
             ),
             (
+                ["--files-with-matches", "--count-matches", "needle", root.path("dense.txt")],
+                Data("5\n".utf8),
+                Int32(0)
+            ),
+            (
+                ["--count", "--count-matches", "needle", root.path("dense.txt")],
+                Data("5\n".utf8),
+                Int32(0)
+            ),
+            (
                 ["--count", "--files-without-match", "needle", root.path("dense.txt")],
                 Data(),
                 Int32(1)
@@ -1782,6 +1792,49 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(singleLiteralPrefixedCaseInsensitiveMaxCountOutput == Data("\(root.path("dense.txt")):1\n".utf8))
+
+        let countMatchesOutput = try runExecutableData([
+            "--count-matches",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(countMatchesOutput == Data("5\n".utf8))
+
+        let explicitRegexpCountMatchesOutput = try runExecutableData([
+            "--count-matches",
+            "-e",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(explicitRegexpCountMatchesOutput == countMatchesOutput)
+
+        let prefixedCountMatchesOutput = try runExecutableData([
+            "-H",
+            "--count-matches",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(prefixedCountMatchesOutput == Data("\(root.path("dense.txt")):5\n".utf8))
+
+        let includeZeroCountMatchesResult = try runExecutableResult([
+            "--include-zero",
+            "--count-matches",
+            "missing",
+            root.path("dense.txt"),
+        ])
+        #expect(includeZeroCountMatchesResult.status == 1)
+        #expect(includeZeroCountMatchesResult.stdout == Data("0\n".utf8))
+        #expect(includeZeroCountMatchesResult.stderr.isEmpty)
+
+        let quietCountMatchesResult = try runExecutableResult([
+            "-q",
+            "--count-matches",
+            "needle",
+            root.path("dense.txt"),
+        ])
+        #expect(quietCountMatchesResult.status == 0)
+        #expect(quietCountMatchesResult.stdout.isEmpty)
+        #expect(quietCountMatchesResult.stderr.isEmpty)
 
         for (exactLineArguments, expectedOutput) in [
             (["-x", "needle", root.path("exact.txt")], Data("needle\nneedle\n".utf8)),
@@ -1932,6 +1985,13 @@ struct MiscTests {
             root.path("binary-mode.dat"),
         ], fixture: {})
         #expect(countBinaryFallbackOutput == Data("1\n".utf8))
+
+        let countMatchesBinaryOutput = try runExecutableData([
+            "--count-matches",
+            "needle",
+            root.path("binary-mode.dat"),
+        ], fixture: {})
+        #expect(countMatchesBinaryOutput == Data("1\n".utf8))
 
         let unrestrictedBinaryFallbackOutput = try runExecutableData([
             "-uuu",

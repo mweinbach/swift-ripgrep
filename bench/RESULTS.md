@@ -385,11 +385,21 @@ multi-literal, reset, and CRLF combinations. On the 50 KiB dense fixture,
 versus 3.5 ms for Rust; `--line-buffered -n needle` measured 3.0 ms.
 Ordered print-mode overrides now update the executable preflight eligibility
 with last-flag-wins semantics when the final mode is path-only. Final
-count-matches output, short clusters that mix count and path modes, and
-unbounded final count output still fall back. On the 45 MiB fixture,
+short clusters that mix count and path modes and unbounded final count output
+still fall back. On the 45 MiB fixture,
 `--count --files-with-matches needle` improved from 28.5 ms to 6.4 ms, versus
 3.6 ms for Rust, and `--count-matches --files-with-matches needle` improved
 from 32.2 ms to 4.2 ms, versus 3.3 ms for Rust.
+
+Executable preflight now handles final `--count-matches` for single
+case-sensitive literal searches with a mapped `Data` counter, including final
+print-mode overrides, explicit single `-e`, filename-prefixed summaries,
+include-zero no-match summaries, and binary/text files. Case-insensitive,
+bounded, word-boundary, line-regexp, and multi-literal count-matches forms stay
+on the prior fallback. On the 50 KiB dense fixture, `--count-matches needle`
+measured 8.8 ms versus 41.1 ms before and 3.7 ms for Rust; final
+`--files-with-matches --count-matches needle` measured 8.0 ms versus 53.2 ms
+before; and `-H --count-matches needle` measured 7.9 ms versus 57.7 ms before.
 
 `--include-zero` now stays on the executable literal preflight for normal
 matching-line output, where it only affects count summaries. Focused tests

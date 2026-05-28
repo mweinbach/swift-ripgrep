@@ -1605,8 +1605,7 @@ struct RipgrepCommand {
               !parsedSearchZip,
               !parsedStats,
               (!parsedStopOnNonmatch || parsedQuiet || parsedPathOnlyMode != nil),
-              !parsedTrim,
-              parsedPrintMode != .countMatches else {
+              !parsedTrim else {
             return nil
         }
 
@@ -1620,6 +1619,9 @@ struct RipgrepCommand {
                     fixedStrings: fixedStrings,
                     allowPCREQuotedLiterals: allowPCREQuotedLiterals
                   ) else {
+                return nil
+            }
+            if parsedPrintMode == .countMatches {
                 return nil
             }
             if asciiCaseInsensitive {
@@ -1685,7 +1687,7 @@ struct RipgrepCommand {
            !wordRegexp,
            !parsedLineRegexp,
            !noMmap,
-           !parsedCount,
+           parsedPrintMode == .matchingLines,
            parsedMaxCount == nil,
            let surroundingLiteral = surroundingWordsLiteral(
             pattern,
@@ -1725,6 +1727,9 @@ struct RipgrepCommand {
             pattern,
             allowPCREQuotedLiterals: allowPCREQuotedLiterals
            ) {
+            if parsedPrintMode == .countMatches {
+                return nil
+            }
             if asciiCaseInsensitive {
                 if parsedQuiet {
                     return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveMultiLiteralQuietExitCode(
@@ -1841,6 +1846,23 @@ struct RipgrepCommand {
             return SwiftDarwinLiteralPreflight.quietExitCode(
                 path: path,
                 literal: literal
+            )
+        }
+        if parsedPrintMode == .countMatches {
+            guard parsedPathOnlyMode == nil,
+                  !wordRegexp,
+                  !parsedLineRegexp,
+                  !asciiBoundary,
+                  !asciiCaseInsensitive,
+                  parsedMaxCount == nil else {
+                return nil
+            }
+            return SwiftDarwinLiteralPreflight.countMatchesExitCode(
+                path: path,
+                literal: literal,
+                includeZero: parsedIncludeZero,
+                countPrefix: parsedCountPrefix,
+                crlfTerminated: parsedCrlf
             )
         }
         if parsedCount {
