@@ -1846,11 +1846,13 @@ struct RipgrepCommand {
         if parsedCount {
             guard parsedPathOnlyMode == nil,
                   !wordRegexp,
-                  !parsedWithFilename,
                   !asciiBoundary else {
                 return nil
             }
             if asciiCaseInsensitive {
+                guard !parsedWithFilename else {
+                    return nil
+                }
                 guard let parsedMaxCount else {
                     return nil
                 }
@@ -1875,6 +1877,9 @@ struct RipgrepCommand {
                 )
             }
             if parsedLineRegexp {
+                guard !parsedWithFilename else {
+                    return nil
+                }
                 guard !parsedCrlf else {
                     return nil
                 }
@@ -1883,6 +1888,16 @@ struct RipgrepCommand {
                     literal: literal,
                     includeZero: parsedIncludeZero,
                     maxCount: parsedMaxCount,
+                    crlfTerminated: parsedCrlf
+                )
+            }
+            if parsedMaxCount == nil || parsedWithFilename {
+                return SwiftDarwinLiteralPreflight.multiLiteralCountLineExitCode(
+                    path: path,
+                    literals: [literal],
+                    includeZero: parsedIncludeZero,
+                    maxCount: parsedMaxCount,
+                    countPrefix: parsedCountPrefix,
                     crlfTerminated: parsedCrlf
                 )
             }

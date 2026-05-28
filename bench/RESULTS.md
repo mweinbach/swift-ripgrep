@@ -524,10 +524,20 @@ matching Rust at 2.9 ms. A no-match `-m1 absent_literal` scan improved from
 84.1 ms to 18.0 ms, versus 6.0 ms for Rust.
 
 Bounded count output now reuses the same Swift-first max-count idea for
-`-c -mN`/`--count --max-count N` literal searches. Plain unbounded count stays
-on the existing full path because repeated high-level line counting regressed
-that case. On the same fixture, `-c -m1 needle` improved from 26.4 ms to
-3.3 ms, versus 3.0 ms for Rust.
+`-c -mN`/`--count --max-count N` literal searches. The earlier high-level
+unbounded count attempt stayed off because repeated line counting regressed that
+case. On the same fixture, `-c -m1 needle` improved from 26.4 ms to 3.3 ms,
+versus 3.0 ms for Rust.
+
+Unbounded case-sensitive single-literal count output now uses the mapped
+literal writer that proved fast for multi-literal counts, with a one-literal
+input list and line emission disabled. This covers plain `-c`, line-buffered
+count, CRLF summaries, include-zero no-match summaries, and filename-prefixed
+count output, while case-folded, word-boundary, and exact-line prefixed counts
+stay on prior behavior. On the 50 KiB dense fixture, `-c needle` measured
+5.0 ms versus 29.8 ms before and 3.1 ms for Rust, `--line-buffered -c needle`
+measured 4.2 ms versus 34.3 ms before, and `-H -c needle` measured 3.7 ms
+versus 34.4 ms before; the bounded prefixed `-H -c -m2 needle` measured 3.4 ms.
 
 Case-insensitive `-c -m1` literal and exact-line searches now share a
 match-only Swift preflight. When a mapped ASCII exact/lower/upper probe proves a

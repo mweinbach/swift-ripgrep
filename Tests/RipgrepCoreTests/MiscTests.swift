@@ -1728,6 +1728,51 @@ struct MiscTests {
             #expect(countResult.status == expectedStatus)
         }
 
+        let singleLiteralLineBufferedCountOutput = try runExecutableData([
+            "--line-buffered",
+            "-c",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(singleLiteralLineBufferedCountOutput == Data("3\n".utf8))
+
+        let singleLiteralCrlfCountOutput = try runExecutableData([
+            "--crlf",
+            "-c",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(singleLiteralCrlfCountOutput == Data("3\r\n".utf8))
+
+        let singleLiteralPrefixedCountOutput = try runExecutableData([
+            "-H",
+            "-c",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(singleLiteralPrefixedCountOutput == Data("\(root.path("dense.txt")):3\n".utf8))
+
+        let singleLiteralNullPrefixedCountOutput = try runExecutableData([
+            "-H",
+            "--null",
+            "-c",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(singleLiteralNullPrefixedCountOutput == Data((
+            "\(root.path("dense.txt"))\0" +
+            "3\n"
+        ).utf8))
+
+        let singleLiteralPrefixedMaxCountOutput = try runExecutableData([
+            "-H",
+            "-c",
+            "-m2",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(singleLiteralPrefixedMaxCountOutput == Data("\(root.path("dense.txt")):2\n".utf8))
+
         for (exactLineArguments, expectedOutput) in [
             (["-x", "needle", root.path("exact.txt")], Data("needle\nneedle\n".utf8)),
             (["--with-filename", "-x", "needle", root.path("exact.txt")], Data("\(root.path("exact.txt")):needle\n\(root.path("exact.txt")):needle\n".utf8)),
@@ -1815,6 +1860,13 @@ struct MiscTests {
         binary file matches (found "\\0" byte around offset 3)
 
         """.utf8))
+
+        let countBinaryFallbackOutput = try runExecutableData([
+            "-c",
+            "needle",
+            root.path("binary-mode.dat"),
+        ], fixture: {})
+        #expect(countBinaryFallbackOutput == Data("1\n".utf8))
 
         let unrestrictedBinaryFallbackOutput = try runExecutableData([
             "-uuu",
