@@ -1939,6 +1939,9 @@ public struct StandardPrinter {
         if let withFilename = options.withFilename {
             return withFilename
         }
+        if options.vimgrep {
+            return true
+        }
         if options.useStdin {
             return options.rootPathArguments.contains { $0 != "-" }
         }

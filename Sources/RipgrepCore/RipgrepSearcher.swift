@@ -925,7 +925,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
         var needsDecodedFallback = false
         let wantsLineNumber = options.wantsLineNumber
         let pathPrefixBytes: Data? = {
-            guard options.withFilename == true else {
+            let shouldPrefixPath = options.withFilename == true
+                || (options.vimgrep && options.withFilename == nil)
+            guard shouldPrefixPath else {
                 return nil
             }
             var data = Data(OutputPathFormatter(options: options).displayPath(for: fileURL).utf8)

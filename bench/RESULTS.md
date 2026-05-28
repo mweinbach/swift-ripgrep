@@ -103,6 +103,22 @@ replacement output remains on the existing replacement writer.
 Output-neutral `--passthru` combinations now stay eligible for quiet,
 path-only, count, and count-matches literal preflights; matching-line passthru
 output remains on the existing mapped passthru writer.
+Output-neutral `--vimgrep` combinations now stay eligible for quiet,
+path-only, count, and count-matches literal preflights. Matching-line,
+context, trim, inverted, stop-on-nonmatch, and passthru vimgrep output still
+falls back to the existing vimgrep writers. Count and count-matches output now
+also matches Rust's vimgrep default filename prefix while honoring
+`--no-filename`.
+
+10 timed runs on `/tmp/swift-rg-candidates/trim.txt` with 3 warmups:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--vimgrep -q needle` | 35.8 ms | 4.9 ms | 4.6 ms |
+| `--vimgrep -l needle` | 1.488 s | 6.0 ms | 4.0 ms |
+| `--vimgrep -c needle` | 1.497 s | 9.7 ms | 10.4 ms |
+| `--vimgrep --count-matches needle` | 1.497 s | 6.9 ms | 19.5 ms |
+
 Case-sensitive repeated `-e`/`-f` and top-level literal alternation `--trim`
 forms now use the same mapped trim writer.
 Literal `--invert-match` matching-line output now has its own mapped Swift line

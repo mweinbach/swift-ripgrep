@@ -2676,6 +2676,18 @@ struct FeatureTests {
             "\(root.path("a.txt")):1:3:needle",
             "\(root.path("a.txt")):1:14:needle",
         ])
+        #expect(try run(["--vimgrep", "-c", "needle", root.path("a.txt")]) == [
+            "\(root.path("a.txt")):1",
+        ])
+        #expect(try run(["--vimgrep", "--count-matches", "needle", root.path("a.txt")]) == [
+            "\(root.path("a.txt")):2",
+        ])
+        #expect(try run(["--vimgrep", "--no-filename", "-c", "needle", root.path("a.txt")]) == [
+            "1",
+        ])
+        #expect(try run(["--vimgrep", "--no-filename", "--count-matches", "needle", root.path("a.txt")]) == [
+            "2",
+        ])
         #expect(try run(["--vimgrep", "-m1", "needle", root.path("a.txt")]) == [
             "\(root.path("a.txt")):1:3:  needle one needle",
             "\(root.path("a.txt")):1:14:  needle one needle",

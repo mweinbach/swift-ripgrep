@@ -3758,6 +3758,58 @@ struct MiscTests {
         ], fixture: {})
         #expect(countMatchesOutput == Data("5\n".utf8))
 
+        let vimgrepQuietResult = try runExecutableResult([
+            "--vimgrep",
+            "-q",
+            "needle",
+            root.path("dense.txt"),
+        ])
+        #expect(vimgrepQuietResult.status == 0)
+        #expect(vimgrepQuietResult.stdout.isEmpty)
+        #expect(vimgrepQuietResult.stderr.isEmpty)
+
+        let vimgrepPathOnlyOutput = try runExecutableData([
+            "--vimgrep",
+            "-l",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(vimgrepPathOnlyOutput == Data("\(root.path("dense.txt"))\n".utf8))
+
+        let vimgrepCountOutput = try runExecutableData([
+            "--vimgrep",
+            "-c",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(vimgrepCountOutput == Data("\(root.path("dense.txt")):3\n".utf8))
+
+        let vimgrepCountMatchesOutput = try runExecutableData([
+            "--vimgrep",
+            "--count-matches",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(vimgrepCountMatchesOutput == Data("\(root.path("dense.txt")):5\n".utf8))
+
+        let vimgrepNoFilenameCountOutput = try runExecutableData([
+            "--vimgrep",
+            "--no-filename",
+            "-c",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(vimgrepNoFilenameCountOutput == Data("3\n".utf8))
+
+        let vimgrepNoFilenameCountMatchesOutput = try runExecutableData([
+            "--vimgrep",
+            "--no-filename",
+            "--count-matches",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(vimgrepNoFilenameCountMatchesOutput == countMatchesOutput)
+
         let trimCountMatchesOutput = try runExecutableData([
             "--trim",
             "--count-matches",

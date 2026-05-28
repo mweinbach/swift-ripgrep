@@ -1057,9 +1057,11 @@ struct RipgrepCommand {
         var parsedStopOnNonmatch = false
         var parsedTrim = false
         var parsedNullData = false
+        var parsedVimgrep = false
         var parsedTypeDefinitionChanges: [TypeChange] = []
         var parsedUnrestrictedCount = 0
         var parsedWithFilename = false
+        var parsedNoFilename = false
         var parsedWordRegexp = false
         var parsedCrlf = false
         var parsedIgnoreFilesEnabled = true
@@ -1140,8 +1142,10 @@ struct RipgrepCommand {
                 parsedHeading = false
             } else if isWithFilenameFlag(argument) {
                 parsedWithFilename = true
+                parsedNoFilename = false
             } else if isNoFilenameFlag(argument) {
                 parsedWithFilename = false
+                parsedNoFilename = true
             } else if isTrimFlag(argument) {
                 parsedTrim = true
             } else if isNoTrimFlag(argument) {
@@ -1177,6 +1181,8 @@ struct RipgrepCommand {
                 parsedInvertMatch = false
             } else if argument == "--passthru" || argument == "--passthrough" {
                 parsedPassthru = true
+            } else if argument == "--vimgrep" {
+                parsedVimgrep = true
             } else if argument == "--json" {
                 parsedJson = true
             } else if argument == "--no-json" {
@@ -1619,7 +1625,8 @@ struct RipgrepCommand {
         let parsedPathOnlyOutputPath = parsedPathSeparator == nil && path.utf8.allSatisfy { $0 < 0x80 }
             ? nil
             : parsedDisplayPath
-        let parsedCountPrefix: [UInt8] = if parsedWithFilename {
+        let parsedVimgrepForcesFilename = parsedVimgrep && !parsedNoFilename
+        let parsedCountPrefix: [UInt8] = if parsedWithFilename || parsedVimgrepForcesFilename {
             parsedDisplayPath + (parsedNullPathTerminator ? [0] : [UInt8(ascii: ":")])
         } else {
             []
@@ -1657,6 +1664,7 @@ struct RipgrepCommand {
            !parsedPassthru,
            !parsedReplacement,
            parsedPrintMode == .matchingLines,
+           !parsedVimgrep,
            !parsedOnlyMatching,
            !parsedQuiet,
            !parsedByteOffset,
@@ -1725,6 +1733,7 @@ struct RipgrepCommand {
            !parsedPassthru,
            !parsedReplacement,
            parsedPrintMode == .matchingLines,
+           !parsedVimgrep,
            !parsedOnlyMatching,
            !parsedQuiet,
            !parsedByteOffset,
@@ -1782,6 +1791,7 @@ struct RipgrepCommand {
            !parsedPassthru,
            !parsedReplacement,
            parsedPrintMode == .matchingLines,
+           !parsedVimgrep,
            !parsedOnlyMatching,
            !parsedQuiet,
            !parsedByteOffset,
@@ -1838,6 +1848,7 @@ struct RipgrepCommand {
            !parsedPassthru,
            !parsedReplacement,
            parsedPrintMode == .matchingLines,
+           !parsedVimgrep,
            !parsedOnlyMatching,
            !parsedQuiet,
            !parsedByteOffset,
@@ -1891,6 +1902,7 @@ struct RipgrepCommand {
         }
         if parsedStopOnNonmatch,
            parsedPrintMode == .matchingLines,
+           !parsedVimgrep,
            !parsedOnlyMatching,
            !parsedQuiet,
            !parsedByteOffset,
@@ -1982,6 +1994,7 @@ struct RipgrepCommand {
         }
         if parsedTrim,
            parsedPrintMode == .matchingLines,
+           !parsedVimgrep,
            !parsedOnlyMatching,
            !parsedQuiet,
            !parsedByteOffset,
@@ -2075,6 +2088,7 @@ struct RipgrepCommand {
         }
         if parsedInvertMatch,
            parsedPrintMode == .matchingLines,
+           !parsedVimgrep,
            !parsedOnlyMatching,
            !parsedQuiet,
            !parsedByteOffset,
@@ -2167,6 +2181,7 @@ struct RipgrepCommand {
         }
         if parsedPassthru,
            parsedPrintMode == .matchingLines,
+           !parsedVimgrep,
            !parsedOnlyMatching,
            !parsedQuiet,
            !parsedByteOffset,
@@ -2291,6 +2306,11 @@ struct RipgrepCommand {
             && parsedPathOnlyMode == nil
             && !parsedCount
             && parsedPrintMode != .countMatches
+        let parsedVimgrepAffectsPreflightOutput = parsedVimgrep
+            && !parsedQuiet
+            && parsedPathOnlyMode == nil
+            && !parsedCount
+            && parsedPrintMode != .countMatches
         guard !(parsedLineRegexp && wordRegexp) else {
             return nil
         }
@@ -2312,7 +2332,8 @@ struct RipgrepCommand {
               !parsedSearchZip,
               !parsedStats,
               (!parsedStopOnNonmatch || parsedQuiet || parsedPathOnlyMode != nil),
-              !parsedTrimAffectsPreflightOutput else {
+              !parsedTrimAffectsPreflightOutput,
+              !parsedVimgrepAffectsPreflightOutput else {
             return nil
         }
         if parsedOnlyMatching {
