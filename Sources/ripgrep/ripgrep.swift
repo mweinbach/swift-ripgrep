@@ -1855,6 +1855,24 @@ struct RipgrepCommand {
                     )
                 }
             } else {
+                if !fixedStrings,
+                   let passthruLiterals = multiLiteralAlternation(
+                    pattern,
+                    allowPCREQuotedLiterals: allowPCREQuotedLiterals
+                   ),
+                   passthruLiterals.allSatisfy({ !$0.contains(UInt8(ascii: "\n")) }) {
+                    return SwiftDarwinLiteralPreflight.multiLiteralPassthruLineExitCode(
+                        path: path,
+                        literals: passthruLiterals,
+                        lineNumber: lineNumber,
+                        lineNumberFieldMatchSeparator: parsedFieldMatchSeparator,
+                        lineNumberFieldContextSeparator: parsedFieldContextSeparator,
+                        lineMatchPrefix: parsedLinePrefix,
+                        lineContextPrefix: parsedContextLinePrefix,
+                        headingPrefix: parsedHeadingPrefix
+                    )
+                }
+
                 let passthruLiteralPattern = fixedStrings
                     ? pattern
                     : RegexLiteralParser.literal(

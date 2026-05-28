@@ -102,6 +102,8 @@ Explicit multi-literal `--passthru` now uses the same Swift-first treatment for
 literal `-e` and `-f` inputs, classifying each output line by whether any
 literal source matched while keeping unsupported or ambiguous patterns on the
 full matcher.
+Top-level literal alternation `--passthru` forms now share that multi-literal
+writer for positional and single-`-e` patterns.
 
 A targeted 20-run A/B against the previous Swift checkpoint and Rust used the
 same 4.8 MiB fixture:
@@ -1237,6 +1239,19 @@ fixture, used 3 warmups and 10 timed runs:
 |---|---:|---:|
 | `--passthru -e needle -e alpha` | 13.0 ms | 16.6 ms |
 | `-n --passthru -e needle -e alpha` | 15.1 ms | 23.0 ms |
+
+The equivalent top-level alternation check used the same fixtures and measured:
+
+| Flags | Swift before | Swift after | rg |
+|---|---:|---:|---:|
+| `--passthru "needle|alpha"` | 1.490 s | 8.8 ms | 8.5 ms |
+
+The larger current/Rust alternation check used 3 warmups and 10 timed runs:
+
+| Flags | Swift | rg |
+|---|---:|---:|
+| `--passthru "needle|alpha"` | 12.8 ms | 16.7 ms |
+| `-n --passthru "needle|alpha"` | 15.5 ms | 24.1 ms |
 
 Null path terminator flags now stay on the executable literal preflight when
 the command shape cannot print a path. This covers standalone `--null` and

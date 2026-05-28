@@ -1871,6 +1871,14 @@ struct MiscTests {
 
         """.utf8))
 
+        let passthruAlternationOutput = try runExecutableData([
+            "-n",
+            "--passthru",
+            "needle|alpha",
+            root.path("passthru.txt"),
+        ], fixture: {})
+        #expect(passthruAlternationOutput == passthruMultiplePatternOutput)
+
         let passthruPatternFileOutput = try runExecutableData([
             "--with-filename",
             "-n",
