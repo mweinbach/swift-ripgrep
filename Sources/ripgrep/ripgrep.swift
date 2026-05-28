@@ -426,6 +426,18 @@ struct RipgrepCommand {
                 return isBufferingFlag(argument) || isMessageFlag(argument)
             }
         }
+        func unrestrictedRepeatCount(_ argument: String) -> Int? {
+            switch argument {
+            case "-u", "--unrestricted":
+                return 1
+            case "-uu":
+                return 2
+            case "-uuu":
+                return 3
+            default:
+                return nil
+            }
+        }
         func isValidNonNegativeInteger(_ value: String) -> Bool {
             guard !value.hasPrefix("-"),
                   Int(value) != nil else {
@@ -620,6 +632,7 @@ struct RipgrepCommand {
         var parsedLineNumber = false
         var parsedNoMmap = false
         var parsedTrim = false
+        var parsedUnrestrictedCount = 0
         var parsedWithFilename = false
         var parsedWordRegexp = false
         var parsedRegexpPattern: String?
@@ -780,6 +793,11 @@ struct RipgrepCommand {
                 argumentIndex += 1
             } else if let encoding = encodingValue(argument) {
                 guard encoding == "auto" else {
+                    return nil
+                }
+            } else if let unrestrictedCount = unrestrictedRepeatCount(argument) {
+                parsedUnrestrictedCount += unrestrictedCount
+                guard parsedUnrestrictedCount <= 3 else {
                     return nil
                 }
             } else if isOutputNeutralSingleFileFlag(argument) {

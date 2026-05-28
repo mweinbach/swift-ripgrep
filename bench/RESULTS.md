@@ -301,6 +301,15 @@ zero-match forms against Rust. On a 45 MiB dense fixture,
 `--include-zero needle` improved from 87.8 ms to 34.9 ms, versus 43.1 ms for
 Rust, while plain `needle` on the same current binary measured 38.2 ms.
 
+Exact unrestricted forms now also use the executable literal preflight for
+explicit file searches. The parser counts `-u`, `-uu`, `-uuu`, and
+`--unrestricted` repeats so a fourth unrestricted flag still falls through to
+the normal parser error. Focused tests cover each accepted form, long repeated
+forms with `-n`, and NUL-containing binary fallback; release byte checks also
+compared the fourth-`-u` error path with Rust. On the 45 MiB dense fixture,
+`-u needle` improved from 84.5 ms to 34.9 ms, and `-uuu needle` improved from
+1.438 s to 34.9 ms, versus 43.5 ms for Rust `-uuu`.
+
 Regex-mode toggles that do not affect plain literal line output now also stay
 eligible for the executable preflight. `--unicode`/`--no-unicode`,
 `--pcre2-unicode`/`--no-pcre2-unicode`, and `--crlf`/`--no-crlf` are still

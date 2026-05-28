@@ -1270,6 +1270,24 @@ struct MiscTests {
             #expect(includeZeroOutput == expectedOutput)
         }
 
+        for (unrestrictedArguments, expectedOutput) in [
+            (["-u"], output),
+            (["-uu"], output),
+            (["-uuu"], output),
+            (["--unrestricted"], output),
+            (["-u", "-n"], lineNumberOutput),
+            (["--unrestricted", "--unrestricted", "--unrestricted", "-n"], lineNumberOutput),
+        ] {
+            let unrestrictedOutput = try runExecutableData(
+                unrestrictedArguments + [
+                    "needle",
+                    root.path("dense.txt"),
+                ],
+                fixture: {}
+            )
+            #expect(unrestrictedOutput == expectedOutput)
+        }
+
         for (nullPathArguments, expectedOutput) in [
             (["--null"], output),
             (["-0"], output),
@@ -1296,6 +1314,13 @@ struct MiscTests {
         binary file matches (found "\\0" byte around offset 3)
 
         """.utf8))
+
+        let unrestrictedBinaryFallbackOutput = try runExecutableData([
+            "-uuu",
+            "needle",
+            root.path("binary-mode.dat"),
+        ], fixture: {})
+        #expect(unrestrictedBinaryFallbackOutput == nullPathBinaryFallbackOutput)
 
         for (binaryModeArguments, expectedOutput) in [
             (["--text"], output),
