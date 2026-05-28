@@ -1031,6 +1031,15 @@ status for each form. On the 50 KiB dense fixture, five-run checks measured
 `-H needle` at 3.4 ms versus a noisy fallback baseline around 54.4 ms and
 3.0 ms for Rust; `-H -n needle` measured 3.1 ms versus 3.0 ms for Rust.
 
+Single-file `--heading` searches without final filename output now remain on
+the Swift executable preflight, since active heading is byte-neutral in that
+shape. Release byte checks matched Rust for plain, numbered, path-separator,
+NUL, custom field separator, max-count, safe multi-literal, exact-line,
+word-regexp, and no-match forms. On the 50 KiB dense fixture, five-run checks
+measured `--heading needle` at 3.2 ms versus 31.6 ms before and 2.9 ms for
+Rust; `--heading -n needle` measured 3.0 ms versus 35.5 ms before and 2.9 ms
+for Rust.
+
 Explicit single-file `--with-filename --path-separator` matching-line searches
 now use the same Swift executable preflight by applying the escaped one-byte
 path separator directly to the emitted path prefix. Release byte checks matched

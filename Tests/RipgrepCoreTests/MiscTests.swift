@@ -1419,6 +1419,29 @@ struct MiscTests {
         ], fixture: {})
         #expect(noHeadingOutput == output)
 
+        let headingOutput = try runExecutableData([
+            "--heading",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(headingOutput == output)
+
+        let headingLineNumberOutput = try runExecutableData([
+            "--heading",
+            "-n",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(headingLineNumberOutput == lineNumberOutput)
+
+        let headingPathSeparatorOutput = try runExecutableData([
+            "--heading",
+            "--path-separator=Z",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(headingPathSeparatorOutput == output)
+
         let noFilenameOutput = try runExecutableData([
             "--no-filename",
             "needle",
@@ -1620,6 +1643,7 @@ struct MiscTests {
             (["--with-filename", "-n", "-x", "needle", root.path("exact.txt")], Data("\(root.path("exact.txt")):1:needle\n\(root.path("exact.txt")):3:needle\n".utf8)),
             (["-nx", "needle", root.path("exact.txt")], Data("1:needle\n3:needle\n".utf8)),
             (["-m1", "-x", "needle", root.path("exact.txt")], Data("needle\n".utf8)),
+            (["--heading", "-x", "needle", root.path("exact.txt")], Data("needle\nneedle\n".utf8)),
             (["-x", "last", root.path("exact.txt")], Data("last\n".utf8)),
             (["--crlf", "-x", "needle", root.path("crlf.txt")], Data("needle\r\n".utf8)),
         ] {

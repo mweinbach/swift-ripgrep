@@ -1541,7 +1541,7 @@ struct RipgrepCommand {
               parsedEncodingIsAutomatic,
               parsedAfterContext == 0,
               parsedBeforeContext == 0,
-              !parsedHeading,
+              !parsedHeading || !parsedWithFilename,
               !parsedInvertMatch,
               !parsedJson,
               parsedMaxColumns == 0,
