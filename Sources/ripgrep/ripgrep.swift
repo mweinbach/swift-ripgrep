@@ -911,7 +911,6 @@ struct RipgrepCommand {
         var parsedJson = false
         var parsedLineNumber = false
         var parsedLineRegexp = false
-        var parsedLineBuffered = false
         var parsedAfterContext = 0
         var parsedAfterContextWasSet = false
         var parsedBeforeContext = 0
@@ -1048,9 +1047,9 @@ struct RipgrepCommand {
             } else if argument == "--no-search-zip" {
                 parsedSearchZip = false
             } else if argument == "--line-buffered" {
-                parsedLineBuffered = true
+                continue
             } else if argument == "--block-buffered" || argument == "--no-line-buffered" {
-                parsedLineBuffered = false
+                continue
             } else if argument == "--no-mmap" {
                 parsedNoMmap = true
             } else if isMmapFlag(argument) {
@@ -1449,7 +1448,6 @@ struct RipgrepCommand {
            !asciiCaseInsensitive,
            !wordRegexp,
            !parsedLineRegexp,
-           !parsedLineBuffered,
            !noMmap,
            !parsedCount,
            parsedMaxCount == nil,
@@ -1526,9 +1524,6 @@ struct RipgrepCommand {
                         nullTerminated: parsedNullPathTerminator,
                         crlfTerminated: parsedCrlf
                     )
-                }
-                guard !parsedLineBuffered else {
-                    return nil
                 }
                 if let exitCode = SwiftDarwinLiteralPreflight.multiLiteralExitCode(
                     path: path,
@@ -1707,9 +1702,6 @@ struct RipgrepCommand {
                 nullTerminated: parsedNullPathTerminator,
                 crlfTerminated: parsedCrlf
             )
-        }
-        guard !parsedLineBuffered else {
-            return nil
         }
         if parsedLineRegexp {
             guard !asciiCaseInsensitive,

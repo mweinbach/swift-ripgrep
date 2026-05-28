@@ -289,8 +289,8 @@ Output-neutral formatting disables and explicit block-buffering are parsed
 conservatively in the same preflight. The parser tracks ordered formatting
 toggles and only dispatches when the final state does not request filenames,
 headings, byte offsets, columns, trimming, or color; explicit streaming
-`--line-buffered` line output remains on the full CLI path because it changes
-flush semantics. Dense-fixture output and exit status for `--messages`,
+`--line-buffered` now stays eligible for explicit-file byte-equivalent line
+output. Dense-fixture output and exit status for `--messages`,
 `--block-buffered`, `--no-line-buffered`, `--no-byte-offset`, `--no-column`,
 `--no-trim`, `--color=never`, `--with-filename --no-filename`,
 `--heading --no-heading`, `--column --no-column`,
@@ -320,6 +320,13 @@ improved from 27.9 ms to 5.3 ms, versus 3.0 ms for Rust;
 `--line-buffered -l needle` improved from 43.7 ms to 4.1 ms, versus 3.3 ms for
 Rust; and `--line-buffered -c -m1 needle` improved from a forced fallback at
 33.9 ms to 4.0-5.7 ms, versus 3.2 ms for Rust.
+Matching-line output now also accepts `--line-buffered` for single explicit
+file searches. Focused coverage checks literal, numbered literal, bounded
+literal, multi-literal, and surrounding-word preflight output under the flag,
+and direct release byte checks matched Rust for literal, numbered, bounded,
+multi-literal, reset, and CRLF combinations. On the 50 KiB dense fixture,
+`--line-buffered needle` improved from 29.3 ms before this slice to 3.3 ms,
+versus 3.5 ms for Rust; `--line-buffered -n needle` measured 3.0 ms.
 Ordered print-mode overrides now update the executable preflight eligibility
 with last-flag-wins semantics when the final mode is path-only. Final
 count-matches output, short clusters that mix count and path modes, and

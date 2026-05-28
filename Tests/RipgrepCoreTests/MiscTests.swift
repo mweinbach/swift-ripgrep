@@ -639,6 +639,14 @@ struct MiscTests {
 
         #expect(String(decoding: output, as: UTF8.self) == "2:Mr Holmes returns\n4:Doctor Holmes arrives\n")
 
+        let lineBufferedOutput = try runExecutableData([
+            "--line-buffered",
+            "-n",
+            #"\w+\s+Holmes\s+\w+"#,
+            root.path("sherlock.txt"),
+        ], fixture: {})
+        #expect(lineBufferedOutput == output)
+
         try root.write("""
         Mr Holmes.Jr returns
         Mr HolmesxJr returns
@@ -1243,6 +1251,20 @@ struct MiscTests {
 
         """.utf8))
 
+        let lineBufferedOutput = try runExecutableData([
+            "--line-buffered",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(lineBufferedOutput == output)
+
+        let lineBufferedAlternationOutput = try runExecutableData([
+            "--line-buffered",
+            "needle|tail",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(lineBufferedAlternationOutput == output)
+
         for nullDataResetArguments in [
             ["--null-data", "--crlf"],
             ["--null-data", "--crlf", "--no-crlf"],
@@ -1280,6 +1302,14 @@ struct MiscTests {
         4:tail needle
 
         """.utf8))
+
+        let lineBufferedLineNumberOutput = try runExecutableData([
+            "--line-buffered",
+            "-n",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(lineBufferedLineNumberOutput == lineNumberOutput)
 
         let explicitNoLineNumberOutput = try runExecutableData([
             "-N",
@@ -1440,6 +1470,7 @@ struct MiscTests {
 
         for (maxCountArguments, expectedOutput) in [
             (["-m1", "needle", root.path("dense.txt")], Data("needle needle needle\n".utf8)),
+            (["--line-buffered", "-m1", "needle", root.path("dense.txt")], Data("needle needle needle\n".utf8)),
             (["-n", "-m1", "needle", root.path("dense.txt")], Data("1:needle needle needle\n".utf8)),
             (["--max-count=2", "needle", root.path("dense.txt")], Data("""
             needle needle needle
