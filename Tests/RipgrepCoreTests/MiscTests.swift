@@ -1183,6 +1183,7 @@ struct MiscTests {
         try root.write("needle\n", to: ".hidden.txt")
         try root.write("*.txt\n", to: ".ignore")
         try root.write("needle\n", to: "ignored.txt")
+        try root.write(Data("pre\0needle\n".utf8), to: "binary-mode.dat")
 
         let output = try runExecutableData([
             "needle",
@@ -1253,6 +1254,32 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(noMessagesOutput == output)
+
+        for (binaryModeArguments, expectedOutput) in [
+            (["--text"], output),
+            (["-a"], output),
+            (["--binary"], output),
+            (["--text", "-n"], lineNumberOutput),
+            (["--binary", "-n"], lineNumberOutput),
+            (["-an"], lineNumberOutput),
+            (["-na"], lineNumberOutput),
+        ] {
+            let binaryModeOutput = try runExecutableData(
+                binaryModeArguments + [
+                    "needle",
+                    root.path("dense.txt"),
+                ],
+                fixture: {}
+            )
+            #expect(binaryModeOutput == expectedOutput)
+        }
+
+        let textBinaryFallbackOutput = try runExecutableData([
+            "--text",
+            "needle",
+            root.path("binary-mode.dat"),
+        ], fixture: {})
+        #expect(textBinaryFallbackOutput == Data("pre\0needle\n".utf8))
 
         let messagesOutput = try runExecutableData([
             "--messages",

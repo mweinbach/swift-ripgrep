@@ -367,6 +367,19 @@ before writing, those current checks measured 492.4 ms, 509.7 ms, and
 451.3 ms respectively, versus 536.3 ms for Rust field-separator output; the
 Rust parity harness binary fixtures also stayed on the binary-aware fallback.
 
+Binary-mode toggles now stay eligible for the same executable literal preflight
+on ordinary text files. The parser accepts `--text`, `-a`, `--binary`, and
+clustered text-mode forms such as `-an`/`-na`; NUL-containing files still
+return to the full searcher before emitting output. Focused executable tests
+covered matching-line and line-number forms plus a `--text` binary fallback,
+and direct release byte checks matched Rust for small, large, clustered, and
+binary-fallback representatives. On a generated 24,000,000-byte text fixture,
+five-run checks before this parser eligibility change measured `--text
+Sherlock` at 865.0 ms, `-a Sherlock` at 874.4 ms, and `--binary Sherlock` at
+868.8 ms, with plain Swift preflight at 26.6 ms and Rust `--text Sherlock` at
+31.3 ms. After the change, the same current forms measured 26.7 ms, 26.4 ms,
+and 26.6 ms respectively, versus 31.7 ms for Rust `--text Sherlock`.
+
 The Swift-only Darwin mmap/stdout preflight now also covers line-numbered
 medium bounded multi-literal output when no filename, byte-offset, column,
 replacement, only-matching, or vimgrep formatting is requested. Output for

@@ -364,6 +364,7 @@ struct RipgrepCommand {
         func isOutputNeutralSingleFileFlag(_ argument: String) -> Bool {
             switch argument {
             case "-.",
+                 "-a",
                  "--hidden",
                  "--ignore",
                  "--ignore-dot",
@@ -374,6 +375,7 @@ struct RipgrepCommand {
                  "--ignore-messages",
                  "--ignore-parent",
                  "--ignore-vcs",
+                 "--binary",
                  "--crlf",
                  "--glob-case-insensitive",
                  "--no-block-buffered",
@@ -401,6 +403,7 @@ struct RipgrepCommand {
                  "--no-search-zip",
                  "--no-sort-files",
                  "--no-stats",
+                 "--text",
                  "--no-text",
                  "--no-config",
                  "--no-one-file-system",
@@ -577,6 +580,8 @@ struct RipgrepCommand {
                     wordRegexp = true
                 case UInt8(ascii: "F"):
                     fixedStrings = true
+                case UInt8(ascii: "a"):
+                    continue
                 default:
                     return nil
                 }
