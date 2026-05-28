@@ -3810,6 +3810,40 @@ struct MiscTests {
         ], fixture: {})
         #expect(vimgrepNoFilenameCountMatchesOutput == countMatchesOutput)
 
+        let byteOffsetQuietResult = try runExecutableResult([
+            "--byte-offset",
+            "-q",
+            "needle",
+            root.path("dense.txt"),
+        ])
+        #expect(byteOffsetQuietResult.status == 0)
+        #expect(byteOffsetQuietResult.stdout.isEmpty)
+        #expect(byteOffsetQuietResult.stderr.isEmpty)
+
+        let byteOffsetPathOnlyOutput = try runExecutableData([
+            "--byte-offset",
+            "-l",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(byteOffsetPathOnlyOutput == Data("\(root.path("dense.txt"))\n".utf8))
+
+        let byteOffsetCountOutput = try runExecutableData([
+            "--byte-offset",
+            "-c",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(byteOffsetCountOutput == Data("3\n".utf8))
+
+        let columnCountMatchesOutput = try runExecutableData([
+            "--column",
+            "--count-matches",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(columnCountMatchesOutput == countMatchesOutput)
+
         let trimCountMatchesOutput = try runExecutableData([
             "--trim",
             "--count-matches",

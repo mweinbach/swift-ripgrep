@@ -119,6 +119,20 @@ also matches Rust's vimgrep default filename prefix while honoring
 | `--vimgrep -c needle` | 1.497 s | 9.7 ms | 10.4 ms |
 | `--vimgrep --count-matches needle` | 1.497 s | 6.9 ms | 19.5 ms |
 
+Positive `--byte-offset` and `--column` formatting flags now stay eligible
+when quiet, path-only, count, or count-matches modes make those fields
+unobservable. Matching-line and only-matching output still falls back so byte
+and column fields are preserved.
+
+10 timed runs on `/tmp/swift-rg-candidates/trim.txt` with 3 warmups:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--byte-offset -q needle` | 37.7 ms | 4.2 ms | 4.0 ms |
+| `--byte-offset -l needle` | 1.501 s | 5.7 ms | 4.1 ms |
+| `--byte-offset -c needle` | 1.528 s | 12.8 ms | 12.6 ms |
+| `--column --count-matches needle` | 1.519 s | 6.7 ms | 20.3 ms |
+
 Case-sensitive repeated `-e`/`-f` and top-level literal alternation `--trim`
 forms now use the same mapped trim writer.
 Literal `--invert-match` matching-line output now has its own mapped Swift line
