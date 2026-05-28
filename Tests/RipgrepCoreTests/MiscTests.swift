@@ -2932,6 +2932,31 @@ struct MiscTests {
         ], fixture: {})
         #expect(clusteredByteOffsetCountOutput == Data("3\n".utf8))
 
+        let clusteredPrettyQuietResult = try runExecutableResult([
+            "-pq",
+            "needle",
+            root.path("dense.txt"),
+        ])
+        #expect(clusteredPrettyQuietResult.status == 0)
+        #expect(clusteredPrettyQuietResult.stdout.isEmpty)
+        #expect(clusteredPrettyQuietResult.stderr.isEmpty)
+
+        let clusteredPrettyCountOutput = try runExecutableData([
+            "-pc",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(clusteredPrettyCountOutput == Data("3\n".utf8))
+
+        let clusteredPrettyPrefixedCountOutput = try runExecutableData([
+            "-pHc",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(clusteredPrettyPrefixedCountOutput == Data(
+            "\u{1B}[0m\u{1B}[35m\(root.path("dense.txt"))\u{1B}[0m:3\n".utf8
+        ))
+
         let withFilenameNullOutput = try runExecutableData([
             "--with-filename",
             "--null",
@@ -4129,6 +4154,17 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(colorCountOutput == Data("3\n".utf8))
+
+        let colorPrefixedCountOutput = try runExecutableData([
+            "--color=always",
+            "-H",
+            "-c",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(colorPrefixedCountOutput == Data(
+            "\u{1B}[0m\u{1B}[35m\(root.path("dense.txt"))\u{1B}[0m:3\n".utf8
+        ))
 
         let prettyCountMatchesOutput = try runExecutableData([
             "--pretty",

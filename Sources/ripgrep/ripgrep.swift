@@ -984,6 +984,7 @@ struct RipgrepCommand {
             allowPCREQuotedLiterals: Bool?,
             byteOffset: Bool,
             withFilename: Bool?,
+            pretty: Bool,
             invertMatch: Bool,
             multiline: Bool,
             quiet: Bool,
@@ -1008,6 +1009,7 @@ struct RipgrepCommand {
             var allowPCREQuotedLiterals: Bool?
             var byteOffset = false
             var withFilename: Bool?
+            var pretty = false
             var invertMatch = false
             var multiline = false
             var quiet = false
@@ -1050,6 +1052,9 @@ struct RipgrepCommand {
                     withFilename = true
                 case UInt8(ascii: "I"):
                     withFilename = false
+                case UInt8(ascii: "p"):
+                    pretty = true
+                    lineNumber = true
                 case UInt8(ascii: "v"):
                     invertMatch = true
                 case UInt8(ascii: "q"):
@@ -1080,6 +1085,7 @@ struct RipgrepCommand {
                 allowPCREQuotedLiterals,
                 byteOffset,
                 withFilename,
+                pretty,
                 invertMatch,
                 multiline,
                 quiet,
@@ -1632,6 +1638,10 @@ struct RipgrepCommand {
                 if let clusterWithFilename = cluster.withFilename {
                     parsedWithFilename = clusterWithFilename
                     parsedNoFilename = !clusterWithFilename
+                }
+                if cluster.pretty {
+                    parsedColorMayEmit = true
+                    parsedHeading = true
                 }
                 parsedInvertMatch = parsedInvertMatch || cluster.invertMatch
                 if cluster.multiline {
@@ -2412,10 +2422,10 @@ struct RipgrepCommand {
             && parsedPathOnlyMode == nil
             && !parsedCount
             && parsedPrintMode != .countMatches
+        let parsedCountStyleOutput = parsedCount || parsedPrintMode == .countMatches
         let parsedColorAffectsPreflightOutput = parsedColorMayEmit
             && !parsedQuiet
-            && !parsedCount
-            && parsedPrintMode != .countMatches
+            && (!parsedCountStyleOutput || !parsedCountPrefix.isEmpty)
         let parsedVimgrepAffectsPreflightOutput = parsedVimgrep
             && !parsedQuiet
             && parsedPathOnlyMode == nil
