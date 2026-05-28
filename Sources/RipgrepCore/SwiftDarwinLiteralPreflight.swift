@@ -1325,26 +1325,78 @@ public enum SwiftDarwinLiteralPreflight {
         maxCount: Int?
     ) -> Int {
         let limit = maxCount ?? Int.max
-        let newline = UInt8(ascii: "\n")
-        var lineStart = data.startIndex
         var matchedLineCount = 0
-        while lineStart < data.endIndex, matchedLineCount < limit {
-            let lineEnd = data[lineStart..<data.endIndex].firstIndex(of: newline) ?? data.endIndex
-            if asciiCaseInsensitiveExactLineRangeMatches(
+        for literal in foldedLiterals where matchedLineCount < limit {
+            matchedLineCount += asciiCaseInsensitiveExactLineCount(
                 data: data,
-                lineStart: lineStart,
-                lineEnd: lineEnd,
-                foldedLiterals: foldedLiterals
-            ) {
-                matchedLineCount += 1
-            }
-            if lineEnd < data.endIndex {
-                lineStart = data.index(after: lineEnd)
-            } else {
-                lineStart = data.endIndex
-            }
+                foldedLiteral: literal,
+                maxCount: limit - matchedLineCount
+            )
         }
         return matchedLineCount
+    }
+
+    private static func asciiCaseInsensitiveExactLineCount(
+        data: Data,
+        foldedLiteral: [UInt8],
+        maxCount: Int?
+    ) -> Int {
+        guard !foldedLiteral.isEmpty,
+              data.count >= foldedLiteral.count else {
+            return 0
+        }
+        let limit = maxCount ?? Int.max
+        return data.withUnsafeBytes { rawData in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
+            }
+            let base = rawBase.assumingMemoryBound(to: UInt8.self)
+            let newline = UInt8(ascii: "\n")
+            var lineNeedle = foldedLiteral
+            lineNeedle.append(newline)
+            var searchOffset = 0
+            var matchedLineCount = 0
+
+            lineNeedle.withUnsafeBufferPointer { lineNeedleBuffer in
+                guard let lineNeedleBase = lineNeedleBuffer.baseAddress else {
+                    return
+                }
+                while matchedLineCount < limit,
+                      searchOffset < data.count,
+                      let found = rg_memcasemem_ascii_prepared(
+                        base.advanced(by: searchOffset),
+                        data.count - searchOffset,
+                        lineNeedleBase,
+                        lineNeedle.count,
+                        nil
+                      ) {
+                    let matchStart = base.distance(to: found)
+                    if matchStart == 0 || base[matchStart - 1] == newline {
+                        matchedLineCount += 1
+                    }
+                    searchOffset = matchStart + lineNeedle.count
+                }
+            }
+
+            if matchedLineCount < limit,
+               base[data.count - 1] != newline {
+                let suffixStart = data.count - foldedLiteral.count
+                if suffixStart >= 0,
+                   (suffixStart == 0 || base[suffixStart - 1] == newline) {
+                    var matched = true
+                    for index in 0..<foldedLiteral.count
+                    where rgSwiftASCIILower(base[suffixStart + index]) != foldedLiteral[index] {
+                        matched = false
+                        break
+                    }
+                    if matched {
+                        matchedLineCount += 1
+                    }
+                }
+            }
+
+            return matchedLineCount
+        }
     }
 
     private static func hasBinaryDetectionPrefix(_ data: Data) -> Bool {
@@ -1632,11 +1684,13 @@ public enum SwiftDarwinLiteralPreflight {
         guard !data.isEmpty else {
             return false
         }
-        guard !hasBinaryDetectionPrefix(data),
-              !data.contains(where: { $0 >= 0x80 }) else {
+        guard !hasBinaryDetectionPrefix(data) else {
             return nil
         }
-        return asciiCaseInsensitiveExactLineCount(data: data, foldedLiterals: literals, maxCount: 1) > 0
+        if asciiCaseInsensitiveExactLineCount(data: data, foldedLiterals: literals, maxCount: 1) > 0 {
+            return true
+        }
+        return data.contains(where: { $0 >= 0x80 }) ? nil : false
     }
 
     private static func asciiCaseVariants(for literal: [UInt8]) -> [[UInt8]] {

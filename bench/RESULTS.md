@@ -30,6 +30,10 @@ Single-literal ASCII `--count-matches -i` now has a total-match counter that
 falls back on non-ASCII or binary-prefix haystacks.
 Case-insensitive line counts now use a byte-level matched-line scan that finds
 the next folded literal match and skips directly to the following line.
+Case-insensitive exact-line count summaries now search folded full-line needles
+directly instead of walking every line with `Data` indices, and exact-line
+existence probes defer the full non-ASCII scan until no ASCII whole-line match
+has been proven.
 
 Benchmarks used `/tmp/swift-rg-bench/stop-on-nonmatch-small.txt`, a 4.8 MiB
 dense ASCII fixture, with 2 warmups and 5 timed runs:
@@ -59,6 +63,8 @@ dense ASCII fixture, with 2 warmups and 5 timed runs:
 | `-c -i NEEDLE` | 35.2 ms | 22.0 ms | 7.6 ms |
 | `--heading -H -c -i NEEDLE` | 141.3 ms | 21.5 ms | 7.8 ms |
 | `-c -i "NEEDLE\|QUIET"` | 36.6 ms | 22.8 ms | 7.8 ms |
+| `-c -i -x "NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE"` | 48.2 ms | 22.9 ms | 14.1 ms |
+| `--count-matches -i -x "NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE"` | 48.0 ms | 24.1 ms | 27.4 ms |
 | `-o -i "NEEDLE\|QUIET"` | 7.718 s | 34.7 ms | 53.4 ms |
 | `-n -o -i "NEEDLE\|QUIET"` | 7.894 s | 44.2 ms | 65.1 ms |
 | `-q -w -i NEEDLE` | 99.3 ms | 5.2 ms | 2.7 ms |
