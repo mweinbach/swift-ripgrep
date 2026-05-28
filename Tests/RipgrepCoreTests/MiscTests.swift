@@ -1723,6 +1723,99 @@ struct MiscTests {
         #expect(maxCountNoMatch.stderr.isEmpty)
         #expect(maxCountNoMatch.status == 1)
 
+        let exactLineOnlyMatchingOutput = try runExecutableData([
+            "-o",
+            "-x",
+            "needle|last",
+            root.path("exact.txt"),
+        ], fixture: {})
+        #expect(exactLineOnlyMatchingOutput == Data("""
+        needle
+        needle
+        last
+
+        """.utf8))
+
+        let exactLineOnlyMatchingLineNumberOutput = try runExecutableData([
+            "-n",
+            "-o",
+            "-x",
+            "needle|last",
+            root.path("exact.txt"),
+        ], fixture: {})
+        #expect(exactLineOnlyMatchingLineNumberOutput == Data("""
+        1:needle
+        3:needle
+        5:last
+
+        """.utf8))
+
+        let exactLineOnlyMatchingClusterOutput = try runExecutableData([
+            "-nox",
+            "needle|last",
+            root.path("exact.txt"),
+        ], fixture: {})
+        #expect(exactLineOnlyMatchingClusterOutput == exactLineOnlyMatchingLineNumberOutput)
+
+        let exactLineOnlyMatchingBoundedOutput = try runExecutableData([
+            "-m2",
+            "-o",
+            "-x",
+            "needle|last",
+            root.path("exact.txt"),
+        ], fixture: {})
+        #expect(exactLineOnlyMatchingBoundedOutput == Data("""
+        needle
+        needle
+
+        """.utf8))
+
+        let exactLineOnlyMatchingRepeatedRegexpOutput = try runExecutableData([
+            "-o",
+            "-x",
+            "-e",
+            "needle",
+            "-e",
+            "last",
+            root.path("exact.txt"),
+        ], fixture: {})
+        #expect(exactLineOnlyMatchingRepeatedRegexpOutput == exactLineOnlyMatchingOutput)
+
+        let exactLineOnlyMatchingPatternFileOutput = try runExecutableData([
+            "-o",
+            "-x",
+            "-f",
+            root.path("exact-patterns.txt"),
+            root.path("exact.txt"),
+        ], fixture: {})
+        #expect(exactLineOnlyMatchingPatternFileOutput == exactLineOnlyMatchingOutput)
+
+        let exactLineOnlyMatchingHeadingOutput = try runExecutableData([
+            "--heading",
+            "--with-filename",
+            "-n",
+            "-o",
+            "-x",
+            "needle|last",
+            root.path("exact.txt"),
+        ], fixture: {})
+        #expect(exactLineOnlyMatchingHeadingOutput == Data("""
+        \(root.path("exact.txt"))
+        1:needle
+        3:needle
+        5:last
+
+        """.utf8))
+
+        let exactLineOnlyMatchingCrlfOutput = try runExecutableData([
+            "--crlf",
+            "-o",
+            "-x",
+            "needle",
+            root.path("crlf.txt"),
+        ], fixture: {})
+        #expect(exactLineOnlyMatchingCrlfOutput == Data("needle\r\n".utf8))
+
         for (countArguments, expectedOutput, expectedStatus) in [
             (["-c", "needle", root.path("dense.txt")], Data("3\n".utf8), Int32(0)),
             (["--count", "missing", root.path("quiet-no-match.txt")], Data(), Int32(1)),

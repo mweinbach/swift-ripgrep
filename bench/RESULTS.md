@@ -695,6 +695,18 @@ versus 16.9 ms for Rust. On the 48 MiB dense fixture, current plain output
 measured 351.4 ms versus 114.9 ms for Rust, and numbered output measured
 499.2 ms versus 144.9 ms for Rust.
 
+Exact-line only-matching output now shares that same literal alternation,
+repeated `-e`, and pattern-file route. The executable preflight parses
+`-o`/`--only-matching` and short clusters such as `-nox`, but keeps `-o` on the
+fast path only when `-x` makes the match span the whole emitted line. It still
+falls through for non-exact only-matching, counts, quiet/path-only modes, CRLF,
+and binary fallback controls. Direct byte/status checks matched Rust for plain,
+numbered, clustered, bounded, prefixed, heading, repeated `-e`, pattern-file,
+CRLF fallback, binary fallback, non-exact fallback, and count-only fallback
+forms. On the 4.8 MiB dense fixture, `-o -x 'needle needle...|missing'`
+improved from 2.128 s to 38.9 ms, versus 26.5 ms for Rust, and `-n -o -x ...`
+improved from 2.149 s to 54.8 ms, versus 31.7 ms for Rust.
+
 Case-insensitive exact-line quiet and path-only searches now have a conservative
 match-only Swift preflight. It probes exact, lowercase, and uppercase ASCII
 whole-line variants and falls back whenever it cannot prove a match, preserving

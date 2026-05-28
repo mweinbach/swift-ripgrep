@@ -461,6 +461,9 @@ struct RipgrepCommand {
         func isCountFlag(_ argument: String) -> Bool {
             argument == "-c" || argument == "--count"
         }
+        func isOnlyMatchingFlag(_ argument: String) -> Bool {
+            argument == "-o" || argument == "--only-matching"
+        }
         func colorModeMayEmitForPreflight(_ value: String) -> Bool? {
             switch value {
             case "never":
@@ -919,6 +922,7 @@ struct RipgrepCommand {
             multiline: Bool,
             quiet: Bool,
             count: Bool,
+            onlyMatching: Bool,
             pathOnlyMode: PathOnlyMode?,
             unrestrictedCount: Int
         )? {
@@ -939,6 +943,7 @@ struct RipgrepCommand {
             var multiline = false
             var quiet = false
             var count = false
+            var onlyMatching = false
             var pathOnlyMode: PathOnlyMode?
             var unrestrictedCount = 0
             for byte in bytes.dropFirst() {
@@ -975,6 +980,8 @@ struct RipgrepCommand {
                     quiet = true
                 case UInt8(ascii: "c"):
                     count = true
+                case UInt8(ascii: "o"):
+                    onlyMatching = true
                 case UInt8(ascii: "l"):
                     pathOnlyMode = .matching
                 case UInt8(ascii: "u"):
@@ -997,6 +1004,7 @@ struct RipgrepCommand {
                 multiline,
                 quiet,
                 count,
+                onlyMatching,
                 pathOnlyMode,
                 unrestrictedCount
             )
@@ -1022,6 +1030,7 @@ struct RipgrepCommand {
         var parsedMaxColumns = 0
         var parsedNullPathTerminator = false
         var parsedNoMmap = false
+        var parsedOnlyMatching = false
         var parsedPrintMode = PrintMode.matchingLines
         var parsedPathSeparator: UInt8?
         var parsedPassthru = false
@@ -1130,6 +1139,8 @@ struct RipgrepCommand {
                 parsedPrintMode = .count
             } else if argument == "--count-matches" {
                 parsedPrintMode = .countMatches
+            } else if isOnlyMatchingFlag(argument) {
+                parsedOnlyMatching = true
             } else if argument == "--include-zero" {
                 parsedIncludeZero = true
             } else if argument == "--no-include-zero" {
@@ -1489,6 +1500,7 @@ struct RipgrepCommand {
                 if cluster.count {
                     parsedPrintMode = .count
                 }
+                parsedOnlyMatching = parsedOnlyMatching || cluster.onlyMatching
                 if let clusterPathOnlyMode = cluster.pathOnlyMode {
                     switch clusterPathOnlyMode {
                     case .matching:
@@ -1607,6 +1619,16 @@ struct RipgrepCommand {
               (!parsedStopOnNonmatch || parsedQuiet || parsedPathOnlyMode != nil),
               !parsedTrim else {
             return nil
+        }
+        if parsedOnlyMatching {
+            guard parsedLineRegexp,
+                  parsedPrintMode == .matchingLines,
+                  !parsedQuiet,
+                  parsedPathOnlyMode == nil,
+                  !wordRegexp,
+                  !parsedCrlf else {
+                return nil
+            }
         }
 
         if explicitRegexpPatterns.count > 1 {
