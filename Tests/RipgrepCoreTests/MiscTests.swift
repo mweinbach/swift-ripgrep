@@ -1183,6 +1183,7 @@ struct MiscTests {
         -needle
         needle
         """, to: "dash-pattern.txt")
+        try root.write("needle\npre needle\nneedle\nneedle tail\nlast", to: "exact.txt")
         try root.write(Data("needle\r\nquiet\r\n".utf8), to: "crlf.txt")
         try root.write("needle\n", to: ".hidden.txt")
         try root.write("*.txt\n", to: ".ignore")
@@ -1338,6 +1339,26 @@ struct MiscTests {
             #expect(countResult.stderr.isEmpty)
             #expect(countResult.status == expectedStatus)
         }
+
+        for (exactLineArguments, expectedOutput) in [
+            (["-x", "needle", root.path("exact.txt")], Data("needle\nneedle\n".utf8)),
+            (["-n", "-x", "needle", root.path("exact.txt")], Data("1:needle\n3:needle\n".utf8)),
+            (["-nx", "needle", root.path("exact.txt")], Data("1:needle\n3:needle\n".utf8)),
+            (["-m1", "-x", "needle", root.path("exact.txt")], Data("needle\n".utf8)),
+            (["-x", "last", root.path("exact.txt")], Data("last\n".utf8)),
+            (["--crlf", "-x", "needle", root.path("crlf.txt")], Data("needle\r\n".utf8)),
+        ] {
+            let exactLineOutput = try runExecutableData(exactLineArguments, fixture: {})
+            #expect(exactLineOutput == expectedOutput)
+        }
+        let exactLineNoMatch = try runExecutableResult([
+            "-x",
+            "missing",
+            root.path("exact.txt"),
+        ])
+        #expect(exactLineNoMatch.stdout.isEmpty)
+        #expect(exactLineNoMatch.stderr.isEmpty)
+        #expect(exactLineNoMatch.status == 1)
 
         for (includeZeroArguments, expectedOutput) in [
             (["--include-zero"], output),

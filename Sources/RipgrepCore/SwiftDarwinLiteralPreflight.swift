@@ -149,6 +149,146 @@ public enum SwiftDarwinLiteralPreflight {
         return matchedLineCount > 0 ? 0 : 1
     }
 
+    public static func exactLineExitCode(
+        path: String,
+        literal: [UInt8],
+        maxCount: Int? = nil,
+        lineNumber: Bool = false
+    ) -> Int32? {
+        guard !literal.isEmpty,
+              !literal.contains(UInt8(ascii: "\n")),
+              maxCount.map({ $0 > 0 }) ?? true else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return 1
+        }
+        guard !hasBinaryDetectionPrefix(data) else {
+            return nil
+        }
+
+        if !lineNumber {
+            return exactLineWithoutLineNumbers(
+                data: data,
+                literal: literal,
+                maxCount: maxCount
+            )
+        }
+
+        let needle = Data(literal)
+        let newline = UInt8(ascii: "\n")
+        let limit = maxCount ?? Int.max
+        var searchStart = data.startIndex
+        var lineScanStart = data.startIndex
+        var nextLineNumber = 1
+        var matchedLineCount = 0
+        var output = Data()
+        output.reserveCapacity(64 * 1024)
+
+        while matchedLineCount < limit,
+              searchStart < data.endIndex,
+              let matchRange = data.range(of: needle, in: searchStart..<data.endIndex) {
+            guard !matchRange.isEmpty else {
+                return nil
+            }
+
+            let lineStart = data[..<matchRange.lowerBound]
+                .lastIndex(of: newline)
+                .map { data.index(after: $0) } ?? data.startIndex
+            let lineEnd = data[matchRange.upperBound...]
+                .firstIndex(of: newline) ?? data.endIndex
+
+            if lineNumber {
+                let skippedNewlines = data[lineScanStart..<lineStart]
+                    .reduce(0) { count, byte in count + (byte == newline ? 1 : 0) }
+                nextLineNumber += skippedNewlines
+            }
+            if lineStart == matchRange.lowerBound,
+               lineEnd == matchRange.upperBound {
+                if lineNumber {
+                    output.append(Data("\(nextLineNumber):".utf8))
+                }
+                output.append(contentsOf: data[lineStart..<lineEnd])
+                output.append(newline)
+                matchedLineCount += 1
+                if output.count >= 64 * 1024 {
+                    FileHandle.standardOutput.write(output)
+                    output.removeAll(keepingCapacity: true)
+                }
+            }
+
+            if lineEnd < data.endIndex {
+                searchStart = data.index(after: lineEnd)
+                if lineNumber {
+                    nextLineNumber += 1
+                    lineScanStart = searchStart
+                }
+            } else {
+                searchStart = data.endIndex
+                lineScanStart = data.endIndex
+            }
+        }
+
+        if !output.isEmpty {
+            FileHandle.standardOutput.write(output)
+        }
+        return matchedLineCount > 0 ? 0 : 1
+    }
+
+    private static func exactLineWithoutLineNumbers(
+        data: Data,
+        literal: [UInt8],
+        maxCount: Int?
+    ) -> Int32? {
+        let newline = UInt8(ascii: "\n")
+        let limit = maxCount ?? Int.max
+        let needle = Data(literal)
+        var lineNeedle = needle
+        lineNeedle.append(newline)
+        var searchStart = data.startIndex
+        var matchedLineCount = 0
+        var output = Data()
+        output.reserveCapacity(64 * 1024)
+
+        while matchedLineCount < limit,
+              searchStart < data.endIndex,
+              let matchRange = data.range(of: lineNeedle, in: searchStart..<data.endIndex) {
+            guard !matchRange.isEmpty else {
+                return nil
+            }
+            if matchRange.lowerBound == data.startIndex
+                || data[data.index(before: matchRange.lowerBound)] == newline {
+                output.append(lineNeedle)
+                matchedLineCount += 1
+                if output.count >= 64 * 1024 {
+                    FileHandle.standardOutput.write(output)
+                    output.removeAll(keepingCapacity: true)
+                }
+            }
+            searchStart = matchRange.upperBound
+        }
+
+        if matchedLineCount < limit,
+           data.last != newline,
+           data.count >= needle.count {
+            let suffixStart = data.index(data.endIndex, offsetBy: -needle.count)
+            if (suffixStart == data.startIndex || data[data.index(before: suffixStart)] == newline),
+               data[suffixStart..<data.endIndex].elementsEqual(needle) {
+                output.append(needle)
+                output.append(newline)
+                matchedLineCount += 1
+            }
+        }
+
+        if !output.isEmpty {
+            FileHandle.standardOutput.write(output)
+        }
+        return matchedLineCount > 0 ? 0 : 1
+    }
+
     private static func hasBinaryDetectionPrefix(_ data: Data) -> Bool {
         let prefixLength = min(data.count, 64 * 1024)
         let prefixEnd = data.index(data.startIndex, offsetBy: prefixLength)

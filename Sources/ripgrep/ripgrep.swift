@@ -301,6 +301,9 @@ struct RipgrepCommand {
         func isNoLineNumberFlag(_ argument: String) -> Bool {
             argument == "-N" || argument == "--no-line-number"
         }
+        func isLineRegexpFlag(_ argument: String) -> Bool {
+            argument == "-x" || argument == "--line-regexp"
+        }
         func isFixedStringsFlag(_ argument: String) -> Bool {
             argument == "-F" || argument == "--fixed-strings"
         }
@@ -735,6 +738,7 @@ struct RipgrepCommand {
         ) -> (
             caseMode: CaseMode?,
             lineNumber: Bool?,
+            lineRegexp: Bool?,
             wordRegexp: Bool,
             fixedStrings: Bool,
             allowPCREQuotedLiterals: Bool?,
@@ -750,6 +754,7 @@ struct RipgrepCommand {
 
             var caseMode: CaseMode?
             var lineNumber: Bool?
+            var lineRegexp: Bool?
             var wordRegexp = false
             var fixedStrings = false
             var allowPCREQuotedLiterals: Bool?
@@ -771,6 +776,10 @@ struct RipgrepCommand {
                     lineNumber = false
                 case UInt8(ascii: "w"):
                     wordRegexp = true
+                    lineRegexp = false
+                case UInt8(ascii: "x"):
+                    wordRegexp = false
+                    lineRegexp = true
                 case UInt8(ascii: "F"):
                     fixedStrings = true
                 case UInt8(ascii: "L"):
@@ -790,7 +799,7 @@ struct RipgrepCommand {
                     return nil
                 }
             }
-            return (caseMode, lineNumber, wordRegexp, fixedStrings, allowPCREQuotedLiterals, quiet, unrestrictedCount)
+            return (caseMode, lineNumber, lineRegexp, wordRegexp, fixedStrings, allowPCREQuotedLiterals, quiet, unrestrictedCount)
         }
         var allowPCREQuotedLiterals = preflightArguments.allowPCREQuotedLiterals
         var parsedCaseMode = CaseMode.sensitive
@@ -802,6 +811,7 @@ struct RipgrepCommand {
         var parsedHeading = false
         var parsedIncludeZero = false
         var parsedLineNumber = false
+        var parsedLineRegexp = false
         var parsedNullPathTerminator = false
         var parsedNoMmap = false
         var parsedPathOnlyMode: PathOnlyMode?
@@ -814,6 +824,7 @@ struct RipgrepCommand {
         var parsedUnrestrictedCount = 0
         var parsedWithFilename = false
         var parsedWordRegexp = false
+        var parsedCrlf = false
         var parsedRegexpPattern: String?
         var patternCanStartWithDash = false
         var valueArguments: [String] = []
@@ -831,6 +842,9 @@ struct RipgrepCommand {
                 parsedLineNumber = true
             } else if isNoLineNumberFlag(argument) {
                 parsedLineNumber = false
+            } else if isLineRegexpFlag(argument) {
+                parsedLineRegexp = true
+                parsedWordRegexp = false
             } else if isFixedStringsFlag(argument) {
                 parsedFixedStrings = true
             } else if isNoFixedStringsFlag(argument) {
@@ -870,14 +884,20 @@ struct RipgrepCommand {
             } else if argument == "-nw" || argument == "-wn" {
                 parsedLineNumber = true
                 parsedWordRegexp = true
+                parsedLineRegexp = false
             } else if argument == "-w" || argument == "--word-regexp" {
                 parsedWordRegexp = true
+                parsedLineRegexp = false
             } else if isQuietFlag(argument) {
                 parsedQuiet = true
             } else if argument == "--no-mmap" {
                 parsedNoMmap = true
             } else if isMmapFlag(argument) {
                 parsedNoMmap = false
+            } else if argument == "--crlf" {
+                parsedCrlf = true
+            } else if argument == "--no-crlf" {
+                parsedCrlf = false
             } else if isSeparatedMaxCountFlag(argument) {
                 guard argumentIndex < arguments.count,
                       let maxCount = nonNegativeInteger(arguments[argumentIndex]) else {
@@ -1092,7 +1112,13 @@ struct RipgrepCommand {
                 if let lineNumber = cluster.lineNumber {
                     parsedLineNumber = lineNumber
                 }
-                parsedWordRegexp = parsedWordRegexp || cluster.wordRegexp
+                if let lineRegexp = cluster.lineRegexp {
+                    parsedLineRegexp = lineRegexp
+                }
+                if cluster.wordRegexp {
+                    parsedWordRegexp = true
+                    parsedLineRegexp = false
+                }
                 parsedFixedStrings = parsedFixedStrings || cluster.fixedStrings
                 if let clusterPCREQuotedLiterals = cluster.allowPCREQuotedLiterals {
                     allowPCREQuotedLiterals = clusterPCREQuotedLiterals
@@ -1138,6 +1164,9 @@ struct RipgrepCommand {
         noMmap = parsedNoMmap
         wordRegexp = parsedWordRegexp
         fixedStrings = parsedFixedStrings
+        guard !(parsedLineRegexp && wordRegexp) else {
+            return nil
+        }
         guard !parsedByteOffset,
               !parsedColumn,
               !parsedColorMayEmit,
@@ -1153,6 +1182,7 @@ struct RipgrepCommand {
            path != "-",
            !asciiCaseInsensitive,
            !wordRegexp,
+           !parsedLineRegexp,
            !noMmap,
            !parsedCount,
            parsedMaxCount == nil,
@@ -1185,6 +1215,7 @@ struct RipgrepCommand {
            path != "-",
            !asciiCaseInsensitive,
            !wordRegexp,
+           !parsedLineRegexp,
            !asciiBoundary,
            !parsedCount,
            parsedMaxCount == nil,
@@ -1217,6 +1248,7 @@ struct RipgrepCommand {
         }
         if parsedQuiet {
             guard !wordRegexp,
+                  !parsedLineRegexp,
                   !asciiCaseInsensitive,
                   !asciiBoundary else {
                 return nil
@@ -1230,6 +1262,7 @@ struct RipgrepCommand {
             guard let parsedMaxCount,
                   parsedPathOnlyMode == nil,
                   !wordRegexp,
+                  !parsedLineRegexp,
                   !asciiCaseInsensitive,
                   !asciiBoundary else {
                 return nil
@@ -1243,6 +1276,7 @@ struct RipgrepCommand {
         }
         if let parsedPathOnlyMode {
             guard !wordRegexp,
+                  !parsedLineRegexp,
                   !asciiCaseInsensitive,
                   !asciiBoundary,
                   !parsedPathSeparator else {
@@ -1253,6 +1287,22 @@ struct RipgrepCommand {
                 literal: literal,
                 printWhenMatched: parsedPathOnlyMode == .matching,
                 nullTerminated: parsedNullPathTerminator
+            )
+        }
+        if parsedLineRegexp {
+            guard !asciiCaseInsensitive,
+                  !asciiBoundary,
+                  !parsedCrlf,
+                  !parsedCount,
+                  parsedPathOnlyMode == nil,
+                  !parsedQuiet else {
+                return nil
+            }
+            return SwiftDarwinLiteralPreflight.exactLineExitCode(
+                path: path,
+                literal: literal,
+                maxCount: parsedMaxCount,
+                lineNumber: lineNumber
             )
         }
         if let parsedMaxCount {

@@ -392,6 +392,15 @@ on the existing full path because repeated high-level line counting regressed
 that case. On the same fixture, `-c -m1 needle` improved from 26.4 ms to
 3.3 ms, versus 3.0 ms for Rust.
 
+Exact line-regexp literals now get a Swift-first executable preflight for
+`-x`/`--line-regexp` when CRLF mode and formatted output modes are inactive.
+The scanner uses mapped `Data`, searches for `literal + "\\n"` in the common
+no-line-number path, preserves `-n` and positive `-m`, and falls through for
+`--crlf`, quiet/path-only/count forms, and early binary detection. On the same
+fixture, `-x 'needle needle needle quiet tail needle'` improved from 13.783 s
+to 397.9 ms, versus 115.5 ms for Rust. A no-match exact-line scan improved
+from 2.241 s to 22.5 ms, versus 8.1 ms for Rust.
+
 Type-definition flags that do not activate a type filter now also stay
 eligible for the executable preflight. The preflight replays
 `--type-add`/`--type-clear` through `FileTypeRegistry.apply`, so invalid
