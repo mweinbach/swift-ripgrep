@@ -621,7 +621,7 @@ bytes now also remain eligible for the executable literal preflight. The parser
 consumes inline and separated `--field-match-separator`,
 `--field-context-separator`, `--context-separator`, `--path-separator`, and
 `--hostname-bin` only while filename, field, and context output are otherwise
-absent; `--field-match-separator` combined with line numbers still falls back.
+absent.
 Small previous/current/Rust checks covered every accepted form, large
 current/Rust checks covered field, path, and hostname representatives, invalid
 `--path-separator=//` still reported the normal parser error, and
@@ -635,6 +635,14 @@ tightening mapped preflight binary detection to reject NUL bytes anywhere
 before writing, those current checks measured 492.4 ms, 509.7 ms, and
 451.3 ms respectively, versus 536.3 ms for Rust field-separator output; the
 Rust parity harness binary fixtures also stayed on the binary-aware fallback.
+Line-numbered `--field-match-separator` output now uses the same executable
+preflight by carrying the parsed separator bytes into the Swift line-number
+prefix writers. Focused coverage checks inline, separated, tab-escaped,
+hex-escaped, and empty separators; direct release byte checks matched Rust for
+literal, line-buffered, max-count, multi-literal, and word-regexp forms. On the
+50 KiB dense fixture, `--field-match-separator='|' -n needle` improved from
+48.2 ms before this slice to 3.4 ms, versus 2.9 ms for Rust and 3.0 ms for
+plain Swift `-n needle`.
 
 Binary-mode toggles now stay eligible for the same executable literal preflight
 on ordinary text files. The parser accepts `--text`, `-a`, `--binary`, and

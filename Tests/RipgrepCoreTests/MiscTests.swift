@@ -2290,6 +2290,55 @@ struct MiscTests {
 
         """.utf8))
 
+        for (fieldSeparatorArguments, expectedOutput) in [
+            (
+                ["--field-match-separator", "|"],
+                Data("""
+                1|needle needle needle
+                3|NEEDLE needle Needle
+                4|tail needle
+
+                """.utf8)
+            ),
+            (
+                ["--field-match-separator=\\t"],
+                Data("""
+                1\tneedle needle needle
+                3\tNEEDLE needle Needle
+                4\ttail needle
+
+                """.utf8)
+            ),
+            (
+                ["--field-match-separator="],
+                Data("""
+                1needle needle needle
+                3NEEDLE needle Needle
+                4tail needle
+
+                """.utf8)
+            ),
+            (
+                ["--field-match-separator=\\x7c"],
+                Data("""
+                1|needle needle needle
+                3|NEEDLE needle Needle
+                4|tail needle
+
+                """.utf8)
+            ),
+        ] {
+            let customFieldSeparatorOutput = try runExecutableData(
+                fieldSeparatorArguments + [
+                    "-n",
+                    "needle",
+                    root.path("dense.txt"),
+                ],
+                fixture: {}
+            )
+            #expect(customFieldSeparatorOutput == expectedOutput)
+        }
+
         let hiddenFlagOutput = try runExecutableData([
             "--hidden",
             "--no-ignore",

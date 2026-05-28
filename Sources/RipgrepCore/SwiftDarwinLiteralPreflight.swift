@@ -23,6 +23,15 @@ public enum SwiftDarwinLiteralPreflight {
         Data("\(count)\(crlfTerminated ? "\r\n" : "\n")".utf8)
     }
 
+    private static func appendLineNumberPrefix(
+        _ lineNumber: Int,
+        to output: inout Data,
+        fieldSeparator: [UInt8]
+    ) {
+        output.append(Data("\(lineNumber)".utf8))
+        output.append(contentsOf: fieldSeparator)
+    }
+
     public static func quietExitCode(
         path: String,
         literal: [UInt8]
@@ -268,7 +277,8 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literal: [UInt8],
         maxCount: Int,
-        lineNumber: Bool = false
+        lineNumber: Bool = false,
+        lineNumberFieldSeparator: [UInt8] = [58]
     ) -> Int32? {
         guard !literal.isEmpty,
               maxCount > 0,
@@ -315,7 +325,11 @@ public enum SwiftDarwinLiteralPreflight {
                 let skippedNewlines = data[lineScanStart..<lineStart]
                     .reduce(0) { count, byte in count + (byte == newline ? 1 : 0) }
                 let matchedLineNumber = nextLineNumber + skippedNewlines
-                output.append(Data("\(matchedLineNumber):".utf8))
+                appendLineNumberPrefix(
+                    matchedLineNumber,
+                    to: &output,
+                    fieldSeparator: lineNumberFieldSeparator
+                )
                 nextLineNumber = matchedLineNumber + 1
             }
             output.append(contentsOf: data[lineStart..<lineEnd])
@@ -386,7 +400,8 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literal: [UInt8],
         maxCount: Int? = nil,
-        lineNumber: Bool = false
+        lineNumber: Bool = false,
+        lineNumberFieldSeparator: [UInt8] = [58]
     ) -> Int32? {
         guard !literal.isEmpty,
               !literal.contains(UInt8(ascii: "\n")),
@@ -442,7 +457,11 @@ public enum SwiftDarwinLiteralPreflight {
             if lineStart == matchRange.lowerBound,
                lineEnd == matchRange.upperBound {
                 if lineNumber {
-                    output.append(Data("\(nextLineNumber):".utf8))
+                    appendLineNumberPrefix(
+                        nextLineNumber,
+                        to: &output,
+                        fieldSeparator: lineNumberFieldSeparator
+                    )
                 }
                 output.append(contentsOf: data[lineStart..<lineEnd])
                 output.append(newline)
@@ -839,7 +858,8 @@ public enum SwiftDarwinLiteralPreflight {
         literal: [UInt8],
         asciiCaseInsensitive: Bool,
         lineNumber: Bool = false,
-        asciiBoundary: Bool = false
+        asciiBoundary: Bool = false,
+        lineNumberFieldSeparator: [UInt8] = [58]
     ) -> Int32? {
         guard !literal.isEmpty else {
             return nil
@@ -886,7 +906,8 @@ public enum SwiftDarwinLiteralPreflight {
                 literal: literalBuffer,
                 asciiCaseInsensitive: asciiCaseInsensitive,
                 lineNumber: lineNumber,
-                asciiBoundary: asciiBoundary
+                asciiBoundary: asciiBoundary,
+                lineNumberFieldSeparator: lineNumberFieldSeparator
             )
         }) else {
             return nil
@@ -898,7 +919,8 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literal: [UInt8],
         asciiCaseInsensitive: Bool,
-        lineNumber: Bool = false
+        lineNumber: Bool = false,
+        lineNumberFieldSeparator: [UInt8] = [58]
     ) -> Int32? {
         guard !literal.isEmpty,
               !literal.contains(UInt8(ascii: "\n")) else {
@@ -911,7 +933,8 @@ public enum SwiftDarwinLiteralPreflight {
             path: path,
             literal: literal,
             asciiCaseInsensitive: asciiCaseInsensitive,
-            lineNumber: lineNumber
+            lineNumber: lineNumber,
+            lineNumberFieldSeparator: lineNumberFieldSeparator
         )
     }
 
@@ -925,7 +948,8 @@ public enum SwiftDarwinLiteralPreflight {
     public static func wordLineExitCode(
         path: String,
         literal: [UInt8],
-        lineNumber: Bool
+        lineNumber: Bool,
+        lineNumberFieldSeparator: [UInt8] = [58]
     ) -> Int32? {
         guard !literal.isEmpty,
               !literal.contains(UInt8(ascii: "\n")),
@@ -972,7 +996,8 @@ public enum SwiftDarwinLiteralPreflight {
                 UnsafeRawPointer(mapped).assumingMemoryBound(to: UInt8.self),
                 haystackLength: haystackLength,
                 literal: literalBuffer,
-                lineNumber: lineNumber
+                lineNumber: lineNumber,
+                lineNumberFieldSeparator: lineNumberFieldSeparator
             )
         }) else {
             return nil
@@ -984,7 +1009,8 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literal: [UInt8],
         lineNumber: Bool,
-        asciiOnly: Bool
+        asciiOnly: Bool,
+        lineNumberFieldSeparator: [UInt8] = [58]
     ) -> Int32? {
         guard !literal.isEmpty,
               !literal.contains(UInt8(ascii: "\n")),
@@ -1029,7 +1055,8 @@ public enum SwiftDarwinLiteralPreflight {
                 haystackLength: haystackLength,
                 literal: literalBuffer,
                 lineNumber: lineNumber,
-                asciiOnly: asciiOnly
+                asciiOnly: asciiOnly,
+                lineNumberFieldSeparator: lineNumberFieldSeparator
             )
         }) else {
             return nil
@@ -1040,13 +1067,15 @@ public enum SwiftDarwinLiteralPreflight {
     public static func multiLiteralExitCode(
         path: String,
         literals: [[UInt8]],
-        lineNumber: Bool = false
+        lineNumber: Bool = false,
+        lineNumberFieldSeparator: [UInt8] = [58]
     ) -> Int32? {
         guard let result = multiLiteralResult(
             path: path,
             literals: literals,
             maxCount: nil,
-            lineNumber: lineNumber
+            lineNumber: lineNumber,
+            lineNumberFieldSeparator: lineNumberFieldSeparator
         ) else {
             return nil
         }
@@ -1060,7 +1089,8 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literal: [UInt8],
         asciiCaseInsensitive: Bool,
-        lineNumber: Bool
+        lineNumber: Bool,
+        lineNumberFieldSeparator: [UInt8]
     ) -> Int32? {
         guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
             return nil
@@ -1238,7 +1268,10 @@ public enum SwiftDarwinLiteralPreflight {
                         newlineByte
                     ))
                     lineCountOffset = lineStart
-                    guard output.writeLineNumberPrefix(lineNumberCursor) else {
+                    guard output.writeLineNumberPrefix(
+                        lineNumberCursor,
+                        fieldSeparator: lineNumberFieldSeparator
+                    ) else {
                         writeFailed = true
                         return (lineNumberCursor, lineCountOffset)
                     }
@@ -1341,7 +1374,8 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literals: [[UInt8]],
         maxCount: Int?,
-        lineNumber: Bool = false
+        lineNumber: Bool = false,
+        lineNumberFieldSeparator: [UInt8] = [58]
     ) -> rg_darwin_literal_file_result? {
         guard literals.count > 1,
               literals.count <= 64,
@@ -1391,7 +1425,8 @@ public enum SwiftDarwinLiteralPreflight {
             haystackLength: haystackLength,
             literals: literals,
             maxCount: maxCount ?? Int.max,
-            lineNumber: lineNumber
+            lineNumber: lineNumber,
+            lineNumberFieldSeparator: lineNumberFieldSeparator
         )
     }
 }
@@ -1450,10 +1485,9 @@ private struct rgSwiftStdoutBuffer {
         return true
     }
 
-    mutating func writeLineNumberPrefix(_ value: Int) -> Bool {
-        withUnsafeTemporaryAllocation(of: UInt8.self, capacity: 32) { buffer in
-            var cursor = buffer.count - 1
-            buffer[cursor] = UInt8(ascii: ":")
+    mutating func writeLineNumberPrefix(_ value: Int, fieldSeparator: [UInt8]) -> Bool {
+        let wroteNumber = withUnsafeTemporaryAllocation(of: UInt8.self, capacity: 32) { buffer in
+            var cursor = buffer.count
             var number = value
             repeat {
                 cursor -= 1
@@ -1464,6 +1498,16 @@ private struct rgSwiftStdoutBuffer {
                 buffer.baseAddress!.advanced(by: cursor),
                 count: buffer.count - cursor
             )
+        }
+        guard wroteNumber else {
+            return false
+        }
+        return fieldSeparator.withUnsafeBufferPointer { separator in
+            guard let baseAddress = separator.baseAddress,
+                  separator.count > 0 else {
+                return true
+            }
+            return write(baseAddress, count: separator.count)
         }
     }
 
@@ -1490,7 +1534,8 @@ private func rgSwiftDarwinWriteLiteralBytes(
     literal: UnsafeBufferPointer<UInt8>,
     asciiCaseInsensitive: Bool,
     lineNumber: Bool,
-    asciiBoundary: Bool
+    asciiBoundary: Bool,
+    lineNumberFieldSeparator: [UInt8]
 ) -> Int? {
     guard let literalBase = literal.baseAddress, literal.count > 0 else {
         return nil
@@ -1572,7 +1617,10 @@ private func rgSwiftDarwinWriteLiteralBytes(
             } ?? haystackLength
             if lineNumber {
                 let matchedLineNumber = lineNumberAtSearchOffset + newlinesBeforeMatch
-                guard output.writeLineNumberPrefix(matchedLineNumber) else {
+                guard output.writeLineNumberPrefix(
+                    matchedLineNumber,
+                    fieldSeparator: lineNumberFieldSeparator
+                ) else {
                     writeFailed = true
                     return false
                 }
@@ -1678,7 +1726,8 @@ private func rgSwiftDarwinWriteWordLiteralLineBytes(
     _ base: UnsafePointer<UInt8>,
     haystackLength: Int,
     literal: UnsafeBufferPointer<UInt8>,
-    lineNumber: Bool
+    lineNumber: Bool,
+    lineNumberFieldSeparator: [UInt8]
 ) -> Int? {
     guard let literalBase = literal.baseAddress, literal.count > 0 else {
         return nil
@@ -1801,7 +1850,7 @@ private func rgSwiftDarwinWriteWordLiteralLineBytes(
 
     for line in pendingLines {
         if lineNumber,
-           !output.writeLineNumberPrefix(line.number) {
+           !output.writeLineNumberPrefix(line.number, fieldSeparator: lineNumberFieldSeparator) {
             return nil
         }
         guard output.write(base.advanced(by: line.start), count: line.outputEnd - line.start) else {
@@ -1824,7 +1873,8 @@ private func rgSwiftDarwinWriteSurroundingWordsBytes(
     haystackLength: Int,
     literal: UnsafeBufferPointer<UInt8>,
     lineNumber: Bool,
-    asciiOnly: Bool
+    asciiOnly: Bool,
+    lineNumberFieldSeparator: [UInt8]
 ) -> Int? {
     guard let literalBase = literal.baseAddress, literal.count > 0 else {
         return nil
@@ -2146,7 +2196,7 @@ private func rgSwiftDarwinWriteSurroundingWordsBytes(
 
     for line in pendingLines {
         if lineNumber,
-           !output.writeLineNumberPrefix(line.number) {
+           !output.writeLineNumberPrefix(line.number, fieldSeparator: lineNumberFieldSeparator) {
             return nil
         }
         guard output.write(base.advanced(by: line.start), count: line.outputEnd - line.start) else {
@@ -2169,7 +2219,8 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
     haystackLength: Int,
     literals: [[UInt8]],
     maxCount: Int,
-    lineNumber: Bool
+    lineNumber: Bool,
+    lineNumberFieldSeparator: [UInt8]
 ) -> rg_darwin_literal_file_result? {
     if haystackLength >= 3,
        base[0] == 0xEF,
@@ -2254,7 +2305,10 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
                 UInt8(ascii: "\n")
             )
             lineCountOffset = lineStart
-            guard output.writeLineNumberPrefix(currentLineNumber) else {
+            guard output.writeLineNumberPrefix(
+                currentLineNumber,
+                fieldSeparator: lineNumberFieldSeparator
+            ) else {
                 return false
             }
         }

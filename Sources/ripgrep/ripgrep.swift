@@ -262,6 +262,74 @@ struct RipgrepCommand {
     #endif
 
     #if !canImport(CRipgrepPlatform)
+    private static func preflightEscapedSeparatorBytes(_ raw: String) -> [UInt8] {
+        var output: [UInt8] = []
+        output.reserveCapacity(raw.utf8.count)
+        var index = raw.startIndex
+
+        while index < raw.endIndex {
+            let character = raw[index]
+            guard character == "\\" else {
+                output.append(contentsOf: String(character).utf8)
+                index = raw.index(after: index)
+                continue
+            }
+
+            let nextIndex = raw.index(after: index)
+            guard nextIndex < raw.endIndex else {
+                output.append(UInt8(ascii: "\\"))
+                index = nextIndex
+                continue
+            }
+
+            let next = raw[nextIndex]
+            switch next {
+            case "0":
+                output.append(0)
+                index = raw.index(after: nextIndex)
+            case "n":
+                output.append(UInt8(ascii: "\n"))
+                index = raw.index(after: nextIndex)
+            case "r":
+                output.append(UInt8(ascii: "\r"))
+                index = raw.index(after: nextIndex)
+            case "t":
+                output.append(UInt8(ascii: "\t"))
+                index = raw.index(after: nextIndex)
+            case "\\":
+                output.append(UInt8(ascii: "\\"))
+                index = raw.index(after: nextIndex)
+            case "x":
+                let firstHex = raw.index(after: nextIndex)
+                guard firstHex < raw.endIndex else {
+                    output.append(contentsOf: "\\x".utf8)
+                    index = firstHex
+                    continue
+                }
+                let secondHex = raw.index(after: firstHex)
+                guard secondHex < raw.endIndex else {
+                    output.append(contentsOf: "\\x".utf8)
+                    output.append(contentsOf: String(raw[firstHex]).utf8)
+                    index = secondHex
+                    continue
+                }
+                let hex = String(raw[firstHex...secondHex])
+                if let scalarValue = UInt32(hex, radix: 16),
+                   let scalar = UnicodeScalar(scalarValue) {
+                    output.append(contentsOf: String(Character(scalar)).utf8)
+                } else {
+                    output.append(contentsOf: "\\x\(hex)".utf8)
+                }
+                index = raw.index(after: secondHex)
+            default:
+                output.append(contentsOf: String(next).utf8)
+                index = raw.index(after: nextIndex)
+            }
+        }
+
+        return output
+    }
+
     private static func runSwiftDarwinLiteralPreflight(arguments: [String]) -> Int32? {
         guard getenv("RIPGREP_CONFIG_PATH") == nil else {
             return nil
@@ -903,7 +971,7 @@ struct RipgrepCommand {
         var parsedColumn = false
         var parsedColorMayEmit = false
         var parsedFixedStrings = false
-        var parsedFieldMatchSeparator = false
+        var parsedFieldMatchSeparator = [UInt8(ascii: ":")]
         var parsedHeading = false
         var parsedEncodingIsAutomatic = true
         var parsedIncludeZero = false
@@ -1260,10 +1328,11 @@ struct RipgrepCommand {
                 guard argumentIndex < arguments.count else {
                     return nil
                 }
-                parsedFieldMatchSeparator = true
+                parsedFieldMatchSeparator = preflightEscapedSeparatorBytes(arguments[argumentIndex])
                 argumentIndex += 1
             } else if isInlineFieldMatchSeparator(argument) {
-                parsedFieldMatchSeparator = true
+                let rawSeparator = String(argument.dropFirst("--field-match-separator=".count))
+                parsedFieldMatchSeparator = preflightEscapedSeparatorBytes(rawSeparator)
             } else if isSeparatedNeutralValueFlag(argument) {
                 guard argumentIndex < arguments.count else {
                     return nil
@@ -1425,7 +1494,6 @@ struct RipgrepCommand {
               parsedEncodingIsAutomatic,
               parsedAfterContext == 0,
               parsedBeforeContext == 0,
-              !(parsedFieldMatchSeparator && lineNumber),
               !parsedHeading,
               !parsedInvertMatch,
               !parsedJson,
@@ -1459,7 +1527,8 @@ struct RipgrepCommand {
                 path: path,
                 literal: Array(surroundingLiteral.utf8),
                 lineNumber: lineNumber,
-                asciiOnly: pattern.hasPrefix("(?-u)")
+                asciiOnly: pattern.hasPrefix("(?-u)"),
+                lineNumberFieldSeparator: parsedFieldMatchSeparator
             )
         }
 
@@ -1528,7 +1597,8 @@ struct RipgrepCommand {
                 if let exitCode = SwiftDarwinLiteralPreflight.multiLiteralExitCode(
                     path: path,
                     literals: literals,
-                    lineNumber: lineNumber
+                    lineNumber: lineNumber,
+                    lineNumberFieldSeparator: parsedFieldMatchSeparator
                 ) {
                     return exitCode
                 }
@@ -1716,7 +1786,8 @@ struct RipgrepCommand {
                 path: path,
                 literal: literal,
                 maxCount: parsedMaxCount,
-                lineNumber: lineNumber
+                lineNumber: lineNumber,
+                lineNumberFieldSeparator: parsedFieldMatchSeparator
             )
         }
         if let parsedMaxCount {
@@ -1729,7 +1800,8 @@ struct RipgrepCommand {
                 path: path,
                 literal: literal,
                 maxCount: parsedMaxCount,
-                lineNumber: lineNumber
+                lineNumber: lineNumber,
+                lineNumberFieldSeparator: parsedFieldMatchSeparator
             )
         }
         if wordRegexp {
@@ -1741,7 +1813,8 @@ struct RipgrepCommand {
             return SwiftDarwinLiteralPreflight.wordLineExitCode(
                 path: path,
                 literal: literal,
-                lineNumber: lineNumber
+                lineNumber: lineNumber,
+                lineNumberFieldSeparator: parsedFieldMatchSeparator
             )
         }
         if noMmap {
@@ -1752,7 +1825,8 @@ struct RipgrepCommand {
                 literal: literal,
                 asciiCaseInsensitive: asciiCaseInsensitive,
                 lineNumber: lineNumber,
-                asciiBoundary: asciiBoundary
+                asciiBoundary: asciiBoundary,
+                lineNumberFieldSeparator: parsedFieldMatchSeparator
             ) {
                 return mappedExitCode
             }
@@ -1763,7 +1837,8 @@ struct RipgrepCommand {
                 path: path,
                 literal: literal,
                 asciiCaseInsensitive: asciiCaseInsensitive,
-                lineNumber: lineNumber
+                lineNumber: lineNumber,
+                lineNumberFieldSeparator: parsedFieldMatchSeparator
             )
         }
         return SwiftDarwinLiteralPreflight.exitCode(
@@ -1771,7 +1846,8 @@ struct RipgrepCommand {
             literal: literal,
             asciiCaseInsensitive: asciiCaseInsensitive,
             lineNumber: lineNumber,
-            asciiBoundary: asciiBoundary
+            asciiBoundary: asciiBoundary,
+            lineNumberFieldSeparator: parsedFieldMatchSeparator
         )
     }
     #endif
