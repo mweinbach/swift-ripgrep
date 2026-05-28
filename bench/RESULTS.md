@@ -104,6 +104,11 @@ literal source matched while keeping unsupported or ambiguous patterns on the
 full matcher.
 Top-level literal alternation `--passthru` forms now share that multi-literal
 writer for positional and single-`-e` patterns.
+ASCII case-insensitive `--passthru` now reuses the single- and multi-literal
+mapped writers for plain literals, repeated `-e`/`-f` sources, and top-level
+literal alternations when all literals and the haystack are ASCII. It folds
+candidate checks in Swift while leaving Unicode case-folding and binary input
+on the existing fallback.
 Single-literal `-A`/`--after-context` matching-line output now has a mapped
 Swift writer for explicit files when no before-context is active, preserving
 match/context field separators, heading and filename layout, context separator
@@ -1276,6 +1281,19 @@ The larger current/Rust alternation check used 3 warmups and 10 timed runs:
 |---|---:|---:|
 | `--passthru "needle|alpha"` | 12.8 ms | 16.7 ms |
 | `-n --passthru "needle|alpha"` | 15.5 ms | 24.1 ms |
+
+The ASCII ignore-case passthru check used
+`/tmp/swift-rg-candidates/context-after-250k.txt`, the same 250,000-line /
+4.21 MiB context fixture, with uppercase `NEEDLE` as the query. Pre-route
+3-run probes measured the same Swift fallback at 36.490 s for the single
+literal and 36.346 s for the repeated `-e` form; after and Rust used 3
+warmups and 10 timed runs:
+
+| Flags | Swift before | Swift after | rg |
+|---|---:|---:|---:|
+| `--passthru -i NEEDLE` | 36.490 s | 9.6 ms | 15.5 ms |
+| `--passthru -i -e NEEDLE -e ABSENT` | 36.346 s | 11.0 ms | 16.5 ms |
+| `--passthru -i "NEEDLE|ABSENT"` | n/a | 12.6 ms | 17.0 ms |
 
 The literal after-context check used
 `/tmp/swift-rg-candidates/context-after-250k.txt`, a 250,000-line / 4.21 MiB

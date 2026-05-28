@@ -1902,6 +1902,54 @@ struct MiscTests {
 
         """.utf8))
 
+        let passthruIgnoreCaseOutput = try runExecutableData([
+            "-n",
+            "--passthru",
+            "-i",
+            "NEEDLE",
+            root.path("case-context.txt"),
+        ], fixture: {})
+        #expect(passthruIgnoreCaseOutput == Data("""
+        1-quiet one
+        2:Needle one
+        3-after one
+        4-quiet
+        5-before two
+        6:NEEDLE two
+        7-after two
+
+        """.utf8))
+
+        let passthruMultiIgnoreCaseOutput = try runExecutableData([
+            "-n",
+            "--passthru",
+            "-i",
+            "-e",
+            "NEEDLE",
+            "-e",
+            "hay",
+            root.path("multi-case-context.txt"),
+        ], fixture: {})
+        #expect(passthruMultiIgnoreCaseOutput == Data("""
+        1-alpha
+        2:Needle one
+        3-beta
+        4-quiet
+        5-zeta
+        6:HAY one
+        7-omega
+
+        """.utf8))
+
+        let passthruAlternationIgnoreCaseOutput = try runExecutableData([
+            "-n",
+            "--passthru",
+            "-i",
+            "NEEDLE|hay",
+            root.path("multi-case-context.txt"),
+        ], fixture: {})
+        #expect(passthruAlternationIgnoreCaseOutput == passthruMultiIgnoreCaseOutput)
+
         let afterContextOutput = try runExecutableData([
             "-A",
             "1",

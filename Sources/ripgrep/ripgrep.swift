@@ -2074,7 +2074,6 @@ struct RipgrepCommand {
            !parsedTrim,
            !wordRegexp,
            !parsedLineRegexp,
-           !asciiCaseInsensitive,
            (patternCanStartWithDash || !pattern.hasPrefix("-")),
            path != "-" {
             if parsedMaxCount == 0 {
@@ -2087,9 +2086,15 @@ struct RipgrepCommand {
                     fixedStrings: fixedStrings,
                     allowPCREQuotedLiterals: allowPCREQuotedLiterals
                 ) {
+                    guard passthruLiterals.allSatisfy({
+                        !asciiCaseInsensitive || $0.allSatisfy({ $0 < 0x80 })
+                    }) else {
+                        return nil
+                    }
                     return SwiftDarwinLiteralPreflight.multiLiteralPassthruLineExitCode(
                         path: path,
                         literals: passthruLiterals,
+                        asciiCaseInsensitive: asciiCaseInsensitive,
                         lineNumber: lineNumber,
                         lineNumberFieldMatchSeparator: parsedFieldMatchSeparator,
                         lineNumberFieldContextSeparator: parsedFieldContextSeparator,
@@ -2104,10 +2109,14 @@ struct RipgrepCommand {
                     pattern,
                     allowPCREQuotedLiterals: allowPCREQuotedLiterals
                    ),
-                   passthruLiterals.allSatisfy({ !$0.contains(UInt8(ascii: "\n")) }) {
+                   passthruLiterals.allSatisfy({
+                       !$0.contains(UInt8(ascii: "\n"))
+                           && (!asciiCaseInsensitive || $0.allSatisfy({ $0 < 0x80 }))
+                   }) {
                     return SwiftDarwinLiteralPreflight.multiLiteralPassthruLineExitCode(
                         path: path,
                         literals: passthruLiterals,
+                        asciiCaseInsensitive: asciiCaseInsensitive,
                         lineNumber: lineNumber,
                         lineNumberFieldMatchSeparator: parsedFieldMatchSeparator,
                         lineNumberFieldContextSeparator: parsedFieldContextSeparator,
@@ -2126,12 +2135,14 @@ struct RipgrepCommand {
                 if let passthruLiteralPattern {
                     let passthruLiteral = Array(passthruLiteralPattern.utf8)
                     guard !passthruLiteral.isEmpty,
-                          !passthruLiteral.contains(UInt8(ascii: "\n")) else {
+                          !passthruLiteral.contains(UInt8(ascii: "\n")),
+                          (!asciiCaseInsensitive || passthruLiteral.allSatisfy({ $0 < 0x80 })) else {
                         return nil
                     }
                     return SwiftDarwinLiteralPreflight.passthruLiteralLineExitCode(
                         path: path,
                         literal: passthruLiteral,
+                        asciiCaseInsensitive: asciiCaseInsensitive,
                         lineNumber: lineNumber,
                         lineNumberFieldMatchSeparator: parsedFieldMatchSeparator,
                         lineNumberFieldContextSeparator: parsedFieldContextSeparator,
