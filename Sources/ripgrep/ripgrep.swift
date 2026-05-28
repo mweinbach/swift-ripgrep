@@ -282,6 +282,10 @@ struct RipgrepCommand {
             case insensitive
             case smart
         }
+        enum PathOnlyMode {
+            case matching
+            case nonMatching
+        }
         func isIgnoreCaseFlag(_ argument: String) -> Bool {
             argument == "-i" || argument == "--ignore-case"
         }
@@ -775,7 +779,10 @@ struct RipgrepCommand {
         var parsedFieldMatchSeparator = false
         var parsedHeading = false
         var parsedLineNumber = false
+        var parsedNullPathTerminator = false
         var parsedNoMmap = false
+        var parsedPathOnlyMode: PathOnlyMode?
+        var parsedPathSeparator = false
         var parsedQuiet = false
         var parsedTrim = false
         var parsedTypeDefinitionChanges: [TypeChange] = []
@@ -823,6 +830,12 @@ struct RipgrepCommand {
                 parsedTrim = true
             } else if isNoTrimFlag(argument) {
                 parsedTrim = false
+            } else if argument == "-l" || argument == "--files-with-matches" {
+                parsedPathOnlyMode = .matching
+            } else if argument == "--files-without-match" {
+                parsedPathOnlyMode = .nonMatching
+            } else if argument == "-0" || argument == "--null" {
+                parsedNullPathTerminator = true
             } else if argument == "-nw" || argument == "-wn" {
                 parsedLineNumber = true
                 parsedWordRegexp = true
@@ -985,11 +998,13 @@ struct RipgrepCommand {
                       isValidSimplePathSeparator(arguments[argumentIndex]) else {
                     return nil
                 }
+                parsedPathSeparator = true
                 argumentIndex += 1
             } else if let separator = pathSeparatorValue(argument) {
                 guard isValidSimplePathSeparator(separator) else {
                     return nil
                 }
+                parsedPathSeparator = true
             } else if isResourceLimitFlag(argument) {
                 guard argumentIndex < arguments.count,
                       isValidHumanReadableSize(arguments[argumentIndex]) else {
@@ -1159,6 +1174,20 @@ struct RipgrepCommand {
             return SwiftDarwinLiteralPreflight.quietExitCode(
                 path: path,
                 literal: literal
+            )
+        }
+        if let parsedPathOnlyMode {
+            guard !wordRegexp,
+                  !asciiCaseInsensitive,
+                  !asciiBoundary,
+                  !parsedPathSeparator else {
+                return nil
+            }
+            return SwiftDarwinLiteralPreflight.pathOnlyExitCode(
+                path: path,
+                literal: literal,
+                printWhenMatched: parsedPathOnlyMode == .matching,
+                nullTerminated: parsedNullPathTerminator
             )
         }
         if wordRegexp {

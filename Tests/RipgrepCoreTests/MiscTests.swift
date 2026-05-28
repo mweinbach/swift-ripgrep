@@ -1289,6 +1289,20 @@ struct MiscTests {
             #expect(quietResult.status == expectedStatus)
         }
 
+        for (pathOnlyArguments, expectedOutput, expectedStatus) in [
+            (["-l", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
+            (["--files-with-matches", "--null", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt"))\0".utf8), Int32(0)),
+            (["-l", "missing", root.path("dense.txt")], Data(), Int32(1)),
+            (["--files-without-match", "missing", root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
+            (["--files-without-match", "needle", root.path("dense.txt")], Data(), Int32(1)),
+            (["-q", "-l", "needle", root.path("dense.txt")], Data(), Int32(0)),
+        ] {
+            let pathOnlyResult = try runExecutableResult(pathOnlyArguments)
+            #expect(pathOnlyResult.stdout == expectedOutput)
+            #expect(pathOnlyResult.stderr.isEmpty)
+            #expect(pathOnlyResult.status == expectedStatus)
+        }
+
         for (includeZeroArguments, expectedOutput) in [
             (["--include-zero"], output),
             (["--include-zero", "-n"], lineNumberOutput),

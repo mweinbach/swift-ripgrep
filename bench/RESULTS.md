@@ -369,6 +369,15 @@ the same fixture, `-q needle` improved from 28.3 ms to 3.9 ms, versus 3.1 ms
 for Rust. A no-match quiet scan improved from 40.5 ms to 21.0 ms, versus
 8.1 ms for Rust.
 
+Path-only explicit-file searches now share the same high-level mapped contains
+check. `-l`/`--files-with-matches` prints the operand path on the first match,
+and `--files-without-match` prints it only when no match is found, including
+the `--null` path terminator. Unsupported word-boundary, ignore-case, custom
+path-separator, and statistics forms still fall through. On the same fixture,
+`-l needle` improved from 32.8 ms to 5.0 ms, versus 3.5 ms for Rust, while
+`--files-without-match absent_literal` improved from 45.5 ms to 21.5 ms,
+versus 9.3 ms for Rust.
+
 Type-definition flags that do not activate a type filter now also stay
 eligible for the executable preflight. The preflight replays
 `--type-add`/`--type-clear` through `FileTypeRegistry.apply`, so invalid

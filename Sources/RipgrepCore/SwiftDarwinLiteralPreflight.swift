@@ -8,6 +8,31 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literal: [UInt8]
     ) -> Int32? {
+        guard let matched = containsLiteral(path: path, literal: literal) else {
+            return nil
+        }
+        return matched ? 0 : 1
+    }
+
+    public static func pathOnlyExitCode(
+        path: String,
+        literal: [UInt8],
+        printWhenMatched: Bool,
+        nullTerminated: Bool
+    ) -> Int32? {
+        guard let matched = containsLiteral(path: path, literal: literal) else {
+            return nil
+        }
+        guard matched == printWhenMatched else {
+            return 1
+        }
+        var output = Data(path.utf8)
+        output.append(nullTerminated ? 0 : UInt8(ascii: "\n"))
+        FileHandle.standardOutput.write(output)
+        return 0
+    }
+
+    private static func containsLiteral(path: String, literal: [UInt8]) -> Bool? {
         guard !literal.isEmpty else {
             return nil
         }
@@ -19,7 +44,7 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         guard !data.isEmpty else {
-            return 1
+            return false
         }
         if data.count >= 3,
            data[data.startIndex] == 0xEF,
@@ -35,12 +60,12 @@ public enum SwiftDarwinLiteralPreflight {
             }
         }
         guard let matchRange = data.range(of: Data(literal)) else {
-            return 1
+            return false
         }
         guard !matchRange.isEmpty else {
             return nil
         }
-        return 0
+        return true
     }
 
     public static func exitCode(
