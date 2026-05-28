@@ -1579,6 +1579,34 @@ public enum SwiftDarwinLiteralPreflight {
         return matchCount > 0 ? 0 : 1
     }
 
+    public static func wordCountMatchesExitCode(
+        path: String,
+        literal: [UInt8],
+        includeZero: Bool,
+        countPrefix: [UInt8] = [],
+        crlfTerminated: Bool = false
+    ) -> Int32? {
+        guard !literal.isEmpty,
+              !literal.contains(UInt8(ascii: "\n")),
+              let first = literal.first,
+              let last = literal.last,
+              rgSwiftIsASCIIRegexWordByte(first),
+              rgSwiftIsASCIIRegexWordByte(last) else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path),
+              let matchCount = countASCIIWordMatches(in: data, literal: literal) else {
+            return nil
+        }
+
+        if matchCount > 0 || includeZero {
+            var output = Data(countPrefix)
+            output.append(countOutput(matchCount, crlfTerminated: crlfTerminated))
+            FileHandle.standardOutput.write(output)
+        }
+        return matchCount > 0 ? 0 : 1
+    }
+
     public static func multiLiteralCountMatchesExitCode(
         path: String,
         literals: [[UInt8]],
@@ -1675,18 +1703,40 @@ public enum SwiftDarwinLiteralPreflight {
 }
 
 private func countNonOverlappingMatches(in data: Data, literal: [UInt8]) -> Int {
-    let needle = Data(literal)
-    var searchStart = data.startIndex
-    var matchCount = 0
-    while searchStart < data.endIndex,
-          let matchRange = data.range(of: needle, in: searchStart..<data.endIndex) {
-        guard !matchRange.isEmpty else {
-            break
-        }
-        matchCount += 1
-        searchStart = matchRange.upperBound
+    guard !literal.isEmpty,
+          data.count >= literal.count else {
+        return 0
     }
-    return matchCount
+    return data.withUnsafeBytes { rawData in
+        guard let rawBase = rawData.baseAddress else {
+            return 0
+        }
+        let base = rawBase.assumingMemoryBound(to: UInt8.self)
+        return literal.withUnsafeBufferPointer { needle in
+            guard let needleBase = needle.baseAddress else {
+                return 0
+            }
+            if literal.count == 1 {
+                return rg_memcount_byte(base, data.count, needleBase[0])
+            }
+
+            var searchOffset = 0
+            var matchCount = 0
+            while searchOffset < data.count {
+                guard let found = rg_memmem_simple(
+                    base.advanced(by: searchOffset),
+                    data.count - searchOffset,
+                    needleBase,
+                    literal.count
+                ) else {
+                    break
+                }
+                matchCount += 1
+                searchOffset = base.distance(to: found) + literal.count
+            }
+            return matchCount
+        }
+    }
 }
 
 private func nonOverlappingDistinctLiterals(_ literals: [[UInt8]]) -> [[UInt8]]? {
@@ -1757,6 +1807,88 @@ private func prefix(_ bytes: [UInt8], _ count: Int) -> ArraySlice<UInt8> {
 
 private func suffix(_ bytes: [UInt8], _ count: Int) -> ArraySlice<UInt8> {
     bytes[bytes.index(bytes.endIndex, offsetBy: -count)..<bytes.endIndex]
+}
+
+private func countASCIIWordMatches(in data: Data, literal: [UInt8]) -> Int? {
+    guard !literal.isEmpty,
+          data.count >= literal.count else {
+        return 0
+    }
+    return data.withUnsafeBytes { rawData in
+        guard let rawBase = rawData.baseAddress else {
+            return 0
+        }
+        let base = rawBase.assumingMemoryBound(to: UInt8.self)
+        return literal.withUnsafeBufferPointer { needle -> Int? in
+            guard let needleBase = needle.baseAddress else {
+                return 0
+            }
+
+            var searchOffset = 0
+            var matchCount = 0
+            var rejectedBoundaryCandidates = 0
+            let maxRejectedBoundaryCandidates = 128
+            while searchOffset < data.count {
+                guard let found = rg_memmem_simple(
+                    base.advanced(by: searchOffset),
+                    data.count - searchOffset,
+                    needleBase,
+                    literal.count
+                ) else {
+                    break
+                }
+
+                let matchStart = base.distance(to: found)
+                let matchEnd = matchStart + literal.count
+                guard let bounded = isASCIIWordBoundaryMatch(
+                    base: base,
+                    dataCount: data.count,
+                    matchStart: matchStart,
+                    matchEnd: matchEnd
+                ) else {
+                    return nil
+                }
+                if bounded {
+                    matchCount += 1
+                    searchOffset = matchEnd
+                } else {
+                    rejectedBoundaryCandidates += 1
+                    guard rejectedBoundaryCandidates <= maxRejectedBoundaryCandidates else {
+                        return nil
+                    }
+                    searchOffset = matchStart + 1
+                }
+            }
+            return matchCount
+        }
+    }
+}
+
+private func isASCIIWordBoundaryMatch(
+    base: UnsafePointer<UInt8>,
+    dataCount: Int,
+    matchStart: Int,
+    matchEnd: Int
+) -> Bool? {
+    if matchStart > 0 {
+        let before = base[matchStart - 1]
+        if before >= 0x80 {
+            return nil
+        }
+        if rgSwiftIsASCIIRegexWordByte(before) {
+            return false
+        }
+    }
+    if matchEnd < dataCount {
+        let after = base[matchEnd]
+        if after >= 0x80 {
+            return nil
+        }
+        if rgSwiftIsASCIIRegexWordByte(after) {
+            return false
+        }
+    }
+    return true
 }
 
 @inline(__always)

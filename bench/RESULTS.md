@@ -392,14 +392,15 @@ still fall back. On the 45 MiB fixture,
 from 32.2 ms to 4.2 ms, versus 3.3 ms for Rust.
 
 Executable preflight now handles final `--count-matches` for single
-case-sensitive literal searches with a mapped `Data` counter, including final
+case-sensitive literal searches with a mapped Swift counter, including final
 print-mode overrides, explicit single `-e`, filename-prefixed summaries,
 include-zero no-match summaries, and binary/text files. Case-insensitive,
-bounded, word-boundary, line-regexp, and multi-literal count-matches forms stay
-on the prior fallback. On the 50 KiB dense fixture, `--count-matches needle`
-measured 8.8 ms versus 41.1 ms before and 3.7 ms for Rust; final
-`--files-with-matches --count-matches needle` measured 8.0 ms versus 53.2 ms
-before; and `-H --count-matches needle` measured 7.9 ms versus 57.7 ms before.
+bounded, line-regexp, and multi-literal count-matches forms stayed on the prior
+fallback at this checkpoint. On the 50 KiB dense fixture,
+`--count-matches needle` measured 8.8 ms versus 41.1 ms before and 3.7 ms for
+Rust; final `--files-with-matches --count-matches needle` measured 8.0 ms
+versus 53.2 ms before; and `-H --count-matches needle` measured 7.9 ms versus
+57.7 ms before.
 
 The same mapped counter now covers safe multi-literal count-matches inputs from
 repeated explicit regexps, simple alternations, and literal-only pattern files.
@@ -407,12 +408,25 @@ The preflight first deduplicates identical literals and proves that distinct
 literals cannot overlap or contain one another, so ambiguous ordered-overlap
 cases stay on the prior fallback. Dense-fixture byte checks matched Rust for
 repeated-regexp, alternation, pattern-file, filename-prefixed, and include-zero
-no-match forms;
-overlapping `aa`/`a` controls stayed on the prior fallback. On the 50 KiB dense
-fixture, `--count-matches -e needle -e quiet` measured 9.6 ms versus 54.0 ms
-before and 3.6 ms for Rust, `--count-matches 'needle|quiet'` measured 10.1 ms
-versus 3.7 ms for Rust, while `--count-matches -f patterns.txt` measured
-10.1 ms and `-H --count-matches -f patterns.txt` measured 10.2 ms.
+no-match forms; overlapping `aa`/`a` controls stayed on the prior fallback. On
+the 50 KiB dense fixture, `--count-matches -e needle -e quiet` measured 9.6 ms
+versus 54.0 ms before and 3.6 ms for Rust,
+`--count-matches 'needle|quiet'` measured 10.1 ms versus 3.7 ms for Rust,
+while `--count-matches -f patterns.txt` measured 10.1 ms and
+`-H --count-matches -f patterns.txt` measured 10.2 ms.
+
+That counter now uses the existing Swift fallback literal scanner instead of a
+per-match `Data.range(of:)` loop, which removes the dense-match regression on
+larger files while keeping the default no-C-shim build. The same scanner also
+covers conservative ASCII word-boundary `--count-matches` by proving candidate
+boundaries before writing output; ambiguous non-ASCII boundaries and
+boundary-heavy false positives still fall back. Byte/status checks matched Rust
+for plain, word-boundary, prefixed, include-zero, embedded-word, and binary
+forms. On the 48 MiB dense fixture, `--count-matches needle` measured 35.4 ms
+versus 1.089 s before and 109.3 ms for Rust; `--count-matches -w needle`
+measured 43.1 ms versus 1.142 s before and 250.4 ms for Rust; and safe
+multi-literal `--count-matches -e needle -e quiet` measured 44.5 ms, with
+`--count-matches 'needle|quiet'` at 43.7 ms, versus 195.6 ms for Rust.
 
 `--include-zero` now stays on the executable literal preflight for normal
 matching-line output, where it only affects count summaries. Focused tests

@@ -1870,12 +1870,20 @@ struct RipgrepCommand {
         }
         if parsedPrintMode == .countMatches {
             guard parsedPathOnlyMode == nil,
-                  !wordRegexp,
                   !parsedLineRegexp,
                   !asciiBoundary,
                   !asciiCaseInsensitive,
                   parsedMaxCount == nil else {
                 return nil
+            }
+            if wordRegexp {
+                return SwiftDarwinLiteralPreflight.wordCountMatchesExitCode(
+                    path: path,
+                    literal: literal,
+                    includeZero: parsedIncludeZero,
+                    countPrefix: parsedCountPrefix,
+                    crlfTerminated: parsedCrlf
+                )
             }
             return SwiftDarwinLiteralPreflight.countMatchesExitCode(
                 path: path,
