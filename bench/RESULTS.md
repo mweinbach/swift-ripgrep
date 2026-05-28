@@ -184,6 +184,21 @@ Visible stop-on-nonmatch context output stays on the context-aware/fallback path
 | `--stop-on-nonmatch --after-context=1 -c needle` | 1.533 s | 6.1 ms | 7.6 ms |
 | `--stop-on-nonmatch --context=1 -c -m2 needle` | 823.4 ms | 4.0 ms | 2.9 ms |
 
+Explicit UTF-8 and disabled encoding modes now stay eligible when quiet,
+path-only, count, or count-matches modes avoid printing decoded line text. The
+generic preflight still falls back for visible matching-line output, BOM input,
+invalid UTF-8 output, and non-UTF-8 encodings such as Latin-1.
+
+10 timed runs on `/tmp/swift-rg-candidates/trim.txt` with 3 warmups:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--encoding=utf-8 -q needle` | 1.458 s | 3.5 ms | 2.7 ms |
+| `--encoding=utf-8 -l needle` | 1.454 s | 3.8 ms | 3.0 ms |
+| `--encoding=utf-8 -c needle` | 1.472 s | 8.6 ms | 9.6 ms |
+| `--encoding=utf-8 --count-matches needle` | 1.469 s | 5.8 ms | 18.0 ms |
+| `--encoding=none -l needle` | 2.063 s | 3.5 ms | 2.8 ms |
+
 Case-sensitive repeated `-e`/`-f` and top-level literal alternation `--trim`
 forms now use the same mapped trim writer.
 Literal `--invert-match` matching-line output now has its own mapped Swift line

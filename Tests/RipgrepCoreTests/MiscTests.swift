@@ -3758,6 +3758,50 @@ struct MiscTests {
         ], fixture: {})
         #expect(countMatchesOutput == Data("5\n".utf8))
 
+        let utf8EncodingQuietResult = try runExecutableResult([
+            "--encoding=utf-8",
+            "-q",
+            "needle",
+            root.path("dense.txt"),
+        ])
+        #expect(utf8EncodingQuietResult.status == 0)
+        #expect(utf8EncodingQuietResult.stdout.isEmpty)
+        #expect(utf8EncodingQuietResult.stderr.isEmpty)
+
+        let utf8EncodingPathOnlyOutput = try runExecutableData([
+            "--encoding",
+            "utf8",
+            "-l",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(utf8EncodingPathOnlyOutput == Data("\(root.path("dense.txt"))\n".utf8))
+
+        let utf8EncodingCountOutput = try runExecutableData([
+            "-E",
+            "utf-8",
+            "-c",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(utf8EncodingCountOutput == Data("3\n".utf8))
+
+        let utf8EncodingCountMatchesOutput = try runExecutableData([
+            "-Eutf8",
+            "--count-matches",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(utf8EncodingCountMatchesOutput == countMatchesOutput)
+
+        let disabledEncodingPathOnlyOutput = try runExecutableData([
+            "--encoding=none",
+            "-l",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(disabledEncodingPathOnlyOutput == Data("\(root.path("dense.txt"))\n".utf8))
+
         let vimgrepQuietResult = try runExecutableResult([
             "--vimgrep",
             "-q",
