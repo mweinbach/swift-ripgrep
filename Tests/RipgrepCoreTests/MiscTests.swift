@@ -1248,6 +1248,7 @@ struct MiscTests {
         try root.write("needle one\nneedle two\nafter\n", to: "after-max.txt")
         try root.write("quiet one\nneedle one\nquiet\nquiet\nbefore two\nneedle two\nquiet", to: "before-context.txt")
         try root.write("needle one\nneedle two\nafter\n", to: "before-max.txt")
+        try root.write("quiet one\nNeedle one\nafter one\nquiet\nbefore two\nNEEDLE two\nafter two", to: "case-context.txt")
         try root.write("needle\n", to: ".hidden.txt")
         try root.write("*.txt\n", to: ".ignore")
         try root.write("needle\n", to: "ignored.txt")
@@ -2033,6 +2034,22 @@ struct MiscTests {
         #expect(afterContextMaxCountZeroResult.stderr.isEmpty)
         #expect(afterContextMaxCountZeroResult.status == 1)
 
+        let afterContextIgnoreCaseOutput = try runExecutableData([
+            "-i",
+            "-A",
+            "1",
+            "NEEDLE",
+            root.path("case-context.txt"),
+        ], fixture: {})
+        #expect(afterContextIgnoreCaseOutput == Data("""
+        Needle one
+        after one
+        --
+        NEEDLE two
+        after two
+
+        """.utf8))
+
         let beforeContextOutput = try runExecutableData([
             "-B",
             "1",
@@ -2166,6 +2183,22 @@ struct MiscTests {
         #expect(beforeContextMaxCountZeroResult.stdout.isEmpty)
         #expect(beforeContextMaxCountZeroResult.stderr.isEmpty)
         #expect(beforeContextMaxCountZeroResult.status == 1)
+
+        let beforeContextIgnoreCaseOutput = try runExecutableData([
+            "-i",
+            "-B",
+            "1",
+            "NEEDLE",
+            root.path("case-context.txt"),
+        ], fixture: {})
+        #expect(beforeContextIgnoreCaseOutput == Data("""
+        quiet one
+        Needle one
+        --
+        before two
+        NEEDLE two
+
+        """.utf8))
 
         let contextOutput = try runExecutableData([
             "-C",
@@ -2312,6 +2345,25 @@ struct MiscTests {
         #expect(contextMaxCountZeroResult.stdout.isEmpty)
         #expect(contextMaxCountZeroResult.stderr.isEmpty)
         #expect(contextMaxCountZeroResult.status == 1)
+
+        let contextIgnoreCaseOutput = try runExecutableData([
+            "-n",
+            "-i",
+            "-C",
+            "1",
+            "NEEDLE",
+            root.path("case-context.txt"),
+        ], fixture: {})
+        #expect(contextIgnoreCaseOutput == Data("""
+        1-quiet one
+        2:Needle one
+        3-after one
+        --
+        5-before two
+        6:NEEDLE two
+        7-after two
+
+        """.utf8))
 
         let plainOnlyMatchingLineNumberOutput = try runExecutableData([
             "-n",

@@ -4071,6 +4071,7 @@ public enum SwiftDarwinLiteralPreflight {
         literal: [UInt8],
         afterContext: Int,
         maxCount: Int,
+        asciiCaseInsensitive: Bool = false,
         lineNumber: Bool = false,
         lineNumberFieldMatchSeparator: [UInt8] = [58],
         lineNumberFieldContextSeparator: [UInt8] = [45],
@@ -4082,6 +4083,9 @@ public enum SwiftDarwinLiteralPreflight {
         guard !literal.isEmpty,
               afterContext > 0,
               maxCount > 0 else {
+            return nil
+        }
+        if asciiCaseInsensitive, literal.contains(where: { $0 >= 0x80 }) {
             return nil
         }
 
@@ -4123,6 +4127,7 @@ public enum SwiftDarwinLiteralPreflight {
                 literal: literalBuffer,
                 afterContext: afterContext,
                 maxCount: maxCount,
+                asciiCaseInsensitive: asciiCaseInsensitive,
                 lineNumber: lineNumber,
                 lineNumberFieldMatchSeparator: lineNumberFieldMatchSeparator,
                 lineNumberFieldContextSeparator: lineNumberFieldContextSeparator,
@@ -4142,6 +4147,7 @@ public enum SwiftDarwinLiteralPreflight {
         literal: [UInt8],
         beforeContext: Int,
         maxCount: Int,
+        asciiCaseInsensitive: Bool = false,
         lineNumber: Bool = false,
         lineNumberFieldMatchSeparator: [UInt8] = [58],
         lineNumberFieldContextSeparator: [UInt8] = [45],
@@ -4153,6 +4159,9 @@ public enum SwiftDarwinLiteralPreflight {
         guard !literal.isEmpty,
               beforeContext > 0,
               maxCount > 0 else {
+            return nil
+        }
+        if asciiCaseInsensitive, literal.contains(where: { $0 >= 0x80 }) {
             return nil
         }
 
@@ -4194,6 +4203,7 @@ public enum SwiftDarwinLiteralPreflight {
                 literal: literalBuffer,
                 beforeContext: beforeContext,
                 maxCount: maxCount,
+                asciiCaseInsensitive: asciiCaseInsensitive,
                 lineNumber: lineNumber,
                 lineNumberFieldMatchSeparator: lineNumberFieldMatchSeparator,
                 lineNumberFieldContextSeparator: lineNumberFieldContextSeparator,
@@ -4214,6 +4224,7 @@ public enum SwiftDarwinLiteralPreflight {
         beforeContext: Int,
         afterContext: Int,
         maxCount: Int,
+        asciiCaseInsensitive: Bool = false,
         lineNumber: Bool = false,
         lineNumberFieldMatchSeparator: [UInt8] = [58],
         lineNumberFieldContextSeparator: [UInt8] = [45],
@@ -4226,6 +4237,9 @@ public enum SwiftDarwinLiteralPreflight {
               beforeContext > 0,
               afterContext > 0,
               maxCount > 0 else {
+            return nil
+        }
+        if asciiCaseInsensitive, literal.contains(where: { $0 >= 0x80 }) {
             return nil
         }
 
@@ -4268,6 +4282,7 @@ public enum SwiftDarwinLiteralPreflight {
                 beforeContext: beforeContext,
                 afterContext: afterContext,
                 maxCount: maxCount,
+                asciiCaseInsensitive: asciiCaseInsensitive,
                 lineNumber: lineNumber,
                 lineNumberFieldMatchSeparator: lineNumberFieldMatchSeparator,
                 lineNumberFieldContextSeparator: lineNumberFieldContextSeparator,
@@ -7070,6 +7085,7 @@ private func rgSwiftDarwinWriteAfterContextLiteralLines(
     literal: UnsafeBufferPointer<UInt8>,
     afterContext: Int,
     maxCount: Int,
+    asciiCaseInsensitive: Bool,
     lineNumber: Bool,
     lineNumberFieldMatchSeparator: [UInt8],
     lineNumberFieldContextSeparator: [UInt8],
@@ -7098,6 +7114,14 @@ private func rgSwiftDarwinWriteAfterContextLiteralLines(
     if memchr(base, 0, haystackLength) != nil {
         return nil
     }
+    if asciiCaseInsensitive {
+        for byte in literal where byte >= 0x80 {
+            return nil
+        }
+        if rgSwiftContainsNonASCIIByte(base, count: haystackLength) {
+            return nil
+        }
+    }
 
     guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
         return nil
@@ -7112,6 +7136,15 @@ private func rgSwiftDarwinWriteAfterContextLiteralLines(
     var previousEmittedLineNumber = 0
     var lineStart = 0
     var emittedHeading = false
+    let foldedLiteral = asciiCaseInsensitive
+        ? (0..<literal.count).map { rgSwiftASCIILower(literalBase[$0]) }
+        : []
+    var caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
+    if asciiCaseInsensitive, foldedLiteral.count > 1 {
+        for index in 0..<(foldedLiteral.count - 1) {
+            caseInsensitiveShifts[Int(foldedLiteral[index])] = foldedLiteral.count - 1 - index
+        }
+    }
 
     func emitGroupSeparatorIfNeeded() -> Bool {
         guard previousEmittedLineNumber > 0,
@@ -7121,6 +7154,28 @@ private func rgSwiftDarwinWriteAfterContextLiteralLines(
         }
         return output.writeBytes(contextSeparator)
             && output.writeByte(UInt8(ascii: "\n"))
+    }
+
+    func lineContainsLiteral(lineStart: Int, lineEnd: Int) -> Bool {
+        if asciiCaseInsensitive {
+            return foldedLiteral.withUnsafeBufferPointer { foldedBuffer in
+                caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
+                    rg_memcasemem_ascii_prepared(
+                        base.advanced(by: lineStart),
+                        lineEnd - lineStart,
+                        foldedBuffer.baseAddress,
+                        foldedBuffer.count,
+                        shifts.baseAddress
+                    ) != nil
+                }
+            }
+        }
+        return rg_memmem_simple(
+            base.advanced(by: lineStart),
+            lineEnd - lineStart,
+            literalBase,
+            literal.count
+        ) != nil
     }
 
     while lineStart < haystackLength {
@@ -7133,12 +7188,7 @@ private func rgSwiftDarwinWriteAfterContextLiteralLines(
             base.distance(to: $0.assumingMemoryBound(to: UInt8.self))
         } ?? haystackLength
         let outputEnd = newline == nil ? haystackLength : lineEnd + 1
-        let containsLiteral = rg_memmem_simple(
-            base.advanced(by: lineStart),
-            lineEnd - lineStart,
-            literalBase,
-            literal.count
-        ) != nil
+        let containsLiteral = lineContainsLiteral(lineStart: lineStart, lineEnd: lineEnd)
 
         let shouldCountMatch = containsLiteral && matchedLineCount < maxCount
         let shouldEmit = shouldCountMatch || remainingContextLines > 0
@@ -7194,6 +7244,7 @@ private func rgSwiftDarwinWriteBeforeContextLiteralLines(
     literal: UnsafeBufferPointer<UInt8>,
     beforeContext: Int,
     maxCount: Int,
+    asciiCaseInsensitive: Bool,
     lineNumber: Bool,
     lineNumberFieldMatchSeparator: [UInt8],
     lineNumberFieldContextSeparator: [UInt8],
@@ -7222,6 +7273,14 @@ private func rgSwiftDarwinWriteBeforeContextLiteralLines(
     if memchr(base, 0, haystackLength) != nil {
         return nil
     }
+    if asciiCaseInsensitive {
+        for byte in literal where byte >= 0x80 {
+            return nil
+        }
+        if rgSwiftContainsNonASCIIByte(base, count: haystackLength) {
+            return nil
+        }
+    }
 
     guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
         return nil
@@ -7246,6 +7305,15 @@ private func rgSwiftDarwinWriteBeforeContextLiteralLines(
     var previousEmittedLineNumber = 0
     var lineStart = 0
     var emittedHeading = false
+    let foldedLiteral = asciiCaseInsensitive
+        ? (0..<literal.count).map { rgSwiftASCIILower(literalBase[$0]) }
+        : []
+    var caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
+    if asciiCaseInsensitive, foldedLiteral.count > 1 {
+        for index in 0..<(foldedLiteral.count - 1) {
+            caseInsensitiveShifts[Int(foldedLiteral[index])] = foldedLiteral.count - 1 - index
+        }
+    }
 
     func compactPendingLinesIfNeeded() {
         guard pendingStartIndex > 1024 else {
@@ -7307,6 +7375,28 @@ private func rgSwiftDarwinWriteBeforeContextLiteralLines(
         return true
     }
 
+    func lineContainsLiteral(lineStart: Int, lineEnd: Int) -> Bool {
+        if asciiCaseInsensitive {
+            return foldedLiteral.withUnsafeBufferPointer { foldedBuffer in
+                caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
+                    rg_memcasemem_ascii_prepared(
+                        base.advanced(by: lineStart),
+                        lineEnd - lineStart,
+                        foldedBuffer.baseAddress,
+                        foldedBuffer.count,
+                        shifts.baseAddress
+                    ) != nil
+                }
+            }
+        }
+        return rg_memmem_simple(
+            base.advanced(by: lineStart),
+            lineEnd - lineStart,
+            literalBase,
+            literal.count
+        ) != nil
+    }
+
     while lineStart < haystackLength {
         let newline = memchr(
             base.advanced(by: lineStart),
@@ -7318,12 +7408,7 @@ private func rgSwiftDarwinWriteBeforeContextLiteralLines(
         } ?? haystackLength
         let hasNewline = newline != nil
         let outputEnd = hasNewline ? lineEnd + 1 : haystackLength
-        let containsLiteral = rg_memmem_simple(
-            base.advanced(by: lineStart),
-            lineEnd - lineStart,
-            literalBase,
-            literal.count
-        ) != nil
+        let containsLiteral = lineContainsLiteral(lineStart: lineStart, lineEnd: lineEnd)
         let currentLine = PendingLine(
             number: currentLineNumber,
             start: lineStart,
@@ -7362,6 +7447,7 @@ private func rgSwiftDarwinWriteContextLiteralLines(
     beforeContext: Int,
     afterContext: Int,
     maxCount: Int,
+    asciiCaseInsensitive: Bool,
     lineNumber: Bool,
     lineNumberFieldMatchSeparator: [UInt8],
     lineNumberFieldContextSeparator: [UInt8],
@@ -7391,6 +7477,14 @@ private func rgSwiftDarwinWriteContextLiteralLines(
     if memchr(base, 0, haystackLength) != nil {
         return nil
     }
+    if asciiCaseInsensitive {
+        for byte in literal where byte >= 0x80 {
+            return nil
+        }
+        if rgSwiftContainsNonASCIIByte(base, count: haystackLength) {
+            return nil
+        }
+    }
 
     guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
         return nil
@@ -7416,6 +7510,15 @@ private func rgSwiftDarwinWriteContextLiteralLines(
     var previousEmittedLineNumber = 0
     var lineStart = 0
     var emittedHeading = false
+    let foldedLiteral = asciiCaseInsensitive
+        ? (0..<literal.count).map { rgSwiftASCIILower(literalBase[$0]) }
+        : []
+    var caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
+    if asciiCaseInsensitive, foldedLiteral.count > 1 {
+        for index in 0..<(foldedLiteral.count - 1) {
+            caseInsensitiveShifts[Int(foldedLiteral[index])] = foldedLiteral.count - 1 - index
+        }
+    }
 
     func compactPendingLinesIfNeeded() {
         guard pendingStartIndex > 1024 else {
@@ -7477,6 +7580,28 @@ private func rgSwiftDarwinWriteContextLiteralLines(
         return true
     }
 
+    func lineContainsLiteral(lineStart: Int, lineEnd: Int) -> Bool {
+        if asciiCaseInsensitive {
+            return foldedLiteral.withUnsafeBufferPointer { foldedBuffer in
+                caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
+                    rg_memcasemem_ascii_prepared(
+                        base.advanced(by: lineStart),
+                        lineEnd - lineStart,
+                        foldedBuffer.baseAddress,
+                        foldedBuffer.count,
+                        shifts.baseAddress
+                    ) != nil
+                }
+            }
+        }
+        return rg_memmem_simple(
+            base.advanced(by: lineStart),
+            lineEnd - lineStart,
+            literalBase,
+            literal.count
+        ) != nil
+    }
+
     while lineStart < haystackLength {
         let newline = memchr(
             base.advanced(by: lineStart),
@@ -7488,12 +7613,7 @@ private func rgSwiftDarwinWriteContextLiteralLines(
         } ?? haystackLength
         let hasNewline = newline != nil
         let outputEnd = hasNewline ? lineEnd + 1 : haystackLength
-        let containsLiteral = rg_memmem_simple(
-            base.advanced(by: lineStart),
-            lineEnd - lineStart,
-            literalBase,
-            literal.count
-        ) != nil
+        let containsLiteral = lineContainsLiteral(lineStart: lineStart, lineEnd: lineEnd)
         let currentLine = PendingLine(
             number: currentLineNumber,
             start: lineStart,

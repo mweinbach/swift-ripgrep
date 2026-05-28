@@ -117,6 +117,10 @@ both before- and after-context are active. It buffers prior line ranges and keep
 emitting trailing context after counted matches, preserving overlapping groups,
 match/context markers, max-count, heading/prefix layout, no-final-newline output,
 and conservative binary/BOM fallback behavior.
+ASCII case-insensitive single-literal context output now reuses those same
+mapped writers for `-A`, `-B`, and `-C` when the literal and haystack are ASCII,
+falling back for Unicode case-folding candidates instead of widening the byte
+scanner's semantics.
 
 A targeted 20-run A/B against the previous Swift checkpoint and Rust used the
 same 4.8 MiB fixture:
@@ -1307,6 +1311,15 @@ Additional current/Rust checks used 3 warmups and 10 timed runs:
 |---|---:|---:|
 | `-n -C 1 needle` | 10.0 ms | 8.9 ms |
 | `--no-context-separator -C 1 needle` | 8.8 ms | 6.4 ms |
+
+The ASCII ignore-case context checks used the same fixture with uppercase
+`NEEDLE` as the query:
+
+| Flags | Swift before | Swift after | rg |
+|---|---:|---:|---:|
+| `-i -A 1 NEEDLE` | 7.920 s | 9.2 ms | 7.1 ms |
+| `-i -B 1 NEEDLE` | 7.896 s | 9.4 ms | 7.0 ms |
+| `-i -C 1 NEEDLE` | 11.281 s | 9.4 ms | 7.0 ms |
 
 Null path terminator flags now stay on the executable literal preflight when
 the command shape cannot print a path. This covers standalone `--null` and

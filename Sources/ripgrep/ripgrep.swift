@@ -1656,7 +1656,6 @@ struct RipgrepCommand {
            !parsedTrim,
            !wordRegexp,
            !parsedLineRegexp,
-           !asciiCaseInsensitive,
            explicitRegexpPatterns.count <= 1,
            (patternCanStartWithDash || !pattern.hasPrefix("-")),
            path != "-" {
@@ -1672,13 +1671,15 @@ struct RipgrepCommand {
             if let contextLiteralPattern {
                 let contextLiteral = Array(contextLiteralPattern.utf8)
                 if !contextLiteral.isEmpty,
-                   !contextLiteral.contains(UInt8(ascii: "\n")) {
+                   !contextLiteral.contains(UInt8(ascii: "\n")),
+                   (!asciiCaseInsensitive || contextLiteral.allSatisfy({ $0 < 0x80 })) {
                     return SwiftDarwinLiteralPreflight.contextLiteralLineExitCode(
                         path: path,
                         literal: contextLiteral,
                         beforeContext: parsedBeforeContext,
                         afterContext: parsedAfterContext,
                         maxCount: parsedMaxCount ?? Int.max,
+                        asciiCaseInsensitive: asciiCaseInsensitive,
                         lineNumber: lineNumber,
                         lineNumberFieldMatchSeparator: parsedFieldMatchSeparator,
                         lineNumberFieldContextSeparator: parsedFieldContextSeparator,
@@ -1711,7 +1712,6 @@ struct RipgrepCommand {
            !parsedTrim,
            !wordRegexp,
            !parsedLineRegexp,
-           !asciiCaseInsensitive,
            explicitRegexpPatterns.count <= 1,
            (patternCanStartWithDash || !pattern.hasPrefix("-")),
            path != "-" {
@@ -1727,12 +1727,14 @@ struct RipgrepCommand {
             if let afterContextLiteralPattern {
                 let afterContextLiteral = Array(afterContextLiteralPattern.utf8)
                 if !afterContextLiteral.isEmpty,
-                   !afterContextLiteral.contains(UInt8(ascii: "\n")) {
+                   !afterContextLiteral.contains(UInt8(ascii: "\n")),
+                   (!asciiCaseInsensitive || afterContextLiteral.allSatisfy({ $0 < 0x80 })) {
                     return SwiftDarwinLiteralPreflight.afterContextLiteralLineExitCode(
                         path: path,
                         literal: afterContextLiteral,
                         afterContext: parsedAfterContext,
                         maxCount: parsedMaxCount ?? Int.max,
+                        asciiCaseInsensitive: asciiCaseInsensitive,
                         lineNumber: lineNumber,
                         lineNumberFieldMatchSeparator: parsedFieldMatchSeparator,
                         lineNumberFieldContextSeparator: parsedFieldContextSeparator,
@@ -1765,7 +1767,6 @@ struct RipgrepCommand {
            !parsedTrim,
            !wordRegexp,
            !parsedLineRegexp,
-           !asciiCaseInsensitive,
            explicitRegexpPatterns.count <= 1,
            (patternCanStartWithDash || !pattern.hasPrefix("-")),
            path != "-" {
@@ -1781,12 +1782,14 @@ struct RipgrepCommand {
             if let beforeContextLiteralPattern {
                 let beforeContextLiteral = Array(beforeContextLiteralPattern.utf8)
                 if !beforeContextLiteral.isEmpty,
-                   !beforeContextLiteral.contains(UInt8(ascii: "\n")) {
+                   !beforeContextLiteral.contains(UInt8(ascii: "\n")),
+                   (!asciiCaseInsensitive || beforeContextLiteral.allSatisfy({ $0 < 0x80 })) {
                     return SwiftDarwinLiteralPreflight.beforeContextLiteralLineExitCode(
                         path: path,
                         literal: beforeContextLiteral,
                         beforeContext: parsedBeforeContext,
                         maxCount: parsedMaxCount ?? Int.max,
+                        asciiCaseInsensitive: asciiCaseInsensitive,
                         lineNumber: lineNumber,
                         lineNumberFieldMatchSeparator: parsedFieldMatchSeparator,
                         lineNumberFieldContextSeparator: parsedFieldContextSeparator,
