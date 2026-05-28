@@ -1741,6 +1741,53 @@ struct RipgrepCommand {
                 }
             }
         }
+        if parsedInvertMatch,
+           parsedPrintMode == .matchingLines,
+           !parsedOnlyMatching,
+           !parsedQuiet,
+           !parsedByteOffset,
+           !parsedColumn,
+           !parsedColorMayEmit,
+           parsedEncodingIsAutomatic,
+           parsedAfterContext == 0,
+           parsedBeforeContext == 0,
+           !parsedJson,
+           parsedMaxColumns == 0,
+           !parsedNullData,
+           !parsedPassthru,
+           !parsedSearchZip,
+           !parsedStats,
+           !parsedStopOnNonmatch,
+           !parsedCrlf,
+           !parsedTrim,
+           !wordRegexp,
+           !parsedLineRegexp,
+           !asciiCaseInsensitive,
+           parsedMaxCount != 0,
+           (patternCanStartWithDash || !pattern.hasPrefix("-")),
+           path != "-" {
+            let invertedLiteralPattern = fixedStrings
+                ? pattern
+                : RegexLiteralParser.literal(
+                    fromPlainRegexPattern: pattern,
+                    allowPCREQuotedLiterals: allowPCREQuotedLiterals
+                )
+            if let invertedLiteralPattern {
+                let invertedLiteral = Array(invertedLiteralPattern.utf8)
+                if !invertedLiteral.isEmpty,
+                   !invertedLiteral.contains(UInt8(ascii: "\n")) {
+                    return SwiftDarwinLiteralPreflight.invertedLiteralLineExitCode(
+                        path: path,
+                        literal: invertedLiteral,
+                        maxCount: parsedMaxCount ?? Int.max,
+                        lineNumber: lineNumber,
+                        lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                        linePrefix: parsedLinePrefix,
+                        headingPrefix: parsedHeadingPrefix
+                    )
+                }
+            }
+        }
         guard !(parsedLineRegexp && wordRegexp) else {
             return nil
         }

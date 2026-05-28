@@ -88,6 +88,10 @@ line writer that trims leading ASCII space, tab, and CR bytes from line content
 before emitting the matched line, while preserving headings, line numbers, max-count,
 fixed-string literals, no-final-newline output, and the conservative binary/BOM
 fallbacks.
+Literal `--invert-match` matching-line output now has its own mapped Swift line
+writer for single-file literal searches, preserving line numbers, headings,
+filename prefixes, max-count, fixed-string literals, no-final-newline output,
+and binary/BOM fallback behavior.
 
 A targeted 20-run A/B against the previous Swift checkpoint and Rust used the
 same 4.8 MiB fixture:
@@ -1176,6 +1180,17 @@ eligible:
 |---|---:|---:|---:|
 | `--trim needle` | 376.5 ms | 13.8 ms | 15.4 ms |
 | `-n --trim needle` | 416.8 ms | 20.8 ms | 24.6 ms |
+
+The literal invert check used `/tmp/swift-rg-candidates/invert.txt`, a
+250,000-line / 6.19 MiB fixture with every tenth line containing the rejected
+literal. The before column is the pre-route Swift fallback from a 7-run probe;
+after and Rust used 3 warmups and 10 timed runs with `RIPGREP_CONFIG_PATH`
+unset:
+
+| Flags | Swift before | Swift after | rg |
+|---|---:|---:|---:|
+| `-v needle` | 927.2 ms | 10.3 ms | 11.1 ms |
+| `-n -v needle` | 970.6 ms | 12.4 ms | 17.3 ms |
 
 Null path terminator flags now stay on the executable literal preflight when
 the command shape cannot print a path. This covers standalone `--null` and

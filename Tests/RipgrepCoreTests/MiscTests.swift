@@ -1240,6 +1240,8 @@ struct MiscTests {
         try root.write("needle needle\nNeedle quiet\n", to: "overlap.txt")
         try root.write("    needle padded\n\tneedle tabbed\nquiet\n    needle later\n", to: "trim.txt")
         try root.write("   \n  needle space\n", to: "trim-space.txt")
+        try root.write("quiet one\nneedle skip\nquiet two\nneedle skip two\ntail quiet", to: "invert.txt")
+        try root.write("needle\nneedle two\n", to: "all-needle.txt")
         try root.write("needle\n", to: ".hidden.txt")
         try root.write("*.txt\n", to: ".ignore")
         try root.write("needle\n", to: "ignored.txt")
@@ -1692,6 +1694,67 @@ struct MiscTests {
             root.path("trim-space.txt"),
         ], fixture: {})
         #expect(trimWhitespaceOnlyOutput == Data("\nneedle space\n".utf8))
+
+        let invertOutput = try runExecutableData([
+            "-v",
+            "needle",
+            root.path("invert.txt"),
+        ], fixture: {})
+        #expect(invertOutput == Data("""
+        quiet one
+        quiet two
+        tail quiet
+
+        """.utf8))
+
+        let invertLineNumberOutput = try runExecutableData([
+            "-n",
+            "-v",
+            "needle",
+            root.path("invert.txt"),
+        ], fixture: {})
+        #expect(invertLineNumberOutput == Data("""
+        1:quiet one
+        3:quiet two
+        5:tail quiet
+
+        """.utf8))
+
+        let invertMaxCountOutput = try runExecutableData([
+            "-v",
+            "-m2",
+            "needle",
+            root.path("invert.txt"),
+        ], fixture: {})
+        #expect(invertMaxCountOutput == Data("""
+        quiet one
+        quiet two
+
+        """.utf8))
+
+        let invertHeadingWithFilenameOutput = try runExecutableData([
+            "--heading",
+            "--with-filename",
+            "-v",
+            "needle",
+            root.path("invert.txt"),
+        ], fixture: {})
+        #expect(invertHeadingWithFilenameOutput == Data("""
+        \(root.path("invert.txt"))
+        quiet one
+        quiet two
+        tail quiet
+
+        """.utf8))
+
+        let invertAllFilteredResult = try runExecutableResult([
+            "-v",
+            "needle",
+            root.path("all-needle.txt"),
+        ])
+        #expect(invertAllFilteredResult.stdout.isEmpty)
+        #expect(invertAllFilteredResult.stderr.isEmpty)
+        #expect(invertAllFilteredResult.status == 1)
 
         let plainOnlyMatchingLineNumberOutput = try runExecutableData([
             "-n",
