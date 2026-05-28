@@ -116,6 +116,42 @@ public enum SwiftDarwinLiteralPreflight {
         return 0
     }
 
+    public static func asciiCaseInsensitiveLimitedCountLineExitCode(
+        path: String,
+        literal: [UInt8],
+        includeZero: Bool,
+        maxCount: Int
+    ) -> Int32? {
+        guard maxCount == 1,
+              let matched = containsASCIICaseInsensitiveLiteral(path: path, literal: literal) else {
+            return nil
+        }
+        if matched {
+            FileHandle.standardOutput.write(Data("1\n".utf8))
+        } else if includeZero {
+            FileHandle.standardOutput.write(Data("0\n".utf8))
+        }
+        return matched ? 0 : 1
+    }
+
+    public static func asciiCaseInsensitiveExactLineCountExitCode(
+        path: String,
+        literal: [UInt8],
+        includeZero: Bool,
+        maxCount: Int
+    ) -> Int32? {
+        guard maxCount == 1,
+              let matched = containsASCIICaseInsensitiveExactLine(path: path, literal: literal) else {
+            return nil
+        }
+        if matched {
+            FileHandle.standardOutput.write(Data("1\n".utf8))
+        } else if includeZero {
+            FileHandle.standardOutput.write(Data("0\n".utf8))
+        }
+        return matched ? 0 : 1
+    }
+
     public static func wordQuietExitCode(
         path: String,
         literal: [UInt8]

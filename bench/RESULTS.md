@@ -425,6 +425,15 @@ on the existing full path because repeated high-level line counting regressed
 that case. On the same fixture, `-c -m1 needle` improved from 26.4 ms to
 3.3 ms, versus 3.0 ms for Rust.
 
+Case-insensitive `-c -m1` literal and exact-line searches now share a
+match-only Swift preflight. When a mapped ASCII exact/lower/upper probe proves a
+match, the count is known to be `1`; otherwise no-match and mixed-case-only
+cases fall back to the full searcher. On a 45 MiB fixture, `-c -m1 -i NEEDLE`
+measured 11.0 ms, versus 2.5 ms for Rust, and `-c -m1 -i -x 'NEEDLE NEEDLE
+NEEDLE QUIET TAIL NEEDLE'` measured 7.3 ms, versus 2.8 ms for Rust. On a
+3.7 MiB exact-line fixture, the exact-line count form improved from a forced
+fallback at 1.490 s to 4.1 ms.
+
 Exact line-regexp literals now get a Swift-first executable preflight for
 `-x`/`--line-regexp` when CRLF mode and formatted output modes are inactive.
 The scanner uses mapped `Data`, searches for `literal + "\\n"` in the common
