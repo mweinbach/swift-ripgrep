@@ -1430,7 +1430,7 @@ struct RipgrepCommand {
               !parsedPassthru,
               !parsedSearchZip,
               !parsedStats,
-              !parsedStopOnNonmatch,
+              (!parsedStopOnNonmatch || parsedQuiet || parsedPathOnlyMode != nil),
               !parsedTrim,
               !parsedWithFilename,
               parsedPrintMode != .countMatches else {
