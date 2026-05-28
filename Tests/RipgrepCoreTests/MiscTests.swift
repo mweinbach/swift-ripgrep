@@ -1587,6 +1587,9 @@ struct MiscTests {
             (["-nU"], lineNumberOutput),
             (["-U", "--multiline-dotall"], output),
             (["--multiline", "--multiline-dotall", "-n"], lineNumberOutput),
+            (["--stop-on-nonmatch", "-U"], output),
+            (["--stop-on-nonmatch", "--multiline"], output),
+            (["--stop-on-nonmatch", "-U", "--no-multiline"], output),
         ] {
             let multilineOutput = try runExecutableData(
                 multilineArguments + [
@@ -1597,6 +1600,14 @@ struct MiscTests {
             )
             #expect(multilineOutput == expectedOutput)
         }
+
+        let activeStopOnNonmatchOutput = try runExecutableData([
+            "-U",
+            "--stop-on-nonmatch",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(activeStopOnNonmatchOutput == Data("needle needle needle\n".utf8))
 
         let messagesOutput = try runExecutableData([
             "--messages",

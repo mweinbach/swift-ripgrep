@@ -812,6 +812,7 @@ struct RipgrepCommand {
             fixedStrings: Bool,
             allowPCREQuotedLiterals: Bool?,
             invertMatch: Bool,
+            multiline: Bool,
             quiet: Bool,
             count: Bool,
             pathOnlyMode: PathOnlyMode?,
@@ -831,6 +832,7 @@ struct RipgrepCommand {
             var fixedStrings = false
             var allowPCREQuotedLiterals: Bool?
             var invertMatch = false
+            var multiline = false
             var quiet = false
             var count = false
             var pathOnlyMode: PathOnlyMode?
@@ -844,7 +846,7 @@ struct RipgrepCommand {
                 case UInt8(ascii: "S"):
                     caseMode = .smart
                 case UInt8(ascii: "U"):
-                    continue
+                    multiline = true
                 case UInt8(ascii: "n"):
                     lineNumber = true
                 case UInt8(ascii: "N"):
@@ -888,6 +890,7 @@ struct RipgrepCommand {
                 fixedStrings,
                 allowPCREQuotedLiterals,
                 invertMatch,
+                multiline,
                 quiet,
                 count,
                 pathOnlyMode,
@@ -925,6 +928,7 @@ struct RipgrepCommand {
         var parsedMaxCount: Int?
         var parsedCount = false
         var parsedStats = false
+        var parsedStopOnNonmatch = false
         var parsedTrim = false
         var parsedTypeDefinitionChanges: [TypeChange] = []
         var parsedUnrestrictedCount = 0
@@ -1054,6 +1058,10 @@ struct RipgrepCommand {
                 parsedCrlf = true
             } else if argument == "--no-crlf" {
                 parsedCrlf = false
+            } else if argument == "-U" || argument == "--multiline" {
+                parsedStopOnNonmatch = false
+            } else if argument == "--stop-on-nonmatch" {
+                parsedStopOnNonmatch = true
             } else if isSeparatedMaxCountFlag(argument) {
                 guard argumentIndex < arguments.count,
                       let maxCount = nonNegativeInteger(arguments[argumentIndex]) else {
@@ -1334,6 +1342,9 @@ struct RipgrepCommand {
                     allowPCREQuotedLiterals = clusterPCREQuotedLiterals
                 }
                 parsedInvertMatch = parsedInvertMatch || cluster.invertMatch
+                if cluster.multiline {
+                    parsedStopOnNonmatch = false
+                }
                 parsedQuiet = parsedQuiet || cluster.quiet
                 if cluster.count {
                     parsedPrintMode = .count
@@ -1419,6 +1430,7 @@ struct RipgrepCommand {
               !parsedPassthru,
               !parsedSearchZip,
               !parsedStats,
+              !parsedStopOnNonmatch,
               !parsedTrim,
               !parsedWithFilename,
               parsedPrintMode != .countMatches else {

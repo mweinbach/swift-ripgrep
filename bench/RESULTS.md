@@ -658,6 +658,15 @@ completion. After the change, five-run checks on the same 24 KB fixture measured
 24,000,000-byte fixture used for binary-mode toggles, current `-U`,
 `--multiline`, and `--multiline-dotall` measured 26.4 ms, 26.2 ms, and 26.4 ms
 respectively, versus 30.6 ms for Rust `-U`.
+`--stop-on-nonmatch` remains on the full path while it is active, but the
+executable preflight now accepts ordered reset forms where a later `-U` or
+`--multiline` makes it output-equivalent to normal literal matching. Focused
+coverage keeps `-U --stop-on-nonmatch` on the fallback by checking its truncated
+output, while direct release byte checks matched Rust for reset line-output,
+quiet, path-only, and active fallback controls. On a 50 KiB dense fixture,
+`--stop-on-nonmatch -U needle` improved from 62.8 ms to 4.7 ms, versus 4.4 ms
+for Rust. A current 48 MiB quiet reset check measured
+`--stop-on-nonmatch -qU needle` at 3.7 ms, versus 3.2 ms for Rust.
 
 Null path terminator flags now stay on the executable literal preflight when
 the command shape cannot print a path. This covers standalone `--null` and
