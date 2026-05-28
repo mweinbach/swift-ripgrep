@@ -743,6 +743,7 @@ struct RipgrepCommand {
             fixedStrings: Bool,
             allowPCREQuotedLiterals: Bool?,
             quiet: Bool,
+            count: Bool,
             pathOnlyMode: PathOnlyMode?,
             unrestrictedCount: Int
         )? {
@@ -760,6 +761,7 @@ struct RipgrepCommand {
             var fixedStrings = false
             var allowPCREQuotedLiterals: Bool?
             var quiet = false
+            var count = false
             var pathOnlyMode: PathOnlyMode?
             var unrestrictedCount = 0
             for byte in bytes.dropFirst() {
@@ -792,6 +794,8 @@ struct RipgrepCommand {
                     continue
                 case UInt8(ascii: "q"):
                     quiet = true
+                case UInt8(ascii: "c"):
+                    count = true
                 case UInt8(ascii: "l"):
                     pathOnlyMode = .matching
                 case UInt8(ascii: "u"):
@@ -811,6 +815,7 @@ struct RipgrepCommand {
                 fixedStrings,
                 allowPCREQuotedLiterals,
                 quiet,
+                count,
                 pathOnlyMode,
                 unrestrictedCount
             )
@@ -1138,6 +1143,7 @@ struct RipgrepCommand {
                     allowPCREQuotedLiterals = clusterPCREQuotedLiterals
                 }
                 parsedQuiet = parsedQuiet || cluster.quiet
+                parsedCount = parsedCount || cluster.count
                 if let clusterPathOnlyMode = cluster.pathOnlyMode {
                     parsedPathOnlyMode = clusterPathOnlyMode
                 }

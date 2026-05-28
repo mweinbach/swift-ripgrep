@@ -1366,10 +1366,12 @@ struct MiscTests {
             (["--count", "--include-zero", "missing", root.path("quiet-no-match.txt")], Data("0\n".utf8), Int32(1)),
             (["-c", "-m1", "needle", root.path("dense.txt")], Data("1\n".utf8), Int32(0)),
             (["-c", "-m1", "-i", "NEEDLE", root.path("dense.txt")], Data("1\n".utf8), Int32(0)),
+            (["-ci", "-m1", "NEEDLE", root.path("dense.txt")], Data("1\n".utf8), Int32(0)),
             (["-c", "-m1", "-i", "missing", root.path("dense.txt")], Data(), Int32(1)),
             (["-c", "-x", "needle", root.path("exact.txt")], Data("2\n".utf8), Int32(0)),
             (["-c", "-m1", "-x", "needle", root.path("exact.txt")], Data("1\n".utf8), Int32(0)),
             (["-c", "-m1", "-i", "-x", "NEEDLE", root.path("exact.txt")], Data("1\n".utf8), Int32(0)),
+            (["-cix", "-m1", "NEEDLE", root.path("exact.txt")], Data("1\n".utf8), Int32(0)),
             (["-c", "-x", "--include-zero", "missing", root.path("exact.txt")], Data("0\n".utf8), Int32(1)),
         ] {
             let countResult = try runExecutableResult(countArguments)

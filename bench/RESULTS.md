@@ -434,6 +434,14 @@ NEEDLE QUIET TAIL NEEDLE'` measured 7.3 ms, versus 2.8 ms for Rust. On a
 3.7 MiB exact-line fixture, the exact-line count form improved from a forced
 fallback at 1.490 s to 4.1 ms.
 
+Clustered short count flags now reach the same executable preflight parser, so
+common spellings like `-ci -m1 NEEDLE` and `-cix -m1 ...` no longer fall back
+just because `c` was packed into the short-flag cluster. On the same 45 MiB
+fixture, `-ci -m1 NEEDLE` now measures 11.0 ms, versus the pre-change clustered
+route at 26.6 ms and Rust at 2.6 ms. On the 3.7 MiB exact-line fixture,
+`-cix -m1 'NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE'` measures 3.7 ms, versus the
+earlier forced fallback at 1.490 s and Rust at 2.8 ms.
+
 Exact line-regexp literals now get a Swift-first executable preflight for
 `-x`/`--line-regexp` when CRLF mode and formatted output modes are inactive.
 The scanner uses mapped `Data`, searches for `literal + "\\n"` in the common
