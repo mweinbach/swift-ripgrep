@@ -22,7 +22,8 @@ multi-literal only-match output. The non-word `-o`/`-o -i` path emits the
 original matched bytes, preserves line-number and filename prefixes, handles
 overlapping alternatives with Rust-compatible leftmost/alternation order, and
 falls back for binary-prefix haystacks; ignore-case additionally falls back for
-non-ASCII haystacks.
+non-ASCII haystacks. Heading output now uses the same only-match writer and
+emits the heading lazily before the first match.
 
 Benchmarks used `/tmp/swift-rg-bench/stop-on-nonmatch-small.txt`, a 4.8 MiB
 dense ASCII fixture, with 2 warmups and 5 timed runs:
@@ -40,6 +41,9 @@ dense ASCII fixture, with 2 warmups and 5 timed runs:
 | `-n -o needle` | 81.6 ms | 22.2 ms | 30.1 ms |
 | `-o "needle\|quiet"` | 59.6 ms | 17.8 ms | 32.1 ms |
 | `-n -o "needle\|quiet"` | 66.8 ms | 28.3 ms | 42.6 ms |
+| `--heading -H -o needle` | 1.661 s | 14.0 ms | 21.8 ms |
+| `--heading -H -n -o needle` | 1.717 s | 21.8 ms | 30.9 ms |
+| `--heading -H -o "needle\|quiet"` | 2.325 s | 17.8 ms | 32.6 ms |
 | `-o -i NEEDLE` | 68.6 ms | 26.1 ms | 41.3 ms |
 | `-n -o -i NEEDLE` | 81.4 ms | 35.2 ms | 51.8 ms |
 | `-o -i "NEEDLE\|QUIET"` | 7.718 s | 34.7 ms | 53.4 ms |

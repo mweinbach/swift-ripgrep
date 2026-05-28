@@ -1424,6 +1424,24 @@ struct MiscTests {
 
         """.utf8))
 
+        let headingOnlyMatchingOutput = try runExecutableData([
+            "--heading",
+            "-H",
+            "-o",
+            "needle|quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(headingOnlyMatchingOutput == Data("""
+        \(root.path("dense.txt"))
+        needle
+        needle
+        needle
+        quiet
+        needle
+        needle
+
+        """.utf8))
+
         let caseInsensitiveMultiLiteralOnlyMatchingOutput = try runExecutableData([
             "-o",
             "-i",
@@ -1431,6 +1449,27 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(caseInsensitiveMultiLiteralOnlyMatchingOutput == Data("""
+        needle
+        needle
+        needle
+        quiet
+        NEEDLE
+        needle
+        Needle
+        needle
+
+        """.utf8))
+
+        let caseInsensitiveHeadingOnlyMatchingOutput = try runExecutableData([
+            "--heading",
+            "-H",
+            "-o",
+            "-i",
+            "NEEDLE|QUIET",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(caseInsensitiveHeadingOnlyMatchingOutput == Data("""
+        \(root.path("dense.txt"))
         needle
         needle
         needle
@@ -1536,6 +1575,25 @@ struct MiscTests {
         1:needle
         1:needle
         1:needle
+
+        """.utf8))
+
+        let headingOnlyMatchingLineNumberOutput = try runExecutableData([
+            "--heading",
+            "-H",
+            "-n",
+            "-o",
+            "needle|quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(headingOnlyMatchingLineNumberOutput == Data("""
+        \(root.path("dense.txt"))
+        1:needle
+        1:needle
+        1:needle
+        2:quiet
+        3:needle
+        4:needle
 
         """.utf8))
 
