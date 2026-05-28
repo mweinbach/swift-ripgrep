@@ -320,6 +320,17 @@ current `--no-block-buffered Sherlock` at 313.7 ms versus 443.0 ms before,
 Rust, and a noisy `--threads=1 Sherlock` rerun at 380.1 ms versus 480.0 ms
 before and 401.8 ms for Rust.
 
+Valid regex/DFA resource limit flags now also remain eligible for the
+executable literal preflight. The preflight parser accepts separated and inline
+`--dfa-size-limit` and `--regex-size-limit` values using the same digit plus
+optional `K`/`M`/`G` syntax as the full parser, and invalid values still fall
+through to the normal parser diagnostic. Small previous/current/Rust checks
+covered inline and separated forms; large current/Rust checks covered
+`--dfa-size-limit=10M` and `--regex-size-limit 10M`. Ten-run checks on the
+252 MiB dense fixture measured current `--dfa-size-limit=10M Sherlock` at
+380.2 ms versus 13.501 s before, and current `--regex-size-limit 10M Sherlock`
+at 358.1 ms versus 13.659 s before and 476.9 ms for Rust.
+
 The Swift-only Darwin mmap/stdout preflight now also covers line-numbered
 medium bounded multi-literal output when no filename, byte-offset, column,
 replacement, only-matching, or vimgrep formatting is requested. Output for

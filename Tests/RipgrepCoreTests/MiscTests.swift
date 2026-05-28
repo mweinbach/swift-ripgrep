@@ -1464,6 +1464,21 @@ struct MiscTests {
         ], fixture: {})
         #expect(shortThreadCountOutput == output)
 
+        let dfaSizeLimitOutput = try runExecutableData([
+            "--dfa-size-limit=10M",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(dfaSizeLimitOutput == output)
+
+        let regexSizeLimitOutput = try runExecutableData([
+            "--regex-size-limit",
+            "10M",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(regexSizeLimitOutput == output)
+
         let hiddenFlagOutput = try runExecutableData([
             "--hidden",
             "--no-ignore",

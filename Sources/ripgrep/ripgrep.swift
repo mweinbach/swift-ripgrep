@@ -434,6 +434,45 @@ struct RipgrepCommand {
         func inlineSortNone(_ argument: String) -> Bool {
             argument == "--sort=none" || argument == "--sortr=none"
         }
+        func resourceLimitValue(_ argument: String) -> String? {
+            if argument.hasPrefix("--dfa-size-limit=") {
+                return String(argument.dropFirst("--dfa-size-limit=".count))
+            }
+            if argument.hasPrefix("--regex-size-limit=") {
+                return String(argument.dropFirst("--regex-size-limit=".count))
+            }
+            return nil
+        }
+        func isResourceLimitFlag(_ argument: String) -> Bool {
+            argument == "--dfa-size-limit" || argument == "--regex-size-limit"
+        }
+        func isValidHumanReadableSize(_ raw: String) -> Bool {
+            guard !raw.isEmpty else {
+                return false
+            }
+            let multiplier: UInt64
+            let digits: Substring
+            switch raw.last {
+            case "K":
+                multiplier = 1024
+                digits = raw.dropLast()
+            case "M":
+                multiplier = 1024 * 1024
+                digits = raw.dropLast()
+            case "G":
+                multiplier = 1024 * 1024 * 1024
+                digits = raw.dropLast()
+            default:
+                multiplier = 1
+                digits = Substring(raw)
+            }
+            guard !digits.isEmpty,
+                  digits.allSatisfy(\.isNumber),
+                  let value = UInt64(digits) else {
+                return false
+            }
+            return !value.multipliedReportingOverflow(by: multiplier).overflow
+        }
         func shortFlagCluster(
             _ argument: String
         ) -> (caseMode: CaseMode?, lineNumber: Bool?, wordRegexp: Bool, fixedStrings: Bool)? {
@@ -574,6 +613,16 @@ struct RipgrepCommand {
                 argumentIndex += 1
             } else if let threadCount = inlineThreadCount(argument) {
                 guard isValidNonNegativeInteger(threadCount) else {
+                    return nil
+                }
+            } else if isResourceLimitFlag(argument) {
+                guard argumentIndex < arguments.count,
+                      isValidHumanReadableSize(arguments[argumentIndex]) else {
+                    return nil
+                }
+                argumentIndex += 1
+            } else if let resourceLimit = resourceLimitValue(argument) {
+                guard isValidHumanReadableSize(resourceLimit) else {
                     return nil
                 }
             } else if isOutputNeutralSingleFileFlag(argument) {
