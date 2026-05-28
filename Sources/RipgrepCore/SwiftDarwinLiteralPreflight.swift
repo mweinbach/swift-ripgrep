@@ -183,6 +183,69 @@ public enum SwiftDarwinLiteralPreflight {
         return 0
     }
 
+    public static func fixedLookbehindCountLineExitCode(
+        path: String,
+        prefix: [UInt8],
+        literal: [UInt8],
+        prefixShouldMatch: Bool,
+        includeZero: Bool,
+        maxCount: Int?,
+        countPrefix: [UInt8] = [],
+        crlfTerminated: Bool = false
+    ) -> Int32? {
+        guard fixedLookaroundInputsAreSafe(literal, prefix),
+              maxCount != 0,
+              let matchedLineCount = countFixedLookbehindMatchedLines(
+                path: path,
+                prefix: prefix,
+                literal: literal,
+                prefixShouldMatch: prefixShouldMatch,
+                maxCount: maxCount
+              ) else {
+            return nil
+        }
+        if matchedLineCount > 0 || includeZero {
+            guard writeCountOutput(
+                matchedLineCount,
+                countPrefix: countPrefix,
+                crlfTerminated: crlfTerminated
+            ) else {
+                return nil
+            }
+        }
+        return matchedLineCount > 0 ? 0 : 1
+    }
+
+    public static func fixedLookbehindCountMatchesExitCode(
+        path: String,
+        prefix: [UInt8],
+        literal: [UInt8],
+        prefixShouldMatch: Bool,
+        includeZero: Bool,
+        countPrefix: [UInt8] = [],
+        crlfTerminated: Bool = false
+    ) -> Int32? {
+        guard fixedLookaroundInputsAreSafe(literal, prefix),
+              let matchCount = countFixedLookbehindMatches(
+                path: path,
+                prefix: prefix,
+                literal: literal,
+                prefixShouldMatch: prefixShouldMatch
+              ) else {
+            return nil
+        }
+        if matchCount > 0 || includeZero {
+            guard writeCountOutput(
+                matchCount,
+                countPrefix: countPrefix,
+                crlfTerminated: crlfTerminated
+            ) else {
+                return nil
+            }
+        }
+        return matchCount > 0 ? 0 : 1
+    }
+
     public static func fixedLookaheadQuietExitCode(
         path: String,
         literal: [UInt8],
@@ -230,6 +293,69 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         return 0
+    }
+
+    public static func fixedLookaheadCountLineExitCode(
+        path: String,
+        literal: [UInt8],
+        suffix: [UInt8],
+        suffixShouldMatch: Bool,
+        includeZero: Bool,
+        maxCount: Int?,
+        countPrefix: [UInt8] = [],
+        crlfTerminated: Bool = false
+    ) -> Int32? {
+        guard fixedLookaroundInputsAreSafe(literal, suffix),
+              maxCount != 0,
+              let matchedLineCount = countFixedLookaheadMatchedLines(
+                path: path,
+                literal: literal,
+                suffix: suffix,
+                suffixShouldMatch: suffixShouldMatch,
+                maxCount: maxCount
+              ) else {
+            return nil
+        }
+        if matchedLineCount > 0 || includeZero {
+            guard writeCountOutput(
+                matchedLineCount,
+                countPrefix: countPrefix,
+                crlfTerminated: crlfTerminated
+            ) else {
+                return nil
+            }
+        }
+        return matchedLineCount > 0 ? 0 : 1
+    }
+
+    public static func fixedLookaheadCountMatchesExitCode(
+        path: String,
+        literal: [UInt8],
+        suffix: [UInt8],
+        suffixShouldMatch: Bool,
+        includeZero: Bool,
+        countPrefix: [UInt8] = [],
+        crlfTerminated: Bool = false
+    ) -> Int32? {
+        guard fixedLookaroundInputsAreSafe(literal, suffix),
+              let matchCount = countFixedLookaheadMatches(
+                path: path,
+                literal: literal,
+                suffix: suffix,
+                suffixShouldMatch: suffixShouldMatch
+              ) else {
+            return nil
+        }
+        if matchCount > 0 || includeZero {
+            guard writeCountOutput(
+                matchCount,
+                countPrefix: countPrefix,
+                crlfTerminated: crlfTerminated
+            ) else {
+                return nil
+            }
+        }
+        return matchCount > 0 ? 0 : 1
     }
 
     public static func asciiCaseInsensitiveQuietExitCode(
@@ -1750,6 +1876,267 @@ public enum SwiftDarwinLiteralPreflight {
                         searchOffset = matchStart + 1
                     }
                     return false
+                }
+            }
+        }
+    }
+
+    private static func fixedLookaroundInputsAreSafe(_ first: [UInt8], _ second: [UInt8]) -> Bool {
+        !first.isEmpty
+            && !second.isEmpty
+            && !first.contains(UInt8(ascii: "\n"))
+            && !second.contains(UInt8(ascii: "\n"))
+            && !first.contains(UInt8(ascii: "\r"))
+            && !second.contains(UInt8(ascii: "\r"))
+    }
+
+    private static func nextLineStart(
+        after offset: Int,
+        in base: UnsafePointer<UInt8>,
+        count: Int
+    ) -> Int {
+        guard offset < count,
+              let newline = memchr(
+                base.advanced(by: offset),
+                Int32(UInt8(ascii: "\n")),
+                count - offset
+              ) else {
+            return count
+        }
+        return base.distance(to: newline.assumingMemoryBound(to: UInt8.self)) + 1
+    }
+
+    private static func countFixedLookbehindMatchedLines(
+        path: String,
+        prefix: [UInt8],
+        literal: [UInt8],
+        prefixShouldMatch: Bool,
+        maxCount: Int?
+    ) -> Int? {
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard data.count >= literal.count else {
+            return 0
+        }
+        let limit = maxCount ?? Int.max
+
+        return data.withUnsafeBytes { rawData in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
+            }
+            let base = rawBase.assumingMemoryBound(to: UInt8.self)
+            return prefix.withUnsafeBufferPointer { prefixBytes in
+                literal.withUnsafeBufferPointer { literalBytes in
+                    guard let prefixBase = prefixBytes.baseAddress,
+                          let literalBase = literalBytes.baseAddress else {
+                        return 0
+                    }
+                    var searchOffset = 0
+                    var matchedLineCount = 0
+                    while matchedLineCount < limit,
+                          searchOffset <= data.count - literal.count {
+                        guard let found = rg_memmem_simple(
+                            base.advanced(by: searchOffset),
+                            data.count - searchOffset,
+                            literalBase,
+                            literal.count
+                        ) else {
+                            return matchedLineCount
+                        }
+                        let matchStart = base.distance(to: found)
+                        let hasPrefix = matchStart >= prefix.count
+                            && memcmp(
+                                base.advanced(by: matchStart - prefix.count),
+                                prefixBase,
+                                prefix.count
+                            ) == 0
+                        if hasPrefix == prefixShouldMatch {
+                            matchedLineCount += 1
+                            searchOffset = nextLineStart(
+                                after: matchStart + literal.count,
+                                in: base,
+                                count: data.count
+                            )
+                        } else {
+                            searchOffset = matchStart + 1
+                        }
+                    }
+                    return matchedLineCount
+                }
+            }
+        }
+    }
+
+    private static func countFixedLookbehindMatches(
+        path: String,
+        prefix: [UInt8],
+        literal: [UInt8],
+        prefixShouldMatch: Bool
+    ) -> Int? {
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard data.count >= literal.count else {
+            return 0
+        }
+
+        return data.withUnsafeBytes { rawData in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
+            }
+            let base = rawBase.assumingMemoryBound(to: UInt8.self)
+            return prefix.withUnsafeBufferPointer { prefixBytes in
+                literal.withUnsafeBufferPointer { literalBytes in
+                    guard let prefixBase = prefixBytes.baseAddress,
+                          let literalBase = literalBytes.baseAddress else {
+                        return 0
+                    }
+                    var searchOffset = 0
+                    var matchCount = 0
+                    while searchOffset <= data.count - literal.count {
+                        guard let found = rg_memmem_simple(
+                            base.advanced(by: searchOffset),
+                            data.count - searchOffset,
+                            literalBase,
+                            literal.count
+                        ) else {
+                            return matchCount
+                        }
+                        let matchStart = base.distance(to: found)
+                        let hasPrefix = matchStart >= prefix.count
+                            && memcmp(
+                                base.advanced(by: matchStart - prefix.count),
+                                prefixBase,
+                                prefix.count
+                            ) == 0
+                        if hasPrefix == prefixShouldMatch {
+                            matchCount += 1
+                            searchOffset = matchStart + literal.count
+                        } else {
+                            searchOffset = matchStart + 1
+                        }
+                    }
+                    return matchCount
+                }
+            }
+        }
+    }
+
+    private static func countFixedLookaheadMatchedLines(
+        path: String,
+        literal: [UInt8],
+        suffix: [UInt8],
+        suffixShouldMatch: Bool,
+        maxCount: Int?
+    ) -> Int? {
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard data.count >= literal.count else {
+            return 0
+        }
+        let limit = maxCount ?? Int.max
+
+        return data.withUnsafeBytes { rawData in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
+            }
+            let base = rawBase.assumingMemoryBound(to: UInt8.self)
+            return literal.withUnsafeBufferPointer { literalBytes in
+                suffix.withUnsafeBufferPointer { suffixBytes in
+                    guard let literalBase = literalBytes.baseAddress,
+                          let suffixBase = suffixBytes.baseAddress else {
+                        return 0
+                    }
+                    var searchOffset = 0
+                    var matchedLineCount = 0
+                    while matchedLineCount < limit,
+                          searchOffset <= data.count - literal.count {
+                        guard let found = rg_memmem_simple(
+                            base.advanced(by: searchOffset),
+                            data.count - searchOffset,
+                            literalBase,
+                            literal.count
+                        ) else {
+                            return matchedLineCount
+                        }
+                        let matchStart = base.distance(to: found)
+                        let suffixStart = matchStart + literal.count
+                        let hasSuffix = suffixStart + suffix.count <= data.count
+                            && memcmp(
+                                base.advanced(by: suffixStart),
+                                suffixBase,
+                                suffix.count
+                            ) == 0
+                        if hasSuffix == suffixShouldMatch {
+                            matchedLineCount += 1
+                            searchOffset = nextLineStart(
+                                after: suffixStart,
+                                in: base,
+                                count: data.count
+                            )
+                        } else {
+                            searchOffset = matchStart + 1
+                        }
+                    }
+                    return matchedLineCount
+                }
+            }
+        }
+    }
+
+    private static func countFixedLookaheadMatches(
+        path: String,
+        literal: [UInt8],
+        suffix: [UInt8],
+        suffixShouldMatch: Bool
+    ) -> Int? {
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard data.count >= literal.count else {
+            return 0
+        }
+
+        return data.withUnsafeBytes { rawData in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
+            }
+            let base = rawBase.assumingMemoryBound(to: UInt8.self)
+            return literal.withUnsafeBufferPointer { literalBytes in
+                suffix.withUnsafeBufferPointer { suffixBytes in
+                    guard let literalBase = literalBytes.baseAddress,
+                          let suffixBase = suffixBytes.baseAddress else {
+                        return 0
+                    }
+                    var searchOffset = 0
+                    var matchCount = 0
+                    while searchOffset <= data.count - literal.count {
+                        guard let found = rg_memmem_simple(
+                            base.advanced(by: searchOffset),
+                            data.count - searchOffset,
+                            literalBase,
+                            literal.count
+                        ) else {
+                            return matchCount
+                        }
+                        let matchStart = base.distance(to: found)
+                        let suffixStart = matchStart + literal.count
+                        let hasSuffix = suffixStart + suffix.count <= data.count
+                            && memcmp(
+                                base.advanced(by: suffixStart),
+                                suffixBase,
+                                suffix.count
+                            ) == 0
+                        if hasSuffix == suffixShouldMatch {
+                            matchCount += 1
+                            searchOffset = matchStart + literal.count
+                        } else {
+                            searchOffset = matchStart + 1
+                        }
+                    }
+                    return matchCount
                 }
             }
         }

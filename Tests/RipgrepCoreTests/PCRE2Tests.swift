@@ -1078,6 +1078,7 @@ struct PCRE2Tests {
     @Test func pcre2FixedLookbehindExecutableFastPathCountOutputs() throws {
         let temp = try TemporaryDirectory()
         try temp.write("Mycroft Holmes\nSherlock Holmes and Sherlock Holmes\n", to: "pcre.txt")
+        try temp.write("aaa\n", to: "overlap.txt")
 
         let countOutput = try runExecutableData(["-P", "-c", "(?<=Sherlock )Holmes", temp.path("pcre.txt")]) {}
         let countMatchesOutput = try runExecutableData([
@@ -1086,9 +1087,23 @@ struct PCRE2Tests {
             "(?<=Sherlock )Holmes",
             temp.path("pcre.txt"),
         ]) {}
+        let overlappingPositiveCountOutput = try runExecutableData([
+            "-P",
+            "-c",
+            "(?<=a)aa",
+            temp.path("overlap.txt"),
+        ]) {}
+        let overlappingNegativeCountMatchesOutput = try runExecutableData([
+            "-P",
+            "--count-matches",
+            "(?<!a)aa",
+            temp.path("overlap.txt"),
+        ]) {}
 
         #expect(countOutput == Data("1\n".utf8))
         #expect(countMatchesOutput == Data("2\n".utf8))
+        #expect(overlappingPositiveCountOutput == Data("1\n".utf8))
+        #expect(overlappingNegativeCountMatchesOutput == Data("1\n".utf8))
     }
 
     @Test func pcre2FixedLookbehindExecutableFastPathPathOutputs() throws {
@@ -1212,6 +1227,37 @@ struct PCRE2Tests {
         #expect(nonmatchingOutput == Data("\(temp.path("pcre.txt"))\n".utf8))
         #expect(negativeMatchingOutput == Data("\(temp.path("pcre.txt"))\n".utf8))
         #expect(overlappingNegativeOutput == Data("\(temp.path("overlap.txt"))\n".utf8))
+    }
+
+    @Test func pcre2FixedLookaheadExecutableFastPathCountOutputs() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("Sherlock Watson\nSherlock Holmes and Sherlock Holmes\nSherlock\n", to: "pcre.txt")
+        try temp.write("aaa\n", to: "overlap.txt")
+
+        let countOutput = try runExecutableData(["-P", "-c", "Sherlock(?= Holmes)", temp.path("pcre.txt")]) {}
+        let countMatchesOutput = try runExecutableData([
+            "-P",
+            "--count-matches",
+            "Sherlock(?= Holmes)",
+            temp.path("pcre.txt"),
+        ]) {}
+        let negativeCountMatchesOutput = try runExecutableData([
+            "-P",
+            "--count-matches",
+            "Sherlock(?! Holmes)",
+            temp.path("pcre.txt"),
+        ]) {}
+        let overlappingNegativeCountOutput = try runExecutableData([
+            "-P",
+            "-c",
+            "aa(?!a)",
+            temp.path("overlap.txt"),
+        ]) {}
+
+        #expect(countOutput == Data("1\n".utf8))
+        #expect(countMatchesOutput == Data("2\n".utf8))
+        #expect(negativeCountMatchesOutput == Data("2\n".utf8))
+        #expect(overlappingNegativeCountOutput == Data("1\n".utf8))
     }
 
     @Test func pcre2FixedNegativeLookaheadLiteralOnlyMatchesWithoutSuffix() throws {

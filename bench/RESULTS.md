@@ -62,6 +62,9 @@ only needs an exit status or a path.
 ASCII fixed-lookahead PCRE quiet and path-only forms use the same mapped Swift
 existence preflight, including overlap-safe rejected candidates for negative
 lookahead.
+ASCII fixed-lookaround PCRE count and count-matches forms now use mapped Swift
+counting preflights too, preserving prefixed counts, CRLF summaries,
+`--include-zero`, bounded line counts, and overlap-safe rejected assertions.
 
 A targeted 20-run A/B against the previous Swift checkpoint and Rust used the
 same 4.8 MiB fixture:
@@ -90,6 +93,17 @@ executable preflight bypassed via `RIPGREP_CONFIG_PATH=`:
 |---|---:|---:|---:|
 | `-P --files-with-matches 'needle(?=suffix)'` | 31.2 ms | 3.5 ms | 2.9 ms |
 | `-P -q 'needle(?=suffix)'` | 32.0 ms | 3.4 ms | 2.9 ms |
+
+The fixed-lookaround count check used the same two fixtures, with 3 warmups and
+20 timed runs. The before column is the same binary with the executable
+preflight bypassed via `RIPGREP_CONFIG_PATH=`:
+
+| Flags | Swift before | Swift after | rg |
+|---|---:|---:|---:|
+| `-P -c '(?<=prefix)needle'` | 44.8 ms | 7.6 ms | 9.9 ms |
+| `-P --count-matches '(?<=prefix)needle'` | 42.4 ms | 9.7 ms | 20.4 ms |
+| `-P -c 'needle(?=suffix)'` | 44.9 ms | 6.9 ms | 9.8 ms |
+| `-P --count-matches 'needle(?=suffix)'` | 42.0 ms | 7.2 ms | 20.5 ms |
 
 Benchmarks used `/tmp/swift-rg-bench/stop-on-nonmatch-small.txt`, a 4.8 MiB
 dense ASCII fixture, with 2 warmups and 5 timed runs:

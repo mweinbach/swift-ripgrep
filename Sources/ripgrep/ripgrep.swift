@@ -1953,6 +1953,32 @@ struct RipgrepCommand {
                     outputPath: parsedPathOnlyOutputPath
                 )
             }
+            if parsedPrintMode == .countMatches {
+                guard parsedMaxCount == nil else {
+                    return nil
+                }
+                return SwiftDarwinLiteralPreflight.fixedLookbehindCountMatchesExitCode(
+                    path: path,
+                    prefix: fixedLookbehind.prefix,
+                    literal: fixedLookbehind.literal,
+                    prefixShouldMatch: fixedLookbehind.prefixShouldMatch,
+                    includeZero: parsedIncludeZero,
+                    countPrefix: parsedCountPrefix,
+                    crlfTerminated: parsedCrlf
+                )
+            }
+            if parsedCount {
+                return SwiftDarwinLiteralPreflight.fixedLookbehindCountLineExitCode(
+                    path: path,
+                    prefix: fixedLookbehind.prefix,
+                    literal: fixedLookbehind.literal,
+                    prefixShouldMatch: fixedLookbehind.prefixShouldMatch,
+                    includeZero: parsedIncludeZero,
+                    maxCount: parsedMaxCount,
+                    countPrefix: parsedCountPrefix,
+                    crlfTerminated: parsedCrlf
+                )
+            }
         }
 
         if !fixedStrings,
@@ -1984,6 +2010,32 @@ struct RipgrepCommand {
                     nullTerminated: parsedNullPathTerminator,
                     crlfTerminated: parsedCrlf,
                     outputPath: parsedPathOnlyOutputPath
+                )
+            }
+            if parsedPrintMode == .countMatches {
+                guard parsedMaxCount == nil else {
+                    return nil
+                }
+                return SwiftDarwinLiteralPreflight.fixedLookaheadCountMatchesExitCode(
+                    path: path,
+                    literal: fixedLookahead.literal,
+                    suffix: fixedLookahead.suffix,
+                    suffixShouldMatch: fixedLookahead.suffixShouldMatch,
+                    includeZero: parsedIncludeZero,
+                    countPrefix: parsedCountPrefix,
+                    crlfTerminated: parsedCrlf
+                )
+            }
+            if parsedCount {
+                return SwiftDarwinLiteralPreflight.fixedLookaheadCountLineExitCode(
+                    path: path,
+                    literal: fixedLookahead.literal,
+                    suffix: fixedLookahead.suffix,
+                    suffixShouldMatch: fixedLookahead.suffixShouldMatch,
+                    includeZero: parsedIncludeZero,
+                    maxCount: parsedMaxCount,
+                    countPrefix: parsedCountPrefix,
+                    crlfTerminated: parsedCrlf
                 )
             }
         }
