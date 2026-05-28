@@ -431,6 +431,20 @@ struct RipgrepCommand {
         func isValidStrictGlob(_ raw: String) -> Bool {
             !hasUnclosedCharacterClass(in: raw)
         }
+        func inlineGlobValue(_ argument: String) -> String? {
+            if argument.hasPrefix("--glob=") {
+                return String(argument.dropFirst("--glob=".count))
+            }
+            if argument.hasPrefix("-g"), argument.count > 2 {
+                return String(argument.dropFirst(2))
+            }
+            return nil
+        }
+        func inlineCaseInsensitiveGlobValue(_ argument: String) -> String? {
+            argument.hasPrefix("--iglob=")
+                ? String(argument.dropFirst("--iglob=".count))
+                : nil
+        }
         func inlineTypeAddValue(_ argument: String) -> String? {
             argument.hasPrefix("--type-add=")
                 ? String(argument.dropFirst("--type-add=".count))
@@ -879,6 +893,20 @@ struct RipgrepCommand {
                 argumentIndex += 1
             } else if let preGlob = inlinePreGlobValue(argument) {
                 guard isValidStrictGlob(preGlob) else {
+                    return nil
+                }
+            } else if argument == "-g" || argument == "--glob" || argument == "--iglob" {
+                guard argumentIndex < arguments.count,
+                      isValidStrictGlob(arguments[argumentIndex]) else {
+                    return nil
+                }
+                argumentIndex += 1
+            } else if let glob = inlineGlobValue(argument) {
+                guard isValidStrictGlob(glob) else {
+                    return nil
+                }
+            } else if let caseInsensitiveGlob = inlineCaseInsensitiveGlobValue(argument) {
+                guard isValidStrictGlob(caseInsensitiveGlob) else {
                     return nil
                 }
             } else if argument == "--type-add" {

@@ -1574,6 +1574,23 @@ struct MiscTests {
             #expect(preGlobOutput == output)
         }
 
+        for (globArguments, expectedOutput) in [
+            (["-g", "*.nomatch"], output),
+            (["--glob=*.txt", "-n"], lineNumberOutput),
+            (["-g!*.txt"], output),
+            (["--iglob", "*.NOMATCH"], output),
+            (["--iglob=*.TXT", "-n"], lineNumberOutput),
+        ] {
+            let globOutput = try runExecutableData(
+                globArguments + [
+                    "needle",
+                    root.path("dense.txt"),
+                ],
+                fixture: {}
+            )
+            #expect(globOutput == expectedOutput)
+        }
+
         for (typeDefinitionArguments, expectedOutput) in [
             (["--type-add", "foo:*.foo"], output),
             (["--type-add=foo:*.foo", "-n"], lineNumberOutput),

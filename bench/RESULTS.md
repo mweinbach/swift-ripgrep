@@ -356,6 +356,12 @@ check as the full option parser, and still falls back for invalid globs or any
 non-empty `--pre` command. On the same fixture, `--pre-glob '*.pdf' needle`
 improved from 6.211 s to 35.0 ms, versus 48.3 ms for Rust.
 
+Explicit-file override globs now use the same preflight treatment. Valid
+`-g`/`--glob`/`--iglob` values do not filter an explicit file operand, while
+invalid glob syntax still falls through to the normal parser diagnostic. On the
+same fixture, `-g '*.nomatch' needle` improved from 6.343 s to 38.0 ms,
+versus 46.8 ms for Rust.
+
 Type-definition flags that do not activate a type filter now also stay
 eligible for the executable preflight. The preflight replays
 `--type-add`/`--type-clear` through `FileTypeRegistry.apply`, so invalid
