@@ -1017,6 +1017,7 @@ struct RipgrepCommand {
         var parsedByteOffset = false
         var parsedColumn = false
         var parsedColorMayEmit = false
+        var parsedContextSeparator: [UInt8]? = [UInt8(ascii: "-"), UInt8(ascii: "-")]
         var parsedFixedStrings = false
         var parsedFieldMatchSeparator = [UInt8(ascii: ":")]
         var parsedFieldContextSeparator = [UInt8(ascii: "-")]
@@ -1414,6 +1415,17 @@ struct RipgrepCommand {
             } else if argument.hasPrefix("--field-context-separator=") {
                 let rawSeparator = String(argument.dropFirst("--field-context-separator=".count))
                 parsedFieldContextSeparator = preflightEscapedSeparatorBytes(rawSeparator)
+            } else if argument == "--context-separator" {
+                guard argumentIndex < arguments.count else {
+                    return nil
+                }
+                parsedContextSeparator = preflightEscapedSeparatorBytes(arguments[argumentIndex])
+                argumentIndex += 1
+            } else if argument.hasPrefix("--context-separator=") {
+                let rawSeparator = String(argument.dropFirst("--context-separator=".count))
+                parsedContextSeparator = preflightEscapedSeparatorBytes(rawSeparator)
+            } else if argument == "--no-context-separator" {
+                parsedContextSeparator = nil
             } else if isSeparatedNeutralValueFlag(argument) {
                 guard argumentIndex < arguments.count else {
                     return nil
@@ -1622,6 +1634,60 @@ struct RipgrepCommand {
             }
         } else {
             []
+        }
+        if parsedAfterContext > 0,
+           parsedBeforeContext == 0,
+           !parsedPassthru,
+           parsedPrintMode == .matchingLines,
+           !parsedOnlyMatching,
+           !parsedQuiet,
+           !parsedByteOffset,
+           !parsedColumn,
+           !parsedColorMayEmit,
+           parsedEncodingIsAutomatic,
+           !parsedInvertMatch,
+           !parsedJson,
+           parsedMaxColumns == 0,
+           !parsedNullData,
+           !parsedSearchZip,
+           !parsedStats,
+           !parsedStopOnNonmatch,
+           !parsedCrlf,
+           !parsedTrim,
+           !wordRegexp,
+           !parsedLineRegexp,
+           !asciiCaseInsensitive,
+           explicitRegexpPatterns.count <= 1,
+           (patternCanStartWithDash || !pattern.hasPrefix("-")),
+           path != "-" {
+            if parsedMaxCount == 0 {
+                return 1
+            }
+            let afterContextLiteralPattern = fixedStrings
+                ? pattern
+                : RegexLiteralParser.literal(
+                    fromPlainRegexPattern: pattern,
+                    allowPCREQuotedLiterals: allowPCREQuotedLiterals
+                )
+            if let afterContextLiteralPattern {
+                let afterContextLiteral = Array(afterContextLiteralPattern.utf8)
+                if !afterContextLiteral.isEmpty,
+                   !afterContextLiteral.contains(UInt8(ascii: "\n")) {
+                    return SwiftDarwinLiteralPreflight.afterContextLiteralLineExitCode(
+                        path: path,
+                        literal: afterContextLiteral,
+                        afterContext: parsedAfterContext,
+                        maxCount: parsedMaxCount ?? Int.max,
+                        lineNumber: lineNumber,
+                        lineNumberFieldMatchSeparator: parsedFieldMatchSeparator,
+                        lineNumberFieldContextSeparator: parsedFieldContextSeparator,
+                        lineMatchPrefix: parsedLinePrefix,
+                        lineContextPrefix: parsedContextLinePrefix,
+                        headingPrefix: parsedHeadingPrefix,
+                        contextSeparator: parsedContextSeparator
+                    )
+                }
+            }
         }
         if parsedStopOnNonmatch,
            parsedPrintMode == .matchingLines,

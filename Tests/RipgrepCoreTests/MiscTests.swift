@@ -1244,6 +1244,8 @@ struct MiscTests {
         try root.write("quiet one\nneedle skip\nquiet two\nneedle skip two\ntail quiet", to: "invert.txt")
         try root.write("needle\nneedle two\n", to: "all-needle.txt")
         try root.write("alpha\nneedle one\nomega", to: "passthru.txt")
+        try root.write("needle one\nafter one\nquiet\nquiet\nneedle two\nafter two\nquiet", to: "after-context.txt")
+        try root.write("needle one\nneedle two\nafter\n", to: "after-max.txt")
         try root.write("needle\n", to: ".hidden.txt")
         try root.write("*.txt\n", to: ".ignore")
         try root.write("needle\n", to: "ignored.txt")
@@ -1893,6 +1895,141 @@ struct MiscTests {
         \(root.path("passthru.txt"))-3-omega
 
         """.utf8))
+
+        let afterContextOutput = try runExecutableData([
+            "-A",
+            "1",
+            "needle",
+            root.path("after-context.txt"),
+        ], fixture: {})
+        #expect(afterContextOutput == Data("""
+        needle one
+        after one
+        --
+        needle two
+        after two
+
+        """.utf8))
+
+        let afterContextLineNumberOutput = try runExecutableData([
+            "-n",
+            "-A",
+            "1",
+            "needle",
+            root.path("after-context.txt"),
+        ], fixture: {})
+        #expect(afterContextLineNumberOutput == Data("""
+        1:needle one
+        2-after one
+        --
+        5:needle two
+        6-after two
+
+        """.utf8))
+
+        let afterContextWithFilenameOutput = try runExecutableData([
+            "--with-filename",
+            "-A",
+            "1",
+            "needle",
+            root.path("after-context.txt"),
+        ], fixture: {})
+        #expect(afterContextWithFilenameOutput == Data("""
+        \(root.path("after-context.txt")):needle one
+        \(root.path("after-context.txt"))-after one
+        --
+        \(root.path("after-context.txt")):needle two
+        \(root.path("after-context.txt"))-after two
+
+        """.utf8))
+
+        let afterContextHeadingWithFilenameOutput = try runExecutableData([
+            "--heading",
+            "--with-filename",
+            "-A",
+            "1",
+            "needle",
+            root.path("after-context.txt"),
+        ], fixture: {})
+        #expect(afterContextHeadingWithFilenameOutput == Data("""
+        \(root.path("after-context.txt"))
+        needle one
+        after one
+        --
+        needle two
+        after two
+
+        """.utf8))
+
+        let afterContextCustomSeparatorOutput = try runExecutableData([
+            "-n",
+            "--field-match-separator=|",
+            "--field-context-separator=_",
+            "--context-separator=ZZ",
+            "-A",
+            "1",
+            "needle",
+            root.path("after-context.txt"),
+        ], fixture: {})
+        #expect(afterContextCustomSeparatorOutput == Data("""
+        1|needle one
+        2_after one
+        ZZ
+        5|needle two
+        6_after two
+
+        """.utf8))
+
+        let afterContextNoSeparatorOutput = try runExecutableData([
+            "--no-context-separator",
+            "-A",
+            "1",
+            "needle",
+            root.path("after-context.txt"),
+        ], fixture: {})
+        #expect(afterContextNoSeparatorOutput == Data("""
+        needle one
+        after one
+        needle two
+        after two
+
+        """.utf8))
+
+        let afterContextMaxCountOutput = try runExecutableData([
+            "-n",
+            "-A",
+            "1",
+            "-m",
+            "1",
+            "needle",
+            root.path("after-max.txt"),
+        ], fixture: {})
+        #expect(afterContextMaxCountOutput == Data("""
+        1:needle one
+        2:needle two
+
+        """.utf8))
+
+        let afterContextMissingResult = try runExecutableResult([
+            "-A",
+            "1",
+            "missing",
+            root.path("after-context.txt"),
+        ])
+        #expect(afterContextMissingResult.stdout.isEmpty)
+        #expect(afterContextMissingResult.stderr.isEmpty)
+        #expect(afterContextMissingResult.status == 1)
+
+        let afterContextMaxCountZeroResult = try runExecutableResult([
+            "-A",
+            "1",
+            "-m0",
+            "[",
+            root.path("after-context.txt"),
+        ])
+        #expect(afterContextMaxCountZeroResult.stdout.isEmpty)
+        #expect(afterContextMaxCountZeroResult.stderr.isEmpty)
+        #expect(afterContextMaxCountZeroResult.status == 1)
 
         let plainOnlyMatchingLineNumberOutput = try runExecutableData([
             "-n",

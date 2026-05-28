@@ -104,6 +104,10 @@ literal source matched while keeping unsupported or ambiguous patterns on the
 full matcher.
 Top-level literal alternation `--passthru` forms now share that multi-literal
 writer for positional and single-`-e` patterns.
+Single-literal `-A`/`--after-context` matching-line output now has a mapped
+Swift writer for explicit files when no before-context is active, preserving
+match/context field separators, heading and filename layout, context separator
+chunks, max-count, no-final-newline output, and binary/BOM fallback behavior.
 
 A targeted 20-run A/B against the previous Swift checkpoint and Rust used the
 same 4.8 MiB fixture:
@@ -1252,6 +1256,22 @@ The larger current/Rust alternation check used 3 warmups and 10 timed runs:
 |---|---:|---:|
 | `--passthru "needle|alpha"` | 12.8 ms | 16.7 ms |
 | `-n --passthru "needle|alpha"` | 15.5 ms | 24.1 ms |
+
+The literal after-context check used
+`/tmp/swift-rg-candidates/context-after-250k.txt`, a 250,000-line / 4.21 MiB
+fixture with every tenth line matching. The before column is the same binary
+with executable preflight bypassed via `RIPGREP_CONFIG_PATH=`:
+
+| Flags | Swift before | Swift after | rg |
+|---|---:|---:|---:|
+| `-A 1 needle` | 7.469 s | 10.9 ms | 8.5 ms |
+
+Additional current/Rust checks used 3 warmups and 10 timed runs:
+
+| Flags | Swift | rg |
+|---|---:|---:|
+| `-n -A 1 needle` | 11.1 ms | 9.8 ms |
+| `--no-context-separator -A 1 needle` | 9.8 ms | 7.7 ms |
 
 Null path terminator flags now stay on the executable literal preflight when
 the command shape cannot print a path. This covers standalone `--null` and
