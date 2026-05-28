@@ -88,6 +88,34 @@ public enum SwiftDarwinLiteralPreflight {
         return 0
     }
 
+    public static func asciiCaseInsensitiveExactLineQuietExitCode(
+        path: String,
+        literal: [UInt8]
+    ) -> Int32? {
+        guard let matched = containsASCIICaseInsensitiveExactLine(path: path, literal: literal) else {
+            return nil
+        }
+        return matched ? 0 : 1
+    }
+
+    public static func asciiCaseInsensitiveExactLinePathOnlyExitCode(
+        path: String,
+        literal: [UInt8],
+        printWhenMatched: Bool,
+        nullTerminated: Bool
+    ) -> Int32? {
+        guard let matched = containsASCIICaseInsensitiveExactLine(path: path, literal: literal) else {
+            return nil
+        }
+        guard matched == printWhenMatched else {
+            return 1
+        }
+        var output = Data(path.utf8)
+        output.append(nullTerminated ? 0 : UInt8(ascii: "\n"))
+        FileHandle.standardOutput.write(output)
+        return 0
+    }
+
     public static func wordQuietExitCode(
         path: String,
         literal: [UInt8]
@@ -570,6 +598,41 @@ public enum SwiftDarwinLiteralPreflight {
         }
         let uppercase = literal.map(rgSwiftASCIIUpper)
         return uppercase != literal && data.range(of: Data(uppercase)) != nil
+    }
+
+    private static func containsASCIICaseInsensitiveExactLine(path: String, literal: [UInt8]) -> Bool? {
+        guard !literal.isEmpty,
+              !literal.contains(UInt8(ascii: "\n")),
+              literal.allSatisfy({ $0 < 0x80 }) else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return false
+        }
+        guard !hasBinaryDetectionPrefix(data) else {
+            return nil
+        }
+        for variant in asciiCaseVariants(for: literal)
+            where exactLineCount(data: data, literal: variant, maxCount: 1) > 0 {
+            return true
+        }
+        return nil
+    }
+
+    private static func asciiCaseVariants(for literal: [UInt8]) -> [[UInt8]] {
+        var variants = [literal]
+        let lowercase = literal.map(rgSwiftASCIILower)
+        if lowercase != literal {
+            variants.append(lowercase)
+        }
+        let uppercase = literal.map(rgSwiftASCIIUpper)
+        if uppercase != literal && uppercase != lowercase {
+            variants.append(uppercase)
+        }
+        return variants
     }
 
     private static func containsAnyLiteral(path: String, literals: [[UInt8]]) -> Bool? {

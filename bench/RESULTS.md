@@ -449,6 +449,16 @@ custom path separators, and early binary detection. On the same fixture,
 versus 3.0 ms for Rust. No-match exact-line quiet/path-only scans measured
 12.4 ms, versus 7.0 ms and 6.9 ms for Rust.
 
+Case-insensitive exact-line quiet and path-only searches now have a conservative
+match-only Swift preflight. It probes exact, lowercase, and uppercase ASCII
+whole-line variants and falls back whenever it cannot prove a match, preserving
+mixed-case and no-match behavior through the full searcher. On a 45 MiB repeated
+exact-line fixture, `-q -i -x 'NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE'`
+measured 7.8 ms, versus 2.8 ms for Rust, and `-l -i -x` measured 8.3 ms,
+versus 3.5 ms for Rust. On a 3.7 MiB fixture, forcing the full fallback with an
+empty `RIPGREP_CONFIG_PATH` measured 2.852-2.902 s for the same quiet/path-only
+forms, while the default Swift preflight measured 3.7-5.1 ms.
+
 Type-definition flags that do not activate a type filter now also stay
 eligible for the executable preflight. The preflight replays
 `--type-add`/`--type-clear` through `FileTypeRegistry.apply`, so invalid
