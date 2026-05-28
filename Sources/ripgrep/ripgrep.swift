@@ -2251,6 +2251,11 @@ struct RipgrepCommand {
             && !parsedQuiet
             && parsedPathOnlyMode == nil
             && parsedPrintMode != .countMatches
+        let parsedMaxColumnsAffectsPreflightOutput = parsedMaxColumns > 0
+            && !parsedQuiet
+            && parsedPathOnlyMode == nil
+            && !parsedCount
+            && parsedPrintMode != .countMatches
         guard !(parsedLineRegexp && wordRegexp) else {
             return nil
         }
@@ -2265,7 +2270,7 @@ struct RipgrepCommand {
                   || parsedPathOnlyMode != nil,
               !parsedInvertMatch,
               !parsedJson,
-              parsedMaxColumns == 0,
+              !parsedMaxColumnsAffectsPreflightOutput,
               !parsedNullDataAffectsPreflightOutput,
               !parsedPassthru,
               !parsedSearchZip,

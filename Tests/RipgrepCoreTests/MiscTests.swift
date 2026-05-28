@@ -3048,6 +3048,7 @@ struct MiscTests {
             (["--trim", "-q", "missing", root.path("trim.txt")], Int32(1)),
             (["--null-data", "-q", "needle", root.path("dense.txt")], Int32(0)),
             (["--null-data", "-q", "-x", "quiet", root.path("nul-records.dat")], Int32(0)),
+            (["-M1", "-q", "needle", root.path("dense.txt")], Int32(0)),
             (["-q", "-w", "needle", root.path("dense.txt")], Int32(0)),
             (["-qw", "needle", root.path("dense.txt")], Int32(0)),
             (["-q", "-w", "eed", root.path("dense.txt")], Int32(1)),
@@ -3104,6 +3105,7 @@ struct MiscTests {
             (["--trim", "-l", "needle", root.path("trim.txt")], Data("\(root.path("trim.txt"))\n".utf8), Int32(0)),
             (["--trim", "--files-without-match", "missing", root.path("trim.txt")], Data("\(root.path("trim.txt"))\n".utf8), Int32(0)),
             (["--null-data", "-l", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
+            (["-M1", "-l", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
             (["--files-without-match", "needle", root.path("dense.txt")], Data(), Int32(1)),
             (["--heading", "--with-filename", "--files-without-match", "needle", root.path("dense.txt")], Data(), Int32(1)),
             (["-li", "NEEDLE", root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
@@ -3494,6 +3496,7 @@ struct MiscTests {
             (["--line-buffered", "-c", "-m1", "needle", root.path("dense.txt")], Data("1\n".utf8), Int32(0)),
             (["--trim", "-c", "needle", root.path("trim.txt")], Data("3\n".utf8), Int32(0)),
             (["--trim", "-c", "-i", "NEEDLE|QUIET", root.path("trim-case.txt")], Data("3\n".utf8), Int32(0)),
+            (["-M1", "-c", "needle", root.path("dense.txt")], Data("3\n".utf8), Int32(0)),
             (["-c", "-m1", "-i", "NEEDLE", root.path("dense.txt")], Data("1\n".utf8), Int32(0)),
             (["-ci", "-m1", "NEEDLE", root.path("dense.txt")], Data("1\n".utf8), Int32(0)),
             (["-c", "-m1", "-i", "missing", root.path("dense.txt")], Data(), Int32(1)),
@@ -3719,6 +3722,14 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(nullDataCountMatchesOutput == countMatchesOutput)
+
+        let maxColumnsCountMatchesOutput = try runExecutableData([
+            "-M1",
+            "--count-matches",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(maxColumnsCountMatchesOutput == countMatchesOutput)
 
         let exactLineCountMatchesOutput = try runExecutableData([
             "--count-matches",

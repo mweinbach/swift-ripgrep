@@ -94,6 +94,9 @@ still requires a trim-aware writer.
 Output-neutral `--null-data` combinations now stay eligible for quiet,
 path-only, and count-matches literal preflights; NUL record-sensitive exact-line,
 lookaround, count-line, and matching-line forms remain on fallback.
+Output-neutral nonzero `--max-columns` combinations now stay eligible for quiet,
+path-only, count, and count-matches literal preflights; matching-line and
+only-matching forms still fall back so omitted-line output is preserved.
 Case-sensitive repeated `-e`/`-f` and top-level literal alternation `--trim`
 forms now use the same mapped trim writer.
 Literal `--invert-match` matching-line output now has its own mapped Swift line
@@ -1259,6 +1262,16 @@ timed runs:
 | `--null-data -q needle` | 407.3 ms | 4.7 ms | 5.6 ms |
 | `--null-data -l needle` | 410.0 ms | 4.7 ms | 5.8 ms |
 | `--null-data --count-matches needle` | 407.2 ms | 7.4 ms | 9.0 ms |
+
+Output-neutral nonzero max-columns checks used the same fixture and 3 warmups
+plus 10 timed runs:
+
+| Flags | Swift before | Swift after | rg |
+|---|---:|---:|---:|
+| `-M1 -q needle` | 1.544 s | 5.5 ms | 4.1 ms |
+| `-M1 -l needle` | 1.562 s | 6.1 ms | 4.0 ms |
+| `-M1 -c needle` | 1.557 s | 11.5 ms | 11.5 ms |
+| `-M1 --count-matches needle` | 1.563 s | 8.3 ms | 20.0 ms |
 
 The multi-literal trim check used the same fixture and 3 warmups plus 10 timed
 runs. The before column is the same binary with executable preflight bypassed
