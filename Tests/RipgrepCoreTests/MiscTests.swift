@@ -1746,6 +1746,32 @@ struct MiscTests {
 
         """.utf8))
 
+        let trimMultiLiteralIgnoreCaseOutput = try runExecutableData([
+            "-n",
+            "--trim",
+            "-i",
+            "-e",
+            "NEEDLE",
+            "-e",
+            "QUIET",
+            root.path("trim-case.txt"),
+        ], fixture: {})
+        #expect(trimMultiLiteralIgnoreCaseOutput == Data("""
+        1:Needle padded
+        2:quiet
+        3:NEEDLE later
+
+        """.utf8))
+
+        let trimAlternationIgnoreCaseOutput = try runExecutableData([
+            "-n",
+            "--trim",
+            "-i",
+            "NEEDLE|QUIET",
+            root.path("trim-case.txt"),
+        ], fixture: {})
+        #expect(trimAlternationIgnoreCaseOutput == trimMultiLiteralIgnoreCaseOutput)
+
         let invertOutput = try runExecutableData([
             "-v",
             "needle",

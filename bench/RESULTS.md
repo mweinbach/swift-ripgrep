@@ -101,9 +101,9 @@ ASCII case-insensitive `--trim` and `--invert-match` now reuse Swift mapped
 line writers when the literal and haystack are ASCII, preserving original
 emitted bytes while leaving Unicode case-folding and binary input on the
 fallback path.
-ASCII case-insensitive multi-literal `--invert-match` forms now share the same
-mapped classifier for repeated `-e`/`-f` and top-level alternations when all
-literals and the haystack are ASCII.
+ASCII case-insensitive multi-literal `--trim` and `--invert-match` forms now
+share mapped classifiers for repeated `-e`/`-f` and top-level alternations when
+all literals and the haystack are ASCII.
 Literal `--passthru` matching-line output now uses a mapped Swift line writer
 for single-file literal searches, emitting every line with Rust-compatible
 match/context separators and returning status from whether any line matched.
@@ -1272,6 +1272,14 @@ and 10 timed runs:
 |---|---:|---:|---:|
 | `--trim -i NEEDLE` | 436.8 ms | 11.2 ms | 19.4 ms |
 | `-v -i NEEDLE` | 3.609 s | 8.8 ms | 10.1 ms |
+
+ASCII ignore-case multi-literal trim checks used the same trim fixture and 3
+warmups plus 10 timed runs:
+
+| Flags | Swift before | Swift after | rg |
+|---|---:|---:|---:|
+| `--trim -i -e NEEDLE -e ABSENT` | 396.6 ms | 10.7 ms | 21.3 ms |
+| `--trim -i "NEEDLE|ABSENT"` | 397.9 ms | 10.8 ms | 20.7 ms |
 
 ASCII ignore-case multi-literal invert checks used the same fixture and 3
 warmups plus 10 timed runs:

@@ -1982,17 +1982,20 @@ struct RipgrepCommand {
            (patternCanStartWithDash || !pattern.hasPrefix("-")),
            path != "-" {
             if explicitRegexpPatterns.count > 1 {
-                if !asciiCaseInsensitive,
-                   let trimLiterals = explicitRegexpPatternLiterals(
+                if let trimLiterals = explicitRegexpPatternLiterals(
                     explicitRegexpPatterns,
                     fixedStrings: fixedStrings,
                     allowPCREQuotedLiterals: allowPCREQuotedLiterals
                    ),
-                   trimLiterals.allSatisfy({ !$0.contains(UInt8(ascii: "\n")) }) {
+                   trimLiterals.allSatisfy({
+                    !$0.contains(UInt8(ascii: "\n"))
+                        && (!asciiCaseInsensitive || $0.allSatisfy({ $0 < 0x80 }))
+                   }) {
                     return SwiftDarwinLiteralPreflight.trimmedMultiLiteralLineExitCode(
                         path: path,
                         literals: trimLiterals,
                         maxCount: parsedMaxCount ?? Int.max,
+                        asciiCaseInsensitive: asciiCaseInsensitive,
                         lineNumber: lineNumber,
                         lineNumberFieldSeparator: parsedFieldMatchSeparator,
                         linePrefix: parsedLinePrefix,
@@ -2000,17 +2003,20 @@ struct RipgrepCommand {
                     )
                 }
             } else {
-                if !asciiCaseInsensitive,
-                   !fixedStrings,
+                if !fixedStrings,
                    let trimLiterals = multiLiteralAlternation(
                     pattern,
                     allowPCREQuotedLiterals: allowPCREQuotedLiterals
                    ),
-                   trimLiterals.allSatisfy({ !$0.contains(UInt8(ascii: "\n")) }) {
+                   trimLiterals.allSatisfy({
+                    !$0.contains(UInt8(ascii: "\n"))
+                        && (!asciiCaseInsensitive || $0.allSatisfy({ $0 < 0x80 }))
+                   }) {
                     return SwiftDarwinLiteralPreflight.trimmedMultiLiteralLineExitCode(
                         path: path,
                         literals: trimLiterals,
                         maxCount: parsedMaxCount ?? Int.max,
+                        asciiCaseInsensitive: asciiCaseInsensitive,
                         lineNumber: lineNumber,
                         lineNumberFieldSeparator: parsedFieldMatchSeparator,
                         linePrefix: parsedLinePrefix,
