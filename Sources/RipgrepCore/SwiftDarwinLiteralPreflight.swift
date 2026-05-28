@@ -32,19 +32,114 @@ public enum SwiftDarwinLiteralPreflight {
         return 0
     }
 
+    public static func limitedLineExitCode(
+        path: String,
+        literal: [UInt8],
+        maxCount: Int,
+        lineNumber: Bool = false
+    ) -> Int32? {
+        guard !literal.isEmpty,
+              maxCount > 0,
+              !literal.contains(UInt8(ascii: "\n")) else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return 1
+        }
+
+        let needle = Data(literal)
+        let newline = UInt8(ascii: "\n")
+        var searchStart = data.startIndex
+        var lineScanStart = data.startIndex
+        var nextLineNumber = 1
+        var matchedLineCount = 0
+        var checkedBinaryPrefix = false
+        var output = Data()
+        output.reserveCapacity(64 * 1024)
+
+        while matchedLineCount < maxCount,
+              searchStart < data.endIndex,
+              let matchRange = data.range(of: needle, in: searchStart..<data.endIndex) {
+            guard !matchRange.isEmpty else {
+                return nil
+            }
+            if !checkedBinaryPrefix {
+                checkedBinaryPrefix = true
+                guard !hasBinaryDetectionPrefix(data) else {
+                    return nil
+                }
+            }
+
+            let lineStart = data[..<matchRange.lowerBound]
+                .lastIndex(of: newline)
+                .map { data.index(after: $0) } ?? data.startIndex
+            let lineEnd = data[matchRange.upperBound...]
+                .firstIndex(of: newline) ?? data.endIndex
+
+            if lineNumber {
+                let skippedNewlines = data[lineScanStart..<lineStart]
+                    .reduce(0) { count, byte in count + (byte == newline ? 1 : 0) }
+                let matchedLineNumber = nextLineNumber + skippedNewlines
+                output.append(Data("\(matchedLineNumber):".utf8))
+                nextLineNumber = matchedLineNumber + 1
+            }
+            output.append(contentsOf: data[lineStart..<lineEnd])
+            output.append(newline)
+            matchedLineCount += 1
+
+            if lineEnd < data.endIndex {
+                searchStart = data.index(after: lineEnd)
+                lineScanStart = searchStart
+            } else {
+                searchStart = data.endIndex
+                lineScanStart = data.endIndex
+            }
+            if output.count >= 64 * 1024 {
+                FileHandle.standardOutput.write(output)
+                output.removeAll(keepingCapacity: true)
+            }
+        }
+        if !output.isEmpty {
+            FileHandle.standardOutput.write(output)
+        }
+        return matchedLineCount > 0 ? 0 : 1
+    }
+
+    private static func hasBinaryDetectionPrefix(_ data: Data) -> Bool {
+        let prefixLength = min(data.count, 64 * 1024)
+        let prefixEnd = data.index(data.startIndex, offsetBy: prefixLength)
+        return data.range(of: Data([0]), in: data.startIndex..<prefixEnd) != nil
+    }
+
     private static func containsLiteral(path: String, literal: [UInt8]) -> Bool? {
         guard !literal.isEmpty else {
             return nil
         }
 
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return false
+        }
+        guard let matchRange = data.range(of: Data(literal)) else {
+            return false
+        }
+        guard !matchRange.isEmpty else {
+            return nil
+        }
+        return true
+    }
+
+    private static func mappedPreflightData(path: String) -> Data? {
         let data: Data
         do {
             data = try Data(contentsOf: URL(fileURLWithPath: path), options: .mappedIfSafe)
         } catch {
             return nil
-        }
-        guard !data.isEmpty else {
-            return false
         }
         if data.count >= 3,
            data[data.startIndex] == 0xEF,
@@ -59,13 +154,7 @@ public enum SwiftDarwinLiteralPreflight {
                 return nil
             }
         }
-        guard let matchRange = data.range(of: Data(literal)) else {
-            return false
-        }
-        guard !matchRange.isEmpty else {
-            return nil
-        }
-        return true
+        return data
     }
 
     public static func exitCode(

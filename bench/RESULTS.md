@@ -378,6 +378,14 @@ path-separator, and statistics forms still fall through. On the same fixture,
 `--files-without-match absent_literal` improved from 45.5 ms to 21.5 ms,
 versus 9.3 ms for Rust.
 
+Positive `-m`/`--max-count` explicit-file literal searches now have a bounded
+Swift line-output preflight. It uses high-level mapped `Data` searches, emits
+each matching line at most once, preserves optional line numbers, and falls
+through for zero counts, word-boundary/case-folded forms, and early binary
+detection. On the same fixture, `-m1 needle` improved from 81.6 ms to 2.9 ms,
+matching Rust at 2.9 ms. A no-match `-m1 absent_literal` scan improved from
+84.1 ms to 18.0 ms, versus 6.0 ms for Rust.
+
 Type-definition flags that do not activate a type filter now also stay
 eligible for the executable preflight. The preflight replays
 `--type-add`/`--type-clear` through `FileTypeRegistry.apply`, so invalid

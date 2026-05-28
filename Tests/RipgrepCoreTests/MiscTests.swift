@@ -1303,6 +1303,30 @@ struct MiscTests {
             #expect(pathOnlyResult.status == expectedStatus)
         }
 
+        for (maxCountArguments, expectedOutput) in [
+            (["-m1", "needle", root.path("dense.txt")], Data("needle needle needle\n".utf8)),
+            (["-n", "-m1", "needle", root.path("dense.txt")], Data("1:needle needle needle\n".utf8)),
+            (["--max-count=2", "needle", root.path("dense.txt")], Data("""
+            needle needle needle
+            NEEDLE needle Needle
+
+            """.utf8)),
+            (["--max-count", "1", "needle", root.path("dense.txt")], Data("needle needle needle\n".utf8)),
+            (["-m1", "needle|tail", root.path("dense.txt")], Data("needle needle needle\n".utf8)),
+        ] {
+            let maxCountOutput = try runExecutableData(maxCountArguments, fixture: {})
+            #expect(maxCountOutput == expectedOutput)
+        }
+        let maxCountNoMatch = try runExecutableResult([
+            "--max-count",
+            "1",
+            "missing",
+            root.path("quiet-no-match.txt"),
+        ])
+        #expect(maxCountNoMatch.stdout.isEmpty)
+        #expect(maxCountNoMatch.stderr.isEmpty)
+        #expect(maxCountNoMatch.status == 1)
+
         for (includeZeroArguments, expectedOutput) in [
             (["--include-zero"], output),
             (["--include-zero", "-n"], lineNumberOutput),

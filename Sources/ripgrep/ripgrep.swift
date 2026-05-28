@@ -557,6 +557,25 @@ struct RipgrepCommand {
             }
             return true
         }
+        func nonNegativeInteger(_ value: String) -> Int? {
+            guard !value.hasPrefix("-"),
+                  let number = Int(value) else {
+                return nil
+            }
+            return number
+        }
+        func inlineMaxCountValue(_ argument: String) -> String? {
+            if argument.hasPrefix("--max-count=") {
+                return String(argument.dropFirst("--max-count=".count))
+            }
+            if argument.hasPrefix("-m"), argument.count > 2 {
+                return String(argument.dropFirst(2))
+            }
+            return nil
+        }
+        func isSeparatedMaxCountFlag(_ argument: String) -> Bool {
+            argument == "-m" || argument == "--max-count"
+        }
         func inlineThreadCount(_ argument: String) -> String? {
             if argument.hasPrefix("--threads=") {
                 return String(argument.dropFirst("--threads=".count))
@@ -784,6 +803,7 @@ struct RipgrepCommand {
         var parsedPathOnlyMode: PathOnlyMode?
         var parsedPathSeparator = false
         var parsedQuiet = false
+        var parsedMaxCount: Int?
         var parsedTrim = false
         var parsedTypeDefinitionChanges: [TypeChange] = []
         var parsedUnrestrictedCount = 0
@@ -847,6 +867,18 @@ struct RipgrepCommand {
                 parsedNoMmap = true
             } else if isMmapFlag(argument) {
                 parsedNoMmap = false
+            } else if isSeparatedMaxCountFlag(argument) {
+                guard argumentIndex < arguments.count,
+                      let maxCount = nonNegativeInteger(arguments[argumentIndex]) else {
+                    return nil
+                }
+                parsedMaxCount = maxCount
+                argumentIndex += 1
+            } else if let maxCount = inlineMaxCountValue(argument) {
+                guard let maxCount = nonNegativeInteger(maxCount) else {
+                    return nil
+                }
+                parsedMaxCount = maxCount
             } else if argument == "--engine" {
                 guard argumentIndex < arguments.count,
                       isEngineSelectorValue(arguments[argumentIndex]) else {
@@ -1111,6 +1143,7 @@ struct RipgrepCommand {
            !asciiCaseInsensitive,
            !wordRegexp,
            !noMmap,
+           parsedMaxCount == nil,
            let surroundingLiteral = surroundingWordsLiteral(
             pattern,
             allowPCREQuotedLiterals: allowPCREQuotedLiterals
@@ -1141,6 +1174,7 @@ struct RipgrepCommand {
            !asciiCaseInsensitive,
            !wordRegexp,
            !asciiBoundary,
+           parsedMaxCount == nil,
            let literals = multiLiteralAlternation(
             pattern,
             allowPCREQuotedLiterals: allowPCREQuotedLiterals
@@ -1163,6 +1197,9 @@ struct RipgrepCommand {
         guard !literal.isEmpty,
               !literal.contains(UInt8(ascii: "\n")),
               !asciiCaseInsensitive || literal.allSatisfy({ $0 < 0x80 }) else {
+            return nil
+        }
+        if parsedMaxCount == 0 {
             return nil
         }
         if parsedQuiet {
@@ -1188,6 +1225,19 @@ struct RipgrepCommand {
                 literal: literal,
                 printWhenMatched: parsedPathOnlyMode == .matching,
                 nullTerminated: parsedNullPathTerminator
+            )
+        }
+        if let parsedMaxCount {
+            guard !wordRegexp,
+                  !asciiCaseInsensitive,
+                  !asciiBoundary else {
+                return nil
+            }
+            return SwiftDarwinLiteralPreflight.limitedLineExitCode(
+                path: path,
+                literal: literal,
+                maxCount: parsedMaxCount,
+                lineNumber: lineNumber
             )
         }
         if wordRegexp {
