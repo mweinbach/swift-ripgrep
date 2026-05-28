@@ -368,7 +368,7 @@ struct RipgrepCommand {
             afterStrippingLeadingEngineSelectorFrom: arguments
         )
         let arguments = preflightArguments.arguments
-        guard getenv("RIPGREP_CONFIG_PATH") == nil || arguments.first == "--no-config" else {
+        guard getenv("RIPGREP_CONFIG_PATH") == nil || leadingArgumentsDisableConfigForPreflight(arguments) else {
             return nil
         }
 
@@ -3703,6 +3703,25 @@ struct RipgrepCommand {
             linePrefix: parsedLinePrefix,
             headingPrefix: parsedHeadingPrefix
         )
+    }
+
+    private static func leadingArgumentsDisableConfigForPreflight(_ arguments: [String]) -> Bool {
+        for argument in arguments {
+            if argument == "--no-config" {
+                return true
+            }
+            switch argument {
+            case "--line-buffered",
+                 "--block-buffered",
+                 "--no-line-buffered",
+                 "--messages",
+                 "--no-messages":
+                continue
+            default:
+                return false
+            }
+        }
+        return false
     }
     #endif
 

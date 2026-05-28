@@ -5646,6 +5646,17 @@ struct MiscTests {
         ], fixture: {})
         #expect(noConfigEnvironmentRegexpOutput == output)
 
+        let neutralLeadingNoConfigEnvironmentOutput = try runExecutableData([
+            "--line-buffered",
+            "--no-config",
+            "-e",
+            "needle",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(neutralLeadingNoConfigEnvironmentOutput == output)
+
         let regexpLineNumberOutput = try runExecutableData([
             "-e",
             "needle",
