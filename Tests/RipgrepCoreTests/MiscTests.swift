@@ -1707,6 +1707,31 @@ struct MiscTests {
         ], fixture: {})
         #expect(trimWhitespaceOnlyOutput == Data("\nneedle space\n".utf8))
 
+        let trimMultiLiteralOutput = try runExecutableData([
+            "-n",
+            "--trim",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("trim.txt"),
+        ], fixture: {})
+        #expect(trimMultiLiteralOutput == Data("""
+        1:needle padded
+        2:needle tabbed
+        3:quiet
+        4:needle later
+
+        """.utf8))
+
+        let trimAlternationOutput = try runExecutableData([
+            "-n",
+            "--trim",
+            "needle|quiet",
+            root.path("trim.txt"),
+        ], fixture: {})
+        #expect(trimAlternationOutput == trimMultiLiteralOutput)
+
         let trimIgnoreCaseOutput = try runExecutableData([
             "-n",
             "--trim",

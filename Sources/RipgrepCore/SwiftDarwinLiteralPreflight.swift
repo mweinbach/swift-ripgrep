@@ -4061,6 +4061,34 @@ public enum SwiftDarwinLiteralPreflight {
         return result.matched_line_count > 0 ? 0 : 1
     }
 
+    public static func trimmedMultiLiteralLineExitCode(
+        path: String,
+        literals: [[UInt8]],
+        maxCount: Int,
+        lineNumber: Bool = false,
+        lineNumberFieldSeparator: [UInt8] = [58],
+        linePrefix: [UInt8] = [],
+        headingPrefix: [UInt8] = []
+    ) -> Int32? {
+        guard !literals.isEmpty,
+              literals.allSatisfy({ !$0.isEmpty }),
+              maxCount > 0,
+              let result = multiLiteralResult(
+                path: path,
+                literals: literals,
+                maxCount: maxCount,
+                lineNumber: lineNumber,
+                lineNumberFieldSeparator: lineNumberFieldSeparator,
+                linePrefix: linePrefix,
+                headingPrefix: headingPrefix,
+                trimLeadingWhitespace: true
+              ),
+              result.status == 0 else {
+            return nil
+        }
+        return result.matched_line_count > 0 ? 0 : 1
+    }
+
     public static func invertedLiteralLineExitCode(
         path: String,
         literal: [UInt8],

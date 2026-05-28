@@ -88,6 +88,8 @@ line writer that trims leading ASCII space, tab, and CR bytes from line content
 before emitting the matched line, while preserving headings, line numbers, max-count,
 fixed-string literals, no-final-newline output, and the conservative binary/BOM
 fallbacks.
+Case-sensitive repeated `-e`/`-f` and top-level literal alternation `--trim`
+forms now use the same mapped trim writer.
 Literal `--invert-match` matching-line output now has its own mapped Swift line
 writer for single-file literal searches, preserving line numbers, headings,
 filename prefixes, max-count, fixed-string literals, no-final-newline output,
@@ -1225,6 +1227,15 @@ eligible:
 |---|---:|---:|---:|
 | `--trim needle` | 376.5 ms | 13.8 ms | 15.4 ms |
 | `-n --trim needle` | 416.8 ms | 20.8 ms | 24.6 ms |
+
+The multi-literal trim check used the same fixture and 3 warmups plus 10 timed
+runs. The before column is the same binary with executable preflight bypassed
+via `RIPGREP_CONFIG_PATH=`:
+
+| Flags | Swift before | Swift after | rg |
+|---|---:|---:|---:|
+| `--trim -e needle -e absent` | 401.8 ms | 13.5 ms | 15.9 ms |
+| `--trim "needle|absent"` | 408.0 ms | 12.9 ms | 15.1 ms |
 
 The literal invert check used `/tmp/swift-rg-candidates/invert.txt`, a
 250,000-line / 6.19 MiB fixture with every tenth line containing the rejected

@@ -1979,30 +1979,67 @@ struct RipgrepCommand {
            !wordRegexp,
            !parsedLineRegexp,
            parsedMaxCount != 0,
-           explicitRegexpPatterns.count <= 1,
            (patternCanStartWithDash || !pattern.hasPrefix("-")),
            path != "-" {
-            let trimLiteralPattern = fixedStrings
-                ? pattern
-                : RegexLiteralParser.literal(
-                    fromPlainRegexPattern: pattern,
+            if explicitRegexpPatterns.count > 1 {
+                if !asciiCaseInsensitive,
+                   let trimLiterals = explicitRegexpPatternLiterals(
+                    explicitRegexpPatterns,
+                    fixedStrings: fixedStrings,
                     allowPCREQuotedLiterals: allowPCREQuotedLiterals
-                )
-            if let trimLiteralPattern {
-                let trimLiteral = Array(trimLiteralPattern.utf8)
-                if !trimLiteral.isEmpty,
-                   !trimLiteral.contains(UInt8(ascii: "\n")),
-                   (!asciiCaseInsensitive || trimLiteral.allSatisfy({ $0 < 0x80 })) {
-                    return SwiftDarwinLiteralPreflight.trimmedLiteralLineExitCode(
+                   ),
+                   trimLiterals.allSatisfy({ !$0.contains(UInt8(ascii: "\n")) }) {
+                    return SwiftDarwinLiteralPreflight.trimmedMultiLiteralLineExitCode(
                         path: path,
-                        literal: trimLiteral,
+                        literals: trimLiterals,
                         maxCount: parsedMaxCount ?? Int.max,
-                        asciiCaseInsensitive: asciiCaseInsensitive,
                         lineNumber: lineNumber,
                         lineNumberFieldSeparator: parsedFieldMatchSeparator,
                         linePrefix: parsedLinePrefix,
                         headingPrefix: parsedHeadingPrefix
                     )
+                }
+            } else {
+                if !asciiCaseInsensitive,
+                   !fixedStrings,
+                   let trimLiterals = multiLiteralAlternation(
+                    pattern,
+                    allowPCREQuotedLiterals: allowPCREQuotedLiterals
+                   ),
+                   trimLiterals.allSatisfy({ !$0.contains(UInt8(ascii: "\n")) }) {
+                    return SwiftDarwinLiteralPreflight.trimmedMultiLiteralLineExitCode(
+                        path: path,
+                        literals: trimLiterals,
+                        maxCount: parsedMaxCount ?? Int.max,
+                        lineNumber: lineNumber,
+                        lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                        linePrefix: parsedLinePrefix,
+                        headingPrefix: parsedHeadingPrefix
+                    )
+                }
+
+                let trimLiteralPattern = fixedStrings
+                    ? pattern
+                    : RegexLiteralParser.literal(
+                        fromPlainRegexPattern: pattern,
+                        allowPCREQuotedLiterals: allowPCREQuotedLiterals
+                    )
+                if let trimLiteralPattern {
+                    let trimLiteral = Array(trimLiteralPattern.utf8)
+                    if !trimLiteral.isEmpty,
+                       !trimLiteral.contains(UInt8(ascii: "\n")),
+                       (!asciiCaseInsensitive || trimLiteral.allSatisfy({ $0 < 0x80 })) {
+                        return SwiftDarwinLiteralPreflight.trimmedLiteralLineExitCode(
+                            path: path,
+                            literal: trimLiteral,
+                            maxCount: parsedMaxCount ?? Int.max,
+                            asciiCaseInsensitive: asciiCaseInsensitive,
+                            lineNumber: lineNumber,
+                            lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                            linePrefix: parsedLinePrefix,
+                            headingPrefix: parsedHeadingPrefix
+                        )
+                    }
                 }
             }
         }
