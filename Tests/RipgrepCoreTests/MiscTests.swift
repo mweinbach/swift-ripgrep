@@ -1346,6 +1346,13 @@ struct MiscTests {
 
         """.utf8))
 
+        let plainOnlyMatchingOutput = try runExecutableData([
+            "-o",
+            "needle",
+            root.path("word-count.txt"),
+        ], fixture: {})
+        #expect(plainOnlyMatchingOutput == caseInsensitiveOnlyMatchingOutput)
+
         let unicodeCaseInsensitiveOnlyMatchingOutput = try runExecutableData([
             "-o",
             "-i",
@@ -1402,6 +1409,21 @@ struct MiscTests {
 
         """.utf8))
 
+        let plainMultiLiteralOnlyMatchingOutput = try runExecutableData([
+            "-o",
+            "needle|quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(plainMultiLiteralOnlyMatchingOutput == Data("""
+        needle
+        needle
+        needle
+        quiet
+        needle
+        needle
+
+        """.utf8))
+
         let caseInsensitiveMultiLiteralOnlyMatchingOutput = try runExecutableData([
             "-o",
             "-i",
@@ -1428,6 +1450,28 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(caseInsensitiveMultiLiteralPatternFileOnlyMatchingOutput == caseInsensitiveMultiLiteralOnlyMatchingOutput)
+
+        let plainShortFirstOverlapOnlyMatchingOutput = try runExecutableData([
+            "-o",
+            "need|needle",
+            root.path("overlap.txt"),
+        ], fixture: {})
+        #expect(plainShortFirstOverlapOnlyMatchingOutput == Data("""
+        need
+        need
+
+        """.utf8))
+
+        let plainLongFirstOverlapOnlyMatchingOutput = try runExecutableData([
+            "-o",
+            "needle|need",
+            root.path("overlap.txt"),
+        ], fixture: {})
+        #expect(plainLongFirstOverlapOnlyMatchingOutput == Data("""
+        needle
+        needle
+
+        """.utf8))
 
         let shortFirstOverlapOnlyMatchingOutput = try runExecutableData([
             "-o",
@@ -1477,6 +1521,21 @@ struct MiscTests {
         1:needle needle needle
         3:NEEDLE needle Needle
         4:tail needle
+
+        """.utf8))
+
+        let plainOnlyMatchingLineNumberOutput = try runExecutableData([
+            "-n",
+            "-o",
+            "needle",
+            root.path("word-count.txt"),
+        ], fixture: {})
+        #expect(plainOnlyMatchingLineNumberOutput == Data("""
+        1:needle
+        1:needle
+        1:needle
+        1:needle
+        1:needle
 
         """.utf8))
 

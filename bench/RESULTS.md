@@ -18,10 +18,11 @@ numbers, counts, quiet mode, path-only mode, files-without-match, and a
 Unicode-adjacent fallback fixture. Follow-ups extend the same ASCII-only guard
 to single-literal `--count-matches -w -i`, multi-literal word/count modes,
 single-literal only-matching word/case output, and plain single- or
-multi-literal case-insensitive only-match output. The non-word `-o -i` path
-emits the original matched bytes, preserves line-number and filename prefixes,
-handles overlapping alternatives with Rust-compatible leftmost/alternation
-order, and falls back for non-ASCII or binary-prefix haystacks.
+multi-literal only-match output. The non-word `-o`/`-o -i` path emits the
+original matched bytes, preserves line-number and filename prefixes, handles
+overlapping alternatives with Rust-compatible leftmost/alternation order, and
+falls back for binary-prefix haystacks; ignore-case additionally falls back for
+non-ASCII haystacks.
 
 Benchmarks used `/tmp/swift-rg-bench/stop-on-nonmatch-small.txt`, a 4.8 MiB
 dense ASCII fixture, with 2 warmups and 5 timed runs:
@@ -35,6 +36,10 @@ dense ASCII fixture, with 2 warmups and 5 timed runs:
 | `-c -w -i "NEEDLE\|QUIET"` | 184.8 ms | 24.0 ms | 12.3 ms |
 | `--count-matches -w -i "NEEDLE\|QUIET"` | 173.8 ms | 24.9 ms | 57.1 ms |
 | `-o -w -i NEEDLE` | 4.604 s | 13.5 ms | 50.1 ms |
+| `-o needle` | 65.6 ms | 14.1 ms | 23.0 ms |
+| `-n -o needle` | 81.6 ms | 22.2 ms | 30.1 ms |
+| `-o "needle\|quiet"` | 59.6 ms | 17.8 ms | 32.1 ms |
+| `-n -o "needle\|quiet"` | 66.8 ms | 28.3 ms | 42.6 ms |
 | `-o -i NEEDLE` | 68.6 ms | 26.1 ms | 41.3 ms |
 | `-n -o -i NEEDLE` | 81.4 ms | 35.2 ms | 51.8 ms |
 | `-o -i "NEEDLE\|QUIET"` | 7.718 s | 34.7 ms | 53.4 ms |
