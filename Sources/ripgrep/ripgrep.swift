@@ -1622,9 +1622,24 @@ struct RipgrepCommand {
             if parsedLineRegexp {
                 guard !wordRegexp,
                       !asciiCaseInsensitive,
-                      !parsedCrlf,
-                      parsedPathOnlyMode == nil else {
+                      !parsedCrlf else {
                     return nil
+                }
+                if parsedQuiet {
+                    return SwiftDarwinLiteralPreflight.multiLiteralExactLineQuietExitCode(
+                        path: path,
+                        literals: literals
+                    )
+                }
+                if let parsedPathOnlyMode {
+                    return SwiftDarwinLiteralPreflight.multiLiteralExactLinePathOnlyExitCode(
+                        path: path,
+                        literals: literals,
+                        printWhenMatched: parsedPathOnlyMode == .matching,
+                        nullTerminated: parsedNullPathTerminator,
+                        crlfTerminated: parsedCrlf,
+                        outputPath: parsedPathOnlyOutputPath
+                    )
                 }
                 if parsedPrintMode == .countMatches {
                     return SwiftDarwinLiteralPreflight.multiLiteralExactLineCountExitCode(
@@ -1793,9 +1808,24 @@ struct RipgrepCommand {
             if parsedLineRegexp {
                 guard !wordRegexp,
                       !asciiCaseInsensitive,
-                      !parsedCrlf,
-                      parsedPathOnlyMode == nil else {
+                      !parsedCrlf else {
                     return nil
+                }
+                if parsedQuiet {
+                    return SwiftDarwinLiteralPreflight.multiLiteralExactLineQuietExitCode(
+                        path: path,
+                        literals: literals
+                    )
+                }
+                if let parsedPathOnlyMode {
+                    return SwiftDarwinLiteralPreflight.multiLiteralExactLinePathOnlyExitCode(
+                        path: path,
+                        literals: literals,
+                        printWhenMatched: parsedPathOnlyMode == .matching,
+                        nullTerminated: parsedNullPathTerminator,
+                        crlfTerminated: parsedCrlf,
+                        outputPath: parsedPathOnlyOutputPath
+                    )
                 }
                 if parsedPrintMode == .countMatches {
                     return SwiftDarwinLiteralPreflight.multiLiteralExactLineCountExitCode(

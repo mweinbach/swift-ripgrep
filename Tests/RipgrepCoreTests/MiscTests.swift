@@ -1567,6 +1567,10 @@ struct MiscTests {
             (["-q", "-x", "missing", root.path("exact.txt")], Int32(1)),
             (["-q", "-i", "-x", "missing", root.path("exact.txt")], Int32(1)),
             (["-q", "-i", "-x", "12345", root.path("exact.txt")], Int32(1)),
+            (["-q", "-x", "needle|last", root.path("exact.txt")], Int32(0)),
+            (["-q", "-x", "-e", "needle", "-e", "last", root.path("exact.txt")], Int32(0)),
+            (["-q", "-x", "-f", root.path("exact-patterns.txt"), root.path("exact.txt")], Int32(0)),
+            (["-q", "-x", "missing|absent", root.path("exact.txt")], Int32(1)),
             (["--crlf", "-q", "-x", "needle", root.path("crlf.txt")], Int32(0)),
             (["-q", "needle", root.path("binary-mode.dat")], Int32(0)),
         ] {
@@ -1626,6 +1630,12 @@ struct MiscTests {
             (["--files-without-match", "-i", "-x", "12345", root.path("exact.txt")], Data("\(root.path("exact.txt"))\n".utf8), Int32(0)),
             (["--files-without-match", "-x", "missing", root.path("exact.txt")], Data("\(root.path("exact.txt"))\n".utf8), Int32(0)),
             (["--files-without-match", "-x", "needle", root.path("exact.txt")], Data(), Int32(1)),
+            (["-l", "-x", "needle|last", root.path("exact.txt")], Data("\(root.path("exact.txt"))\n".utf8), Int32(0)),
+            (["-l", "-x", "-e", "needle", "-e", "last", root.path("exact.txt")], Data("\(root.path("exact.txt"))\n".utf8), Int32(0)),
+            (["-l", "-x", "-f", root.path("exact-patterns.txt"), root.path("exact.txt")], Data("\(root.path("exact.txt"))\n".utf8), Int32(0)),
+            (["--files-with-matches", "--null", "-x", "needle|last", root.path("exact.txt")], Data("\(root.path("exact.txt"))\0".utf8), Int32(0)),
+            (["--files-without-match", "-x", "missing|absent", root.path("exact.txt")], Data("\(root.path("exact.txt"))\n".utf8), Int32(0)),
+            (["--files-without-match", "-x", "needle|last", root.path("exact.txt")], Data(), Int32(1)),
         ] {
             let pathOnlyResult = try runExecutableResult(pathOnlyArguments)
             #expect(pathOnlyResult.stdout == expectedOutput)

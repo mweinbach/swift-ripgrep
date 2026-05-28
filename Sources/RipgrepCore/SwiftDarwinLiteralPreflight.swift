@@ -172,6 +172,40 @@ public enum SwiftDarwinLiteralPreflight {
         return 0
     }
 
+    public static func multiLiteralExactLineQuietExitCode(
+        path: String,
+        literals: [[UInt8]]
+    ) -> Int32? {
+        guard let matched = containsAnyExactLine(path: path, literals: literals) else {
+            return nil
+        }
+        return matched ? 0 : 1
+    }
+
+    public static func multiLiteralExactLinePathOnlyExitCode(
+        path: String,
+        literals: [[UInt8]],
+        printWhenMatched: Bool,
+        nullTerminated: Bool,
+        crlfTerminated: Bool = false,
+        outputPath: [UInt8]? = nil
+    ) -> Int32? {
+        guard let matched = containsAnyExactLine(path: path, literals: literals) else {
+            return nil
+        }
+        guard matched == printWhenMatched else {
+            return 1
+        }
+        let output = pathOnlyOutput(
+            path: path,
+            outputPath: outputPath,
+            nullTerminated: nullTerminated,
+            crlfTerminated: crlfTerminated
+        )
+        FileHandle.standardOutput.write(output)
+        return 0
+    }
+
     public static func asciiCaseInsensitiveExactLineQuietExitCode(
         path: String,
         literal: [UInt8]
@@ -705,15 +739,11 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
 
-        let limit = maxCount ?? Int.max
-        var matchedLineCount = 0
-        for literal in literals where matchedLineCount < limit {
-            matchedLineCount += exactLineCount(
-                data: data,
-                literal: literal,
-                maxCount: limit - matchedLineCount
-            )
-        }
+        let matchedLineCount = multiLiteralExactLineCount(
+            data: data,
+            literals: literals,
+            maxCount: maxCount
+        )
 
         if matchedLineCount > 0 || includeZero {
             var output = Data(countPrefix)
@@ -838,6 +868,23 @@ public enum SwiftDarwinLiteralPreflight {
                 return matchedLineCount
             }
         }
+    }
+
+    private static func multiLiteralExactLineCount(
+        data: Data,
+        literals: [[UInt8]],
+        maxCount: Int?
+    ) -> Int {
+        let limit = maxCount ?? Int.max
+        var matchedLineCount = 0
+        for literal in literals where matchedLineCount < limit {
+            matchedLineCount += exactLineCount(
+                data: data,
+                literal: literal,
+                maxCount: limit - matchedLineCount
+            )
+        }
+        return matchedLineCount
     }
 
     private static func hasBinaryDetectionPrefix(_ data: Data) -> Bool {
@@ -993,6 +1040,23 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         return exactLineCount(data: data, literal: literal, maxCount: 1) > 0
+    }
+
+    private static func containsAnyExactLine(path: String, literals: [[UInt8]]) -> Bool? {
+        guard let literals = distinctExactLineLiterals(literals),
+              !literals.isEmpty else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return false
+        }
+        guard !hasBinaryDetectionPrefix(data) else {
+            return nil
+        }
+        return multiLiteralExactLineCount(data: data, literals: literals, maxCount: 1) > 0
     }
 
     private static func containsWordLiteral(path: String, literal: [UInt8]) -> Bool? {

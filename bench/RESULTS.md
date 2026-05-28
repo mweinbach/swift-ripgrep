@@ -669,6 +669,20 @@ custom path separators, and early binary detection. On the same fixture,
 versus 3.0 ms for Rust. No-match exact-line quiet/path-only scans measured
 12.4 ms, versus 7.0 ms and 6.9 ms for Rust.
 
+Exact-line quiet and path-only searches now also cover simple literal
+alternations, repeated explicit regexps, and literal pattern files. The
+preflight shares the exact-line multi-literal existence check with count
+summaries, preserves `--files-without-match` and `--null` path output, and
+keeps CRLF exact-line forms on the existing fallback. Byte/status checks
+matched Rust for quiet, path-only, files-without-match, repeated `-e`, pattern
+file, NUL path output, and CRLF fallback controls. On the 4.8 MiB dense
+fixture, `-q -x 'needle needle…|missing'` improved from 1.967 s to 4.2 ms,
+versus 4.1 ms for Rust, while `-l -x ...` improved from 1.952 s to 4.9 ms,
+versus 3.0 ms for Rust. On the 48 MiB dense fixture, current `-q -x ...`
+measured 4.6 ms versus 4.0 ms for Rust, current `-l -x ...` measured 4.3 ms
+versus 3.3 ms for Rust, and no-match `--files-without-match -x ...` measured
+11.2 ms versus 10.7 ms for Rust.
+
 Case-insensitive exact-line quiet and path-only searches now have a conservative
 match-only Swift preflight. It probes exact, lowercase, and uppercase ASCII
 whole-line variants and falls back whenever it cannot prove a match, preserving
