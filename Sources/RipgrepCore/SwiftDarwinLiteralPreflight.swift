@@ -18,8 +18,29 @@ public enum SwiftDarwinLiteralPreflight {
         }
     }
 
-    private static func countOutput(_ count: Int, crlfTerminated: Bool) -> Data {
-        Data("\(count)\(crlfTerminated ? "\r\n" : "\n")".utf8)
+    private static func writeCountOutput(
+        _ count: Int,
+        countPrefix: [UInt8] = [],
+        crlfTerminated: Bool
+    ) -> Bool {
+        guard var output = rgSwiftStdoutBuffer(capacity: max(64, countPrefix.count + 32)) else {
+            return false
+        }
+        defer {
+            output.deallocate()
+        }
+        guard output.writeBytes(countPrefix),
+              output.writeLineNumberPrefix(count, fieldSeparator: []) else {
+            return false
+        }
+        if crlfTerminated,
+           !output.writeByte(UInt8(ascii: "\r")) {
+            return false
+        }
+        guard output.writeByte(UInt8(ascii: "\n")) else {
+            return false
+        }
+        return output.flush()
     }
 
     private static func appendLineNumberPrefix(
@@ -291,13 +312,13 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         if matched {
-            var output = Data(countPrefix)
-            output.append(countOutput(1, crlfTerminated: crlfTerminated))
-            FileHandle.standardOutput.write(output)
+            guard writeCountOutput(1, countPrefix: countPrefix, crlfTerminated: crlfTerminated) else {
+                return nil
+            }
         } else if includeZero {
-            var output = Data(countPrefix)
-            output.append(countOutput(0, crlfTerminated: crlfTerminated))
-            FileHandle.standardOutput.write(output)
+            guard writeCountOutput(0, countPrefix: countPrefix, crlfTerminated: crlfTerminated) else {
+                return nil
+            }
         }
         return matched ? 0 : 1
     }
@@ -348,9 +369,13 @@ public enum SwiftDarwinLiteralPreflight {
         )
 
         if matchedLineCount > 0 || includeZero {
-            var output = Data(countPrefix)
-            output.append(countOutput(matchedLineCount, crlfTerminated: crlfTerminated))
-            FileHandle.standardOutput.write(output)
+            guard writeCountOutput(
+                matchedLineCount,
+                countPrefix: countPrefix,
+                crlfTerminated: crlfTerminated
+            ) else {
+                return nil
+            }
         }
         return matchedLineCount > 0 ? 0 : 1
     }
@@ -417,9 +442,13 @@ public enum SwiftDarwinLiteralPreflight {
         }
 
         if matchedLineCount > 0 || includeZero {
-            var output = Data(countPrefix)
-            output.append(countOutput(matchedLineCount, crlfTerminated: crlfTerminated))
-            FileHandle.standardOutput.write(output)
+            guard writeCountOutput(
+                matchedLineCount,
+                countPrefix: countPrefix,
+                crlfTerminated: crlfTerminated
+            ) else {
+                return nil
+            }
         }
         return matchedLineCount > 0 ? 0 : 1
     }
@@ -447,9 +476,13 @@ public enum SwiftDarwinLiteralPreflight {
         }
 
         if matchedLineCount > 0 || includeZero {
-            var output = Data(countPrefix)
-            output.append(countOutput(matchedLineCount, crlfTerminated: crlfTerminated))
-            FileHandle.standardOutput.write(output)
+            guard writeCountOutput(
+                matchedLineCount,
+                countPrefix: countPrefix,
+                crlfTerminated: crlfTerminated
+            ) else {
+                return nil
+            }
         }
         return matchedLineCount > 0 ? 0 : 1
     }
@@ -478,9 +511,13 @@ public enum SwiftDarwinLiteralPreflight {
         }
 
         if matchedLineCount > 0 || includeZero {
-            var output = Data(countPrefix)
-            output.append(countOutput(matchedLineCount, crlfTerminated: crlfTerminated))
-            FileHandle.standardOutput.write(output)
+            guard writeCountOutput(
+                matchedLineCount,
+                countPrefix: countPrefix,
+                crlfTerminated: crlfTerminated
+            ) else {
+                return nil
+            }
         }
         return matchedLineCount > 0 ? 0 : 1
     }
@@ -583,9 +620,13 @@ public enum SwiftDarwinLiteralPreflight {
         )
 
         if matchedLineCount > 0 || includeZero {
-            var output = Data(countPrefix)
-            output.append(countOutput(matchedLineCount, crlfTerminated: crlfTerminated))
-            FileHandle.standardOutput.write(output)
+            guard writeCountOutput(
+                matchedLineCount,
+                countPrefix: countPrefix,
+                crlfTerminated: crlfTerminated
+            ) else {
+                return nil
+            }
         }
         return matchedLineCount > 0 ? 0 : 1
     }
@@ -612,9 +653,13 @@ public enum SwiftDarwinLiteralPreflight {
         let matchCount = countASCIICaseInsensitiveMatches(in: data, foldedLiteral: foldedLiteral)
 
         if matchCount > 0 || includeZero {
-            var output = Data(countPrefix)
-            output.append(countOutput(matchCount, crlfTerminated: crlfTerminated))
-            FileHandle.standardOutput.write(output)
+            guard writeCountOutput(
+                matchCount,
+                countPrefix: countPrefix,
+                crlfTerminated: crlfTerminated
+            ) else {
+                return nil
+            }
         }
         return matchCount > 0 ? 0 : 1
     }
@@ -820,7 +865,9 @@ public enum SwiftDarwinLiteralPreflight {
         }
 
         if matchedLineCount > 0 || includeZero {
-            FileHandle.standardOutput.write(countOutput(matchedLineCount, crlfTerminated: crlfTerminated))
+            guard writeCountOutput(matchedLineCount, crlfTerminated: crlfTerminated) else {
+                return nil
+            }
         }
         return matchedLineCount > 0 ? 0 : 1
     }
@@ -952,9 +999,13 @@ public enum SwiftDarwinLiteralPreflight {
             maxCount: maxCount
         )
         if matchedLineCount > 0 || includeZero {
-            var output = Data(countPrefix)
-            output.append(countOutput(matchedLineCount, crlfTerminated: crlfTerminated))
-            FileHandle.standardOutput.write(output)
+            guard writeCountOutput(
+                matchedLineCount,
+                countPrefix: countPrefix,
+                crlfTerminated: crlfTerminated
+            ) else {
+                return nil
+            }
         }
         return matchedLineCount > 0 ? 0 : 1
     }
@@ -1156,9 +1207,13 @@ public enum SwiftDarwinLiteralPreflight {
         )
 
         if matchedLineCount > 0 || includeZero {
-            var output = Data(countPrefix)
-            output.append(countOutput(matchedLineCount, crlfTerminated: crlfTerminated))
-            FileHandle.standardOutput.write(output)
+            guard writeCountOutput(
+                matchedLineCount,
+                countPrefix: countPrefix,
+                crlfTerminated: crlfTerminated
+            ) else {
+                return nil
+            }
         }
         return matchedLineCount > 0 ? 0 : 1
     }
@@ -2149,9 +2204,13 @@ public enum SwiftDarwinLiteralPreflight {
         }
 
         if matchedLineCount > 0 || includeZero {
-            var output = Data(countPrefix)
-            output.append(countOutput(matchedLineCount, crlfTerminated: crlfTerminated))
-            FileHandle.standardOutput.write(output)
+            guard writeCountOutput(
+                matchedLineCount,
+                countPrefix: countPrefix,
+                crlfTerminated: crlfTerminated
+            ) else {
+                return nil
+            }
         }
         return matchedLineCount > 0 ? 0 : 1
     }
@@ -2176,9 +2235,13 @@ public enum SwiftDarwinLiteralPreflight {
         }
 
         if matchCount > 0 || includeZero {
-            var output = Data(countPrefix)
-            output.append(countOutput(matchCount, crlfTerminated: crlfTerminated))
-            FileHandle.standardOutput.write(output)
+            guard writeCountOutput(
+                matchCount,
+                countPrefix: countPrefix,
+                crlfTerminated: crlfTerminated
+            ) else {
+                return nil
+            }
         }
         return matchCount > 0 ? 0 : 1
     }
@@ -2450,9 +2513,13 @@ public enum SwiftDarwinLiteralPreflight {
         }
         let matchedLineCount = Int(result.matched_line_count)
         if matchedLineCount > 0 || includeZero {
-            var output = Data(countPrefix)
-            output.append(countOutput(matchedLineCount, crlfTerminated: crlfTerminated))
-            FileHandle.standardOutput.write(output)
+            guard writeCountOutput(
+                matchedLineCount,
+                countPrefix: countPrefix,
+                crlfTerminated: crlfTerminated
+            ) else {
+                return nil
+            }
         }
         return matchedLineCount > 0 ? 0 : 1
     }
@@ -2786,9 +2853,13 @@ public enum SwiftDarwinLiteralPreflight {
         let matchCount = countNonOverlappingMatches(in: data, literal: literal)
 
         if matchCount > 0 || includeZero {
-            var output = Data(countPrefix)
-            output.append(countOutput(matchCount, crlfTerminated: crlfTerminated))
-            FileHandle.standardOutput.write(output)
+            guard writeCountOutput(
+                matchCount,
+                countPrefix: countPrefix,
+                crlfTerminated: crlfTerminated
+            ) else {
+                return nil
+            }
         }
         return matchCount > 0 ? 0 : 1
     }
@@ -2814,9 +2885,13 @@ public enum SwiftDarwinLiteralPreflight {
         }
 
         if matchCount > 0 || includeZero {
-            var output = Data(countPrefix)
-            output.append(countOutput(matchCount, crlfTerminated: crlfTerminated))
-            FileHandle.standardOutput.write(output)
+            guard writeCountOutput(
+                matchCount,
+                countPrefix: countPrefix,
+                crlfTerminated: crlfTerminated
+            ) else {
+                return nil
+            }
         }
         return matchCount > 0 ? 0 : 1
     }
@@ -2846,9 +2921,13 @@ public enum SwiftDarwinLiteralPreflight {
         }
 
         if matchCount > 0 || includeZero {
-            var output = Data(countPrefix)
-            output.append(countOutput(matchCount, crlfTerminated: crlfTerminated))
-            FileHandle.standardOutput.write(output)
+            guard writeCountOutput(
+                matchCount,
+                countPrefix: countPrefix,
+                crlfTerminated: crlfTerminated
+            ) else {
+                return nil
+            }
         }
         return matchCount > 0 ? 0 : 1
     }
@@ -2881,9 +2960,13 @@ public enum SwiftDarwinLiteralPreflight {
         }
 
         if matchCount > 0 || includeZero {
-            var output = Data(countPrefix)
-            output.append(countOutput(matchCount, crlfTerminated: crlfTerminated))
-            FileHandle.standardOutput.write(output)
+            guard writeCountOutput(
+                matchCount,
+                countPrefix: countPrefix,
+                crlfTerminated: crlfTerminated
+            ) else {
+                return nil
+            }
         }
         return matchCount > 0 ? 0 : 1
     }
@@ -2909,9 +2992,13 @@ public enum SwiftDarwinLiteralPreflight {
         }
 
         if matchCount > 0 || includeZero {
-            var output = Data(countPrefix)
-            output.append(countOutput(matchCount, crlfTerminated: crlfTerminated))
-            FileHandle.standardOutput.write(output)
+            guard writeCountOutput(
+                matchCount,
+                countPrefix: countPrefix,
+                crlfTerminated: crlfTerminated
+            ) else {
+                return nil
+            }
         }
         return matchCount > 0 ? 0 : 1
     }

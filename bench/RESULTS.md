@@ -49,6 +49,9 @@ the fallback searcher before proving no-match or Unicode-adjacent candidates.
 Path-only preflights now write path bytes and terminators directly through
 stdout instead of allocating a tiny `Data` buffer and handing it to
 `FileHandle`.
+Count preflights now use the same raw stdout buffer for prefix, decimal count,
+and LF/CRLF output instead of allocating a tiny `Data` buffer for the count
+line.
 
 Benchmarks used `/tmp/swift-rg-bench/stop-on-nonmatch-small.txt`, a 4.8 MiB
 dense ASCII fixture, with 2 warmups and 5 timed runs:
@@ -75,7 +78,7 @@ dense ASCII fixture, with 2 warmups and 5 timed runs:
 | `-n -o -i NEEDLE` | 81.4 ms | 20.7 ms | 54.3 ms |
 | `--count-matches -i NEEDLE` | 35.5 ms | 8.5 ms | 32.8 ms |
 | `--heading -H --count-matches -i NEEDLE` | 142.5 ms | 8.2 ms | 33.3 ms |
-| `-c -i NEEDLE` | 35.2 ms | 8.4 ms | 8.5 ms |
+| `-c -i NEEDLE` | 35.2 ms | 5.9 ms | 8.6 ms |
 | `--heading -H -c -i NEEDLE` | 141.3 ms | 6.8 ms | 8.2 ms |
 | `-c -i "NEEDLE\|QUIET"` | 36.6 ms | 7.2 ms | 8.6 ms |
 | `-c -i -x "NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE"` | 48.2 ms | 7.2 ms | 13.5 ms |
