@@ -574,6 +574,42 @@ public enum SwiftDarwinLiteralPreflight {
         return matchedLineCount > 0 ? 0 : 1
     }
 
+    public static func asciiCaseInsensitiveMultiLiteralOnlyMatchingExitCode(
+        path: String,
+        literals: [[UInt8]],
+        lineNumber: Bool,
+        lineNumberFieldSeparator: [UInt8] = [58],
+        linePrefix: [UInt8] = []
+    ) -> Int32? {
+        guard let literals = distinctASCIICaseInsensitiveLiterals(literals),
+              !literals.isEmpty,
+              let data = mappedPreflightData(path: path),
+              !hasBinaryDetectionPrefix(data),
+              !data.contains(where: { $0 >= 0x80 }) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return 1
+        }
+
+        guard let matchCount = data.withUnsafeBytes({ rawData -> Int? in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
+            }
+            return rgSwiftDarwinWriteASCIICaseInsensitiveMultiLiteralOnlyMatches(
+                rawBase.assumingMemoryBound(to: UInt8.self),
+                haystackLength: data.count,
+                foldedLiterals: literals,
+                lineNumber: lineNumber,
+                lineNumberFieldSeparator: lineNumberFieldSeparator,
+                linePrefix: linePrefix
+            )
+        }) else {
+            return nil
+        }
+        return matchCount > 0 ? 0 : 1
+    }
+
     public static func limitedLineExitCode(
         path: String,
         literal: [UInt8],
@@ -3630,6 +3666,105 @@ private func rgSwiftDarwinWriteASCIICaseInsensitiveWordOnlyMatches(
             currentLineNumber = matchedLineNumber
             searchOffset = matchStart + 1
         }
+    }
+
+    guard output.flush() else {
+        return nil
+    }
+    return matchCount
+}
+
+private func rgSwiftDarwinWriteASCIICaseInsensitiveMultiLiteralOnlyMatches(
+    _ base: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    foldedLiterals: [[UInt8]],
+    lineNumber: Bool,
+    lineNumberFieldSeparator: [UInt8],
+    linePrefix: [UInt8]
+) -> Int? {
+    guard !foldedLiterals.isEmpty else {
+        return 0
+    }
+    guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+        return nil
+    }
+    defer {
+        output.deallocate()
+    }
+
+    let shifts = foldedLiterals.map { literal -> [Int] in
+        var table = [Int](repeating: literal.count, count: 256)
+        if literal.count > 1 {
+            for index in 0..<(literal.count - 1) {
+                table[Int(literal[index])] = literal.count - 1 - index
+            }
+        }
+        return table
+    }
+
+    var searchOffset = 0
+    var currentLineNumber = 1
+    var lineCountOffset = 0
+    var matchCount = 0
+
+    while searchOffset < haystackLength {
+        var bestStart = Int.max
+        var bestLiteralIndex = -1
+
+        for literalIndex in foldedLiterals.indices {
+            let literal = foldedLiterals[literalIndex]
+            guard literal.count <= haystackLength - searchOffset else {
+                continue
+            }
+            let found = literal.withUnsafeBufferPointer { literalBuffer in
+                shifts[literalIndex].withUnsafeBufferPointer { shiftBuffer in
+                    rg_memcasemem_ascii_prepared(
+                        base.advanced(by: searchOffset),
+                        haystackLength - searchOffset,
+                        literalBuffer.baseAddress,
+                        literalBuffer.count,
+                        shiftBuffer.baseAddress
+                    )
+                }
+            }
+            guard let found else {
+                continue
+            }
+            let matchStart = base.distance(to: found)
+            if matchStart < bestStart {
+                bestStart = matchStart
+                bestLiteralIndex = literalIndex
+            }
+        }
+
+        guard bestLiteralIndex >= 0 else {
+            break
+        }
+
+        let literalLength = foldedLiterals[bestLiteralIndex].count
+        guard output.writeBytes(linePrefix) else {
+            return nil
+        }
+        if lineNumber {
+            currentLineNumber += rg_memcount_byte(
+                base.advanced(by: lineCountOffset),
+                bestStart - lineCountOffset,
+                UInt8(ascii: "\n")
+            )
+            lineCountOffset = bestStart
+            guard output.writeLineNumberPrefix(
+                currentLineNumber,
+                fieldSeparator: lineNumberFieldSeparator
+            ) else {
+                return nil
+            }
+        }
+        guard output.write(base.advanced(by: bestStart), count: literalLength),
+              output.writeByte(UInt8(ascii: "\n")) else {
+            return nil
+        }
+        matchCount += 1
+        searchOffset = bestStart + literalLength
     }
 
     guard output.flush() else {

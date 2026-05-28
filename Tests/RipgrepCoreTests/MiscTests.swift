@@ -1237,6 +1237,7 @@ struct MiscTests {
         try root.write("needle needle\nquiet line\n", to: "fixed-patterns.txt")
         try root.write("needlex xneedle needle_ _needle needle\n", to: "word-count.txt")
         try root.write("éneedle\npre NEEDLE\nNEEDLE\n", to: "unicode-word-ci.txt")
+        try root.write("needle needle\nNeedle quiet\n", to: "overlap.txt")
         try root.write("needle\n", to: ".hidden.txt")
         try root.write("*.txt\n", to: ".ignore")
         try root.write("needle\n", to: "ignored.txt")
@@ -1373,6 +1374,72 @@ struct MiscTests {
 
         """.utf8))
 
+        let caseInsensitiveMultiLiteralOnlyMatchingOutput = try runExecutableData([
+            "-o",
+            "-i",
+            "NEEDLE|QUIET",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(caseInsensitiveMultiLiteralOnlyMatchingOutput == Data("""
+        needle
+        needle
+        needle
+        quiet
+        NEEDLE
+        needle
+        Needle
+        needle
+
+        """.utf8))
+
+        let caseInsensitiveMultiLiteralPatternFileOnlyMatchingOutput = try runExecutableData([
+            "-o",
+            "-i",
+            "-f",
+            root.path("patterns.txt"),
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(caseInsensitiveMultiLiteralPatternFileOnlyMatchingOutput == caseInsensitiveMultiLiteralOnlyMatchingOutput)
+
+        let shortFirstOverlapOnlyMatchingOutput = try runExecutableData([
+            "-o",
+            "-i",
+            "NEED|NEEDLE",
+            root.path("overlap.txt"),
+        ], fixture: {})
+        #expect(shortFirstOverlapOnlyMatchingOutput == Data("""
+        need
+        need
+        Need
+
+        """.utf8))
+
+        let longFirstOverlapOnlyMatchingOutput = try runExecutableData([
+            "-o",
+            "-i",
+            "NEEDLE|NEED",
+            root.path("overlap.txt"),
+        ], fixture: {})
+        #expect(longFirstOverlapOnlyMatchingOutput == Data("""
+        needle
+        needle
+        Needle
+
+        """.utf8))
+
+        let unicodeCaseInsensitiveMultiLiteralOnlyMatchingOutput = try runExecutableData([
+            "-o",
+            "-i",
+            "NEEDLE|QUIET",
+            root.path("unicode-word-ci.txt"),
+        ], fixture: {})
+        #expect(unicodeCaseInsensitiveMultiLiteralOnlyMatchingOutput == Data("""
+        needle
+        NEEDLE
+        NEEDLE
+
+        """.utf8))
+
         let lineNumberOutput = try runExecutableData([
             "-n",
             "needle",
@@ -1382,6 +1449,25 @@ struct MiscTests {
         1:needle needle needle
         3:NEEDLE needle Needle
         4:tail needle
+
+        """.utf8))
+
+        let caseInsensitiveMultiLiteralOnlyMatchingLineNumberOutput = try runExecutableData([
+            "-n",
+            "-o",
+            "-i",
+            "NEEDLE|QUIET",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(caseInsensitiveMultiLiteralOnlyMatchingLineNumberOutput == Data("""
+        1:needle
+        1:needle
+        1:needle
+        2:quiet
+        3:NEEDLE
+        3:needle
+        3:Needle
+        4:needle
 
         """.utf8))
 
