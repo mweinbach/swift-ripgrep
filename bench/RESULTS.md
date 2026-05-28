@@ -43,6 +43,9 @@ ASCII case-insensitive preflight modes.
 Case-insensitive exact-line matching output now writes through the existing raw
 stdout buffer, avoiding per-line `Data` growth and string-backed line-number
 prefix formatting.
+Case-insensitive word quiet and path-only probes now search for a bounded ASCII
+match before doing full-haystack ASCII/NUL rejection, while still deferring to
+the fallback searcher before proving no-match or Unicode-adjacent candidates.
 
 Benchmarks used `/tmp/swift-rg-bench/stop-on-nonmatch-small.txt`, a 4.8 MiB
 dense ASCII fixture, with 2 warmups and 5 timed runs:
@@ -79,8 +82,8 @@ dense ASCII fixture, with 2 warmups and 5 timed runs:
 | `-i -x "NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE\|MISSING"` | 57.3 ms | 9.1 ms | 15.6 ms |
 | `-o -i "NEEDLE\|QUIET"` | 7.718 s | 19.8 ms | 54.5 ms |
 | `-n -o -i "NEEDLE\|QUIET"` | 7.894 s | 29.8 ms | 66.6 ms |
-| `-q -w -i NEEDLE` | 99.3 ms | 5.2 ms | 2.7 ms |
-| `-l -w -i NEEDLE` | 125.7 ms | 5.7 ms | 2.7 ms |
+| `-q -w -i NEEDLE` | 99.3 ms | 3.4 ms | 2.8 ms |
+| `-l -w -i NEEDLE` | 125.7 ms | 4.3 ms | 3.1 ms |
 
 ## Swift-only default checkpoint — 2026-05-26
 
