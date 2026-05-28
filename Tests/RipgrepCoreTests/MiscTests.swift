@@ -2881,6 +2881,57 @@ struct MiscTests {
 
         """.utf8))
 
+        let clusteredWithFilenameLineNumberOutput = try runExecutableData([
+            "-Hn",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(clusteredWithFilenameLineNumberOutput == withFilenameLineNumberOutput)
+
+        let clusteredLineNumberWithFilenameOutput = try runExecutableData([
+            "-nH",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(clusteredLineNumberWithFilenameOutput == withFilenameLineNumberOutput)
+
+        let clusteredNoFilenameOutput = try runExecutableData([
+            "-HI",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(clusteredNoFilenameOutput == output)
+
+        let clusteredWithFilenameOutput = try runExecutableData([
+            "-IH",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(clusteredWithFilenameOutput == withFilenameOutput)
+
+        let clusteredSearchZipLineNumberOutput = try runExecutableData([
+            "-zn",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(clusteredSearchZipLineNumberOutput == lineNumberOutput)
+
+        let clusteredByteOffsetQuietResult = try runExecutableResult([
+            "-bq",
+            "needle",
+            root.path("dense.txt"),
+        ])
+        #expect(clusteredByteOffsetQuietResult.status == 0)
+        #expect(clusteredByteOffsetQuietResult.stdout.isEmpty)
+        #expect(clusteredByteOffsetQuietResult.stderr.isEmpty)
+
+        let clusteredByteOffsetCountOutput = try runExecutableData([
+            "-bc",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(clusteredByteOffsetCountOutput == Data("3\n".utf8))
+
         let withFilenameNullOutput = try runExecutableData([
             "--with-filename",
             "--null",

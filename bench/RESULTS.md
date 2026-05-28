@@ -291,6 +291,24 @@ warmups:
 | `--no-config needle` | 165.4 ms | 14.6 ms | 12.9 ms |
 | `--line-buffered --no-config needle` | 165.4 ms | 14.8 ms | 128.6 ms |
 
+The executable short-cluster parser now keeps additional already-supported
+single-file flags on the Swift preflight: `H`/`I` filename toggles, `z`
+search-zip enablement when the explicit path has no compressed suffix, and
+`b` byte-offset enablement when the selected output mode makes offsets
+unobservable. Direct byte/status checks matched Rust for clustered filename
+ordering, search-zip line output, byte-offset quiet/count output, and a
+visible byte-offset fallback control.
+
+7 timed runs on `/tmp/swift-rg-candidates/cluster-dense.txt`, a 600,000-line
+literal fixture:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `-Hn needle` | 62.0 ms | 26.1 ms | 26.1 ms |
+| `-nz needle` | 427.8 ms | 25.0 ms | 21.4 ms |
+| `-bq needle` | 38.1 ms | 5.8 ms | 4.4 ms |
+| `-Hc needle` | 43.5 ms | 13.2 ms | 10.8 ms |
+
 Case-sensitive repeated `-e`/`-f` and top-level literal alternation `--trim`
 forms now use the same mapped trim writer.
 Literal `--invert-match` matching-line output now has its own mapped Swift line

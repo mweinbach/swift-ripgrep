@@ -982,12 +982,15 @@ struct RipgrepCommand {
             wordRegexp: Bool,
             fixedStrings: Bool,
             allowPCREQuotedLiterals: Bool?,
+            byteOffset: Bool,
+            withFilename: Bool?,
             invertMatch: Bool,
             multiline: Bool,
             quiet: Bool,
             count: Bool,
             onlyMatching: Bool,
             pathOnlyMode: PathOnlyMode?,
+            searchZip: Bool,
             unrestrictedCount: Int
         )? {
             let bytes = Array(argument.utf8)
@@ -1003,12 +1006,15 @@ struct RipgrepCommand {
             var wordRegexp = false
             var fixedStrings = false
             var allowPCREQuotedLiterals: Bool?
+            var byteOffset = false
+            var withFilename: Bool?
             var invertMatch = false
             var multiline = false
             var quiet = false
             var count = false
             var onlyMatching = false
             var pathOnlyMode: PathOnlyMode?
+            var searchZip = false
             var unrestrictedCount = 0
             for byte in bytes.dropFirst() {
                 switch byte {
@@ -1038,6 +1044,12 @@ struct RipgrepCommand {
                     allowPCREQuotedLiterals = true
                 case UInt8(ascii: "a"):
                     continue
+                case UInt8(ascii: "b"):
+                    byteOffset = true
+                case UInt8(ascii: "H"):
+                    withFilename = true
+                case UInt8(ascii: "I"):
+                    withFilename = false
                 case UInt8(ascii: "v"):
                     invertMatch = true
                 case UInt8(ascii: "q"):
@@ -1048,6 +1060,8 @@ struct RipgrepCommand {
                     onlyMatching = true
                 case UInt8(ascii: "l"):
                     pathOnlyMode = .matching
+                case UInt8(ascii: "z"):
+                    searchZip = true
                 case UInt8(ascii: "u"):
                     unrestrictedCount += 1
                     guard unrestrictedCount <= 3 else {
@@ -1064,12 +1078,15 @@ struct RipgrepCommand {
                 wordRegexp,
                 fixedStrings,
                 allowPCREQuotedLiterals,
+                byteOffset,
+                withFilename,
                 invertMatch,
                 multiline,
                 quiet,
                 count,
                 onlyMatching,
                 pathOnlyMode,
+                searchZip,
                 unrestrictedCount
             )
         }
@@ -1611,6 +1628,11 @@ struct RipgrepCommand {
                 if let clusterPCREQuotedLiterals = cluster.allowPCREQuotedLiterals {
                     allowPCREQuotedLiterals = clusterPCREQuotedLiterals
                 }
+                parsedByteOffset = parsedByteOffset || cluster.byteOffset
+                if let clusterWithFilename = cluster.withFilename {
+                    parsedWithFilename = clusterWithFilename
+                    parsedNoFilename = !clusterWithFilename
+                }
                 parsedInvertMatch = parsedInvertMatch || cluster.invertMatch
                 if cluster.multiline {
                     parsedStopOnNonmatch = false
@@ -1628,6 +1650,7 @@ struct RipgrepCommand {
                         parsedPrintMode = .filesWithoutMatch
                     }
                 }
+                parsedSearchZip = parsedSearchZip || cluster.searchZip
                 parsedUnrestrictedCount += cluster.unrestrictedCount
                 guard parsedUnrestrictedCount <= 3 else {
                     return nil
