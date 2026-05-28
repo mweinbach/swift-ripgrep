@@ -80,8 +80,9 @@ count-matches summaries now reuse the fixed-lookbehind mapped Swift preflights
 for non-empty ASCII prefix/literal pairs. Normal matching-line output for the
 same reset-start shape now uses the literal line writer with the contiguous
 `prefixliteral` search key, since `\K` only changes the reported match span.
-Active literal `--stop-on-nonmatch` matching-line output now has a mapped Swift
-writer that stops after the first non-matching line following the first match.
+Active literal `--stop-on-nonmatch` matching-line and count output now have
+mapped Swift writers that stop after the first non-matching line following the
+first match.
 
 A targeted 20-run A/B against the previous Swift checkpoint and Rust used the
 same 4.8 MiB fixture:
@@ -1130,11 +1131,11 @@ completion. After the change, five-run checks on the same 24 KB fixture measured
 24,000,000-byte fixture used for binary-mode toggles, current `-U`,
 `--multiline`, and `--multiline-dotall` measured 26.4 ms, 26.2 ms, and 26.4 ms
 respectively, versus 30.6 ms for Rust `-U`.
-Active `--stop-on-nonmatch` count output remains on the full path, but
-matching-line, quiet, and path-only forms now use executable preflights for
-literal searches. Matching-line output finds the first matching line, then
-scans only the consecutive matching run until the first non-match, preserving
-line numbers, `-m`, and no-final-newline output. The executable preflight also
+Active `--stop-on-nonmatch` matching-line, count, quiet, and path-only forms
+now use executable preflights for literal searches. Matching-line and count
+output find the first matching line, then scan only the consecutive matching
+run until the first non-match, preserving line numbers, `-m`, prefixed counts,
+`--include-zero`, and no-final-newline output. The executable preflight also
 accepts ordered reset forms where a later `-U` or `--multiline` makes line
 output equivalent to normal literal matching. Focused coverage keeps
 `-U --stop-on-nonmatch` on the fallback by checking its truncated output, while
@@ -1157,6 +1158,8 @@ bypassed via `RIPGREP_CONFIG_PATH=`:
 |---|---:|---:|---:|
 | `--stop-on-nonmatch match` | 187.2 ms | 5.0 ms | 3.0 ms |
 | `-n --stop-on-nonmatch match` | n/a | 4.2 ms | 2.7 ms |
+| `-c --stop-on-nonmatch match` | 190.5 ms | 5.0 ms | 3.2 ms |
+| `-H -c --stop-on-nonmatch match` | n/a | 4.3 ms | 3.1 ms |
 
 Null path terminator flags now stay on the executable literal preflight when
 the command shape cannot print a path. This covers standalone `--null` and

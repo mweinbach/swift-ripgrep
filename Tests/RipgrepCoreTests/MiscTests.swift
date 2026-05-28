@@ -3080,6 +3080,43 @@ struct MiscTests {
         #expect(stopOnNonmatchNoMatch.stderr.isEmpty)
         #expect(stopOnNonmatchNoMatch.status == 1)
 
+        let stopOnNonmatchCountOutput = try runExecutableData([
+            "-c",
+            "--stop-on-nonmatch",
+            "needle",
+            root.path("stop-run.txt"),
+        ], fixture: {})
+        #expect(stopOnNonmatchCountOutput == Data("3\n".utf8))
+
+        let stopOnNonmatchMaxCountOutput = try runExecutableData([
+            "-c",
+            "--stop-on-nonmatch",
+            "-m2",
+            "needle",
+            root.path("stop-run.txt"),
+        ], fixture: {})
+        #expect(stopOnNonmatchMaxCountOutput == Data("2\n".utf8))
+
+        let stopOnNonmatchPrefixedCountOutput = try runExecutableData([
+            "-H",
+            "-c",
+            "--stop-on-nonmatch",
+            "needle",
+            root.path("stop-run.txt"),
+        ], fixture: {})
+        #expect(stopOnNonmatchPrefixedCountOutput == Data("\(root.path("stop-run.txt")):3\n".utf8))
+
+        let stopOnNonmatchIncludeZero = try runExecutableResult([
+            "--include-zero",
+            "-c",
+            "--stop-on-nonmatch",
+            "missing",
+            root.path("stop-run.txt"),
+        ])
+        #expect(stopOnNonmatchIncludeZero.stdout == Data("0\n".utf8))
+        #expect(stopOnNonmatchIncludeZero.stderr.isEmpty)
+        #expect(stopOnNonmatchIncludeZero.status == 1)
+
         let messagesOutput = try runExecutableData([
             "--messages",
             "needle",
