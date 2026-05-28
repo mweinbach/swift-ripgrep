@@ -1231,6 +1231,19 @@ struct PCRE2Tests {
         #expect(output == Data("Holmes\nHolmes\n".utf8))
     }
 
+    @Test func pcre2FixedNegativeLookbehindExecutableFastPathMatchingLines() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("Sherlock Holmes\nMycroft Holmes\nHolmes\n", to: "pcre.txt")
+
+        let output = try runExecutableData(["-P", "(?<!Sherlock )Holmes", temp.path("pcre.txt")]) {}
+        let lineNumberOutput = try runExecutableData(["-P", "-n", "(?<!Sherlock )Holmes", temp.path("pcre.txt")]) {}
+        let maxCountOutput = try runExecutableData(["-P", "-m1", "(?<!Sherlock )Holmes", temp.path("pcre.txt")]) {}
+
+        #expect(output == Data("Mycroft Holmes\nHolmes\n".utf8))
+        #expect(lineNumberOutput == Data("2:Mycroft Holmes\n3:Holmes\n".utf8))
+        #expect(maxCountOutput == Data("Mycroft Holmes\n".utf8))
+    }
+
     @Test func pcre2FixedLookaheadLiteralOnlyMatchesBeforeSuffix() throws {
         let temp = try TemporaryDirectory()
         try temp.write("Sherlock Holmes\nSherlock Watson\nSherlock Holmes\n", to: "pcre.txt")
@@ -1354,6 +1367,19 @@ struct PCRE2Tests {
         let output = try runExecutableData(["-P", "-n", "-o", "Sherlock(?! Holmes)", temp.path("pcre.txt")]) {}
 
         #expect(output == Data("2:Sherlock\n3:Sherlock\n".utf8))
+    }
+
+    @Test func pcre2FixedNegativeLookaheadExecutableFastPathMatchingLines() throws {
+        let temp = try TemporaryDirectory()
+        try temp.write("Sherlock Holmes\nSherlock Watson\nSherlock\n", to: "pcre.txt")
+
+        let output = try runExecutableData(["-P", "Sherlock(?! Holmes)", temp.path("pcre.txt")]) {}
+        let lineNumberOutput = try runExecutableData(["-P", "-n", "Sherlock(?! Holmes)", temp.path("pcre.txt")]) {}
+        let maxCountOutput = try runExecutableData(["-P", "-m1", "Sherlock(?! Holmes)", temp.path("pcre.txt")]) {}
+
+        #expect(output == Data("Sherlock Watson\nSherlock\n".utf8))
+        #expect(lineNumberOutput == Data("2:Sherlock Watson\n3:Sherlock\n".utf8))
+        #expect(maxCountOutput == Data("Sherlock Watson\n".utf8))
     }
 
     @Test func pcre2BackreferenceOnlyMatching() throws {

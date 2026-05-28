@@ -188,6 +188,55 @@ public enum SwiftDarwinLiteralPreflight {
         return 0
     }
 
+    public static func fixedLookbehindLineExitCode(
+        path: String,
+        prefix: [UInt8],
+        literal: [UInt8],
+        prefixShouldMatch: Bool,
+        maxCount: Int?,
+        lineNumber: Bool = false,
+        lineNumberFieldSeparator: [UInt8] = [58],
+        linePrefix: [UInt8] = [],
+        headingPrefix: [UInt8] = []
+    ) -> Int32? {
+        guard fixedLookaroundInputsAreSafe(literal, prefix),
+              maxCount != 0,
+              let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return 1
+        }
+        guard let matchedLineCount = data.withUnsafeBytes({ rawData -> Int? in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
+            }
+            return prefix.withUnsafeBufferPointer { prefixBytes in
+                literal.withUnsafeBufferPointer { literalBytes in
+                    guard let prefixBase = prefixBytes.baseAddress,
+                          let literalBase = literalBytes.baseAddress else {
+                        return nil
+                    }
+                    return rgSwiftDarwinWriteFixedLookbehindLines(
+                        rawBase.assumingMemoryBound(to: UInt8.self),
+                        haystackLength: data.count,
+                        prefix: UnsafeBufferPointer(start: prefixBase, count: prefix.count),
+                        literal: UnsafeBufferPointer(start: literalBase, count: literal.count),
+                        prefixShouldMatch: prefixShouldMatch,
+                        maxCount: maxCount ?? Int.max,
+                        lineNumber: lineNumber,
+                        lineNumberFieldSeparator: lineNumberFieldSeparator,
+                        linePrefix: linePrefix,
+                        headingPrefix: headingPrefix
+                    )
+                }
+            }
+        }) else {
+            return nil
+        }
+        return matchedLineCount > 0 ? 0 : 1
+    }
+
     public static func fixedLookbehindCountLineExitCode(
         path: String,
         prefix: [UInt8],
@@ -298,6 +347,55 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         return 0
+    }
+
+    public static func fixedLookaheadLineExitCode(
+        path: String,
+        literal: [UInt8],
+        suffix: [UInt8],
+        suffixShouldMatch: Bool,
+        maxCount: Int?,
+        lineNumber: Bool = false,
+        lineNumberFieldSeparator: [UInt8] = [58],
+        linePrefix: [UInt8] = [],
+        headingPrefix: [UInt8] = []
+    ) -> Int32? {
+        guard fixedLookaroundInputsAreSafe(literal, suffix),
+              maxCount != 0,
+              let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return 1
+        }
+        guard let matchedLineCount = data.withUnsafeBytes({ rawData -> Int? in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
+            }
+            return literal.withUnsafeBufferPointer { literalBytes in
+                suffix.withUnsafeBufferPointer { suffixBytes in
+                    guard let literalBase = literalBytes.baseAddress,
+                          let suffixBase = suffixBytes.baseAddress else {
+                        return nil
+                    }
+                    return rgSwiftDarwinWriteFixedLookaheadLines(
+                        rawBase.assumingMemoryBound(to: UInt8.self),
+                        haystackLength: data.count,
+                        literal: UnsafeBufferPointer(start: literalBase, count: literal.count),
+                        suffix: UnsafeBufferPointer(start: suffixBase, count: suffix.count),
+                        suffixShouldMatch: suffixShouldMatch,
+                        maxCount: maxCount ?? Int.max,
+                        lineNumber: lineNumber,
+                        lineNumberFieldSeparator: lineNumberFieldSeparator,
+                        linePrefix: linePrefix,
+                        headingPrefix: headingPrefix
+                    )
+                }
+            }
+        }) else {
+            return nil
+        }
+        return matchedLineCount > 0 ? 0 : 1
     }
 
     public static func fixedLookaheadCountLineExitCode(
@@ -4741,6 +4839,202 @@ private func rgSwiftDarwinWriteLiteralBytes(
         guard output?.flush() == true else {
             return nil
         }
+    }
+    return matchedLineCount
+}
+
+private func rgSwiftDarwinWriteFixedLookbehindLines(
+    _ base: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    prefix: UnsafeBufferPointer<UInt8>,
+    literal: UnsafeBufferPointer<UInt8>,
+    prefixShouldMatch: Bool,
+    maxCount: Int,
+    lineNumber: Bool,
+    lineNumberFieldSeparator: [UInt8],
+    linePrefix: [UInt8],
+    headingPrefix: [UInt8]
+) -> Int? {
+    guard let prefixBase = prefix.baseAddress,
+          literal.baseAddress != nil,
+          prefix.count > 0,
+          literal.count > 0,
+          maxCount > 0 else {
+        return nil
+    }
+    return rgSwiftDarwinWriteFixedLookaroundLines(
+        base,
+        haystackLength: haystackLength,
+        literal: literal,
+        maxCount: maxCount,
+        lineNumber: lineNumber,
+        lineNumberFieldSeparator: lineNumberFieldSeparator,
+        linePrefix: linePrefix,
+        headingPrefix: headingPrefix
+    ) { matchStart in
+        let hasPrefix = matchStart >= prefix.count
+            && memcmp(
+                base.advanced(by: matchStart - prefix.count),
+                prefixBase,
+                prefix.count
+            ) == 0
+        return hasPrefix == prefixShouldMatch
+    }
+}
+
+private func rgSwiftDarwinWriteFixedLookaheadLines(
+    _ base: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    literal: UnsafeBufferPointer<UInt8>,
+    suffix: UnsafeBufferPointer<UInt8>,
+    suffixShouldMatch: Bool,
+    maxCount: Int,
+    lineNumber: Bool,
+    lineNumberFieldSeparator: [UInt8],
+    linePrefix: [UInt8],
+    headingPrefix: [UInt8]
+) -> Int? {
+    guard let suffixBase = suffix.baseAddress,
+          literal.baseAddress != nil,
+          literal.count > 0,
+          suffix.count > 0,
+          maxCount > 0 else {
+        return nil
+    }
+    return rgSwiftDarwinWriteFixedLookaroundLines(
+        base,
+        haystackLength: haystackLength,
+        literal: literal,
+        maxCount: maxCount,
+        lineNumber: lineNumber,
+        lineNumberFieldSeparator: lineNumberFieldSeparator,
+        linePrefix: linePrefix,
+        headingPrefix: headingPrefix
+    ) { matchStart in
+        let suffixStart = matchStart + literal.count
+        let hasSuffix = suffixStart + suffix.count <= haystackLength
+            && memcmp(
+                base.advanced(by: suffixStart),
+                suffixBase,
+                suffix.count
+            ) == 0
+        return hasSuffix == suffixShouldMatch
+    }
+}
+
+private func rgSwiftDarwinWriteFixedLookaroundLines(
+    _ base: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    literal: UnsafeBufferPointer<UInt8>,
+    maxCount: Int,
+    lineNumber: Bool,
+    lineNumberFieldSeparator: [UInt8],
+    linePrefix: [UInt8],
+    headingPrefix: [UInt8],
+    assertionMatches: (Int) -> Bool
+) -> Int? {
+    guard let literalBase = literal.baseAddress,
+          literal.count > 0,
+          maxCount > 0 else {
+        return nil
+    }
+    if haystackLength >= 3,
+       base[0] == 0xEF,
+       base[1] == 0xBB,
+       base[2] == 0xBF {
+        return nil
+    }
+    if haystackLength >= 2,
+       (base[0] == 0xFF && base[1] == 0xFE
+        || base[0] == 0xFE && base[1] == 0xFF) {
+        return nil
+    }
+    if memchr(base, 0, haystackLength) != nil {
+        return nil
+    }
+
+    guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+        return nil
+    }
+    defer {
+        output.deallocate()
+    }
+
+    let newline = UInt8(ascii: "\n")
+    var searchOffset = 0
+    var matchedLineCount = 0
+    var nextLineNumber = 1
+    var lineScanOffset = 0
+    var emittedHeading = false
+
+    while matchedLineCount < maxCount,
+          searchOffset <= haystackLength - literal.count {
+        guard let found = rg_memmem_simple(
+            base.advanced(by: searchOffset),
+            haystackLength - searchOffset,
+            literalBase,
+            literal.count
+        ) else {
+            break
+        }
+        let matchStart = base.distance(to: found)
+        guard assertionMatches(matchStart) else {
+            searchOffset = matchStart + 1
+            continue
+        }
+
+        var lineStart = matchStart
+        while lineStart > 0, base[lineStart - 1] != newline {
+            lineStart -= 1
+        }
+        let newlinePointer = memchr(found, Int32(newline), haystackLength - matchStart)
+        let outputEnd: Int
+        let nextSearchOffset: Int
+        let hasNewline: Bool
+        if let newlinePointer {
+            outputEnd = base.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self)) + 1
+            nextSearchOffset = outputEnd
+            hasNewline = true
+        } else {
+            outputEnd = haystackLength
+            nextSearchOffset = haystackLength
+            hasNewline = false
+        }
+
+        guard output.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading),
+              output.writeBytes(linePrefix) else {
+            return nil
+        }
+        if lineNumber {
+            let skippedNewlines = Int(rg_memcount_byte(
+                base.advanced(by: lineScanOffset),
+                lineStart - lineScanOffset,
+                newline
+            ))
+            let matchedLineNumber = nextLineNumber + skippedNewlines
+            guard output.writeLineNumberPrefix(
+                matchedLineNumber,
+                fieldSeparator: lineNumberFieldSeparator
+            ) else {
+                return nil
+            }
+            nextLineNumber = matchedLineNumber + 1
+            lineScanOffset = nextSearchOffset
+        }
+        guard output.write(base.advanced(by: lineStart), count: outputEnd - lineStart) else {
+            return nil
+        }
+        if !hasNewline,
+           !output.writeByte(newline) {
+            return nil
+        }
+
+        matchedLineCount += 1
+        searchOffset = nextSearchOffset
+    }
+
+    guard output.flush() else {
+        return nil
     }
     return matchedLineCount
 }
