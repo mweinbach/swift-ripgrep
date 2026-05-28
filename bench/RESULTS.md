@@ -92,6 +92,10 @@ Literal `--invert-match` matching-line output now has its own mapped Swift line
 writer for single-file literal searches, preserving line numbers, headings,
 filename prefixes, max-count, fixed-string literals, no-final-newline output,
 and binary/BOM fallback behavior.
+ASCII case-insensitive `--trim` and `--invert-match` now reuse Swift mapped
+line writers when the literal and haystack are ASCII, preserving original
+emitted bytes while leaving Unicode case-folding and binary input on the
+fallback path.
 Literal `--passthru` matching-line output now uses a mapped Swift line writer
 for single-file literal searches, emitting every line with Rust-compatible
 match/context separators and returning status from whether any line matched.
@@ -1232,6 +1236,16 @@ unset:
 |---|---:|---:|---:|
 | `-v needle` | 927.2 ms | 10.3 ms | 11.1 ms |
 | `-n -v needle` | 970.6 ms | 12.4 ms | 17.3 ms |
+
+ASCII ignore-case trim/invert checks used the same fixtures with uppercase
+`NEEDLE` as the query. The before column is the same binary with executable
+preflight bypassed via `RIPGREP_CONFIG_PATH=`; current and Rust used 3 warmups
+and 10 timed runs:
+
+| Flags | Swift before | Swift after | rg |
+|---|---:|---:|---:|
+| `--trim -i NEEDLE` | 436.8 ms | 11.2 ms | 19.4 ms |
+| `-v -i NEEDLE` | 3.609 s | 8.8 ms | 10.1 ms |
 
 The literal passthru check used `/tmp/swift-rg-candidates/passthru-50k.txt`, a
 50,000-line / 1.29 MiB fixture with every tenth line matching. The before

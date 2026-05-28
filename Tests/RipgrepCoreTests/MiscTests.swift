@@ -1240,8 +1240,10 @@ struct MiscTests {
         try root.write("éneedle\npre NEEDLE\nNEEDLE\n", to: "unicode-word-ci.txt")
         try root.write("needle needle\nNeedle quiet\n", to: "overlap.txt")
         try root.write("    needle padded\n\tneedle tabbed\nquiet\n    needle later\n", to: "trim.txt")
+        try root.write("    Needle padded\n\tquiet\n  NEEDLE later\n", to: "trim-case.txt")
         try root.write("   \n  needle space\n", to: "trim-space.txt")
         try root.write("quiet one\nneedle skip\nquiet two\nneedle skip two\ntail quiet", to: "invert.txt")
+        try root.write("quiet one\nNeedle skip\nafter one\nNEEDLE skip two\ntail quiet", to: "invert-case.txt")
         try root.write("needle\nneedle two\n", to: "all-needle.txt")
         try root.write("alpha\nneedle one\nomega", to: "passthru.txt")
         try root.write("needle one\nafter one\nquiet\nquiet\nneedle two\nafter two\nquiet", to: "after-context.txt")
@@ -1705,6 +1707,19 @@ struct MiscTests {
         ], fixture: {})
         #expect(trimWhitespaceOnlyOutput == Data("\nneedle space\n".utf8))
 
+        let trimIgnoreCaseOutput = try runExecutableData([
+            "-n",
+            "--trim",
+            "-i",
+            "NEEDLE",
+            root.path("trim-case.txt"),
+        ], fixture: {})
+        #expect(trimIgnoreCaseOutput == Data("""
+        1:Needle padded
+        3:NEEDLE later
+
+        """.utf8))
+
         let invertOutput = try runExecutableData([
             "-v",
             "needle",
@@ -1754,6 +1769,20 @@ struct MiscTests {
         quiet one
         quiet two
         tail quiet
+
+        """.utf8))
+
+        let invertIgnoreCaseOutput = try runExecutableData([
+            "-n",
+            "-v",
+            "-i",
+            "NEEDLE",
+            root.path("invert-case.txt"),
+        ], fixture: {})
+        #expect(invertIgnoreCaseOutput == Data("""
+        1:quiet one
+        3:after one
+        5:tail quiet
 
         """.utf8))
 

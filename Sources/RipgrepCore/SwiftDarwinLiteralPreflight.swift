@@ -3981,24 +3981,81 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literal: [UInt8],
         maxCount: Int,
+        asciiCaseInsensitive: Bool = false,
         lineNumber: Bool = false,
         lineNumberFieldSeparator: [UInt8] = [58],
         linePrefix: [UInt8] = [],
         headingPrefix: [UInt8] = []
     ) -> Int32? {
         guard !literal.isEmpty,
-              maxCount > 0,
-              let result = multiLiteralResult(
-                path: path,
-                literals: [literal],
-                maxCount: maxCount,
-                lineNumber: lineNumber,
-                lineNumberFieldSeparator: lineNumberFieldSeparator,
-                linePrefix: linePrefix,
-                headingPrefix: headingPrefix,
-                trimLeadingWhitespace: true
-              ),
-              result.status == 0 else {
+              maxCount > 0 else {
+            return nil
+        }
+
+        if asciiCaseInsensitive {
+            guard literal.allSatisfy({ $0 < 0x80 }) else {
+                return nil
+            }
+            let fd = path.withCString { Darwin.open($0, O_RDONLY) }
+            guard fd >= 0 else {
+                return nil
+            }
+            defer {
+                Darwin.close(fd)
+            }
+
+            var fileStat = stat()
+            guard Darwin.fstat(fd, &fileStat) == 0 else {
+                return nil
+            }
+            guard (fileStat.st_mode & S_IFMT) == S_IFREG else {
+                return nil
+            }
+            guard fileStat.st_size > 0 else {
+                return 1
+            }
+            guard UInt64(fileStat.st_size) <= UInt64(Int.max) else {
+                return nil
+            }
+
+            let haystackLength = Int(fileStat.st_size)
+            guard let mapped = Darwin.mmap(nil, haystackLength, PROT_READ, MAP_PRIVATE, fd, 0),
+                  mapped != MAP_FAILED else {
+                return nil
+            }
+            defer {
+                Darwin.munmap(mapped, haystackLength)
+            }
+
+            guard let matchedLineCount = literal.withUnsafeBufferPointer({ literalBuffer in
+                rgSwiftDarwinWriteTrimmedLiteralLines(
+                    UnsafeRawPointer(mapped).assumingMemoryBound(to: UInt8.self),
+                    haystackLength: haystackLength,
+                    literal: literalBuffer,
+                    maxCount: maxCount,
+                    asciiCaseInsensitive: true,
+                    lineNumber: lineNumber,
+                    lineNumberFieldSeparator: lineNumberFieldSeparator,
+                    linePrefix: linePrefix,
+                    headingPrefix: headingPrefix
+                )
+            }) else {
+                return nil
+            }
+            return matchedLineCount > 0 ? 0 : 1
+        }
+
+        guard let result = multiLiteralResult(
+            path: path,
+            literals: [literal],
+            maxCount: maxCount,
+            lineNumber: lineNumber,
+            lineNumberFieldSeparator: lineNumberFieldSeparator,
+            linePrefix: linePrefix,
+            headingPrefix: headingPrefix,
+            trimLeadingWhitespace: true
+        ),
+        result.status == 0 else {
             return nil
         }
         return result.matched_line_count > 0 ? 0 : 1
@@ -4008,6 +4065,7 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literal: [UInt8],
         maxCount: Int,
+        asciiCaseInsensitive: Bool = false,
         lineNumber: Bool = false,
         lineNumberFieldSeparator: [UInt8] = [58],
         linePrefix: [UInt8] = [],
@@ -4055,6 +4113,7 @@ public enum SwiftDarwinLiteralPreflight {
                 haystackLength: haystackLength,
                 literal: literalBuffer,
                 maxCount: maxCount,
+                asciiCaseInsensitive: asciiCaseInsensitive,
                 lineNumber: lineNumber,
                 lineNumberFieldSeparator: lineNumberFieldSeparator,
                 linePrefix: linePrefix,
@@ -7075,11 +7134,12 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
     )
 }
 
-private func rgSwiftDarwinWriteInvertedLiteralLines(
+private func rgSwiftDarwinWriteTrimmedLiteralLines(
     _ base: UnsafePointer<UInt8>,
     haystackLength: Int,
     literal: UnsafeBufferPointer<UInt8>,
     maxCount: Int,
+    asciiCaseInsensitive: Bool,
     lineNumber: Bool,
     lineNumberFieldSeparator: [UInt8],
     linePrefix: [UInt8],
@@ -7104,6 +7164,150 @@ private func rgSwiftDarwinWriteInvertedLiteralLines(
     if memchr(base, 0, haystackLength) != nil {
         return nil
     }
+    if asciiCaseInsensitive {
+        for byte in literal where byte >= 0x80 {
+            return nil
+        }
+        if rgSwiftContainsNonASCIIByte(base, count: haystackLength) {
+            return nil
+        }
+    }
+
+    guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+        return nil
+    }
+    defer {
+        output.deallocate()
+    }
+
+    let foldedLiteral = asciiCaseInsensitive
+        ? (0..<literal.count).map { rgSwiftASCIILower(literalBase[$0]) }
+        : []
+    var caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
+    if asciiCaseInsensitive, foldedLiteral.count > 1 {
+        for index in 0..<(foldedLiteral.count - 1) {
+            caseInsensitiveShifts[Int(foldedLiteral[index])] = foldedLiteral.count - 1 - index
+        }
+    }
+
+    func lineContainsLiteral(lineStart: Int, lineEnd: Int) -> Bool {
+        if asciiCaseInsensitive {
+            return foldedLiteral.withUnsafeBufferPointer { foldedBuffer in
+                caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
+                    rg_memcasemem_ascii_prepared(
+                        base.advanced(by: lineStart),
+                        lineEnd - lineStart,
+                        foldedBuffer.baseAddress,
+                        foldedBuffer.count,
+                        shifts.baseAddress
+                    ) != nil
+                }
+            }
+        }
+        return rg_memmem_simple(
+            base.advanced(by: lineStart),
+            lineEnd - lineStart,
+            literalBase,
+            literal.count
+        ) != nil
+    }
+
+    var matchedLineCount = 0
+    var currentLineNumber = 1
+    var lineStart = 0
+    var emittedHeading = false
+
+    while lineStart < haystackLength && matchedLineCount < maxCount {
+        let newline = memchr(
+            base.advanced(by: lineStart),
+            Int32(UInt8(ascii: "\n")),
+            haystackLength - lineStart
+        )
+        let lineEnd = newline.map {
+            base.distance(to: $0.assumingMemoryBound(to: UInt8.self))
+        } ?? haystackLength
+        let outputEnd = newline == nil ? haystackLength : lineEnd + 1
+
+        if lineContainsLiteral(lineStart: lineStart, lineEnd: lineEnd) {
+            var renderedLineStart = lineStart
+            while renderedLineStart < lineEnd {
+                let byte = base[renderedLineStart]
+                guard byte == 0x20 || byte == 0x09 || byte == 0x0D || byte == 0x0A else {
+                    break
+                }
+                renderedLineStart += 1
+            }
+            guard output.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading) else {
+                return nil
+            }
+            guard output.writeBytes(linePrefix) else {
+                return nil
+            }
+            if lineNumber {
+                guard output.writeLineNumberPrefix(
+                    currentLineNumber,
+                    fieldSeparator: lineNumberFieldSeparator
+                ) else {
+                    return nil
+                }
+            }
+            guard output.write(base.advanced(by: renderedLineStart), count: outputEnd - renderedLineStart) else {
+                return nil
+            }
+            if newline == nil, !output.writeByte(UInt8(ascii: "\n")) {
+                return nil
+            }
+            matchedLineCount += 1
+        }
+
+        lineStart = outputEnd
+        currentLineNumber += 1
+    }
+
+    guard output.flush() else {
+        return nil
+    }
+    return matchedLineCount
+}
+
+private func rgSwiftDarwinWriteInvertedLiteralLines(
+    _ base: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    literal: UnsafeBufferPointer<UInt8>,
+    maxCount: Int,
+    asciiCaseInsensitive: Bool,
+    lineNumber: Bool,
+    lineNumberFieldSeparator: [UInt8],
+    linePrefix: [UInt8],
+    headingPrefix: [UInt8]
+) -> Int? {
+    guard let literalBase = literal.baseAddress,
+          literal.count > 0,
+          maxCount > 0 else {
+        return nil
+    }
+    if haystackLength >= 3,
+       base[0] == 0xEF,
+       base[1] == 0xBB,
+       base[2] == 0xBF {
+        return nil
+    }
+    if haystackLength >= 2,
+       (base[0] == 0xFF && base[1] == 0xFE
+        || base[0] == 0xFE && base[1] == 0xFF) {
+        return nil
+    }
+    if memchr(base, 0, haystackLength) != nil {
+        return nil
+    }
+    if asciiCaseInsensitive {
+        for byte in literal where byte >= 0x80 {
+            return nil
+        }
+        if rgSwiftContainsNonASCIIByte(base, count: haystackLength) {
+            return nil
+        }
+    }
 
     guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
         return nil
@@ -7116,6 +7320,37 @@ private func rgSwiftDarwinWriteInvertedLiteralLines(
     var currentLineNumber = 1
     var lineStart = 0
     var emittedHeading = false
+    let foldedLiteral = asciiCaseInsensitive
+        ? (0..<literal.count).map { rgSwiftASCIILower(literalBase[$0]) }
+        : []
+    var caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
+    if asciiCaseInsensitive, foldedLiteral.count > 1 {
+        for index in 0..<(foldedLiteral.count - 1) {
+            caseInsensitiveShifts[Int(foldedLiteral[index])] = foldedLiteral.count - 1 - index
+        }
+    }
+
+    func lineContainsLiteral(lineStart: Int, lineEnd: Int) -> Bool {
+        if asciiCaseInsensitive {
+            return foldedLiteral.withUnsafeBufferPointer { foldedBuffer in
+                caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
+                    rg_memcasemem_ascii_prepared(
+                        base.advanced(by: lineStart),
+                        lineEnd - lineStart,
+                        foldedBuffer.baseAddress,
+                        foldedBuffer.count,
+                        shifts.baseAddress
+                    ) != nil
+                }
+            }
+        }
+        return rg_memmem_simple(
+            base.advanced(by: lineStart),
+            lineEnd - lineStart,
+            literalBase,
+            literal.count
+        ) != nil
+    }
 
     while lineStart < haystackLength && selectedLineCount < maxCount {
         let newline = memchr(
@@ -7127,12 +7362,7 @@ private func rgSwiftDarwinWriteInvertedLiteralLines(
             base.distance(to: $0.assumingMemoryBound(to: UInt8.self))
         } ?? haystackLength
         let outputEnd = newline == nil ? haystackLength : lineEnd + 1
-        let containsLiteral = rg_memmem_simple(
-            base.advanced(by: lineStart),
-            lineEnd - lineStart,
-            literalBase,
-            literal.count
-        ) != nil
+        let containsLiteral = lineContainsLiteral(lineStart: lineStart, lineEnd: lineEnd)
 
         if !containsLiteral {
             guard output.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading) else {

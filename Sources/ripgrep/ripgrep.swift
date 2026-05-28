@@ -1978,7 +1978,6 @@ struct RipgrepCommand {
            !parsedCrlf,
            !wordRegexp,
            !parsedLineRegexp,
-           !asciiCaseInsensitive,
            parsedMaxCount != 0,
            explicitRegexpPatterns.count <= 1,
            (patternCanStartWithDash || !pattern.hasPrefix("-")),
@@ -1992,11 +1991,13 @@ struct RipgrepCommand {
             if let trimLiteralPattern {
                 let trimLiteral = Array(trimLiteralPattern.utf8)
                 if !trimLiteral.isEmpty,
-                   !trimLiteral.contains(UInt8(ascii: "\n")) {
+                   !trimLiteral.contains(UInt8(ascii: "\n")),
+                   (!asciiCaseInsensitive || trimLiteral.allSatisfy({ $0 < 0x80 })) {
                     return SwiftDarwinLiteralPreflight.trimmedLiteralLineExitCode(
                         path: path,
                         literal: trimLiteral,
                         maxCount: parsedMaxCount ?? Int.max,
+                        asciiCaseInsensitive: asciiCaseInsensitive,
                         lineNumber: lineNumber,
                         lineNumberFieldSeparator: parsedFieldMatchSeparator,
                         linePrefix: parsedLinePrefix,
@@ -2026,7 +2027,6 @@ struct RipgrepCommand {
            !parsedTrim,
            !wordRegexp,
            !parsedLineRegexp,
-           !asciiCaseInsensitive,
            parsedMaxCount != 0,
            explicitRegexpPatterns.count <= 1,
            (patternCanStartWithDash || !pattern.hasPrefix("-")),
@@ -2040,11 +2040,13 @@ struct RipgrepCommand {
             if let invertedLiteralPattern {
                 let invertedLiteral = Array(invertedLiteralPattern.utf8)
                 if !invertedLiteral.isEmpty,
-                   !invertedLiteral.contains(UInt8(ascii: "\n")) {
+                   !invertedLiteral.contains(UInt8(ascii: "\n")),
+                   (!asciiCaseInsensitive || invertedLiteral.allSatisfy({ $0 < 0x80 })) {
                     return SwiftDarwinLiteralPreflight.invertedLiteralLineExitCode(
                         path: path,
                         literal: invertedLiteral,
                         maxCount: parsedMaxCount ?? Int.max,
+                        asciiCaseInsensitive: asciiCaseInsensitive,
                         lineNumber: lineNumber,
                         lineNumberFieldSeparator: parsedFieldMatchSeparator,
                         linePrefix: parsedLinePrefix,
