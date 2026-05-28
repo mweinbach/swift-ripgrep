@@ -1011,7 +1011,6 @@ struct RipgrepCommand {
         var parsedBeforeContext = 0
         var parsedBeforeContextWasSet = false
         var parsedMaxColumns = 0
-        var parsedMaxDepth = 0
         var parsedNullPathTerminator = false
         var parsedNoMmap = false
         var parsedPrintMode = PrintMode.matchingLines
@@ -1056,7 +1055,7 @@ struct RipgrepCommand {
             case .maxColumns:
                 parsedMaxColumns = value
             case .maxDepth:
-                parsedMaxDepth = value
+                break
             }
         }
         var argumentIndex = 0
@@ -1560,7 +1559,6 @@ struct RipgrepCommand {
               !parsedInvertMatch,
               !parsedJson,
               parsedMaxColumns == 0,
-              parsedMaxDepth == 0,
               !parsedNullData,
               !parsedPassthru,
               !parsedSearchZip,

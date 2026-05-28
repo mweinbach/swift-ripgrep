@@ -2463,6 +2463,39 @@ struct MiscTests {
             #expect(orderedZeroValueOutput == output)
         }
 
+        for maxDepthArguments in [
+            ["--max-depth=1"],
+            ["--maxdepth=2"],
+            ["--max-depth", "1"],
+            ["-d1"],
+            ["--max-depth=1", "--max-depth=2"],
+        ] {
+            let maxDepthOutput = try runExecutableData(
+                maxDepthArguments + [
+                    "needle",
+                    root.path("dense.txt"),
+                ],
+                fixture: {}
+            )
+            #expect(maxDepthOutput == output)
+        }
+
+        let maxDepthLineNumberOutput = try runExecutableData([
+            "--maxdepth=2",
+            "-n",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(maxDepthLineNumberOutput == lineNumberOutput)
+
+        let maxDepthPathOnlyOutput = try runExecutableData([
+            "-d1",
+            "-l",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(maxDepthPathOnlyOutput == Data("\(root.path("dense.txt"))\n".utf8))
+
         for neutralValueArguments in [
             ["--field-match-separator=|"],
             ["--field-match-separator", "|"],

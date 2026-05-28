@@ -616,6 +616,14 @@ versus 47.4 ms for Rust; `--context=1 --context=0 needle` from 91.0 ms to
 `--max-columns=100 --max-columns=0 needle` from 82.4 ms to 38.1 ms, versus
 47.0 ms for Rust.
 
+Nonzero `--max-depth` values now share that explicit-file preflight treatment,
+since depth pruning is traversal-only once the operand is an actual file.
+Release byte checks matched Rust for inline, separated, short, ordered,
+numbered, filename-prefixed, heading-prefixed, and path-only forms. On the 50
+KiB dense fixture, five-run checks measured `--max-depth=1 needle` at 3.9 ms
+versus 26.4 ms before and 2.8 ms for Rust; `--maxdepth=2 -n needle` measured
+3.0 ms versus 25.9 ms before and 2.7 ms for Rust.
+
 Separator and metadata value flags that cannot affect plain matching-line
 bytes now also remain eligible for the executable literal preflight. The parser
 consumes inline and separated `--field-match-separator`,
