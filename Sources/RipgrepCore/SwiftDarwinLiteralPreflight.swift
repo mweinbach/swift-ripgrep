@@ -4208,6 +4208,80 @@ public enum SwiftDarwinLiteralPreflight {
         return matchedLineCount > 0 ? 0 : 1
     }
 
+    public static func contextLiteralLineExitCode(
+        path: String,
+        literal: [UInt8],
+        beforeContext: Int,
+        afterContext: Int,
+        maxCount: Int,
+        lineNumber: Bool = false,
+        lineNumberFieldMatchSeparator: [UInt8] = [58],
+        lineNumberFieldContextSeparator: [UInt8] = [45],
+        lineMatchPrefix: [UInt8] = [],
+        lineContextPrefix: [UInt8] = [],
+        headingPrefix: [UInt8] = [],
+        contextSeparator: [UInt8]? = [45, 45]
+    ) -> Int32? {
+        guard !literal.isEmpty,
+              beforeContext > 0,
+              afterContext > 0,
+              maxCount > 0 else {
+            return nil
+        }
+
+        let fd = path.withCString { Darwin.open($0, O_RDONLY) }
+        guard fd >= 0 else {
+            return nil
+        }
+        defer {
+            Darwin.close(fd)
+        }
+
+        var fileStat = stat()
+        guard Darwin.fstat(fd, &fileStat) == 0 else {
+            return nil
+        }
+        guard (fileStat.st_mode & S_IFMT) == S_IFREG else {
+            return nil
+        }
+        guard fileStat.st_size > 0 else {
+            return 1
+        }
+        guard UInt64(fileStat.st_size) <= UInt64(Int.max) else {
+            return nil
+        }
+
+        let haystackLength = Int(fileStat.st_size)
+        guard let mapped = Darwin.mmap(nil, haystackLength, PROT_READ, MAP_PRIVATE, fd, 0),
+              mapped != MAP_FAILED else {
+            return nil
+        }
+        defer {
+            Darwin.munmap(mapped, haystackLength)
+        }
+
+        guard let matchedLineCount = literal.withUnsafeBufferPointer({ literalBuffer in
+            rgSwiftDarwinWriteContextLiteralLines(
+                UnsafeRawPointer(mapped).assumingMemoryBound(to: UInt8.self),
+                haystackLength: haystackLength,
+                literal: literalBuffer,
+                beforeContext: beforeContext,
+                afterContext: afterContext,
+                maxCount: maxCount,
+                lineNumber: lineNumber,
+                lineNumberFieldMatchSeparator: lineNumberFieldMatchSeparator,
+                lineNumberFieldContextSeparator: lineNumberFieldContextSeparator,
+                lineMatchPrefix: lineMatchPrefix,
+                lineContextPrefix: lineContextPrefix,
+                headingPrefix: headingPrefix,
+                contextSeparator: contextSeparator
+            )
+        }) else {
+            return nil
+        }
+        return matchedLineCount > 0 ? 0 : 1
+    }
+
     public static func passthruLiteralLineExitCode(
         path: String,
         literal: [UInt8],
@@ -7268,6 +7342,182 @@ private func rgSwiftDarwinWriteBeforeContextLiteralLines(
             guard emitLine(currentLine) else {
                 return nil
             }
+        }
+
+        appendPendingLine(currentLine)
+        lineStart = outputEnd
+        currentLineNumber += 1
+    }
+
+    guard output.flush() else {
+        return nil
+    }
+    return matchedLineCount
+}
+
+private func rgSwiftDarwinWriteContextLiteralLines(
+    _ base: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    literal: UnsafeBufferPointer<UInt8>,
+    beforeContext: Int,
+    afterContext: Int,
+    maxCount: Int,
+    lineNumber: Bool,
+    lineNumberFieldMatchSeparator: [UInt8],
+    lineNumberFieldContextSeparator: [UInt8],
+    lineMatchPrefix: [UInt8],
+    lineContextPrefix: [UInt8],
+    headingPrefix: [UInt8],
+    contextSeparator: [UInt8]?
+) -> Int? {
+    guard let literalBase = literal.baseAddress,
+          literal.count > 0,
+          beforeContext > 0,
+          afterContext > 0,
+          maxCount > 0 else {
+        return nil
+    }
+    if haystackLength >= 3,
+       base[0] == 0xEF,
+       base[1] == 0xBB,
+       base[2] == 0xBF {
+        return nil
+    }
+    if haystackLength >= 2,
+       (base[0] == 0xFF && base[1] == 0xFE
+        || base[0] == 0xFE && base[1] == 0xFF) {
+        return nil
+    }
+    if memchr(base, 0, haystackLength) != nil {
+        return nil
+    }
+
+    guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+        return nil
+    }
+    defer {
+        output.deallocate()
+    }
+
+    struct PendingLine {
+        let number: Int
+        let start: Int
+        let outputEnd: Int
+        let hasNewline: Bool
+        let containsLiteral: Bool
+    }
+
+    var pendingLines: [PendingLine] = []
+    pendingLines.reserveCapacity(min(beforeContext, 128))
+    var pendingStartIndex = 0
+    var matchedLineCount = 0
+    var remainingContextLines = 0
+    var currentLineNumber = 1
+    var previousEmittedLineNumber = 0
+    var lineStart = 0
+    var emittedHeading = false
+
+    func compactPendingLinesIfNeeded() {
+        guard pendingStartIndex > 1024 else {
+            return
+        }
+        pendingLines.removeFirst(pendingStartIndex)
+        pendingStartIndex = 0
+    }
+
+    func appendPendingLine(_ line: PendingLine) {
+        pendingLines.append(line)
+        if pendingLines.count - pendingStartIndex > beforeContext {
+            pendingStartIndex += 1
+            compactPendingLinesIfNeeded()
+        }
+    }
+
+    func emitGroupSeparatorIfNeeded(for lineNumber: Int) -> Bool {
+        guard previousEmittedLineNumber > 0,
+              lineNumber > previousEmittedLineNumber + 1,
+              let contextSeparator else {
+            return true
+        }
+        return output.writeBytes(contextSeparator)
+            && output.writeByte(UInt8(ascii: "\n"))
+    }
+
+    func emitLine(_ line: PendingLine) -> Bool {
+        guard line.number > previousEmittedLineNumber else {
+            return true
+        }
+        guard emitGroupSeparatorIfNeeded(for: line.number) else {
+            return false
+        }
+        guard output.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading) else {
+            return false
+        }
+        guard output.writeBytes(line.containsLiteral ? lineMatchPrefix : lineContextPrefix) else {
+            return false
+        }
+        if lineNumber {
+            guard output.writeLineNumberPrefix(
+                line.number,
+                fieldSeparator: line.containsLiteral
+                    ? lineNumberFieldMatchSeparator
+                    : lineNumberFieldContextSeparator
+            ) else {
+                return false
+            }
+        }
+        guard output.write(base.advanced(by: line.start), count: line.outputEnd - line.start) else {
+            return false
+        }
+        if !line.hasNewline,
+           !output.writeByte(UInt8(ascii: "\n")) {
+            return false
+        }
+        previousEmittedLineNumber = line.number
+        return true
+    }
+
+    while lineStart < haystackLength {
+        let newline = memchr(
+            base.advanced(by: lineStart),
+            Int32(UInt8(ascii: "\n")),
+            haystackLength - lineStart
+        )
+        let lineEnd = newline.map {
+            base.distance(to: $0.assumingMemoryBound(to: UInt8.self))
+        } ?? haystackLength
+        let hasNewline = newline != nil
+        let outputEnd = hasNewline ? lineEnd + 1 : haystackLength
+        let containsLiteral = rg_memmem_simple(
+            base.advanced(by: lineStart),
+            lineEnd - lineStart,
+            literalBase,
+            literal.count
+        ) != nil
+        let currentLine = PendingLine(
+            number: currentLineNumber,
+            start: lineStart,
+            outputEnd: outputEnd,
+            hasNewline: hasNewline,
+            containsLiteral: containsLiteral
+        )
+
+        if containsLiteral && matchedLineCount < maxCount {
+            matchedLineCount += 1
+            for pendingLine in pendingLines[pendingStartIndex...] {
+                guard emitLine(pendingLine) else {
+                    return nil
+                }
+            }
+            guard emitLine(currentLine) else {
+                return nil
+            }
+            remainingContextLines = afterContext
+        } else if remainingContextLines > 0 {
+            guard emitLine(currentLine) else {
+                return nil
+            }
+            remainingContextLines -= 1
         }
 
         appendPendingLine(currentLine)
