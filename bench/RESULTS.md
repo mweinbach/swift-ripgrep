@@ -225,6 +225,21 @@ literal fallback.
 | --- | ---: | ---: | ---: |
 | `--encoding=none -i NEEDLE` | 6.403 s | 16.2 ms | 20.4 ms |
 
+Explicit UTF-8 visible line output now stays on the executable preflight when
+the target file validates as UTF-8 and the command is still a plain literal
+line-output form. Invalid UTF-8, BOM input, ignore-case, word, exact-line, and
+only-matching forms still fall through to the full searcher. Direct byte/status
+checks covered accepted line, line-number, and max-count forms plus those
+fallback controls.
+
+10 timed runs on `/tmp/swift-rg-candidates/trim.txt` with 3 warmups:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--encoding=utf-8 needle` | 1.765 s | 17.1 ms | 15.3 ms |
+| `--encoding=utf-8 -n needle` | 1.813 s | 22.5 ms | 23.5 ms |
+| `--encoding=utf-8 -m2 needle` | 908.6 ms | 7.4 ms | 5.0 ms |
+
 `--search-zip` now stays on the executable preflight for explicit paths whose
 suffix cannot trigger decompression. Compressed suffixes still fall through to
 the normal searcher so real archives and decompressor errors keep matching

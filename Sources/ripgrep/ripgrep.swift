@@ -918,6 +918,19 @@ struct RipgrepCommand {
                 return false
             }
         }
+        func isUTF8LinePreflightCompatibleEncodingValue(_ raw: String) -> Bool {
+            switch normalizedEncodingValue(raw) {
+            case "unicode-1-1-utf-8",
+                 "unicode11utf8",
+                 "unicode20utf8",
+                 "utf-8",
+                 "utf8",
+                 "x-unicode20utf8":
+                return true
+            default:
+                return false
+            }
+        }
         func isSummaryPreflightCompatibleEncodingValue(_ raw: String) -> Bool {
             switch normalizedEncodingValue(raw) {
             case "auto",
@@ -1072,6 +1085,7 @@ struct RipgrepCommand {
         var parsedHeading = false
         var parsedEncodingIsAutomatic = true
         var parsedEncodingSupportsLinePreflight = true
+        var parsedEncodingSupportsUTF8LinePreflight = false
         var parsedEncodingSupportsSummaryPreflight = true
         var parsedIncludeZero = false
         var parsedInvertMatch = false
@@ -1543,6 +1557,7 @@ struct RipgrepCommand {
             } else if argument == "--no-encoding" {
                 parsedEncodingIsAutomatic = true
                 parsedEncodingSupportsLinePreflight = true
+                parsedEncodingSupportsUTF8LinePreflight = false
                 parsedEncodingSupportsSummaryPreflight = true
             } else if argument == "-E" || argument == "--encoding" {
                 guard argumentIndex < arguments.count,
@@ -1551,6 +1566,9 @@ struct RipgrepCommand {
                 }
                 parsedEncodingIsAutomatic = isAutomaticEncodingValue(arguments[argumentIndex])
                 parsedEncodingSupportsLinePreflight = isLinePreflightCompatibleEncodingValue(
+                    arguments[argumentIndex]
+                )
+                parsedEncodingSupportsUTF8LinePreflight = isUTF8LinePreflightCompatibleEncodingValue(
                     arguments[argumentIndex]
                 )
                 parsedEncodingSupportsSummaryPreflight = isSummaryPreflightCompatibleEncodingValue(
@@ -1563,6 +1581,7 @@ struct RipgrepCommand {
                 }
                 parsedEncodingIsAutomatic = isAutomaticEncodingValue(encoding)
                 parsedEncodingSupportsLinePreflight = isLinePreflightCompatibleEncodingValue(encoding)
+                parsedEncodingSupportsUTF8LinePreflight = isUTF8LinePreflightCompatibleEncodingValue(encoding)
                 parsedEncodingSupportsSummaryPreflight = isSummaryPreflightCompatibleEncodingValue(encoding)
             } else if let unrestrictedCount = unrestrictedRepeatCount(argument) {
                 parsedUnrestrictedCount += unrestrictedCount
@@ -2392,13 +2411,19 @@ struct RipgrepCommand {
             && parsedPathOnlyMode == nil
             && !parsedCount
             && parsedPrintMode != .countMatches
+        let parsedEncodingVisibleLineShapeCanUsePreflight = !wordRegexp
+            && !parsedLineRegexp
+            && !parsedOnlyMatching
+        let parsedEncodingVisibleLineOutputCanUsePreflight =
+            parsedEncodingVisibleLineShapeCanUsePreflight
+            && (parsedEncodingSupportsLinePreflight
+                || (!asciiCaseInsensitive
+                    && parsedEncodingSupportsUTF8LinePreflight
+                    && SwiftDarwinLiteralPreflight.fileCanUseUTF8LinePreflight(path: path)))
         let parsedEncodingAffectsPreflightOutput = !parsedEncodingIsAutomatic
             && (!parsedEncodingSupportsSummaryPreflight
                 || (parsedEncodingVisibleLineOutput
-                    && (!parsedEncodingSupportsLinePreflight
-                        || wordRegexp
-                        || parsedLineRegexp
-                        || parsedOnlyMatching)))
+                    && !parsedEncodingVisibleLineOutputCanUsePreflight))
         let parsedSearchZipAffectsPreflight = parsedSearchZip && pathMayUseSearchZip(path)
         guard !(parsedLineRegexp && wordRegexp) else {
             return nil

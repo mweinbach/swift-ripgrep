@@ -3796,6 +3796,48 @@ struct MiscTests {
         ], fixture: {})
         #expect(utf8EncodingCountMatchesOutput == countMatchesOutput)
 
+        let utf8EncodingLineOutput = try runExecutableData([
+            "--encoding=utf-8",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(utf8EncodingLineOutput == output)
+
+        let utf8EncodingLineNumberOutput = try runExecutableData([
+            "--encoding",
+            "utf8",
+            "-n",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(utf8EncodingLineNumberOutput == lineNumberOutput)
+
+        let utf8EncodingMaxCountOutput = try runExecutableData([
+            "-Eutf8",
+            "-m2",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(utf8EncodingMaxCountOutput == Data("""
+        needle needle needle
+        NEEDLE needle Needle
+
+        """.utf8))
+
+        let utf8EncodingInvalidLineOutput = try runExecutableData([
+            "--encoding=utf-8",
+            "needle",
+            root.path("encoding-none-invalid.txt"),
+        ], fixture: {})
+        #expect(utf8EncodingInvalidLineOutput == Data("\u{FFFD}needle raw\n".utf8))
+
+        let utf8EncodingBOMLineOutput = try runExecutableData([
+            "--encoding=utf-8",
+            "needle",
+            root.path("encoding-none-bom.txt"),
+        ], fixture: {})
+        #expect(utf8EncodingBOMLineOutput == Data("needle\n".utf8))
+
         let disabledEncodingPathOnlyOutput = try runExecutableData([
             "--encoding=none",
             "-l",
