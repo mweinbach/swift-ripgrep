@@ -1259,12 +1259,24 @@ struct RipgrepCommand {
             )
         }
         if parsedCount {
-            guard let parsedMaxCount,
-                  parsedPathOnlyMode == nil,
+            guard parsedPathOnlyMode == nil,
                   !wordRegexp,
-                  !parsedLineRegexp,
                   !asciiCaseInsensitive,
                   !asciiBoundary else {
+                return nil
+            }
+            if parsedLineRegexp {
+                guard !parsedCrlf else {
+                    return nil
+                }
+                return SwiftDarwinLiteralPreflight.exactLineCountExitCode(
+                    path: path,
+                    literal: literal,
+                    includeZero: parsedIncludeZero,
+                    maxCount: parsedMaxCount
+                )
+            }
+            guard let parsedMaxCount else {
                 return nil
             }
             return SwiftDarwinLiteralPreflight.countLineExitCode(

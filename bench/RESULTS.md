@@ -401,6 +401,11 @@ fixture, `-x 'needle needle needle quiet tail needle'` improved from 13.783 s
 to 397.9 ms, versus 115.5 ms for Rust. A no-match exact-line scan improved
 from 2.241 s to 22.5 ms, versus 8.1 ms for Rust.
 
+Exact line count output now uses the same full-line scanner without emitting
+matched lines. On the same fixture,
+`-c -x 'needle needle needle quiet tail needle'` improved from 13.070 s to
+370.6 ms, versus 99.2 ms for Rust.
+
 Type-definition flags that do not activate a type filter now also stay
 eligible for the executable preflight. The preflight replays
 `--type-add`/`--type-clear` through `FileTypeRegistry.apply`, so invalid
