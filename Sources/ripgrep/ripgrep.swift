@@ -1694,6 +1694,53 @@ struct RipgrepCommand {
                 }
             }
         }
+        if parsedTrim,
+           parsedPrintMode == .matchingLines,
+           !parsedOnlyMatching,
+           !parsedQuiet,
+           !parsedByteOffset,
+           !parsedColumn,
+           !parsedColorMayEmit,
+           parsedEncodingIsAutomatic,
+           parsedAfterContext == 0,
+           parsedBeforeContext == 0,
+           !parsedInvertMatch,
+           !parsedJson,
+           parsedMaxColumns == 0,
+           !parsedNullData,
+           !parsedPassthru,
+           !parsedSearchZip,
+           !parsedStats,
+           !parsedStopOnNonmatch,
+           !parsedCrlf,
+           !wordRegexp,
+           !parsedLineRegexp,
+           !asciiCaseInsensitive,
+           parsedMaxCount != 0,
+           (patternCanStartWithDash || !pattern.hasPrefix("-")),
+           path != "-" {
+            let trimLiteralPattern = fixedStrings
+                ? pattern
+                : RegexLiteralParser.literal(
+                    fromPlainRegexPattern: pattern,
+                    allowPCREQuotedLiterals: allowPCREQuotedLiterals
+                )
+            if let trimLiteralPattern {
+                let trimLiteral = Array(trimLiteralPattern.utf8)
+                if !trimLiteral.isEmpty,
+                   !trimLiteral.contains(UInt8(ascii: "\n")) {
+                    return SwiftDarwinLiteralPreflight.trimmedLiteralLineExitCode(
+                        path: path,
+                        literal: trimLiteral,
+                        maxCount: parsedMaxCount ?? Int.max,
+                        lineNumber: lineNumber,
+                        lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                        linePrefix: parsedLinePrefix,
+                        headingPrefix: parsedHeadingPrefix
+                    )
+                }
+            }
+        }
         guard !(parsedLineRegexp && wordRegexp) else {
             return nil
         }

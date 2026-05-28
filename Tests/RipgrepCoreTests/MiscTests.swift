@@ -1238,6 +1238,8 @@ struct MiscTests {
         try root.write("needlex xneedle needle_ _needle needle\n", to: "word-count.txt")
         try root.write("éneedle\npre NEEDLE\nNEEDLE\n", to: "unicode-word-ci.txt")
         try root.write("needle needle\nNeedle quiet\n", to: "overlap.txt")
+        try root.write("    needle padded\n\tneedle tabbed\nquiet\n    needle later\n", to: "trim.txt")
+        try root.write("   \n  needle space\n", to: "trim-space.txt")
         try root.write("needle\n", to: ".hidden.txt")
         try root.write("*.txt\n", to: ".ignore")
         try root.write("needle\n", to: "ignored.txt")
@@ -1622,6 +1624,74 @@ struct MiscTests {
         4:tail needle
 
         """.utf8))
+
+        let trimOutput = try runExecutableData([
+            "--trim",
+            "needle",
+            root.path("trim.txt"),
+        ], fixture: {})
+        #expect(trimOutput == Data("""
+        needle padded
+        needle tabbed
+        needle later
+
+        """.utf8))
+
+        let trimLineNumberOutput = try runExecutableData([
+            "-n",
+            "--trim",
+            "needle",
+            root.path("trim.txt"),
+        ], fixture: {})
+        #expect(trimLineNumberOutput == Data("""
+        1:needle padded
+        2:needle tabbed
+        4:needle later
+
+        """.utf8))
+
+        let trimMaxCountOutput = try runExecutableData([
+            "--trim",
+            "-m2",
+            "needle",
+            root.path("trim.txt"),
+        ], fixture: {})
+        #expect(trimMaxCountOutput == Data("""
+        needle padded
+        needle tabbed
+
+        """.utf8))
+
+        let trimHeadingWithFilenameOutput = try runExecutableData([
+            "--heading",
+            "--with-filename",
+            "--trim",
+            "needle",
+            root.path("trim.txt"),
+        ], fixture: {})
+        #expect(trimHeadingWithFilenameOutput == Data("""
+        \(root.path("trim.txt"))
+        needle padded
+        needle tabbed
+        needle later
+
+        """.utf8))
+
+        let trimDisabledOutput = try runExecutableData([
+            "--trim",
+            "--no-trim",
+            "needle",
+            root.path("trim.txt"),
+        ], fixture: {})
+        #expect(trimDisabledOutput == Data("    needle padded\n\tneedle tabbed\n    needle later\n".utf8))
+
+        let trimWhitespaceOnlyOutput = try runExecutableData([
+            "-F",
+            "--trim",
+            " ",
+            root.path("trim-space.txt"),
+        ], fixture: {})
+        #expect(trimWhitespaceOnlyOutput == Data("\nneedle space\n".utf8))
 
         let plainOnlyMatchingLineNumberOutput = try runExecutableData([
             "-n",

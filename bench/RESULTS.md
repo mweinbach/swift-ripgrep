@@ -83,6 +83,11 @@ same reset-start shape now uses the literal line writer with the contiguous
 Active literal `--stop-on-nonmatch` matching-line and count output now have
 mapped Swift writers that stop after the first non-matching line following the
 first match.
+Literal `--trim` matching-line output now routes through a Swift-only mapped
+line writer that trims leading ASCII space, tab, and CR bytes from line content
+before emitting the matched line, while preserving headings, line numbers, max-count,
+fixed-string literals, no-final-newline output, and the conservative binary/BOM
+fallbacks.
 
 A targeted 20-run A/B against the previous Swift checkpoint and Rust used the
 same 4.8 MiB fixture:
@@ -1160,6 +1165,17 @@ bypassed via `RIPGREP_CONFIG_PATH=`:
 | `-n --stop-on-nonmatch match` | n/a | 4.2 ms | 2.7 ms |
 | `-c --stop-on-nonmatch match` | 190.5 ms | 5.0 ms | 3.2 ms |
 | `-H -c --stop-on-nonmatch match` | n/a | 4.3 ms | 3.1 ms |
+
+The literal trim check used `/tmp/swift-rg-candidates/trim.txt`, a 250,000-line
+fixture with leading spaces before every match. The before column is the
+pre-route Swift fallback from a 7-run probe; after and Rust used 3 warmups and
+10 timed runs with `RIPGREP_CONFIG_PATH` unset so the executable preflight was
+eligible:
+
+| Flags | Swift before | Swift after | rg |
+|---|---:|---:|---:|
+| `--trim needle` | 376.5 ms | 13.8 ms | 15.4 ms |
+| `-n --trim needle` | 416.8 ms | 20.8 ms | 24.6 ms |
 
 Null path terminator flags now stay on the executable literal preflight when
 the command shape cannot print a path. This covers standalone `--null` and
