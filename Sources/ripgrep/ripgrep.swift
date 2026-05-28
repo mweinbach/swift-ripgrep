@@ -2180,13 +2180,24 @@ struct RipgrepCommand {
         }
         if parsedOnlyMatching, !parsedLineRegexp {
             guard asciiCaseInsensitive,
-                  wordRegexp,
                   parsedPrintMode == .matchingLines,
                   parsedPathOnlyMode == nil,
                   !parsedQuiet,
                   parsedMaxCount == nil,
                   !parsedCrlf else {
                 return nil
+            }
+            guard wordRegexp else {
+                guard !asciiBoundary else {
+                    return nil
+                }
+                return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveMultiLiteralOnlyMatchingExitCode(
+                    path: path,
+                    literals: [literal],
+                    lineNumber: lineNumber,
+                    lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                    linePrefix: parsedLinePrefix
+                )
             }
             return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveWordOnlyMatchingExitCode(
                 path: path,

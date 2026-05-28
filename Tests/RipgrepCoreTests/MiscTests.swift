@@ -1331,6 +1331,34 @@ struct MiscTests {
         ], fixture: {})
         #expect(caseInsensitiveWordOutput == output)
 
+        let caseInsensitiveOnlyMatchingOutput = try runExecutableData([
+            "-o",
+            "-i",
+            "NEEDLE",
+            root.path("word-count.txt"),
+        ], fixture: {})
+        #expect(caseInsensitiveOnlyMatchingOutput == Data("""
+        needle
+        needle
+        needle
+        needle
+        needle
+
+        """.utf8))
+
+        let unicodeCaseInsensitiveOnlyMatchingOutput = try runExecutableData([
+            "-o",
+            "-i",
+            "NEEDLE",
+            root.path("unicode-word-ci.txt"),
+        ], fixture: {})
+        #expect(unicodeCaseInsensitiveOnlyMatchingOutput == Data("""
+        needle
+        NEEDLE
+        NEEDLE
+
+        """.utf8))
+
         let unicodeCaseInsensitiveWordOutput = try runExecutableData([
             "-w",
             "-i",
@@ -1449,6 +1477,22 @@ struct MiscTests {
         1:needle needle needle
         3:NEEDLE needle Needle
         4:tail needle
+
+        """.utf8))
+
+        let caseInsensitiveOnlyMatchingLineNumberOutput = try runExecutableData([
+            "-n",
+            "-o",
+            "-i",
+            "NEEDLE",
+            root.path("word-count.txt"),
+        ], fixture: {})
+        #expect(caseInsensitiveOnlyMatchingLineNumberOutput == Data("""
+        1:needle
+        1:needle
+        1:needle
+        1:needle
+        1:needle
 
         """.utf8))
 
