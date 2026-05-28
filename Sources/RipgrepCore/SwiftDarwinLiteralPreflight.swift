@@ -1038,12 +1038,16 @@ public enum SwiftDarwinLiteralPreflight {
         let limit = maxCount ?? Int.max
         let newline = UInt8(ascii: "\n")
         var matchedLineCount = 0
-        var output = Data()
-        output.reserveCapacity(64 * 1024)
+        guard var output = rgSwiftStdoutBuffer(capacity: 64 * 1024) else {
+            return nil
+        }
+        defer {
+            output.deallocate()
+        }
 
-        data.withUnsafeBytes { rawData in
+        let wroteOutput = data.withUnsafeBytes { rawData in
             guard let rawBase = rawData.baseAddress else {
-                return
+                return true
             }
             let base = rawBase.assumingMemoryBound(to: UInt8.self)
             var lineStart = 0
@@ -1072,25 +1076,26 @@ public enum SwiftDarwinLiteralPreflight {
                     lineEnd: lineEnd,
                     foldedLiterals: literals
                 ) {
-                    appendHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading, to: &output)
-                    appendLinePrefix(linePrefix, to: &output)
+                    guard output.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading),
+                          output.writeBytes(linePrefix) else {
+                        return false
+                    }
                     if lineNumber {
-                        appendLineNumberPrefix(
+                        guard output.writeLineNumberPrefix(
                             lineNumberValue,
-                            to: &output,
                             fieldSeparator: lineNumberFieldSeparator
-                        )
+                        ) else {
+                            return false
+                        }
                     }
-                    output.append(contentsOf: UnsafeBufferPointer(
-                        start: base.advanced(by: lineStart),
+                    guard output.write(
+                        base.advanced(by: lineStart),
                         count: lineEnd - lineStart
-                    ))
-                    output.append(newline)
-                    matchedLineCount += 1
-                    if output.count >= 64 * 1024 {
-                        FileHandle.standardOutput.write(output)
-                        output.removeAll(keepingCapacity: true)
+                    ),
+                        output.writeByte(newline) else {
+                        return false
                     }
+                    matchedLineCount += 1
                 }
 
                 lineStart = nextLineStart
@@ -1098,10 +1103,12 @@ public enum SwiftDarwinLiteralPreflight {
                     lineNumberValue += 1
                 }
             }
+            return true
         }
 
-        if !output.isEmpty {
-            FileHandle.standardOutput.write(output)
+        guard wroteOutput,
+              output.flush() else {
+            return nil
         }
         return matchedLineCount > 0 ? 0 : 1
     }

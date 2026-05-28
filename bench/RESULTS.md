@@ -40,6 +40,9 @@ binary and non-ASCII fallback before writing.
 Mapped ASCII haystack guards now use a Swift SIMD byte scan instead of
 `Data.contains(where:)`, removing the guard as the dominant cost for dense
 ASCII case-insensitive preflight modes.
+Case-insensitive exact-line matching output now writes through the existing raw
+stdout buffer, avoiding per-line `Data` growth and string-backed line-number
+prefix formatting.
 
 Benchmarks used `/tmp/swift-rg-bench/stop-on-nonmatch-small.txt`, a 4.8 MiB
 dense ASCII fixture, with 2 warmups and 5 timed runs:
@@ -71,9 +74,9 @@ dense ASCII fixture, with 2 warmups and 5 timed runs:
 | `-c -i "NEEDLE\|QUIET"` | 36.6 ms | 7.2 ms | 8.6 ms |
 | `-c -i -x "NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE"` | 48.2 ms | 7.2 ms | 13.5 ms |
 | `--count-matches -i -x "NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE"` | 48.0 ms | 7.0 ms | 26.7 ms |
-| `-i -x "NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE"` | 62.3 ms | 15.2 ms | 16.1 ms |
-| `-n -i -x "NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE"` | 80.2 ms | 31.4 ms | 18.3 ms |
-| `-i -x "NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE\|MISSING"` | 57.3 ms | 14.7 ms | 15.4 ms |
+| `-i -x "NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE"` | 62.3 ms | 10.4 ms | 15.3 ms |
+| `-n -i -x "NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE"` | 80.2 ms | 9.5 ms | 17.8 ms |
+| `-i -x "NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE\|MISSING"` | 57.3 ms | 9.1 ms | 15.6 ms |
 | `-o -i "NEEDLE\|QUIET"` | 7.718 s | 19.8 ms | 54.5 ms |
 | `-n -o -i "NEEDLE\|QUIET"` | 7.894 s | 29.8 ms | 66.6 ms |
 | `-q -w -i NEEDLE` | 99.3 ms | 5.2 ms | 2.7 ms |
