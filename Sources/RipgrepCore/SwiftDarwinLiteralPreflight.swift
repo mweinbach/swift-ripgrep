@@ -134,6 +134,55 @@ public enum SwiftDarwinLiteralPreflight {
         return 0
     }
 
+    public static func fixedLookbehindQuietExitCode(
+        path: String,
+        prefix: [UInt8],
+        literal: [UInt8],
+        prefixShouldMatch: Bool
+    ) -> Int32? {
+        guard let matched = containsFixedLookbehindLiteral(
+            path: path,
+            prefix: prefix,
+            literal: literal,
+            prefixShouldMatch: prefixShouldMatch
+        ) else {
+            return nil
+        }
+        return matched ? 0 : 1
+    }
+
+    public static func fixedLookbehindPathOnlyExitCode(
+        path: String,
+        prefix: [UInt8],
+        literal: [UInt8],
+        prefixShouldMatch: Bool,
+        printWhenMatched: Bool,
+        nullTerminated: Bool,
+        crlfTerminated: Bool,
+        outputPath: [UInt8]? = nil
+    ) -> Int32? {
+        guard let matched = containsFixedLookbehindLiteral(
+            path: path,
+            prefix: prefix,
+            literal: literal,
+            prefixShouldMatch: prefixShouldMatch
+        ) else {
+            return nil
+        }
+        guard matched == printWhenMatched else {
+            return 1
+        }
+        guard writePathOnlyOutput(
+            path: path,
+            outputPath: outputPath,
+            nullTerminated: nullTerminated,
+            crlfTerminated: crlfTerminated
+        ) else {
+            return nil
+        }
+        return 0
+    }
+
     public static func asciiCaseInsensitiveQuietExitCode(
         path: String,
         literal: [UInt8]
@@ -1534,6 +1583,66 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         return true
+    }
+
+    private static func containsFixedLookbehindLiteral(
+        path: String,
+        prefix: [UInt8],
+        literal: [UInt8],
+        prefixShouldMatch: Bool
+    ) -> Bool? {
+        guard !prefix.isEmpty,
+              !literal.isEmpty,
+              !prefix.contains(UInt8(ascii: "\n")),
+              !literal.contains(UInt8(ascii: "\n")),
+              !prefix.contains(UInt8(ascii: "\r")),
+              !literal.contains(UInt8(ascii: "\r")) else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard data.count >= literal.count else {
+            return false
+        }
+
+        return data.withUnsafeBytes { rawData in
+            guard let rawBase = rawData.baseAddress else {
+                return false
+            }
+            let base = rawBase.assumingMemoryBound(to: UInt8.self)
+            return prefix.withUnsafeBufferPointer { prefixBytes in
+                literal.withUnsafeBufferPointer { literalBytes in
+                    guard let prefixBase = prefixBytes.baseAddress,
+                          let literalBase = literalBytes.baseAddress else {
+                        return false
+                    }
+                    var searchOffset = 0
+                    while searchOffset <= data.count - literal.count {
+                        guard let found = rg_memmem_simple(
+                            base.advanced(by: searchOffset),
+                            data.count - searchOffset,
+                            literalBase,
+                            literal.count
+                        ) else {
+                            return false
+                        }
+                        let matchStart = base.distance(to: found)
+                        let hasPrefix = matchStart >= prefix.count
+                            && memcmp(
+                                base.advanced(by: matchStart - prefix.count),
+                                prefixBase,
+                                prefix.count
+                            ) == 0
+                        if hasPrefix == prefixShouldMatch {
+                            return true
+                        }
+                        searchOffset = matchStart + 1
+                    }
+                    return false
+                }
+            }
+        }
     }
 
     private static func containsASCIICaseInsensitiveLiteral(path: String, literal: [UInt8]) -> Bool? {

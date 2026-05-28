@@ -1107,9 +1107,16 @@ struct PCRE2Tests {
             "(?<=Nobody )Holmes",
             temp.path("pcre.txt"),
         ]) {}
+        let negativeMatchingOutput = try runExecutableData([
+            "-P",
+            "--files-with-matches",
+            "(?<!Sherlock )Holmes",
+            temp.path("pcre.txt"),
+        ]) {}
 
         #expect(matchingOutput == Data("\(temp.path("pcre.txt"))\n".utf8))
         #expect(nonmatchingOutput == Data("\(temp.path("pcre.txt"))\n".utf8))
+        #expect(negativeMatchingOutput == Data("\(temp.path("pcre.txt"))\n".utf8))
     }
 
     @Test func pcre2FixedLookbehindPathOutputPrecomposesUnicodeRootArgument() throws {

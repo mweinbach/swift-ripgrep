@@ -56,6 +56,9 @@ Direct searcher path-only output now goes through `OutputPathFormatter` before
 writing, matching Rust's composed Unicode path bytes for explicit path-only
 PCRE fast paths. The writer emits normal path-length lines through one Swift
 stack buffer instead of allocating `Array(path.utf8) + newline`.
+ASCII fixed-lookbehind PCRE quiet and path-only forms now enter a Swift
+executable preflight too, avoiding the generic searcher setup when the result
+only needs an exit status or a path.
 
 A targeted 20-run A/B against the previous Swift checkpoint and Rust used the
 same 4.8 MiB fixture:
@@ -64,6 +67,16 @@ same 4.8 MiB fixture:
 |---|---:|---:|---:|
 | `--files-with-matches needle` | 4.2 ms | 3.1 ms | 2.8 ms |
 | `--files-without-match absent` | 7.8 ms | 7.6 ms | 3.5 ms |
+
+The fixed-lookbehind check used
+`/tmp/swift-rg-bench/pcre-lookbehind-small.txt`, a 5.7 MiB ASCII fixture, with
+3 warmups and 20 timed runs. The before column is the same binary with the
+executable preflight bypassed via `RIPGREP_CONFIG_PATH=`:
+
+| Flags | Swift before | Swift after | rg |
+|---|---:|---:|---:|
+| `-P --files-with-matches '(?<=prefix)needle'` | 32.1 ms | 3.1 ms | 2.5 ms |
+| `-P -q '(?<=prefix)needle'` | 36.0 ms | 3.2 ms | 2.6 ms |
 
 Benchmarks used `/tmp/swift-rg-bench/stop-on-nonmatch-small.txt`, a 4.8 MiB
 dense ASCII fixture, with 2 warmups and 5 timed runs:

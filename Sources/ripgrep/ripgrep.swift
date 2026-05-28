@@ -351,7 +351,10 @@ struct RipgrepCommand {
         _ path: String,
         pathSeparator: UInt8?
     ) -> [UInt8] {
-        let bytes = Array(path.utf8)
+        let normalizedPath = path.utf8.allSatisfy { $0 < 0x80 }
+            ? path
+            : path.precomposedStringWithCanonicalMapping
+        let bytes = Array(normalizedPath.utf8)
         guard let pathSeparator else {
             return bytes
         }
@@ -1573,7 +1576,9 @@ struct RipgrepCommand {
             path,
             pathSeparator: parsedPathSeparator
         )
-        let parsedPathOnlyOutputPath = parsedPathSeparator == nil ? nil : parsedDisplayPath
+        let parsedPathOnlyOutputPath = parsedPathSeparator == nil && path.utf8.allSatisfy { $0 < 0x80 }
+            ? nil
+            : parsedDisplayPath
         let parsedCountPrefix: [UInt8] = if parsedWithFilename {
             parsedDisplayPath + (parsedNullPathTerminator ? [0] : [UInt8(ascii: ":")])
         } else {
@@ -1915,6 +1920,39 @@ struct RipgrepCommand {
                 linePrefix: parsedLinePrefix,
                 headingPrefix: parsedHeadingPrefix
             )
+        }
+
+        if !fixedStrings,
+           (patternCanStartWithDash || !pattern.hasPrefix("-")),
+           path != "-",
+           !asciiCaseInsensitive,
+           !wordRegexp,
+           !parsedLineRegexp,
+           parsedMaxCount != 0,
+           let fixedLookbehind = fixedLookbehindLiteral(
+            pattern,
+            allowPCREQuotedLiterals: allowPCREQuotedLiterals
+           ) {
+            if parsedQuiet {
+                return SwiftDarwinLiteralPreflight.fixedLookbehindQuietExitCode(
+                    path: path,
+                    prefix: fixedLookbehind.prefix,
+                    literal: fixedLookbehind.literal,
+                    prefixShouldMatch: fixedLookbehind.prefixShouldMatch
+                )
+            }
+            if let parsedPathOnlyMode {
+                return SwiftDarwinLiteralPreflight.fixedLookbehindPathOnlyExitCode(
+                    path: path,
+                    prefix: fixedLookbehind.prefix,
+                    literal: fixedLookbehind.literal,
+                    prefixShouldMatch: fixedLookbehind.prefixShouldMatch,
+                    printWhenMatched: parsedPathOnlyMode == .matching,
+                    nullTerminated: parsedNullPathTerminator,
+                    crlfTerminated: parsedCrlf,
+                    outputPath: parsedPathOnlyOutputPath
+                )
+            }
         }
 
         let asciiBoundaryLiteralPattern = (fixedStrings || asciiCaseInsensitive) ? nil : asciiBoundaryLiteral(
@@ -2719,6 +2757,93 @@ struct RipgrepCommand {
             fromPlainRegexPattern: String(pattern[literalStart..<literalEnd]),
             allowPCREQuotedLiterals: allowPCREQuotedLiterals
         )
+    }
+
+    private static func fixedLookbehindLiteral(
+        _ pattern: String,
+        allowPCREQuotedLiterals: Bool
+    ) -> (prefix: [UInt8], literal: [UInt8], prefixShouldMatch: Bool)? {
+        let positiveMarker = "(?<="
+        let negativeMarker = "(?<!"
+        let marker: String
+        let prefixShouldMatch: Bool
+        if pattern.hasPrefix(positiveMarker) {
+            marker = positiveMarker
+            prefixShouldMatch = true
+        } else if pattern.hasPrefix(negativeMarker) {
+            marker = negativeMarker
+            prefixShouldMatch = false
+        } else {
+            return nil
+        }
+        guard let close = firstUnescapedClosingParen(in: pattern.dropFirst(marker.count)) else {
+            return nil
+        }
+        let prefixStart = pattern.index(pattern.startIndex, offsetBy: marker.count)
+        let rawPrefix = String(pattern[prefixStart..<close])
+        let literalStart = pattern.index(after: close)
+        let rawLiteral = String(pattern[literalStart...])
+        guard let prefix = RegexLiteralParser.literal(
+            fromPlainRegexPattern: rawPrefix,
+            allowPCREQuotedLiterals: allowPCREQuotedLiterals
+        ),
+              let literal = RegexLiteralParser.literal(
+                fromPlainRegexPattern: rawLiteral,
+                allowPCREQuotedLiterals: allowPCREQuotedLiterals
+              ) else {
+            return nil
+        }
+        let prefixBytes = Array(prefix.utf8)
+        let literalBytes = Array(literal.utf8)
+        guard !prefixBytes.isEmpty,
+              !literalBytes.isEmpty,
+              !prefixBytes.contains(UInt8(ascii: "\n")),
+              !literalBytes.contains(UInt8(ascii: "\n")),
+              !prefixBytes.contains(UInt8(ascii: "\r")),
+              !literalBytes.contains(UInt8(ascii: "\r")),
+              prefixBytes.allSatisfy({ $0 < 0x80 }),
+              literalBytes.allSatisfy({ $0 < 0x80 }) else {
+            return nil
+        }
+        return (prefixBytes, literalBytes, prefixShouldMatch)
+    }
+
+    private static func firstUnescapedClosingParen(in text: Substring) -> String.Index? {
+        var escaped = false
+        var index = text.startIndex
+        while index < text.endIndex {
+            let character = text[index]
+            if escaped {
+                if character == "Q" {
+                    var quotedIndex = text.index(after: index)
+                    var closedQuote = false
+                    while quotedIndex < text.endIndex {
+                        if text[quotedIndex] == "\\" {
+                            let quoteEscapeIndex = text.index(after: quotedIndex)
+                            if quoteEscapeIndex < text.endIndex,
+                               text[quoteEscapeIndex] == "E" {
+                                index = text.index(after: quoteEscapeIndex)
+                                closedQuote = true
+                                break
+                            }
+                        }
+                        quotedIndex = text.index(after: quotedIndex)
+                    }
+                    guard closedQuote else {
+                        return nil
+                    }
+                    escaped = false
+                    continue
+                }
+                escaped = false
+            } else if character == "\\" {
+                escaped = true
+            } else if character == ")" {
+                return index
+            }
+            index = text.index(after: index)
+        }
+        return nil
     }
 
     private static func singleByteAlternation(
