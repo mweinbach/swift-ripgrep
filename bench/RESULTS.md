@@ -199,6 +199,21 @@ invalid UTF-8 output, and non-UTF-8 encodings such as Latin-1.
 | `--encoding=utf-8 --count-matches needle` | 1.469 s | 5.8 ms | 18.0 ms |
 | `--encoding=none -l needle` | 2.063 s | 3.5 ms | 2.8 ms |
 
+`--search-zip` now stays on the executable preflight for explicit paths whose
+suffix cannot trigger decompression. Compressed suffixes still fall through to
+the normal searcher so real archives and decompressor errors keep matching
+Rust. Direct byte/status checks covered no-suffix line output, quiet, path-only,
+count, and count-matches modes, plus bad `.gz` and real gzip fallback controls.
+
+10 timed runs on `/tmp/swift-rg-candidates/trim.txt` with 3 warmups:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--search-zip -q needle` | 171.4 ms | 4.8 ms | 3.7 ms |
+| `--search-zip -l needle` | 80.9 ms | 4.2 ms | 4.2 ms |
+| `--search-zip -c needle` | 111.0 ms | 10.1 ms | 12.7 ms |
+| `--search-zip --count-matches needle` | 108.1 ms | 6.1 ms | 18.6 ms |
+
 Case-sensitive repeated `-e`/`-f` and top-level literal alternation `--trim`
 forms now use the same mapped trim writer.
 Literal `--invert-match` matching-line output now has its own mapped Swift line

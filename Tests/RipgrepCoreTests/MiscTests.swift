@@ -3802,6 +3802,47 @@ struct MiscTests {
         ], fixture: {})
         #expect(disabledEncodingPathOnlyOutput == Data("\(root.path("dense.txt"))\n".utf8))
 
+        let searchZipLineOutput = try runExecutableData([
+            "--search-zip",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(searchZipLineOutput == output)
+
+        let searchZipQuietResult = try runExecutableResult([
+            "--search-zip",
+            "-q",
+            "needle",
+            root.path("dense.txt"),
+        ])
+        #expect(searchZipQuietResult.status == 0)
+        #expect(searchZipQuietResult.stdout.isEmpty)
+        #expect(searchZipQuietResult.stderr.isEmpty)
+
+        let searchZipPathOnlyOutput = try runExecutableData([
+            "--search-zip",
+            "-l",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(searchZipPathOnlyOutput == Data("\(root.path("dense.txt"))\n".utf8))
+
+        let searchZipCountOutput = try runExecutableData([
+            "--search-zip",
+            "-c",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(searchZipCountOutput == Data("3\n".utf8))
+
+        let searchZipCountMatchesOutput = try runExecutableData([
+            "--search-zip",
+            "--count-matches",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(searchZipCountMatchesOutput == countMatchesOutput)
+
         let vimgrepQuietResult = try runExecutableResult([
             "--vimgrep",
             "-q",

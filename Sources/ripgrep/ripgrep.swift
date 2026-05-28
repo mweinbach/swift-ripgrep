@@ -894,6 +894,22 @@ struct RipgrepCommand {
         func isAutomaticEncodingValue(_ raw: String) -> Bool {
             normalizedEncodingValue(raw) == "auto"
         }
+        func pathMayUseSearchZip(_ path: String) -> Bool {
+            [
+                ".gz",
+                ".tgz",
+                ".bz2",
+                ".tbz2",
+                ".xz",
+                ".txz",
+                ".lz4",
+                ".lzma",
+                ".br",
+                ".zst",
+                ".zstd",
+                ".Z",
+            ].contains { path.hasSuffix($0) }
+        }
         func isSummaryPreflightCompatibleEncodingValue(_ raw: String) -> Bool {
             switch normalizedEncodingValue(raw) {
             case "auto",
@@ -2364,6 +2380,7 @@ struct RipgrepCommand {
                     && parsedPathOnlyMode == nil
                     && !parsedCount
                     && parsedPrintMode != .countMatches))
+        let parsedSearchZipAffectsPreflight = parsedSearchZip && pathMayUseSearchZip(path)
         guard !(parsedLineRegexp && wordRegexp) else {
             return nil
         }
@@ -2381,7 +2398,7 @@ struct RipgrepCommand {
               !parsedNullDataAffectsPreflightOutput,
               !parsedPassthruAffectsPreflightOutput,
               !parsedReplacementAffectsPreflightOutput,
-              !parsedSearchZip,
+              !parsedSearchZipAffectsPreflight,
               !parsedStats,
               (!parsedStopOnNonmatch || parsedQuiet || parsedPathOnlyMode != nil),
               !parsedTrimAffectsPreflightOutput,
