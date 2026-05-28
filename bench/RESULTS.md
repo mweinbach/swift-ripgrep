@@ -269,7 +269,7 @@ of falling back to full CLI setup. This covers plain and line-numbered matching
 lines, filename and heading prefixes, path-only modes, quiet checks, fixed-string
 patterns, and explicit patterns that themselves contain safe literal
 alternations; case-insensitive line output and semantic modes like word-regexp,
-line-regexp, counts, and max-count still fall back. Dense-fixture byte checks for
+line-regexp, and counts still fall back. Dense-fixture byte checks for
 `-e needle -e quiet`, `-n -e needle -e quiet`,
 `--with-filename -e needle -e quiet`,
 `--heading --with-filename -e needle -e quiet`,
@@ -291,6 +291,17 @@ fixed-string pattern files, literal alternation pattern lines, one-pattern
 files, and mixed `-e`/`-f` forms. On the 50 KiB dense fixture, `-f patterns.txt`
 measured 6.0 ms versus 35.3 ms before and 2.7 ms for Rust, while
 `-n -f patterns.txt` measured 5.2 ms versus 35.3 ms before and 2.8 ms for Rust.
+
+Positive `-m`/`--max-count` now stays on the executable multi-literal preflight
+for safe alternations, repeated explicit regexps, and literal-only pattern
+files. The public Swift preflight wrapper now passes the existing bounded
+`maxCount` through to the mapped multi-literal writer; `-m0` and unsupported
+semantic modes still fall back. Dense-fixture byte checks matched Rust for
+plain, line-numbered, filename-prefixed, heading-prefixed, pattern-file, and
+single-pattern alternation forms. On the 50 KiB dense fixture,
+`-m2 -e needle -e quiet` measured 4.1 ms versus 32.0 ms before and 2.6 ms for
+Rust, while `-n -m2 -f patterns.txt` measured 4.8 ms versus 36.7 ms before and
+2.5 ms for Rust.
 
 Traversal-only flags that do not affect an explicit regular file now stay
 eligible for the executable preflight. The parser treats hidden, ignore-family,

@@ -1178,6 +1178,7 @@ public enum SwiftDarwinLiteralPreflight {
     public static func multiLiteralExitCode(
         path: String,
         literals: [[UInt8]],
+        maxCount: Int? = nil,
         lineNumber: Bool = false,
         lineNumberFieldSeparator: [UInt8] = [58],
         linePrefix: [UInt8] = [],
@@ -1186,7 +1187,7 @@ public enum SwiftDarwinLiteralPreflight {
         guard let result = multiLiteralResult(
             path: path,
             literals: literals,
-            maxCount: nil,
+            maxCount: maxCount,
             lineNumber: lineNumber,
             lineNumberFieldSeparator: lineNumberFieldSeparator,
             linePrefix: linePrefix,

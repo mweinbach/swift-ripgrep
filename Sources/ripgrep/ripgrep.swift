@@ -1606,11 +1606,11 @@ struct RipgrepCommand {
         }
 
         if explicitRegexpPatterns.count > 1 {
-            guard path != "-",
+            guard parsedMaxCount != 0,
+                  path != "-",
                   !wordRegexp,
                   !parsedLineRegexp,
                   !parsedCount,
-                  parsedMaxCount == nil,
                   let literals = explicitRegexpPatternLiterals(
                     explicitRegexpPatterns,
                     fixedStrings: fixedStrings,
@@ -1656,6 +1656,7 @@ struct RipgrepCommand {
             return SwiftDarwinLiteralPreflight.multiLiteralExitCode(
                 path: path,
                 literals: literals,
+                maxCount: parsedMaxCount,
                 lineNumber: lineNumber,
                 lineNumberFieldSeparator: parsedFieldMatchSeparator,
                 linePrefix: parsedLinePrefix,
@@ -1706,7 +1707,7 @@ struct RipgrepCommand {
            !parsedLineRegexp,
            !asciiBoundary,
            !parsedCount,
-           parsedMaxCount == nil,
+           parsedMaxCount != 0,
            let literals = multiLiteralAlternation(
             pattern,
             allowPCREQuotedLiterals: allowPCREQuotedLiterals
@@ -1748,6 +1749,7 @@ struct RipgrepCommand {
                 if let exitCode = SwiftDarwinLiteralPreflight.multiLiteralExitCode(
                     path: path,
                     literals: literals,
+                    maxCount: parsedMaxCount,
                     lineNumber: lineNumber,
                     lineNumberFieldSeparator: parsedFieldMatchSeparator,
                     linePrefix: parsedLinePrefix,

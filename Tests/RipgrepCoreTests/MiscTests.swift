@@ -2989,6 +2989,101 @@ struct MiscTests {
         ], fixture: {})
         #expect(mixedRegexpPatternFileOutput == repeatedRegexpOutput)
 
+        let repeatedRegexpMaxCountOutput = try runExecutableData([
+            "-m2",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(repeatedRegexpMaxCountOutput == Data("""
+        needle needle needle
+        quiet line
+
+        """.utf8))
+
+        let repeatedRegexpLineNumberMaxCountOutput = try runExecutableData([
+            "-n",
+            "-m2",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(repeatedRegexpLineNumberMaxCountOutput == Data("""
+        1:needle needle needle
+        2:quiet line
+
+        """.utf8))
+
+        let repeatedRegexpFilenameMaxCountOutput = try runExecutableData([
+            "--with-filename",
+            "-m2",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(repeatedRegexpFilenameMaxCountOutput == Data("""
+        \(root.path("dense.txt")):needle needle needle
+        \(root.path("dense.txt")):quiet line
+
+        """.utf8))
+
+        let repeatedRegexpHeadingMaxCountOutput = try runExecutableData([
+            "--heading",
+            "--with-filename",
+            "-m2",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(repeatedRegexpHeadingMaxCountOutput == Data("""
+        \(root.path("dense.txt"))
+        needle needle needle
+        quiet line
+
+        """.utf8))
+
+        let patternFileMaxCountOutput = try runExecutableData([
+            "-m2",
+            "-f",
+            root.path("patterns.txt"),
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(patternFileMaxCountOutput == repeatedRegexpMaxCountOutput)
+
+        let patternFileLineNumberMaxCountOutput = try runExecutableData([
+            "-n",
+            "-m2",
+            "-f",
+            root.path("patterns.txt"),
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(patternFileLineNumberMaxCountOutput == repeatedRegexpLineNumberMaxCountOutput)
+
+        let alternationMaxCountOutput = try runExecutableData([
+            "-m2",
+            "needle|quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(alternationMaxCountOutput == repeatedRegexpMaxCountOutput)
+
+        let repeatedRegexpZeroMaxCountOutput = try runExecutableData([
+            "-m0",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(repeatedRegexpZeroMaxCountOutput.isEmpty)
+
         let orderedNoLineNumberOutput = try runExecutableData([
             "-n",
             "-N",
