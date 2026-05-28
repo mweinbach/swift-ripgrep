@@ -49,9 +49,9 @@ dense ASCII fixture, with 2 warmups and 5 timed runs:
 | `-w -i NEEDLE` | 2.122 s | 11.3 ms | 14.5 ms |
 | `-n -w -i NEEDLE` | 209.3 ms | 11.9 ms | 19.2 ms |
 | `-c -w -i NEEDLE` | 136.4 ms | 7.4 ms | 12.2 ms |
-| `--count-matches -w -i NEEDLE` | 154.8 ms | 25.0 ms | 40.1 ms |
-| `-c -w -i "NEEDLE\|QUIET"` | 184.8 ms | 24.0 ms | 12.3 ms |
-| `--count-matches -w -i "NEEDLE\|QUIET"` | 173.8 ms | 24.9 ms | 57.1 ms |
+| `--count-matches -w -i NEEDLE` | 154.8 ms | 9.4 ms | 41.0 ms |
+| `-c -w -i "NEEDLE\|QUIET"` | 184.8 ms | 7.8 ms | 12.7 ms |
+| `--count-matches -w -i "NEEDLE\|QUIET"` | 173.8 ms | 9.6 ms | 52.9 ms |
 | `-o -w -i NEEDLE` | 4.604 s | 13.5 ms | 50.1 ms |
 | `-o needle` | 65.6 ms | 14.1 ms | 23.0 ms |
 | `-n -o needle` | 81.6 ms | 22.2 ms | 30.1 ms |
