@@ -1804,6 +1804,33 @@ public enum SwiftDarwinLiteralPreflight {
         return matchedLineCount > 0 ? 0 : 1
     }
 
+    public static func asciiCaseInsensitiveWordCountMatchesExitCode(
+        path: String,
+        literal: [UInt8],
+        includeZero: Bool,
+        countPrefix: [UInt8] = [],
+        crlfTerminated: Bool = false
+    ) -> Int32? {
+        guard isSafeASCIIWordLiteral(literal),
+              let data = mappedPreflightData(path: path),
+              !hasBinaryDetectionPrefix(data),
+              !data.contains(where: { $0 >= 0x80 }),
+              let matchCount = countASCIIWordMatches(
+                in: data,
+                literal: literal,
+                asciiCaseInsensitive: true
+              ) else {
+            return nil
+        }
+
+        if matchCount > 0 || includeZero {
+            var output = Data(countPrefix)
+            output.append(countOutput(matchCount, crlfTerminated: crlfTerminated))
+            FileHandle.standardOutput.write(output)
+        }
+        return matchCount > 0 ? 0 : 1
+    }
+
     public static func asciiCaseInsensitiveWordLineExitCode(
         path: String,
         literal: [UInt8],
@@ -2685,7 +2712,11 @@ private func suffix(_ bytes: [UInt8], _ count: Int) -> ArraySlice<UInt8> {
     bytes[bytes.index(bytes.endIndex, offsetBy: -count)..<bytes.endIndex]
 }
 
-private func countASCIIWordMatches(in data: Data, literal: [UInt8]) -> Int? {
+private func countASCIIWordMatches(
+    in data: Data,
+    literal: [UInt8],
+    asciiCaseInsensitive: Bool = false
+) -> Int? {
     guard !literal.isEmpty,
           data.count >= literal.count else {
         return 0
@@ -2699,18 +2730,41 @@ private func countASCIIWordMatches(in data: Data, literal: [UInt8]) -> Int? {
             guard let needleBase = needle.baseAddress else {
                 return 0
             }
+            let foldedLiteral = asciiCaseInsensitive ? literal.map(rgSwiftASCIILower) : []
+            var caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
+            if asciiCaseInsensitive, foldedLiteral.count > 1 {
+                for index in 0..<(foldedLiteral.count - 1) {
+                    caseInsensitiveShifts[Int(foldedLiteral[index])] = foldedLiteral.count - 1 - index
+                }
+            }
 
             var searchOffset = 0
             var matchCount = 0
             var rejectedBoundaryCandidates = 0
             let maxRejectedBoundaryCandidates = 128
             while searchOffset < data.count {
-                guard let found = rg_memmem_simple(
-                    base.advanced(by: searchOffset),
-                    data.count - searchOffset,
-                    needleBase,
-                    literal.count
-                ) else {
+                let found: UnsafePointer<UInt8>?
+                if asciiCaseInsensitive {
+                    found = foldedLiteral.withUnsafeBufferPointer { foldedNeedle in
+                        caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
+                            rg_memcasemem_ascii_prepared(
+                                base.advanced(by: searchOffset),
+                                data.count - searchOffset,
+                                foldedNeedle.baseAddress,
+                                foldedNeedle.count,
+                                shifts.baseAddress
+                            )
+                        }
+                    }
+                } else {
+                    found = rg_memmem_simple(
+                        base.advanced(by: searchOffset),
+                        data.count - searchOffset,
+                        needleBase,
+                        literal.count
+                    )
+                }
+                guard let found else {
                     break
                 }
 

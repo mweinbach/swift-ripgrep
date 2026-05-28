@@ -2174,11 +2174,19 @@ struct RipgrepCommand {
             guard parsedPathOnlyMode == nil,
                   !parsedLineRegexp,
                   !asciiBoundary,
-                  !asciiCaseInsensitive,
                   parsedMaxCount == nil else {
                 return nil
             }
             if wordRegexp {
+                if asciiCaseInsensitive {
+                    return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveWordCountMatchesExitCode(
+                        path: path,
+                        literal: literal,
+                        includeZero: parsedIncludeZero,
+                        countPrefix: parsedCountPrefix,
+                        crlfTerminated: parsedCrlf
+                    )
+                }
                 return SwiftDarwinLiteralPreflight.wordCountMatchesExitCode(
                     path: path,
                     literal: literal,
@@ -2186,6 +2194,9 @@ struct RipgrepCommand {
                     countPrefix: parsedCountPrefix,
                     crlfTerminated: parsedCrlf
                 )
+            }
+            guard !asciiCaseInsensitive else {
+                return nil
             }
             return SwiftDarwinLiteralPreflight.countMatchesExitCode(
                 path: path,
