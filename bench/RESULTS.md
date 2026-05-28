@@ -736,6 +736,15 @@ to 80.2 ms, versus 20.0 ms for Rust. The neighboring alternation
 `-i -x 'NEEDLE NEEDLE...|MISSING'` measured 57.3 ms, and numbered alternation
 measured 72.3 ms.
 
+The same ASCII exact-line scanner now counts case-insensitive `-c -i -x` and
+`--count-matches -i -x` matches without emitting lines. Byte/status checks
+matched Rust for line counts, count-matches, bounded counts, include-zero,
+repeated `-e`, pattern-file, prefixed, CRLF fallback, binary fallback, and
+Unicode fallback forms. On the 4.8 MiB dense fixture,
+`-c -i -x 'NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE'` improved from 3.797 s to
+48.2 ms, versus 12.7 ms for Rust, and `--count-matches -i -x ...` improved
+from 3.825 s to 48.0 ms, versus 25.9 ms for Rust.
+
 Type-definition flags that do not activate a type filter now also stay
 eligible for the executable preflight. The preflight replays
 `--type-add`/`--type-clear` through `FileTypeRegistry.apply`, so invalid

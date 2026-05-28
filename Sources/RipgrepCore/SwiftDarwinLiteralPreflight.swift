@@ -268,24 +268,53 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literal: [UInt8],
         includeZero: Bool,
-        maxCount: Int,
+        maxCount: Int? = nil,
         countPrefix: [UInt8] = [],
         crlfTerminated: Bool = false
     ) -> Int32? {
-        guard maxCount == 1,
-              let matched = containsASCIICaseInsensitiveExactLine(path: path, literal: literal) else {
+        asciiCaseInsensitiveExactLineCountExitCode(
+            path: path,
+            literals: [literal],
+            includeZero: includeZero,
+            maxCount: maxCount,
+            countPrefix: countPrefix,
+            crlfTerminated: crlfTerminated
+        )
+    }
+
+    public static func asciiCaseInsensitiveExactLineCountExitCode(
+        path: String,
+        literals: [[UInt8]],
+        includeZero: Bool,
+        maxCount: Int? = nil,
+        countPrefix: [UInt8] = [],
+        crlfTerminated: Bool = false
+    ) -> Int32? {
+        guard maxCount.map({ $0 > 0 }) ?? true,
+              let literals = distinctASCIICaseInsensitiveExactLineLiterals(literals),
+              !literals.isEmpty else {
             return nil
         }
-        if matched {
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !hasBinaryDetectionPrefix(data),
+              !data.contains(where: { $0 >= 0x80 }) else {
+            return nil
+        }
+
+        let matchedLineCount = asciiCaseInsensitiveExactLineCount(
+            data: data,
+            foldedLiterals: literals,
+            maxCount: maxCount
+        )
+
+        if matchedLineCount > 0 || includeZero {
             var output = Data(countPrefix)
-            output.append(countOutput(1, crlfTerminated: crlfTerminated))
-            FileHandle.standardOutput.write(output)
-        } else if includeZero {
-            var output = Data(countPrefix)
-            output.append(countOutput(0, crlfTerminated: crlfTerminated))
+            output.append(countOutput(matchedLineCount, crlfTerminated: crlfTerminated))
             FileHandle.standardOutput.write(output)
         }
-        return matched ? 0 : 1
+        return matchedLineCount > 0 ? 0 : 1
     }
 
     public static func wordQuietExitCode(
@@ -1093,6 +1122,34 @@ public enum SwiftDarwinLiteralPreflight {
             }
         }
         return false
+    }
+
+    private static func asciiCaseInsensitiveExactLineCount(
+        data: Data,
+        foldedLiterals: [[UInt8]],
+        maxCount: Int?
+    ) -> Int {
+        let limit = maxCount ?? Int.max
+        let newline = UInt8(ascii: "\n")
+        var lineStart = data.startIndex
+        var matchedLineCount = 0
+        while lineStart < data.endIndex, matchedLineCount < limit {
+            let lineEnd = data[lineStart..<data.endIndex].firstIndex(of: newline) ?? data.endIndex
+            if asciiCaseInsensitiveExactLineRangeMatches(
+                data: data,
+                lineStart: lineStart,
+                lineEnd: lineEnd,
+                foldedLiterals: foldedLiterals
+            ) {
+                matchedLineCount += 1
+            }
+            if lineEnd < data.endIndex {
+                lineStart = data.index(after: lineEnd)
+            } else {
+                lineStart = data.endIndex
+            }
+        }
+        return matchedLineCount
     }
 
     private static func hasBinaryDetectionPrefix(_ data: Data) -> Bool {

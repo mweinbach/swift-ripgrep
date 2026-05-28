@@ -1647,9 +1647,21 @@ struct RipgrepCommand {
                     return nil
                 }
                 if asciiCaseInsensitive {
-                    guard parsedPrintMode == .matchingLines,
-                          !parsedQuiet,
+                    guard !parsedQuiet,
                           parsedPathOnlyMode == nil else {
+                        return nil
+                    }
+                    if parsedPrintMode == .countMatches || parsedCount {
+                        return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveExactLineCountExitCode(
+                            path: path,
+                            literals: literals,
+                            includeZero: parsedIncludeZero,
+                            maxCount: parsedMaxCount,
+                            countPrefix: parsedCountPrefix,
+                            crlfTerminated: parsedCrlf
+                        )
+                    }
+                    guard parsedPrintMode == .matchingLines else {
                         return nil
                     }
                     return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveExactLineExitCode(
@@ -1856,9 +1868,21 @@ struct RipgrepCommand {
                     return nil
                 }
                 if asciiCaseInsensitive {
-                    guard parsedPrintMode == .matchingLines,
-                          !parsedQuiet,
+                    guard !parsedQuiet,
                           parsedPathOnlyMode == nil else {
+                        return nil
+                    }
+                    if parsedPrintMode == .countMatches || parsedCount {
+                        return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveExactLineCountExitCode(
+                            path: path,
+                            literals: literals,
+                            includeZero: parsedIncludeZero,
+                            maxCount: parsedMaxCount,
+                            countPrefix: parsedCountPrefix,
+                            crlfTerminated: parsedCrlf
+                        )
+                    }
+                    guard parsedPrintMode == .matchingLines else {
                         return nil
                     }
                     return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveExactLineExitCode(
@@ -2081,9 +2105,18 @@ struct RipgrepCommand {
                 guard parsedPathOnlyMode == nil,
                       !wordRegexp,
                       !asciiBoundary,
-                      !asciiCaseInsensitive,
                       !parsedCrlf else {
                     return nil
+                }
+                if asciiCaseInsensitive {
+                    return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveExactLineCountExitCode(
+                        path: path,
+                        literal: literal,
+                        includeZero: parsedIncludeZero,
+                        maxCount: parsedMaxCount,
+                        countPrefix: parsedCountPrefix,
+                        crlfTerminated: parsedCrlf
+                    )
                 }
                 return SwiftDarwinLiteralPreflight.exactLineCountExitCode(
                     path: path,
@@ -2138,9 +2171,6 @@ struct RipgrepCommand {
                 )
             }
             if asciiCaseInsensitive {
-                guard let parsedMaxCount else {
-                    return nil
-                }
                 if parsedLineRegexp {
                     guard !parsedCrlf else {
                         return nil
@@ -2153,6 +2183,9 @@ struct RipgrepCommand {
                         countPrefix: parsedCountPrefix,
                         crlfTerminated: parsedCrlf
                     )
+                }
+                guard let parsedMaxCount else {
+                    return nil
                 }
                 return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveLimitedCountLineExitCode(
                     path: path,

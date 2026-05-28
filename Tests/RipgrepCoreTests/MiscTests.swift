@@ -1892,6 +1892,78 @@ struct MiscTests {
         ], fixture: {})
         #expect(caseInsensitiveExactLineCrlfOutput == Data("needle\r\n".utf8))
 
+        let caseInsensitiveExactLineCountOutput = try runExecutableData([
+            "-c",
+            "-i",
+            "-x",
+            "NEEDLE|LAST",
+            root.path("exact.txt"),
+        ], fixture: {})
+        #expect(caseInsensitiveExactLineCountOutput == Data("3\n".utf8))
+
+        let caseInsensitiveExactLineCountMatchesOutput = try runExecutableData([
+            "--count-matches",
+            "-i",
+            "-x",
+            "NEEDLE|LAST",
+            root.path("exact.txt"),
+        ], fixture: {})
+        #expect(caseInsensitiveExactLineCountMatchesOutput == caseInsensitiveExactLineCountOutput)
+
+        let caseInsensitiveExactLineBoundedCountOutput = try runExecutableData([
+            "-c",
+            "-m2",
+            "-i",
+            "-x",
+            "NEEDLE|LAST",
+            root.path("exact.txt"),
+        ], fixture: {})
+        #expect(caseInsensitiveExactLineBoundedCountOutput == Data("2\n".utf8))
+
+        let caseInsensitiveExactLineRepeatedRegexpCountOutput = try runExecutableData([
+            "-c",
+            "-i",
+            "-x",
+            "-e",
+            "NEEDLE",
+            "-e",
+            "LAST",
+            root.path("exact.txt"),
+        ], fixture: {})
+        #expect(caseInsensitiveExactLineRepeatedRegexpCountOutput == caseInsensitiveExactLineCountOutput)
+
+        let caseInsensitiveExactLinePatternFileCountOutput = try runExecutableData([
+            "--count-matches",
+            "-i",
+            "-x",
+            "-f",
+            root.path("exact-patterns.txt"),
+            root.path("exact.txt"),
+        ], fixture: {})
+        #expect(caseInsensitiveExactLinePatternFileCountOutput == caseInsensitiveExactLineCountOutput)
+
+        let includeZeroCaseInsensitiveExactLineCountResult = try runExecutableResult([
+            "--include-zero",
+            "-c",
+            "-i",
+            "-x",
+            "MISSING",
+            root.path("exact.txt"),
+        ])
+        #expect(includeZeroCaseInsensitiveExactLineCountResult.status == 1)
+        #expect(includeZeroCaseInsensitiveExactLineCountResult.stdout == Data("0\n".utf8))
+        #expect(includeZeroCaseInsensitiveExactLineCountResult.stderr.isEmpty)
+
+        let caseInsensitiveExactLineCrlfCountOutput = try runExecutableData([
+            "--crlf",
+            "-c",
+            "-i",
+            "-x",
+            "NEEDLE",
+            root.path("crlf.txt"),
+        ], fixture: {})
+        #expect(caseInsensitiveExactLineCrlfCountOutput == Data("1\r\n".utf8))
+
         for (countArguments, expectedOutput, expectedStatus) in [
             (["-c", "needle", root.path("dense.txt")], Data("3\n".utf8), Int32(0)),
             (["--count", "missing", root.path("quiet-no-match.txt")], Data(), Int32(1)),
