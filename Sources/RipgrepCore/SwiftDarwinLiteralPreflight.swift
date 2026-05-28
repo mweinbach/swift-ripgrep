@@ -508,6 +508,41 @@ public enum SwiftDarwinLiteralPreflight {
         return 0
     }
 
+    public static func asciiCaseInsensitiveMultiLiteralCountLineExitCode(
+        path: String,
+        literals: [[UInt8]],
+        includeZero: Bool,
+        maxCount: Int? = nil,
+        countPrefix: [UInt8] = [],
+        crlfTerminated: Bool = false
+    ) -> Int32? {
+        guard maxCount.map({ $0 > 0 }) ?? true,
+              let literals = distinctASCIICaseInsensitiveLiterals(literals),
+              !literals.isEmpty else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !hasBinaryDetectionPrefix(data),
+              !data.contains(where: { $0 >= 0x80 }) else {
+            return nil
+        }
+
+        let matchedLineCount = asciiCaseInsensitiveLineCount(
+            data: data,
+            foldedLiterals: literals,
+            maxCount: maxCount
+        )
+
+        if matchedLineCount > 0 || includeZero {
+            var output = Data(countPrefix)
+            output.append(countOutput(matchedLineCount, crlfTerminated: crlfTerminated))
+            FileHandle.standardOutput.write(output)
+        }
+        return matchedLineCount > 0 ? 0 : 1
+    }
+
     public static func limitedLineExitCode(
         path: String,
         literal: [UInt8],
@@ -1223,11 +1258,8 @@ public enum SwiftDarwinLiteralPreflight {
         literals: [[UInt8]]
     ) -> Bool? {
         guard (2...8).contains(literals.count),
-              literals.allSatisfy({
-                !$0.isEmpty
-                    && !$0.contains(UInt8(ascii: "\n"))
-                    && $0.allSatisfy({ $0 < 0x80 })
-              }) else {
+              let literals = distinctASCIICaseInsensitiveLiterals(literals),
+              !literals.isEmpty else {
             return nil
         }
         guard let data = mappedPreflightData(path: path) else {
@@ -1247,6 +1279,82 @@ public enum SwiftDarwinLiteralPreflight {
             }
         }
         return canProveNoMatch ? false : nil
+    }
+
+    private static func asciiCaseInsensitiveLineCount(
+        data: Data,
+        foldedLiterals: [[UInt8]],
+        maxCount: Int?
+    ) -> Int {
+        let limit = maxCount ?? Int.max
+        let newline = UInt8(ascii: "\n")
+        var lineStart = data.startIndex
+        var matchedLineCount = 0
+        while lineStart < data.endIndex, matchedLineCount < limit {
+            let lineEnd = data[lineStart..<data.endIndex].firstIndex(of: newline) ?? data.endIndex
+            if asciiCaseInsensitiveLineRangeContains(
+                data: data,
+                lineStart: lineStart,
+                lineEnd: lineEnd,
+                foldedLiterals: foldedLiterals
+            ) {
+                matchedLineCount += 1
+            }
+            if lineEnd < data.endIndex {
+                lineStart = data.index(after: lineEnd)
+            } else {
+                lineStart = data.endIndex
+            }
+        }
+        return matchedLineCount
+    }
+
+    private static func asciiCaseInsensitiveLineRangeContains(
+        data: Data,
+        lineStart: Data.Index,
+        lineEnd: Data.Index,
+        foldedLiterals: [[UInt8]]
+    ) -> Bool {
+        let lineLength = data.distance(from: lineStart, to: lineEnd)
+        guard lineLength > 0 else {
+            return false
+        }
+        for literal in foldedLiterals where literal.count <= lineLength {
+            if asciiCaseInsensitiveLineRangeContains(
+                data: data,
+                lineStart: lineStart,
+                lineEnd: lineEnd,
+                foldedLiteral: literal
+            ) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private static func asciiCaseInsensitiveLineRangeContains(
+        data: Data,
+        lineStart: Data.Index,
+        lineEnd: Data.Index,
+        foldedLiteral: [UInt8]
+    ) -> Bool {
+        var candidateStart = lineStart
+        while data.distance(from: candidateStart, to: lineEnd) >= foldedLiteral.count {
+            var cursor = candidateStart
+            var matched = true
+            for byte in foldedLiteral {
+                if rgSwiftASCIILower(data[cursor]) != byte {
+                    matched = false
+                    break
+                }
+                cursor = data.index(after: cursor)
+            }
+            if matched {
+                return true
+            }
+            candidateStart = data.index(after: candidateStart)
+        }
+        return false
     }
 
     private static func containsASCIICaseInsensitiveLiteral(data: Data, literal: [UInt8]) -> Bool? {
@@ -2286,6 +2394,23 @@ private func distinctASCIIWordLiterals(_ literals: [[UInt8]]) -> [[UInt8]]? {
         }
         if !distinct.contains(literal) {
             distinct.append(literal)
+        }
+    }
+    return distinct
+}
+
+private func distinctASCIICaseInsensitiveLiterals(_ literals: [[UInt8]]) -> [[UInt8]]? {
+    var distinct: [[UInt8]] = []
+    distinct.reserveCapacity(literals.count)
+    for literal in literals {
+        guard !literal.isEmpty,
+              !literal.contains(UInt8(ascii: "\n")),
+              literal.allSatisfy({ $0 < 0x80 }) else {
+            return nil
+        }
+        let folded = literal.map(rgSwiftASCIILower)
+        if !distinct.contains(folded) {
+            distinct.append(folded)
         }
     }
     return distinct

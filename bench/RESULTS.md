@@ -758,6 +758,16 @@ fallback forms. On the 4.8 MiB dense fixture,
 2.9 ms for Rust; and no-match `--files-without-match -i -x 'ABSENT|MISSING'`
 improved from 954.8 ms to 35.0 ms, versus 3.6 ms for Rust.
 
+Case-insensitive multi-literal line counts now use a Swift folded line scanner
+for safe ASCII alternations, repeated `-e`, and pattern files outside
+line-regexp mode. It counts each matching line once, preserves `-m`,
+`--include-zero`, and filename prefixes, and falls back for binary or non-ASCII
+inputs. Direct byte/status checks matched Rust for plain, bounded, prefixed,
+repeated `-e`, pattern-file, include-zero no-match, binary fallback, and
+Unicode fallback forms. On the 4.8 MiB dense fixture,
+`-c -i 'NEEDLE|QUIET'` improved from 177.6 ms to 36.9 ms, versus 7.4 ms for
+Rust, and bounded `-c -m2 -i ...` measured 20.4 ms, versus 2.8 ms for Rust.
+
 Type-definition flags that do not activate a type filter now also stay
 eligible for the executable preflight. The preflight replays
 `--type-add`/`--type-clear` through `FileTypeRegistry.apply`, so invalid

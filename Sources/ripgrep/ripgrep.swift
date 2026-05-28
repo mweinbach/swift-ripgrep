@@ -1790,6 +1790,16 @@ struct RipgrepCommand {
                         outputPath: parsedPathOnlyOutputPath
                     )
                 }
+                if parsedCount {
+                    return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveMultiLiteralCountLineExitCode(
+                        path: path,
+                        literals: literals,
+                        includeZero: parsedIncludeZero,
+                        maxCount: parsedMaxCount,
+                        countPrefix: parsedCountPrefix,
+                        crlfTerminated: parsedCrlf
+                    )
+                }
                 return nil
             }
             if parsedQuiet {
@@ -2024,7 +2034,14 @@ struct RipgrepCommand {
                     )
                 }
                 if parsedCount {
-                    return nil
+                    return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveMultiLiteralCountLineExitCode(
+                        path: path,
+                        literals: literals,
+                        includeZero: parsedIncludeZero,
+                        maxCount: parsedMaxCount,
+                        countPrefix: parsedCountPrefix,
+                        crlfTerminated: parsedCrlf
+                    )
                 }
             } else {
                 if parsedQuiet {
