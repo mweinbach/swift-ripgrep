@@ -1325,6 +1325,30 @@ struct MiscTests {
         ], fixture: {})
         #expect(caseInsensitiveHeadingCountMatchesOutput == Data("\(root.path("dense.txt")):7\n".utf8))
 
+        let caseInsensitiveCountOutput = try runExecutableData([
+            "-c",
+            "-i",
+            "NEEDLE",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(caseInsensitiveCountOutput == Data("3\n".utf8))
+
+        let caseInsensitiveCountMatchesOutput = try runExecutableData([
+            "--count-matches",
+            "-i",
+            "NEEDLE",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(caseInsensitiveCountMatchesOutput == Data("7\n".utf8))
+
+        let unicodeCaseInsensitiveCountMatchesOutput = try runExecutableData([
+            "--count-matches",
+            "-i",
+            "NEEDLE",
+            root.path("unicode-word-ci.txt"),
+        ], fixture: {})
+        #expect(unicodeCaseInsensitiveCountMatchesOutput == Data("3\n".utf8))
+
         for nullDataResetArguments in [
             ["--null-data", "--crlf"],
             ["--null-data", "--crlf", "--no-crlf"],

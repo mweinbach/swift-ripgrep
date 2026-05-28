@@ -574,6 +574,35 @@ public enum SwiftDarwinLiteralPreflight {
         return matchedLineCount > 0 ? 0 : 1
     }
 
+    public static func asciiCaseInsensitiveCountMatchesExitCode(
+        path: String,
+        literal: [UInt8],
+        includeZero: Bool,
+        countPrefix: [UInt8] = [],
+        crlfTerminated: Bool = false
+    ) -> Int32? {
+        guard let literals = distinctASCIICaseInsensitiveLiterals([literal]),
+              let foldedLiteral = literals.first else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !hasBinaryDetectionPrefix(data),
+              !data.contains(where: { $0 >= 0x80 }) else {
+            return nil
+        }
+
+        let matchCount = countASCIICaseInsensitiveMatches(in: data, foldedLiteral: foldedLiteral)
+
+        if matchCount > 0 || includeZero {
+            var output = Data(countPrefix)
+            output.append(countOutput(matchCount, crlfTerminated: crlfTerminated))
+            FileHandle.standardOutput.write(output)
+        }
+        return matchCount > 0 ? 0 : 1
+    }
+
     public static func asciiCaseInsensitiveMultiLiteralOnlyMatchingExitCode(
         path: String,
         literals: [[UInt8]],
@@ -1413,6 +1442,50 @@ public enum SwiftDarwinLiteralPreflight {
             }
         }
         return matchedLineCount
+    }
+
+    private static func countASCIICaseInsensitiveMatches(
+        in data: Data,
+        foldedLiteral: [UInt8]
+    ) -> Int {
+        guard !foldedLiteral.isEmpty,
+              data.count >= foldedLiteral.count else {
+            return 0
+        }
+        return data.withUnsafeBytes { rawData in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
+            }
+            var shifts = [Int](repeating: foldedLiteral.count, count: 256)
+            if foldedLiteral.count > 1 {
+                for index in 0..<(foldedLiteral.count - 1) {
+                    shifts[Int(foldedLiteral[index])] = foldedLiteral.count - 1 - index
+                }
+            }
+            let base = rawBase.assumingMemoryBound(to: UInt8.self)
+            var searchOffset = 0
+            var matchCount = 0
+            while searchOffset < data.count {
+                let found = foldedLiteral.withUnsafeBufferPointer { literalBuffer in
+                    shifts.withUnsafeBufferPointer { shiftBuffer in
+                        rg_memcasemem_ascii_prepared(
+                            base.advanced(by: searchOffset),
+                            data.count - searchOffset,
+                            literalBuffer.baseAddress,
+                            literalBuffer.count,
+                            shiftBuffer.baseAddress
+                        )
+                    }
+                }
+                guard let found else {
+                    break
+                }
+                let matchStart = base.distance(to: found)
+                matchCount += 1
+                searchOffset = matchStart + foldedLiteral.count
+            }
+            return matchCount
+        }
     }
 
     private static func asciiCaseInsensitiveLineRangeContains(
