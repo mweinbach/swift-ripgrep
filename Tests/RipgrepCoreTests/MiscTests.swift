@@ -2076,6 +2076,11 @@ struct MiscTests {
             (["--heading", "-x", "needle", root.path("exact.txt")], Data("needle\nneedle\n".utf8)),
             (["--heading", "--with-filename", "-x", "needle", root.path("exact.txt")], Data("\(root.path("exact.txt"))\nneedle\nneedle\n".utf8)),
             (["-x", "last", root.path("exact.txt")], Data("last\n".utf8)),
+            (["-x", "needle|last", root.path("exact.txt")], Data("needle\nneedle\nlast\n".utf8)),
+            (["-n", "-x", "needle|last", root.path("exact.txt")], Data("1:needle\n3:needle\n5:last\n".utf8)),
+            (["-m2", "-x", "needle|last", root.path("exact.txt")], Data("needle\nneedle\n".utf8)),
+            (["--with-filename", "-x", "-e", "needle", "-e", "last", root.path("exact.txt")], Data("\(root.path("exact.txt")):needle\n\(root.path("exact.txt")):needle\n\(root.path("exact.txt")):last\n".utf8)),
+            (["--heading", "--with-filename", "-x", "-f", root.path("exact-patterns.txt"), root.path("exact.txt")], Data("\(root.path("exact.txt"))\nneedle\nneedle\nlast\n".utf8)),
             (["--crlf", "-x", "needle", root.path("crlf.txt")], Data("needle\r\n".utf8)),
         ] {
             let exactLineOutput = try runExecutableData(exactLineArguments, fixture: {})

@@ -1661,7 +1661,15 @@ struct RipgrepCommand {
                         crlfTerminated: parsedCrlf
                     )
                 }
-                return nil
+                return SwiftDarwinLiteralPreflight.multiLiteralExactLineExitCode(
+                    path: path,
+                    literals: literals,
+                    maxCount: parsedMaxCount,
+                    lineNumber: lineNumber,
+                    lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                    linePrefix: parsedLinePrefix,
+                    headingPrefix: parsedHeadingPrefix
+                )
             }
             if wordRegexp {
                 guard !asciiCaseInsensitive else {
@@ -1847,7 +1855,15 @@ struct RipgrepCommand {
                         crlfTerminated: parsedCrlf
                     )
                 }
-                return nil
+                return SwiftDarwinLiteralPreflight.multiLiteralExactLineExitCode(
+                    path: path,
+                    literals: literals,
+                    maxCount: parsedMaxCount,
+                    lineNumber: lineNumber,
+                    lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                    linePrefix: parsedLinePrefix,
+                    headingPrefix: parsedHeadingPrefix
+                )
             }
             if wordRegexp {
                 guard !asciiCaseInsensitive else {

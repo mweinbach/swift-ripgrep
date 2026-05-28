@@ -683,6 +683,18 @@ measured 4.6 ms versus 4.0 ms for Rust, current `-l -x ...` measured 4.3 ms
 versus 3.3 ms for Rust, and no-match `--files-without-match -x ...` measured
 11.2 ms versus 10.7 ms for Rust.
 
+Exact-line matching output now covers the same literal alternation, repeated
+`-e`, and pattern-file shapes with a Swift line scanner that preserves file
+order, one output row per matched line, line numbers, max-count, filename
+prefixes, headings, and binary fallback behavior. Direct byte/status checks
+matched Rust for plain, numbered, bounded, prefixed, heading, repeated `-e`,
+pattern-file, CRLF fallback, and binary fallback forms. On the 4.8 MiB dense
+fixture, `-x 'needle needle...|missing'` improved from 2.033 s to 38.6 ms,
+versus 14.1 ms for Rust; `-n -x ...` improved from 2.048 s to 54.6 ms,
+versus 16.9 ms for Rust. On the 48 MiB dense fixture, current plain output
+measured 351.4 ms versus 114.9 ms for Rust, and numbered output measured
+499.2 ms versus 144.9 ms for Rust.
+
 Case-insensitive exact-line quiet and path-only searches now have a conservative
 match-only Swift preflight. It probes exact, lowercase, and uppercase ASCII
 whole-line variants and falls back whenever it cannot prove a match, preserving
