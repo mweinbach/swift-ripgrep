@@ -2247,6 +2247,10 @@ struct RipgrepCommand {
             && !parsedCount
             && parsedPrintMode != .countMatches
             && !parsedOnlyMatching
+        let parsedNullDataAffectsPreflightOutput = parsedNullData
+            && !parsedQuiet
+            && parsedPathOnlyMode == nil
+            && parsedPrintMode != .countMatches
         guard !(parsedLineRegexp && wordRegexp) else {
             return nil
         }
@@ -2262,7 +2266,7 @@ struct RipgrepCommand {
               !parsedInvertMatch,
               !parsedJson,
               parsedMaxColumns == 0,
-              !parsedNullData,
+              !parsedNullDataAffectsPreflightOutput,
               !parsedPassthru,
               !parsedSearchZip,
               !parsedStats,
@@ -2300,6 +2304,7 @@ struct RipgrepCommand {
             }
             if parsedLineRegexp {
                 guard !wordRegexp,
+                      !parsedNullData,
                       !parsedCrlf else {
                     return nil
                 }
@@ -2547,6 +2552,7 @@ struct RipgrepCommand {
            !asciiCaseInsensitive,
            !wordRegexp,
            !parsedLineRegexp,
+           !parsedNullData,
            !noMmap,
            parsedPrintMode == .matchingLines,
            parsedMaxCount == nil,
@@ -2571,6 +2577,7 @@ struct RipgrepCommand {
            !asciiCaseInsensitive,
            !wordRegexp,
            !parsedLineRegexp,
+           !parsedNullData,
            parsedMaxCount != 0,
            let fixedLookbehind = fixedLookbehindLiteral(
             pattern,
@@ -2657,6 +2664,7 @@ struct RipgrepCommand {
            !asciiCaseInsensitive,
            !wordRegexp,
            !parsedLineRegexp,
+           !parsedNullData,
            parsedMaxCount != 0,
            let fixedLookahead = fixedLookaheadLiteral(
             pattern,
@@ -2743,6 +2751,7 @@ struct RipgrepCommand {
            !asciiCaseInsensitive,
            !wordRegexp,
            !parsedLineRegexp,
+           !parsedNullData,
            parsedMaxCount != 0,
            let fixedResetStart = fixedResetStartLiteral(
             pattern,
@@ -2831,6 +2840,7 @@ struct RipgrepCommand {
             ) {
             if parsedLineRegexp {
                 guard !wordRegexp,
+                      !parsedNullData,
                       !parsedCrlf else {
                     return nil
                 }
@@ -3145,7 +3155,8 @@ struct RipgrepCommand {
                     )
                 }
                 if parsedLineRegexp {
-                    guard !parsedCrlf else {
+                    guard !parsedNullData,
+                          !parsedCrlf else {
                         return nil
                     }
                     return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveExactLineQuietExitCode(
@@ -3165,7 +3176,8 @@ struct RipgrepCommand {
                 )
             }
             if parsedLineRegexp {
-                guard !parsedCrlf else {
+                guard !parsedNullData,
+                      !parsedCrlf else {
                     return nil
                 }
                 return SwiftDarwinLiteralPreflight.exactLineQuietExitCode(
@@ -3183,6 +3195,7 @@ struct RipgrepCommand {
                 guard parsedPathOnlyMode == nil,
                       !wordRegexp,
                       !asciiBoundary,
+                      !parsedNullData,
                       !parsedCrlf else {
                     return nil
                 }
@@ -3276,7 +3289,8 @@ struct RipgrepCommand {
             }
             if asciiCaseInsensitive {
                 if parsedLineRegexp {
-                    guard !parsedCrlf else {
+                    guard !parsedNullData,
+                          !parsedCrlf else {
                         return nil
                     }
                     return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveExactLineCountExitCode(
@@ -3298,7 +3312,8 @@ struct RipgrepCommand {
                 )
             }
             if parsedLineRegexp {
-                guard !parsedCrlf else {
+                guard !parsedNullData,
+                      !parsedCrlf else {
                     return nil
                 }
                 return SwiftDarwinLiteralPreflight.exactLineCountExitCode(
@@ -3347,7 +3362,8 @@ struct RipgrepCommand {
                     )
                 }
                 if parsedLineRegexp {
-                    guard !parsedCrlf else {
+                    guard !parsedNullData,
+                          !parsedCrlf else {
                         return nil
                     }
                     return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveExactLinePathOnlyExitCode(
@@ -3379,7 +3395,8 @@ struct RipgrepCommand {
                 )
             }
             if parsedLineRegexp {
-                guard !parsedCrlf else {
+                guard !parsedNullData,
+                      !parsedCrlf else {
                     return nil
                 }
                 return SwiftDarwinLiteralPreflight.exactLinePathOnlyExitCode(
@@ -3402,6 +3419,7 @@ struct RipgrepCommand {
         }
         if parsedLineRegexp {
             guard !asciiBoundary,
+                  !parsedNullData,
                   !parsedCrlf,
                   !parsedCount,
                   parsedPathOnlyMode == nil,

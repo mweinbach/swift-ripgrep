@@ -91,6 +91,9 @@ fallbacks.
 Output-neutral `--trim` combinations now stay eligible for the existing quiet,
 path-only, count, count-matches, and only-matching preflights; full-line output
 still requires a trim-aware writer.
+Output-neutral `--null-data` combinations now stay eligible for quiet,
+path-only, and count-matches literal preflights; NUL record-sensitive exact-line,
+lookaround, count-line, and matching-line forms remain on fallback.
 Case-sensitive repeated `-e`/`-f` and top-level literal alternation `--trim`
 forms now use the same mapped trim writer.
 Literal `--invert-match` matching-line output now has its own mapped Swift line
@@ -1247,6 +1250,15 @@ via `RIPGREP_CONFIG_PATH=`:
 | `--trim -l needle` | 91.0 ms | 4.8 ms | 3.8 ms |
 | `--trim -c needle` | 118.1 ms | 10.1 ms | 10.4 ms |
 | `--trim --count-matches needle` | 117.5 ms | 6.9 ms | 19.2 ms |
+
+Output-neutral null-data checks used the same fixture and 3 warmups plus 10
+timed runs:
+
+| Flags | Swift before | Swift after | rg |
+|---|---:|---:|---:|
+| `--null-data -q needle` | 407.3 ms | 4.7 ms | 5.6 ms |
+| `--null-data -l needle` | 410.0 ms | 4.7 ms | 5.8 ms |
+| `--null-data --count-matches needle` | 407.2 ms | 7.4 ms | 9.0 ms |
 
 The multi-literal trim check used the same fixture and 3 warmups plus 10 timed
 runs. The before column is the same binary with executable preflight bypassed

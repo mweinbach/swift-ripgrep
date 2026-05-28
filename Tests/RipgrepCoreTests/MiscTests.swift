@@ -1259,6 +1259,7 @@ struct MiscTests {
         try root.write("*.txt\n", to: ".ignore")
         try root.write("needle\n", to: "ignored.txt")
         try root.write(Data("pre\0needle\n".utf8), to: "binary-mode.dat")
+        try root.write(Data("needle\0quiet\0needle\0".utf8), to: "nul-records.dat")
         try root.write("quiet\n", to: "quiet-no-match.txt")
         try root.write("""
         hay
@@ -3045,6 +3046,8 @@ struct MiscTests {
             (["-qi", "12345", root.path("dense.txt")], Int32(1)),
             (["--trim", "-q", "needle", root.path("trim.txt")], Int32(0)),
             (["--trim", "-q", "missing", root.path("trim.txt")], Int32(1)),
+            (["--null-data", "-q", "needle", root.path("dense.txt")], Int32(0)),
+            (["--null-data", "-q", "-x", "quiet", root.path("nul-records.dat")], Int32(0)),
             (["-q", "-w", "needle", root.path("dense.txt")], Int32(0)),
             (["-qw", "needle", root.path("dense.txt")], Int32(0)),
             (["-q", "-w", "eed", root.path("dense.txt")], Int32(1)),
@@ -3100,6 +3103,7 @@ struct MiscTests {
             (["--crlf", "--files-without-match", "missing", root.path("dense.txt")], Data("\(root.path("dense.txt"))\r\n".utf8), Int32(0)),
             (["--trim", "-l", "needle", root.path("trim.txt")], Data("\(root.path("trim.txt"))\n".utf8), Int32(0)),
             (["--trim", "--files-without-match", "missing", root.path("trim.txt")], Data("\(root.path("trim.txt"))\n".utf8), Int32(0)),
+            (["--null-data", "-l", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
             (["--files-without-match", "needle", root.path("dense.txt")], Data(), Int32(1)),
             (["--heading", "--with-filename", "--files-without-match", "needle", root.path("dense.txt")], Data(), Int32(1)),
             (["-li", "NEEDLE", root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
@@ -3707,6 +3711,14 @@ struct MiscTests {
             root.path("trim.txt"),
         ], fixture: {})
         #expect(trimCountMatchesOutput == Data("3\n".utf8))
+
+        let nullDataCountMatchesOutput = try runExecutableData([
+            "--null-data",
+            "--count-matches",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(nullDataCountMatchesOutput == countMatchesOutput)
 
         let exactLineCountMatchesOutput = try runExecutableData([
             "--count-matches",
