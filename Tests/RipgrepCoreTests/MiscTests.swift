@@ -3084,6 +3084,141 @@ struct MiscTests {
         ], fixture: {})
         #expect(repeatedRegexpZeroMaxCountOutput.isEmpty)
 
+        let repeatedRegexpMaxCountCountOutput = try runExecutableData([
+            "-c",
+            "-m2",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(repeatedRegexpMaxCountCountOutput == Data("2\n".utf8))
+
+        let patternFileMaxCountCountOutput = try runExecutableData([
+            "--count",
+            "--max-count",
+            "2",
+            "-f",
+            root.path("patterns.txt"),
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(patternFileMaxCountCountOutput == repeatedRegexpMaxCountCountOutput)
+
+        let alternationMaxCountCountOutput = try runExecutableData([
+            "-c",
+            "-m2",
+            "needle|quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(alternationMaxCountCountOutput == repeatedRegexpMaxCountCountOutput)
+
+        let crlfMaxCountCountOutput = try runExecutableData([
+            "--crlf",
+            "-c",
+            "-m2",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(crlfMaxCountCountOutput == Data("2\r\n".utf8))
+
+        let includeZeroMaxCountCountResult = try runExecutableResult([
+            "--include-zero",
+            "-c",
+            "-m2",
+            "-e",
+            "missing",
+            "-e",
+            "absent",
+            root.path("dense.txt"),
+        ])
+        #expect(includeZeroMaxCountCountResult.status == 1)
+        #expect(includeZeroMaxCountCountResult.stdout == Data("0\n".utf8))
+        #expect(includeZeroMaxCountCountResult.stderr.isEmpty)
+
+        let quietMaxCountCountResult = try runExecutableResult([
+            "-q",
+            "-c",
+            "-m2",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ])
+        #expect(quietMaxCountCountResult.status == 0)
+        #expect(quietMaxCountCountResult.stdout.isEmpty)
+        #expect(quietMaxCountCountResult.stderr.isEmpty)
+
+        let prefixedMaxCountCountOutput = try runExecutableData([
+            "-H",
+            "-c",
+            "-m2",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(prefixedMaxCountCountOutput == Data("\(root.path("dense.txt")):2\n".utf8))
+
+        let headingPrefixedMaxCountCountOutput = try runExecutableData([
+            "--heading",
+            "--with-filename",
+            "-c",
+            "-m2",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(headingPrefixedMaxCountCountOutput == prefixedMaxCountCountOutput)
+
+        let nullPrefixedMaxCountCountOutput = try runExecutableData([
+            "-H",
+            "-0",
+            "-c",
+            "-m2",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(nullPrefixedMaxCountCountOutput == Data("\(root.path("dense.txt"))\02\n".utf8))
+
+        let pathSeparatedPrefixedMaxCountCountOutput = try runExecutableData([
+            "-H",
+            "--path-separator=Z",
+            "-c",
+            "-m2",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(pathSeparatedPrefixedMaxCountCountOutput == Data("\(pathSeparatedName):2\n".utf8))
+
+        let prefixedIncludeZeroMaxCountCountResult = try runExecutableResult([
+            "-H",
+            "--include-zero",
+            "-c",
+            "-m2",
+            "-e",
+            "missing",
+            "-e",
+            "absent",
+            root.path("dense.txt"),
+        ])
+        #expect(prefixedIncludeZeroMaxCountCountResult.status == 1)
+        #expect(prefixedIncludeZeroMaxCountCountResult.stdout == Data("\(root.path("dense.txt")):0\n".utf8))
+        #expect(prefixedIncludeZeroMaxCountCountResult.stderr.isEmpty)
+
         let orderedNoLineNumberOutput = try runExecutableData([
             "-n",
             "-N",

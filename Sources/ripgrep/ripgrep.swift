@@ -1562,6 +1562,11 @@ struct RipgrepCommand {
             pathSeparator: parsedPathSeparator
         )
         let parsedPathOnlyOutputPath = parsedPathSeparator == nil ? nil : parsedDisplayPath
+        let parsedCountPrefix: [UInt8] = if parsedWithFilename {
+            parsedDisplayPath + (parsedNullPathTerminator ? [0] : [UInt8(ascii: ":")])
+        } else {
+            []
+        }
         let parsedHeadingPrefix: [UInt8] = if parsedHeading && parsedWithFilename {
             if parsedNullPathTerminator {
                 parsedDisplayPath + [0]
@@ -1610,7 +1615,6 @@ struct RipgrepCommand {
                   path != "-",
                   !wordRegexp,
                   !parsedLineRegexp,
-                  !parsedCount,
                   let literals = explicitRegexpPatternLiterals(
                     explicitRegexpPatterns,
                     fixedStrings: fixedStrings,
@@ -1641,6 +1645,19 @@ struct RipgrepCommand {
                 return SwiftDarwinLiteralPreflight.multiLiteralQuietExitCode(
                     path: path,
                     literals: literals
+                )
+            }
+            if parsedCount {
+                guard let parsedMaxCount else {
+                    return nil
+                }
+                return SwiftDarwinLiteralPreflight.multiLiteralCountLineExitCode(
+                    path: path,
+                    literals: literals,
+                    includeZero: parsedIncludeZero,
+                    maxCount: parsedMaxCount,
+                    countPrefix: parsedCountPrefix,
+                    crlfTerminated: parsedCrlf
                 )
             }
             if let parsedPathOnlyMode {
@@ -1706,7 +1723,6 @@ struct RipgrepCommand {
            !wordRegexp,
            !parsedLineRegexp,
            !asciiBoundary,
-           !parsedCount,
            parsedMaxCount != 0,
            let literals = multiLiteralAlternation(
             pattern,
@@ -1729,11 +1745,27 @@ struct RipgrepCommand {
                         outputPath: parsedPathOnlyOutputPath
                     )
                 }
+                if parsedCount {
+                    return nil
+                }
             } else {
                 if parsedQuiet {
                     return SwiftDarwinLiteralPreflight.multiLiteralQuietExitCode(
                         path: path,
                         literals: literals
+                    )
+                }
+                if parsedCount {
+                    guard let parsedMaxCount else {
+                        return nil
+                    }
+                    return SwiftDarwinLiteralPreflight.multiLiteralCountLineExitCode(
+                        path: path,
+                        literals: literals,
+                        includeZero: parsedIncludeZero,
+                        maxCount: parsedMaxCount,
+                        countPrefix: parsedCountPrefix,
+                        crlfTerminated: parsedCrlf
                     )
                 }
                 if let parsedPathOnlyMode {

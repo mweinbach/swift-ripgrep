@@ -303,6 +303,20 @@ single-pattern alternation forms. On the 50 KiB dense fixture,
 Rust, while `-n -m2 -f patterns.txt` measured 4.8 ms versus 36.7 ms before and
 2.5 ms for Rust.
 
+Bounded multi-literal count output now reuses that same mapped writer without
+emitting matched lines, then prints only the matched-line count summary. This
+covers `-c -mN`/`--count --max-count N` for safe alternations, repeated explicit
+regexps, and literal-only pattern files, while unbounded counts, `-m0`, quiet
+precedence, and unsupported semantic modes stay on the prior behavior.
+Dense-fixture byte checks matched Rust for repeated-regexp, pattern-file,
+single-pattern alternation, include-zero no-match, CRLF summary, quiet-count,
+filename-prefixed, heading-prefixed, NUL-prefixed, path-separated, ASCII
+ignore-case fallback, and zero-count forms. On the 50 KiB dense fixture,
+`-c -m2 -e needle -e quiet` measured 4.4 ms versus 22.7 ms before and 2.5 ms
+for Rust, while `-c -m2 -f patterns.txt` measured 4.6 ms versus 38.9 ms before
+and 2.8 ms for Rust; the neighboring `-H -c -m2 -e needle -e quiet` measured
+4.3 ms versus 2.5 ms for Rust while preserving the required path prefix.
+
 Traversal-only flags that do not affect an explicit regular file now stay
 eligible for the executable preflight. The parser treats hidden, ignore-family,
 require-git, and one-file-system toggles as neutral only in this single-path

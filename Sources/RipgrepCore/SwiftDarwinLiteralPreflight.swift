@@ -1201,6 +1201,35 @@ public enum SwiftDarwinLiteralPreflight {
         return result.matched_line_count > 0 ? 0 : 1
     }
 
+    public static func multiLiteralCountLineExitCode(
+        path: String,
+        literals: [[UInt8]],
+        includeZero: Bool,
+        maxCount: Int,
+        countPrefix: [UInt8] = [],
+        crlfTerminated: Bool = false
+    ) -> Int32? {
+        guard maxCount > 0,
+              let result = multiLiteralResult(
+                path: path,
+                literals: literals,
+                maxCount: maxCount,
+                emitLines: false
+              ) else {
+            return nil
+        }
+        guard result.status >= 0 else {
+            return nil
+        }
+        let matchedLineCount = Int(result.matched_line_count)
+        if matchedLineCount > 0 || includeZero {
+            var output = Data(countPrefix)
+            output.append(countOutput(matchedLineCount, crlfTerminated: crlfTerminated))
+            FileHandle.standardOutput.write(output)
+        }
+        return matchedLineCount > 0 ? 0 : 1
+    }
+
     private static func streamingLiteralExitCode(
         path: String,
         literal: [UInt8],
@@ -1519,7 +1548,8 @@ public enum SwiftDarwinLiteralPreflight {
         lineNumber: Bool = false,
         lineNumberFieldSeparator: [UInt8] = [58],
         linePrefix: [UInt8] = [],
-        headingPrefix: [UInt8] = []
+        headingPrefix: [UInt8] = [],
+        emitLines: Bool = true
     ) -> rg_darwin_literal_file_result? {
         guard literals.count > 1,
               literals.count <= 64,
@@ -1572,7 +1602,8 @@ public enum SwiftDarwinLiteralPreflight {
             lineNumber: lineNumber,
             lineNumberFieldSeparator: lineNumberFieldSeparator,
             linePrefix: linePrefix,
-            headingPrefix: headingPrefix
+            headingPrefix: headingPrefix,
+            emitLines: emitLines
         )
     }
 }
@@ -2420,7 +2451,8 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
     lineNumber: Bool,
     lineNumberFieldSeparator: [UInt8],
     linePrefix: [UInt8],
-    headingPrefix: [UInt8]
+    headingPrefix: [UInt8],
+    emitLines: Bool
 ) -> rg_darwin_literal_file_result? {
     if haystackLength >= 3,
        base[0] == 0xEF,
@@ -2499,6 +2531,11 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
         let outputEnd = newline.map {
             base.distance(to: $0.assumingMemoryBound(to: UInt8.self)) + 1
         } ?? haystackLength
+        if !emitLines {
+            matchedLineCount += 1
+            bytesSearched = outputEnd
+            return true
+        }
         guard output.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading) else {
             return false
         }
