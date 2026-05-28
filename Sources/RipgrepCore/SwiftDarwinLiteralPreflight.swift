@@ -60,6 +60,34 @@ public enum SwiftDarwinLiteralPreflight {
         return 0
     }
 
+    public static func wordQuietExitCode(
+        path: String,
+        literal: [UInt8]
+    ) -> Int32? {
+        guard let matched = containsWordLiteral(path: path, literal: literal) else {
+            return nil
+        }
+        return matched ? 0 : 1
+    }
+
+    public static func wordPathOnlyExitCode(
+        path: String,
+        literal: [UInt8],
+        printWhenMatched: Bool,
+        nullTerminated: Bool
+    ) -> Int32? {
+        guard let matched = containsWordLiteral(path: path, literal: literal) else {
+            return nil
+        }
+        guard matched == printWhenMatched else {
+            return 1
+        }
+        var output = Data(path.utf8)
+        output.append(nullTerminated ? 0 : UInt8(ascii: "\n"))
+        FileHandle.standardOutput.write(output)
+        return 0
+    }
+
     public static func limitedLineExitCode(
         path: String,
         literal: [UInt8],
@@ -423,6 +451,74 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         return exactLineCount(data: data, literal: literal, maxCount: 1) > 0
+    }
+
+    private static func containsWordLiteral(path: String, literal: [UInt8]) -> Bool? {
+        guard !literal.isEmpty,
+              !literal.contains(UInt8(ascii: "\n")),
+              let first = literal.first,
+              let last = literal.last,
+              rgSwiftIsASCIIRegexWordByte(first),
+              rgSwiftIsASCIIRegexWordByte(last) else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return false
+        }
+        guard !hasBinaryDetectionPrefix(data) else {
+            return nil
+        }
+
+        let needle = Data(literal)
+        var searchStart = data.startIndex
+        var rejectedBoundaryCandidates = 0
+        let maxRejectedBoundaryCandidates = 128
+        while searchStart < data.endIndex,
+              let matchRange = data.range(of: needle, in: searchStart..<data.endIndex) {
+            guard !matchRange.isEmpty else {
+                return nil
+            }
+            guard let bounded = isASCIIWordBoundaryMatch(data: data, matchRange: matchRange) else {
+                return nil
+            }
+            if bounded {
+                return true
+            }
+            rejectedBoundaryCandidates += 1
+            guard rejectedBoundaryCandidates <= maxRejectedBoundaryCandidates else {
+                return nil
+            }
+            searchStart = data.index(after: matchRange.lowerBound)
+        }
+        return false
+    }
+
+    private static func isASCIIWordBoundaryMatch(
+        data: Data,
+        matchRange: Range<Data.Index>
+    ) -> Bool? {
+        if matchRange.lowerBound > data.startIndex {
+            let before = data[data.index(before: matchRange.lowerBound)]
+            if before >= 0x80 {
+                return nil
+            }
+            if rgSwiftIsASCIIRegexWordByte(before) {
+                return false
+            }
+        }
+        if matchRange.upperBound < data.endIndex {
+            let after = data[matchRange.upperBound]
+            if after >= 0x80 {
+                return nil
+            }
+            if rgSwiftIsASCIIRegexWordByte(after) {
+                return false
+            }
+        }
+        return true
     }
 
     private static func mappedPreflightData(path: String) -> Data? {

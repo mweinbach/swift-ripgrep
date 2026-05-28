@@ -378,6 +378,18 @@ path-separator, and statistics forms still fall through. On the same fixture,
 `--files-without-match absent_literal` improved from 45.5 ms to 21.5 ms,
 versus 9.3 ms for Rust.
 
+ASCII word-boundary quiet and path-only searches now use a conservative
+Swift-first mapped existence check. It accepts only literals whose first and
+last bytes are ASCII regex word bytes, falls back on non-ASCII candidate
+boundaries or early binary detection, and bails back to the full searcher after
+128 rejected boundary candidates so embedded-substring no-match cases do not
+regress. On the same fixture, `-q -w needle` improved from 762.8 ms to 3.3 ms,
+versus 2.8 ms for Rust, and `-l -w needle` improved from 1.968 s to 3.7 ms,
+versus 2.8 ms for Rust. Absent word no-match checks measured 26.2-26.4 ms,
+versus 6.6 ms for Rust. The boundary-heavy `-w eed` substring no-match falls
+back and stayed effectively tied with the full Swift path at 134.6 ms for
+quiet and 165.6 ms for path-only.
+
 Positive `-m`/`--max-count` explicit-file literal searches now have a bounded
 Swift line-output preflight. It uses high-level mapped `Data` searches, emits
 each matching line at most once, preserves optional line numbers, and falls
