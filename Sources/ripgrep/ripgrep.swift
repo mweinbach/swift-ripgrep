@@ -2334,6 +2334,11 @@ struct RipgrepCommand {
             && !parsedQuiet
             && parsedPathOnlyMode == nil
             && parsedPrintMode != .countMatches
+        let parsedContextAffectsPreflightOutput = (parsedAfterContext > 0 || parsedBeforeContext > 0)
+            && !parsedQuiet
+            && parsedPathOnlyMode == nil
+            && !parsedCount
+            && parsedPrintMode != .countMatches
         guard !(parsedLineRegexp && wordRegexp) else {
             return nil
         }
@@ -2341,8 +2346,7 @@ struct RipgrepCommand {
               !parsedColumnAffectsPreflightOutput,
               !parsedColorAffectsPreflightOutput,
               parsedEncodingIsAutomatic,
-              parsedAfterContext == 0,
-              parsedBeforeContext == 0,
+              !parsedContextAffectsPreflightOutput,
               !parsedHeading || !parsedWithFilename || parsedPrintMode == .matchingLines
                   || parsedPrintMode == .count || parsedPrintMode == .countMatches
                   || parsedPathOnlyMode != nil,

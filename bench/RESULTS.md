@@ -159,6 +159,20 @@ output, CRLF only-matching output, and bounded `-o -c -mN` stay on fallback.
 | `-o -c needle` | 1.456 s | 6.6 ms | 18.6 ms |
 | `-o --count-matches needle` | 1.449 s | 7.1 ms | 19.0 ms |
 
+Before/after context now only disables the generic executable preflight when
+context lines can be printed. Quiet, path-only, count, and count-matches modes
+stay on their existing literal preflights; matching-line output, including
+`-o` with visible context lines, remains on the context-aware/fallback paths.
+
+10 timed runs on `/tmp/swift-rg-candidates/trim.txt` with 3 warmups:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--after-context=1 -q needle` | 1.567 s | 1.6 ms | 899.0 us |
+| `--before-context=1 -l needle` | 1.600 s | 2.1 ms | 2.2 ms |
+| `--after-context=1 -c needle` | 1.536 s | 8.5 ms | 9.2 ms |
+| `--before-context=1 --count-matches needle` | 1.582 s | 6.0 ms | 18.3 ms |
+
 Case-sensitive repeated `-e`/`-f` and top-level literal alternation `--trim`
 forms now use the same mapped trim writer.
 Literal `--invert-match` matching-line output now has its own mapped Swift line

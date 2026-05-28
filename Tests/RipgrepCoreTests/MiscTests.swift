@@ -3912,6 +3912,48 @@ struct MiscTests {
         ], fixture: {})
         #expect(onlyMatchingCountOutput == countMatchesOutput)
 
+        let afterContextQuietResult = try runExecutableResult([
+            "--after-context=1",
+            "-q",
+            "needle",
+            root.path("dense.txt"),
+        ])
+        #expect(afterContextQuietResult.status == 0)
+        #expect(afterContextQuietResult.stdout.isEmpty)
+        #expect(afterContextQuietResult.stderr.isEmpty)
+
+        let beforeContextPathOnlyOutput = try runExecutableData([
+            "--before-context=1",
+            "-l",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(beforeContextPathOnlyOutput == Data("\(root.path("dense.txt"))\n".utf8))
+
+        let contextFilesWithoutMatchOutput = try runExecutableData([
+            "--context=1",
+            "--files-without-match",
+            "missing",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(contextFilesWithoutMatchOutput == Data("\(root.path("dense.txt"))\n".utf8))
+
+        let afterContextCountOutput = try runExecutableData([
+            "--after-context=1",
+            "-c",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(afterContextCountOutput == Data("3\n".utf8))
+
+        let beforeContextCountMatchesOutput = try runExecutableData([
+            "--before-context=1",
+            "--count-matches",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(beforeContextCountMatchesOutput == countMatchesOutput)
+
         let trimCountMatchesOutput = try runExecutableData([
             "--trim",
             "--count-matches",
