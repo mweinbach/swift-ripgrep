@@ -1242,6 +1242,7 @@ struct MiscTests {
         try root.write("   \n  needle space\n", to: "trim-space.txt")
         try root.write("quiet one\nneedle skip\nquiet two\nneedle skip two\ntail quiet", to: "invert.txt")
         try root.write("needle\nneedle two\n", to: "all-needle.txt")
+        try root.write("alpha\nneedle one\nomega", to: "passthru.txt")
         try root.write("needle\n", to: ".hidden.txt")
         try root.write("*.txt\n", to: ".ignore")
         try root.write("needle\n", to: "ignored.txt")
@@ -1755,6 +1756,109 @@ struct MiscTests {
         #expect(invertAllFilteredResult.stdout.isEmpty)
         #expect(invertAllFilteredResult.stderr.isEmpty)
         #expect(invertAllFilteredResult.status == 1)
+
+        let passthruOutput = try runExecutableData([
+            "--passthru",
+            "needle",
+            root.path("passthru.txt"),
+        ], fixture: {})
+        #expect(passthruOutput == Data("""
+        alpha
+        needle one
+        omega
+
+        """.utf8))
+
+        let passthruLineNumberOutput = try runExecutableData([
+            "-n",
+            "--passthru",
+            "needle",
+            root.path("passthru.txt"),
+        ], fixture: {})
+        #expect(passthruLineNumberOutput == Data("""
+        1-alpha
+        2:needle one
+        3-omega
+
+        """.utf8))
+
+        let passthruWithFilenameOutput = try runExecutableData([
+            "--with-filename",
+            "--passthru",
+            "needle",
+            root.path("passthru.txt"),
+        ], fixture: {})
+        #expect(passthruWithFilenameOutput == Data("""
+        \(root.path("passthru.txt"))-alpha
+        \(root.path("passthru.txt")):needle one
+        \(root.path("passthru.txt"))-omega
+
+        """.utf8))
+
+        let passthruHeadingWithFilenameOutput = try runExecutableData([
+            "--heading",
+            "--with-filename",
+            "--passthru",
+            "needle",
+            root.path("passthru.txt"),
+        ], fixture: {})
+        #expect(passthruHeadingWithFilenameOutput == Data("""
+        \(root.path("passthru.txt"))
+        alpha
+        needle one
+        omega
+
+        """.utf8))
+
+        let passthruCustomSeparatorOutput = try runExecutableData([
+            "-n",
+            "--field-match-separator=|",
+            "--field-context-separator=_",
+            "--passthru",
+            "needle",
+            root.path("passthru.txt"),
+        ], fixture: {})
+        #expect(passthruCustomSeparatorOutput == Data("""
+        1_alpha
+        2|needle one
+        3_omega
+
+        """.utf8))
+
+        let passthruMissingResult = try runExecutableResult([
+            "--passthru",
+            "missing",
+            root.path("passthru.txt"),
+        ])
+        #expect(passthruMissingResult.stdout == passthruOutput)
+        #expect(passthruMissingResult.stderr.isEmpty)
+        #expect(passthruMissingResult.status == 1)
+
+        let passthruMaxCountZeroResult = try runExecutableResult([
+            "--passthru",
+            "-m0",
+            "needle",
+            root.path("passthru.txt"),
+        ])
+        #expect(passthruMaxCountZeroResult.stdout.isEmpty)
+        #expect(passthruMaxCountZeroResult.stderr.isEmpty)
+        #expect(passthruMaxCountZeroResult.status == 1)
+
+        let passthruMultiplePatternOutput = try runExecutableData([
+            "-n",
+            "--passthru",
+            "-e",
+            "needle",
+            "-e",
+            "alpha",
+            root.path("passthru.txt"),
+        ], fixture: {})
+        #expect(passthruMultiplePatternOutput == Data("""
+        1:alpha
+        2:needle one
+        3-omega
+
+        """.utf8))
 
         let plainOnlyMatchingLineNumberOutput = try runExecutableData([
             "-n",

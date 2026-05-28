@@ -92,6 +92,12 @@ Literal `--invert-match` matching-line output now has its own mapped Swift line
 writer for single-file literal searches, preserving line numbers, headings,
 filename prefixes, max-count, fixed-string literals, no-final-newline output,
 and binary/BOM fallback behavior.
+Literal `--passthru` matching-line output now uses a mapped Swift line writer
+for single-file literal searches, emitting every line with Rust-compatible
+match/context separators and returning status from whether any line matched.
+It preserves line numbers, filename prefixes, headings, custom field match and
+context separators, fixed-string literals, no-final-newline output, `-m0`
+literal status, and binary/BOM fallback behavior.
 
 A targeted 20-run A/B against the previous Swift checkpoint and Rust used the
 same 4.8 MiB fixture:
@@ -1191,6 +1197,23 @@ unset:
 |---|---:|---:|---:|
 | `-v needle` | 927.2 ms | 10.3 ms | 11.1 ms |
 | `-n -v needle` | 970.6 ms | 12.4 ms | 17.3 ms |
+
+The literal passthru check used `/tmp/swift-rg-candidates/passthru-50k.txt`, a
+50,000-line / 1.29 MiB fixture with every tenth line matching. The before
+column is the same binary with the executable preflight bypassed via
+`RIPGREP_CONFIG_PATH=`:
+
+| Flags | Swift before | Swift after | rg |
+|---|---:|---:|---:|
+| `--passthru needle` | 1.523 s | 9.3 ms | 8.9 ms |
+
+A larger current/Rust check on `/tmp/swift-rg-candidates/passthru.txt`, a
+250,000-line / 6.66 MiB fixture, used 3 warmups and 10 timed runs:
+
+| Flags | Swift | rg |
+|---|---:|---:|
+| `--passthru needle` | 12.6 ms | 16.2 ms |
+| `-n --passthru needle` | 16.1 ms | 25.3 ms |
 
 Null path terminator flags now stay on the executable literal preflight when
 the command shape cannot print a path. This covers standalone `--null` and

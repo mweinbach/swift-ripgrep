@@ -1019,6 +1019,7 @@ struct RipgrepCommand {
         var parsedColorMayEmit = false
         var parsedFixedStrings = false
         var parsedFieldMatchSeparator = [UInt8(ascii: ":")]
+        var parsedFieldContextSeparator = [UInt8(ascii: "-")]
         var parsedHeading = false
         var parsedEncodingIsAutomatic = true
         var parsedIncludeZero = false
@@ -1404,6 +1405,15 @@ struct RipgrepCommand {
             } else if isInlineFieldMatchSeparator(argument) {
                 let rawSeparator = String(argument.dropFirst("--field-match-separator=".count))
                 parsedFieldMatchSeparator = preflightEscapedSeparatorBytes(rawSeparator)
+            } else if argument == "--field-context-separator" {
+                guard argumentIndex < arguments.count else {
+                    return nil
+                }
+                parsedFieldContextSeparator = preflightEscapedSeparatorBytes(arguments[argumentIndex])
+                argumentIndex += 1
+            } else if argument.hasPrefix("--field-context-separator=") {
+                let rawSeparator = String(argument.dropFirst("--field-context-separator=".count))
+                parsedFieldContextSeparator = preflightEscapedSeparatorBytes(rawSeparator)
             } else if isSeparatedNeutralValueFlag(argument) {
                 guard argumentIndex < arguments.count else {
                     return nil
@@ -1604,6 +1614,15 @@ struct RipgrepCommand {
         } else {
             []
         }
+        let parsedContextLinePrefix: [UInt8] = if parsedWithFilename {
+            if parsedHeading {
+                []
+            } else {
+                parsedDisplayPath + (parsedNullPathTerminator ? [0] : parsedFieldContextSeparator)
+            }
+        } else {
+            []
+        }
         if parsedStopOnNonmatch,
            parsedPrintMode == .matchingLines,
            !parsedOnlyMatching,
@@ -1717,6 +1736,7 @@ struct RipgrepCommand {
            !parsedLineRegexp,
            !asciiCaseInsensitive,
            parsedMaxCount != 0,
+           explicitRegexpPatterns.count <= 1,
            (patternCanStartWithDash || !pattern.hasPrefix("-")),
            path != "-" {
             let trimLiteralPattern = fixedStrings
@@ -1764,6 +1784,7 @@ struct RipgrepCommand {
            !parsedLineRegexp,
            !asciiCaseInsensitive,
            parsedMaxCount != 0,
+           explicitRegexpPatterns.count <= 1,
            (patternCanStartWithDash || !pattern.hasPrefix("-")),
            path != "-" {
             let invertedLiteralPattern = fixedStrings
@@ -1783,6 +1804,57 @@ struct RipgrepCommand {
                         lineNumber: lineNumber,
                         lineNumberFieldSeparator: parsedFieldMatchSeparator,
                         linePrefix: parsedLinePrefix,
+                        headingPrefix: parsedHeadingPrefix
+                    )
+                }
+            }
+        }
+        if parsedPassthru,
+           parsedPrintMode == .matchingLines,
+           !parsedOnlyMatching,
+           !parsedQuiet,
+           !parsedByteOffset,
+           !parsedColumn,
+           !parsedColorMayEmit,
+           parsedEncodingIsAutomatic,
+           parsedAfterContext == 0,
+           parsedBeforeContext == 0,
+           !parsedInvertMatch,
+           !parsedJson,
+           parsedMaxColumns == 0,
+           !parsedNullData,
+           !parsedSearchZip,
+           !parsedStats,
+           !parsedStopOnNonmatch,
+           !parsedCrlf,
+           !parsedTrim,
+           !wordRegexp,
+           !parsedLineRegexp,
+           !asciiCaseInsensitive,
+           explicitRegexpPatterns.count <= 1,
+           (patternCanStartWithDash || !pattern.hasPrefix("-")),
+           path != "-" {
+            let passthruLiteralPattern = fixedStrings
+                ? pattern
+                : RegexLiteralParser.literal(
+                    fromPlainRegexPattern: pattern,
+                    allowPCREQuotedLiterals: allowPCREQuotedLiterals
+                )
+            if let passthruLiteralPattern {
+                let passthruLiteral = Array(passthruLiteralPattern.utf8)
+                if !passthruLiteral.isEmpty,
+                   !passthruLiteral.contains(UInt8(ascii: "\n")) {
+                    if parsedMaxCount == 0 {
+                        return 1
+                    }
+                    return SwiftDarwinLiteralPreflight.passthruLiteralLineExitCode(
+                        path: path,
+                        literal: passthruLiteral,
+                        lineNumber: lineNumber,
+                        lineNumberFieldMatchSeparator: parsedFieldMatchSeparator,
+                        lineNumberFieldContextSeparator: parsedFieldContextSeparator,
+                        lineMatchPrefix: parsedLinePrefix,
+                        lineContextPrefix: parsedContextLinePrefix,
                         headingPrefix: parsedHeadingPrefix
                     )
                 }
