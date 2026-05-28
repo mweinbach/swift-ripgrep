@@ -510,6 +510,15 @@ definitions and follow-on `-t`/`-T` filters still use the normal parser and
 diagnostics. On the same fixture, `--type-clear rust needle` improved from
 6.141 s to 35.6 ms, and `--type-add foo:*.foo needle` improved from 6.165 s
 to 36.0 ms, versus 44.6 ms and 47.0 ms for the same Rust commands.
+Explicit-file type filters now share that same validation path because Rust
+still searches explicit operands regardless of `-t`/`-T` filters. The parser
+accepts separated and inline short/long forms, plus filters that reference a
+type added earlier in the same command; invalid types still fall back to the
+normal diagnostic. On the 45 MiB fixture, `-t rust needle` improved from
+5.744 s to 34.2 ms, versus 41.5 ms for Rust; `-T rust needle` improved from
+5.774 s to 33.4 ms, versus 49.0 ms for Rust; and
+`--type-add foo:*.txt -t foo needle` improved from 5.795 s to 33.9 ms, versus
+42.0 ms for Rust.
 
 Regex-mode toggles that do not affect plain literal line output now also stay
 eligible for the executable preflight. `--unicode`/`--no-unicode`,

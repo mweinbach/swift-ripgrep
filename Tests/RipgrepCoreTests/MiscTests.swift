@@ -1768,6 +1768,13 @@ struct MiscTests {
             (["--type-clear", "rust"], output),
             (["--type-clear=rust"], output),
             (["--type-add", "wat:*.wat", "--type-add", "combo:include:wat,py"], output),
+            (["-t", "rust"], output),
+            (["--type=rust", "-n"], lineNumberOutput),
+            (["-trust"], output),
+            (["-T", "rust"], output),
+            (["--type-not=rust"], output),
+            (["-Trust", "-n"], lineNumberOutput),
+            (["--type-add", "foo:*.foo", "-t", "foo"], output),
         ] {
             let typeDefinitionOutput = try runExecutableData(
                 typeDefinitionArguments + [
@@ -1778,6 +1785,16 @@ struct MiscTests {
             )
             #expect(typeDefinitionOutput == expectedOutput)
         }
+
+        let invalidTypeFilterOutput = try runExecutableResult([
+            "-t",
+            "missingtype",
+            "needle",
+            root.path("dense.txt"),
+        ])
+        #expect(invalidTypeFilterOutput.stdout.isEmpty)
+        #expect(invalidTypeFilterOutput.stderr == Data("rg: unrecognized file type: missingtype\n".utf8))
+        #expect(invalidTypeFilterOutput.status == 2)
 
         let noUnicodeOutput = try runExecutableData([
             "--no-unicode",

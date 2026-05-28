@@ -481,6 +481,24 @@ struct RipgrepCommand {
                 ? String(argument.dropFirst("--type-clear=".count))
                 : nil
         }
+        func inlineTypeSelectValue(_ argument: String) -> String? {
+            if argument.hasPrefix("--type=") {
+                return String(argument.dropFirst("--type=".count))
+            }
+            if argument.hasPrefix("-t"), argument.count > 2 {
+                return String(argument.dropFirst(2))
+            }
+            return nil
+        }
+        func inlineTypeNegateValue(_ argument: String) -> String? {
+            if argument.hasPrefix("--type-not=") {
+                return String(argument.dropFirst("--type-not=".count))
+            }
+            if argument.hasPrefix("-T"), argument.count > 2 {
+                return String(argument.dropFirst(2))
+            }
+            return nil
+        }
         func typeDefinitionChangesAreValid(_ changes: [TypeChange]) -> Bool {
             guard !changes.isEmpty else {
                 return true
@@ -1065,6 +1083,22 @@ struct RipgrepCommand {
                 argumentIndex += 1
             } else if let typeClear = inlineTypeClearValue(argument) {
                 parsedTypeDefinitionChanges.append(.clear(typeClear))
+            } else if argument == "-t" || argument == "--type" {
+                guard argumentIndex < arguments.count else {
+                    return nil
+                }
+                parsedTypeDefinitionChanges.append(.select(arguments[argumentIndex]))
+                argumentIndex += 1
+            } else if let typeSelect = inlineTypeSelectValue(argument) {
+                parsedTypeDefinitionChanges.append(.select(typeSelect))
+            } else if argument == "-T" || argument == "--type-not" {
+                guard argumentIndex < arguments.count else {
+                    return nil
+                }
+                parsedTypeDefinitionChanges.append(.negate(arguments[argumentIndex]))
+                argumentIndex += 1
+            } else if let typeNegate = inlineTypeNegateValue(argument) {
+                parsedTypeDefinitionChanges.append(.negate(typeNegate))
             } else if argument == "--sort" || argument == "--sortr" {
                 guard argumentIndex < arguments.count,
                       isValidSortValue(arguments[argumentIndex]) else {
