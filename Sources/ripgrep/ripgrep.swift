@@ -743,6 +743,7 @@ struct RipgrepCommand {
             fixedStrings: Bool,
             allowPCREQuotedLiterals: Bool?,
             quiet: Bool,
+            pathOnlyMode: PathOnlyMode?,
             unrestrictedCount: Int
         )? {
             let bytes = Array(argument.utf8)
@@ -759,6 +760,7 @@ struct RipgrepCommand {
             var fixedStrings = false
             var allowPCREQuotedLiterals: Bool?
             var quiet = false
+            var pathOnlyMode: PathOnlyMode?
             var unrestrictedCount = 0
             for byte in bytes.dropFirst() {
                 switch byte {
@@ -790,6 +792,8 @@ struct RipgrepCommand {
                     continue
                 case UInt8(ascii: "q"):
                     quiet = true
+                case UInt8(ascii: "l"):
+                    pathOnlyMode = .matching
                 case UInt8(ascii: "u"):
                     unrestrictedCount += 1
                     guard unrestrictedCount <= 3 else {
@@ -799,7 +803,17 @@ struct RipgrepCommand {
                     return nil
                 }
             }
-            return (caseMode, lineNumber, lineRegexp, wordRegexp, fixedStrings, allowPCREQuotedLiterals, quiet, unrestrictedCount)
+            return (
+                caseMode,
+                lineNumber,
+                lineRegexp,
+                wordRegexp,
+                fixedStrings,
+                allowPCREQuotedLiterals,
+                quiet,
+                pathOnlyMode,
+                unrestrictedCount
+            )
         }
         var allowPCREQuotedLiterals = preflightArguments.allowPCREQuotedLiterals
         var parsedCaseMode = CaseMode.sensitive
@@ -1124,6 +1138,9 @@ struct RipgrepCommand {
                     allowPCREQuotedLiterals = clusterPCREQuotedLiterals
                 }
                 parsedQuiet = parsedQuiet || cluster.quiet
+                if let clusterPathOnlyMode = cluster.pathOnlyMode {
+                    parsedPathOnlyMode = clusterPathOnlyMode
+                }
                 parsedUnrestrictedCount += cluster.unrestrictedCount
                 guard parsedUnrestrictedCount <= 3 else {
                     return nil
@@ -1213,7 +1230,6 @@ struct RipgrepCommand {
         if !fixedStrings,
            (patternCanStartWithDash || !pattern.hasPrefix("-")),
            path != "-",
-           !asciiCaseInsensitive,
            !wordRegexp,
            !parsedLineRegexp,
            !asciiBoundary,
@@ -1223,29 +1239,49 @@ struct RipgrepCommand {
             pattern,
             allowPCREQuotedLiterals: allowPCREQuotedLiterals
            ) {
-            if parsedQuiet {
-                return SwiftDarwinLiteralPreflight.multiLiteralQuietExitCode(
-                    path: path,
-                    literals: literals
-                )
-            }
-            if let parsedPathOnlyMode {
-                guard !parsedPathSeparator else {
-                    return nil
+            if asciiCaseInsensitive {
+                if parsedQuiet {
+                    return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveMultiLiteralQuietExitCode(
+                        path: path,
+                        literals: literals
+                    )
                 }
-                return SwiftDarwinLiteralPreflight.multiLiteralPathOnlyExitCode(
+                if let parsedPathOnlyMode {
+                    guard !parsedPathSeparator else {
+                        return nil
+                    }
+                    return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveMultiLiteralPathOnlyExitCode(
+                        path: path,
+                        literals: literals,
+                        printWhenMatched: parsedPathOnlyMode == .matching,
+                        nullTerminated: parsedNullPathTerminator
+                    )
+                }
+            } else {
+                if parsedQuiet {
+                    return SwiftDarwinLiteralPreflight.multiLiteralQuietExitCode(
+                        path: path,
+                        literals: literals
+                    )
+                }
+                if let parsedPathOnlyMode {
+                    guard !parsedPathSeparator else {
+                        return nil
+                    }
+                    return SwiftDarwinLiteralPreflight.multiLiteralPathOnlyExitCode(
+                        path: path,
+                        literals: literals,
+                        printWhenMatched: parsedPathOnlyMode == .matching,
+                        nullTerminated: parsedNullPathTerminator
+                    )
+                }
+                if let exitCode = SwiftDarwinLiteralPreflight.multiLiteralExitCode(
                     path: path,
                     literals: literals,
-                    printWhenMatched: parsedPathOnlyMode == .matching,
-                    nullTerminated: parsedNullPathTerminator
-                )
-            }
-            if let exitCode = SwiftDarwinLiteralPreflight.multiLiteralExitCode(
-                path: path,
-                literals: literals,
-                lineNumber: lineNumber
-            ) {
-                return exitCode
+                    lineNumber: lineNumber
+                ) {
+                    return exitCode
+                }
             }
         }
 
@@ -1265,9 +1301,18 @@ struct RipgrepCommand {
             return nil
         }
         if parsedQuiet {
-            guard !asciiCaseInsensitive,
-                  !asciiBoundary else {
+            guard !asciiBoundary else {
                 return nil
+            }
+            if asciiCaseInsensitive {
+                guard !wordRegexp,
+                      !parsedLineRegexp else {
+                    return nil
+                }
+                return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveQuietExitCode(
+                    path: path,
+                    literal: literal
+                )
             }
             if wordRegexp {
                 return SwiftDarwinLiteralPreflight.wordQuietExitCode(
@@ -1318,10 +1363,21 @@ struct RipgrepCommand {
             )
         }
         if let parsedPathOnlyMode {
-            guard !asciiCaseInsensitive,
-                  !asciiBoundary,
+            guard !asciiBoundary,
                   !parsedPathSeparator else {
                 return nil
+            }
+            if asciiCaseInsensitive {
+                guard !wordRegexp,
+                      !parsedLineRegexp else {
+                    return nil
+                }
+                return SwiftDarwinLiteralPreflight.asciiCaseInsensitivePathOnlyExitCode(
+                    path: path,
+                    literal: literal,
+                    printWhenMatched: parsedPathOnlyMode == .matching,
+                    nullTerminated: parsedNullPathTerminator
+                )
             }
             if wordRegexp {
                 return SwiftDarwinLiteralPreflight.wordPathOnlyExitCode(

@@ -400,6 +400,17 @@ stdout and measures 2.9 ms, versus 2.4 ms for Rust; `-l 'needle|tail'` emits
 only the file path and measures 3.4 ms, versus 2.5 ms for Rust. The two-literal
 no-match form measured 59.3-62.2 ms, versus 8.8 ms for Rust.
 
+Case-insensitive quiet and path-only searches now have a conservative
+Swift-first match-only preflight. It probes exact, lowercase, and uppercase
+ASCII literal variants through mapped `Data` and falls back whenever those
+checks cannot prove a match, so no-match and mixed-case-only haystacks stay on
+the full searcher. The executable parser also recognizes clustered lowercase
+`l`, so common forms such as `-li NEEDLE` reach the same path-only route. On
+the same fixture, `-qi NEEDLE` improved from 113.8 ms to 11.0 ms, versus
+3.1 ms for Rust; `-li NEEDLE` measured 10.8 ms, versus 2.7 ms for Rust; and
+`-li 'NEEDLE|TAIL'` improved from 2.434 s to 10.7 ms, versus 3.0 ms for Rust.
+The no-match forms still fall back and measured 60.2-83.7 ms.
+
 Positive `-m`/`--max-count` explicit-file literal searches now have a bounded
 Swift line-output preflight. It uses high-level mapped `Data` searches, emits
 each matching line at most once, preserves optional line numbers, and falls

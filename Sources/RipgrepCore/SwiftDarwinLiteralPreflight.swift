@@ -32,6 +32,34 @@ public enum SwiftDarwinLiteralPreflight {
         return 0
     }
 
+    public static func asciiCaseInsensitiveQuietExitCode(
+        path: String,
+        literal: [UInt8]
+    ) -> Int32? {
+        guard let matched = containsASCIICaseInsensitiveLiteral(path: path, literal: literal) else {
+            return nil
+        }
+        return matched ? 0 : 1
+    }
+
+    public static func asciiCaseInsensitivePathOnlyExitCode(
+        path: String,
+        literal: [UInt8],
+        printWhenMatched: Bool,
+        nullTerminated: Bool
+    ) -> Int32? {
+        guard let matched = containsASCIICaseInsensitiveLiteral(path: path, literal: literal) else {
+            return nil
+        }
+        guard matched == printWhenMatched else {
+            return 1
+        }
+        var output = Data(path.utf8)
+        output.append(nullTerminated ? 0 : UInt8(ascii: "\n"))
+        FileHandle.standardOutput.write(output)
+        return 0
+    }
+
     public static func exactLineQuietExitCode(
         path: String,
         literal: [UInt8]
@@ -105,6 +133,34 @@ public enum SwiftDarwinLiteralPreflight {
         nullTerminated: Bool
     ) -> Int32? {
         guard let matched = containsAnyLiteral(path: path, literals: literals) else {
+            return nil
+        }
+        guard matched == printWhenMatched else {
+            return 1
+        }
+        var output = Data(path.utf8)
+        output.append(nullTerminated ? 0 : UInt8(ascii: "\n"))
+        FileHandle.standardOutput.write(output)
+        return 0
+    }
+
+    public static func asciiCaseInsensitiveMultiLiteralQuietExitCode(
+        path: String,
+        literals: [[UInt8]]
+    ) -> Int32? {
+        guard let matched = containsAnyASCIICaseInsensitiveLiteral(path: path, literals: literals) else {
+            return nil
+        }
+        return matched ? 0 : 1
+    }
+
+    public static func asciiCaseInsensitiveMultiLiteralPathOnlyExitCode(
+        path: String,
+        literals: [[UInt8]],
+        printWhenMatched: Bool,
+        nullTerminated: Bool
+    ) -> Int32? {
+        guard let matched = containsAnyASCIICaseInsensitiveLiteral(path: path, literals: literals) else {
             return nil
         }
         guard matched == printWhenMatched else {
@@ -462,6 +518,58 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         return true
+    }
+
+    private static func containsASCIICaseInsensitiveLiteral(path: String, literal: [UInt8]) -> Bool? {
+        guard !literal.isEmpty,
+              !literal.contains(UInt8(ascii: "\n")),
+              literal.allSatisfy({ $0 < 0x80 }) else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return nil
+        }
+        return containsASCIICaseInsensitiveLiteral(data: data, literal: literal) ? true : nil
+    }
+
+    private static func containsAnyASCIICaseInsensitiveLiteral(
+        path: String,
+        literals: [[UInt8]]
+    ) -> Bool? {
+        guard (2...8).contains(literals.count),
+              literals.allSatisfy({
+                !$0.isEmpty
+                    && !$0.contains(UInt8(ascii: "\n"))
+                    && $0.allSatisfy({ $0 < 0x80 })
+              }) else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return nil
+        }
+        for literal in literals where containsASCIICaseInsensitiveLiteral(data: data, literal: literal) {
+            return true
+        }
+        return nil
+    }
+
+    private static func containsASCIICaseInsensitiveLiteral(data: Data, literal: [UInt8]) -> Bool {
+        if data.range(of: Data(literal)) != nil {
+            return true
+        }
+        let lowercase = literal.map(rgSwiftASCIILower)
+        if lowercase != literal,
+           data.range(of: Data(lowercase)) != nil {
+            return true
+        }
+        let uppercase = literal.map(rgSwiftASCIIUpper)
+        return uppercase != literal && data.range(of: Data(uppercase)) != nil
     }
 
     private static func containsAnyLiteral(path: String, literals: [[UInt8]]) -> Bool? {
@@ -1151,6 +1259,13 @@ public enum SwiftDarwinLiteralPreflight {
 private func rgSwiftASCIILower(_ byte: UInt8) -> UInt8 {
     byte >= UInt8(ascii: "A") && byte <= UInt8(ascii: "Z")
         ? byte + (UInt8(ascii: "a") - UInt8(ascii: "A"))
+        : byte
+}
+
+@inline(__always)
+private func rgSwiftASCIIUpper(_ byte: UInt8) -> UInt8 {
+    byte >= UInt8(ascii: "a") && byte <= UInt8(ascii: "z")
+        ? byte - (UInt8(ascii: "a") - UInt8(ascii: "A"))
         : byte
 }
 
