@@ -646,6 +646,19 @@ after a pre-route forced-fallback probe was still running after 60 seconds,
 versus 238.8 ms for Rust; and bounded `--count-matches -m2 -x ...` measured
 3.6 ms.
 
+Exact-line count summaries now also cover simple literal alternations,
+multiple explicit regexps, and literal pattern files. The helper deduplicates
+identical exact-line alternatives and sums per-literal full-line counts, which
+is order-independent for count summaries while still honoring `-m` as a total
+cap. Byte/status checks matched Rust for alternation, repeated `-e`, pattern
+file, bounded, prefixed include-zero no-match, duplicate-alternative, and
+neighboring matching-line fallback controls. On the 4.8 MiB dense fixture,
+`-c -x 'needle needle…|missing'` improved from 1.968 s to 4.6 ms, versus
+11.7 ms for Rust; `--count-matches -x ...` improved from 1.958 s to 4.6 ms,
+versus 24.0 ms for Rust. On the 48 MiB dense fixture, current `-c -x ...`
+measured 15.3 ms versus 91.9 ms for Rust, and current
+`--count-matches -x ...` measured 13.4 ms versus 211.2 ms for Rust.
+
 Exact-line quiet and path-only explicit-file searches now use the same
 Swift-first full-line existence check. The preflight writes no output for
 `-q -x`, prints only the file path for `-l -x`, preserves

@@ -1612,12 +1612,40 @@ struct RipgrepCommand {
         if explicitRegexpPatterns.count > 1 {
             guard parsedMaxCount != 0,
                   path != "-",
-                  !parsedLineRegexp,
                   let literals = explicitRegexpPatternLiterals(
                     explicitRegexpPatterns,
                     fixedStrings: fixedStrings,
                     allowPCREQuotedLiterals: allowPCREQuotedLiterals
                   ) else {
+                return nil
+            }
+            if parsedLineRegexp {
+                guard !wordRegexp,
+                      !asciiCaseInsensitive,
+                      !parsedCrlf,
+                      parsedPathOnlyMode == nil else {
+                    return nil
+                }
+                if parsedPrintMode == .countMatches {
+                    return SwiftDarwinLiteralPreflight.multiLiteralExactLineCountExitCode(
+                        path: path,
+                        literals: literals,
+                        includeZero: parsedIncludeZero,
+                        maxCount: parsedMaxCount,
+                        countPrefix: parsedCountPrefix,
+                        crlfTerminated: parsedCrlf
+                    )
+                }
+                if parsedCount {
+                    return SwiftDarwinLiteralPreflight.multiLiteralExactLineCountExitCode(
+                        path: path,
+                        literals: literals,
+                        includeZero: parsedIncludeZero,
+                        maxCount: parsedMaxCount,
+                        countPrefix: parsedCountPrefix,
+                        crlfTerminated: parsedCrlf
+                    )
+                }
                 return nil
             }
             if wordRegexp {
@@ -1756,13 +1784,41 @@ struct RipgrepCommand {
         if !fixedStrings,
            (patternCanStartWithDash || !pattern.hasPrefix("-")),
            path != "-",
-           !parsedLineRegexp,
            !asciiBoundary,
            parsedMaxCount != 0,
            let literals = multiLiteralAlternation(
             pattern,
             allowPCREQuotedLiterals: allowPCREQuotedLiterals
            ) {
+            if parsedLineRegexp {
+                guard !wordRegexp,
+                      !asciiCaseInsensitive,
+                      !parsedCrlf,
+                      parsedPathOnlyMode == nil else {
+                    return nil
+                }
+                if parsedPrintMode == .countMatches {
+                    return SwiftDarwinLiteralPreflight.multiLiteralExactLineCountExitCode(
+                        path: path,
+                        literals: literals,
+                        includeZero: parsedIncludeZero,
+                        maxCount: parsedMaxCount,
+                        countPrefix: parsedCountPrefix,
+                        crlfTerminated: parsedCrlf
+                    )
+                }
+                if parsedCount {
+                    return SwiftDarwinLiteralPreflight.multiLiteralExactLineCountExitCode(
+                        path: path,
+                        literals: literals,
+                        includeZero: parsedIncludeZero,
+                        maxCount: parsedMaxCount,
+                        countPrefix: parsedCountPrefix,
+                        crlfTerminated: parsedCrlf
+                    )
+                }
+                return nil
+            }
             if wordRegexp {
                 guard !asciiCaseInsensitive else {
                     return nil

@@ -1231,6 +1231,7 @@ struct MiscTests {
         try root.write("needle\npre needle\nneedle\nneedle tail\nlast", to: "exact.txt")
         try root.write(Data("needle\r\nquiet\r\n".utf8), to: "crlf.txt")
         try root.write("needle\nquiet\n", to: "patterns.txt")
+        try root.write("needle\nlast\n", to: "exact-patterns.txt")
         try root.write("needle\n", to: "one-pattern.txt")
         try root.write("missing\nabsent\n", to: "missing-patterns.txt")
         try root.write("needle needle\nquiet line\n", to: "fixed-patterns.txt")
@@ -1733,6 +1734,9 @@ struct MiscTests {
             (["-cix", "-m1", "NEEDLE", root.path("exact.txt")], Data("1\n".utf8), Int32(0)),
             (["-c", "-m1", "-i", "-x", "--include-zero", "12345", root.path("exact.txt")], Data("0\n".utf8), Int32(1)),
             (["-c", "-x", "--include-zero", "missing", root.path("exact.txt")], Data("0\n".utf8), Int32(1)),
+            (["-c", "-x", "needle|last", root.path("exact.txt")], Data("3\n".utf8), Int32(0)),
+            (["-c", "-m2", "-x", "needle|last", root.path("exact.txt")], Data("2\n".utf8), Int32(0)),
+            (["-c", "-x", "-e", "needle", "-e", "last", root.path("exact.txt")], Data("3\n".utf8), Int32(0)),
         ] {
             let countResult = try runExecutableResult(countArguments)
             #expect(countResult.stdout == expectedOutput)
@@ -1878,6 +1882,23 @@ struct MiscTests {
             root.path("exact.txt"),
         ], fixture: {})
         #expect(exactLineBoundedCountMatchesOutput == Data("1\n".utf8))
+
+        let exactLineAlternationCountMatchesOutput = try runExecutableData([
+            "--count-matches",
+            "-x",
+            "needle|last",
+            root.path("exact.txt"),
+        ], fixture: {})
+        #expect(exactLineAlternationCountMatchesOutput == Data("3\n".utf8))
+
+        let exactLinePatternFileCountMatchesOutput = try runExecutableData([
+            "--count-matches",
+            "-x",
+            "-f",
+            root.path("exact-patterns.txt"),
+            root.path("exact.txt"),
+        ], fixture: {})
+        #expect(exactLinePatternFileCountMatchesOutput == exactLineAlternationCountMatchesOutput)
 
         let exactLinePrefixedCountMatchesOutput = try runExecutableData([
             "-H",

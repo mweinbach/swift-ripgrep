@@ -685,6 +685,44 @@ public enum SwiftDarwinLiteralPreflight {
         return matchedLineCount > 0 ? 0 : 1
     }
 
+    public static func multiLiteralExactLineCountExitCode(
+        path: String,
+        literals: [[UInt8]],
+        includeZero: Bool,
+        maxCount: Int? = nil,
+        countPrefix: [UInt8] = [],
+        crlfTerminated: Bool = false
+    ) -> Int32? {
+        guard maxCount.map({ $0 > 0 }) ?? true,
+              let literals = distinctExactLineLiterals(literals),
+              !literals.isEmpty else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !hasBinaryDetectionPrefix(data) else {
+            return nil
+        }
+
+        let limit = maxCount ?? Int.max
+        var matchedLineCount = 0
+        for literal in literals where matchedLineCount < limit {
+            matchedLineCount += exactLineCount(
+                data: data,
+                literal: literal,
+                maxCount: limit - matchedLineCount
+            )
+        }
+
+        if matchedLineCount > 0 || includeZero {
+            var output = Data(countPrefix)
+            output.append(countOutput(matchedLineCount, crlfTerminated: crlfTerminated))
+            FileHandle.standardOutput.write(output)
+        }
+        return matchedLineCount > 0 ? 0 : 1
+    }
+
     private static func exactLineWithoutLineNumbers(
         data: Data,
         literal: [UInt8],
@@ -1891,6 +1929,21 @@ private func distinctASCIIWordLiterals(_ literals: [[UInt8]]) -> [[UInt8]]? {
               let last = literal.last,
               rgSwiftIsASCIIRegexWordByte(first),
               rgSwiftIsASCIIRegexWordByte(last) else {
+            return nil
+        }
+        if !distinct.contains(literal) {
+            distinct.append(literal)
+        }
+    }
+    return distinct
+}
+
+private func distinctExactLineLiterals(_ literals: [[UInt8]]) -> [[UInt8]]? {
+    var distinct: [[UInt8]] = []
+    distinct.reserveCapacity(literals.count)
+    for literal in literals {
+        guard !literal.isEmpty,
+              !literal.contains(UInt8(ascii: "\n")) else {
             return nil
         }
         if !distinct.contains(literal) {
