@@ -331,6 +331,22 @@ covered inline and separated forms; large current/Rust checks covered
 380.2 ms versus 13.501 s before, and current `--regex-size-limit 10M Sherlock`
 at 358.1 ms versus 13.659 s before and 476.9 ms for Rust.
 
+Zero-valued numeric controls now stay on the executable literal preflight when
+they are output-equivalent for a single explicit file search. This covers
+inline, separated, and short forms for `--max-columns 0`, `--max-depth 0`,
+`--maxdepth 0`, `--after-context 0`, `--before-context 0`, and `--context 0`;
+nonzero and invalid values still fall through to the normal parser/searcher.
+`--no-encoding` and standalone `--max-columns-preview` are also treated as
+neutral in this preflight shape. Small previous/current/Rust checks covered
+every accepted form, large current/Rust checks covered representative
+max-columns, context, max-depth, and no-encoding forms, invalid
+`--max-columns=bogus` still reported the normal parser error, and nonzero
+`--context=1` matched Rust through fallback. Ten-run checks on the 252 MiB
+dense fixture measured current `--max-columns=0 Sherlock` at 444.5 ms versus
+532.2 ms before, current `--context=0 Sherlock` at 425.7 ms versus 556.2 ms
+before and 540.6 ms for Rust, and current `--max-depth=0 Sherlock` at
+449.9 ms versus 557.5 ms before.
+
 The Swift-only Darwin mmap/stdout preflight now also covers line-numbered
 medium bounded multi-literal output when no filename, byte-offset, column,
 replacement, only-matching, or vimgrep formatting is requested. Output for

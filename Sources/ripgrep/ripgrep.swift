@@ -390,6 +390,7 @@ struct RipgrepCommand {
                  "--no-ignore-messages",
                  "--no-ignore-parent",
                  "--no-ignore-vcs",
+                 "--no-encoding",
                  "--no-glob-case-insensitive",
                  "--no-include-zero",
                  "--no-invert-match",
@@ -406,6 +407,7 @@ struct RipgrepCommand {
                  "--no-require-git",
                  "--no-pcre2-unicode",
                  "--no-unicode",
+                 "--max-columns-preview",
                  "--one-file-system",
                  "--pcre2-unicode",
                  "--unicode",
@@ -433,6 +435,49 @@ struct RipgrepCommand {
         }
         func inlineSortNone(_ argument: String) -> Bool {
             argument == "--sort=none" || argument == "--sortr=none"
+        }
+        func zeroValueOption(_ argument: String) -> String? {
+            let inlinePrefixes = [
+                "--after-context=",
+                "--before-context=",
+                "--context=",
+                "--max-columns=",
+                "--max-depth=",
+                "--maxdepth=",
+            ]
+            for prefix in inlinePrefixes where argument.hasPrefix(prefix) {
+                return String(argument.dropFirst(prefix.count))
+            }
+            let shortPrefixes = ["-A", "-B", "-C", "-M", "-d"]
+            for prefix in shortPrefixes where argument.hasPrefix(prefix) && argument.count > prefix.count {
+                return String(argument.dropFirst(prefix.count))
+            }
+            return nil
+        }
+        func isSeparatedZeroValueFlag(_ argument: String) -> Bool {
+            switch argument {
+            case "-A",
+                 "-B",
+                 "-C",
+                 "-M",
+                 "-d",
+                 "--after-context",
+                 "--before-context",
+                 "--context",
+                 "--max-columns",
+                 "--max-depth",
+                 "--maxdepth":
+                return true
+            default:
+                return false
+            }
+        }
+        func isZeroInteger(_ value: String) -> Bool {
+            guard !value.hasPrefix("-"),
+                  let number = Int(value) else {
+                return false
+            }
+            return number == 0
         }
         func resourceLimitValue(_ argument: String) -> String? {
             if argument.hasPrefix("--dfa-size-limit=") {
@@ -613,6 +658,16 @@ struct RipgrepCommand {
                 argumentIndex += 1
             } else if let threadCount = inlineThreadCount(argument) {
                 guard isValidNonNegativeInteger(threadCount) else {
+                    return nil
+                }
+            } else if isSeparatedZeroValueFlag(argument) {
+                guard argumentIndex < arguments.count,
+                      isZeroInteger(arguments[argumentIndex]) else {
+                    return nil
+                }
+                argumentIndex += 1
+            } else if let zeroValue = zeroValueOption(argument) {
+                guard isZeroInteger(zeroValue) else {
                     return nil
                 }
             } else if isResourceLimitFlag(argument) {

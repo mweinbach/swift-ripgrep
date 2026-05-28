@@ -1408,6 +1408,7 @@ struct MiscTests {
             "--no-block-buffered",
             "--no-binary",
             "--no-context-separator",
+            "--no-encoding",
             "--no-glob-case-insensitive",
             "--no-include-zero",
             "--no-invert-match",
@@ -1419,6 +1420,7 @@ struct MiscTests {
             "--no-sort-files",
             "--no-stats",
             "--no-text",
+            "--max-columns-preview",
         ] {
             let neutralResetOutput = try runExecutableData([
                 neutralResetFlag,
@@ -1478,6 +1480,31 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(regexSizeLimitOutput == output)
+
+        for zeroValueArguments in [
+            ["--max-columns=0"],
+            ["--max-columns", "0"],
+            ["-M0"],
+            ["--max-depth=0"],
+            ["--maxdepth=0"],
+            ["--max-depth", "0"],
+            ["-d0"],
+            ["--after-context=0"],
+            ["--before-context=0"],
+            ["--context=0"],
+            ["-A0"],
+            ["-B0"],
+            ["-C0"],
+        ] {
+            let zeroValueOutput = try runExecutableData(
+                zeroValueArguments + [
+                    "needle",
+                    root.path("dense.txt"),
+                ],
+                fixture: {}
+            )
+            #expect(zeroValueOutput == output)
+        }
 
         let hiddenFlagOutput = try runExecutableData([
             "--hidden",
