@@ -4,6 +4,25 @@ import Foundation
 import Darwin
 
 public enum SwiftDarwinLiteralPreflight {
+    private static func appendPathTerminator(
+        to output: inout Data,
+        nullTerminated: Bool,
+        crlfTerminated: Bool
+    ) {
+        if nullTerminated {
+            output.append(0)
+        } else if crlfTerminated {
+            output.append(UInt8(ascii: "\r"))
+            output.append(UInt8(ascii: "\n"))
+        } else {
+            output.append(UInt8(ascii: "\n"))
+        }
+    }
+
+    private static func countOutput(_ count: Int, crlfTerminated: Bool) -> Data {
+        Data("\(count)\(crlfTerminated ? "\r\n" : "\n")".utf8)
+    }
+
     public static func quietExitCode(
         path: String,
         literal: [UInt8]
@@ -18,7 +37,8 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literal: [UInt8],
         printWhenMatched: Bool,
-        nullTerminated: Bool
+        nullTerminated: Bool,
+        crlfTerminated: Bool = false
     ) -> Int32? {
         guard let matched = containsLiteral(path: path, literal: literal) else {
             return nil
@@ -27,7 +47,7 @@ public enum SwiftDarwinLiteralPreflight {
             return 1
         }
         var output = Data(path.utf8)
-        output.append(nullTerminated ? 0 : UInt8(ascii: "\n"))
+        appendPathTerminator(to: &output, nullTerminated: nullTerminated, crlfTerminated: crlfTerminated)
         FileHandle.standardOutput.write(output)
         return 0
     }
@@ -46,7 +66,8 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literal: [UInt8],
         printWhenMatched: Bool,
-        nullTerminated: Bool
+        nullTerminated: Bool,
+        crlfTerminated: Bool = false
     ) -> Int32? {
         guard let matched = containsASCIICaseInsensitiveLiteral(path: path, literal: literal) else {
             return nil
@@ -55,7 +76,7 @@ public enum SwiftDarwinLiteralPreflight {
             return 1
         }
         var output = Data(path.utf8)
-        output.append(nullTerminated ? 0 : UInt8(ascii: "\n"))
+        appendPathTerminator(to: &output, nullTerminated: nullTerminated, crlfTerminated: crlfTerminated)
         FileHandle.standardOutput.write(output)
         return 0
     }
@@ -74,7 +95,8 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literal: [UInt8],
         printWhenMatched: Bool,
-        nullTerminated: Bool
+        nullTerminated: Bool,
+        crlfTerminated: Bool = false
     ) -> Int32? {
         guard let matched = containsExactLine(path: path, literal: literal) else {
             return nil
@@ -83,7 +105,7 @@ public enum SwiftDarwinLiteralPreflight {
             return 1
         }
         var output = Data(path.utf8)
-        output.append(nullTerminated ? 0 : UInt8(ascii: "\n"))
+        appendPathTerminator(to: &output, nullTerminated: nullTerminated, crlfTerminated: crlfTerminated)
         FileHandle.standardOutput.write(output)
         return 0
     }
@@ -102,7 +124,8 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literal: [UInt8],
         printWhenMatched: Bool,
-        nullTerminated: Bool
+        nullTerminated: Bool,
+        crlfTerminated: Bool = false
     ) -> Int32? {
         guard let matched = containsASCIICaseInsensitiveExactLine(path: path, literal: literal) else {
             return nil
@@ -111,7 +134,7 @@ public enum SwiftDarwinLiteralPreflight {
             return 1
         }
         var output = Data(path.utf8)
-        output.append(nullTerminated ? 0 : UInt8(ascii: "\n"))
+        appendPathTerminator(to: &output, nullTerminated: nullTerminated, crlfTerminated: crlfTerminated)
         FileHandle.standardOutput.write(output)
         return 0
     }
@@ -120,16 +143,17 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literal: [UInt8],
         includeZero: Bool,
-        maxCount: Int
+        maxCount: Int,
+        crlfTerminated: Bool = false
     ) -> Int32? {
         guard maxCount == 1,
               let matched = containsASCIICaseInsensitiveLiteral(path: path, literal: literal) else {
             return nil
         }
         if matched {
-            FileHandle.standardOutput.write(Data("1\n".utf8))
+            FileHandle.standardOutput.write(countOutput(1, crlfTerminated: crlfTerminated))
         } else if includeZero {
-            FileHandle.standardOutput.write(Data("0\n".utf8))
+            FileHandle.standardOutput.write(countOutput(0, crlfTerminated: crlfTerminated))
         }
         return matched ? 0 : 1
     }
@@ -138,16 +162,17 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literal: [UInt8],
         includeZero: Bool,
-        maxCount: Int
+        maxCount: Int,
+        crlfTerminated: Bool = false
     ) -> Int32? {
         guard maxCount == 1,
               let matched = containsASCIICaseInsensitiveExactLine(path: path, literal: literal) else {
             return nil
         }
         if matched {
-            FileHandle.standardOutput.write(Data("1\n".utf8))
+            FileHandle.standardOutput.write(countOutput(1, crlfTerminated: crlfTerminated))
         } else if includeZero {
-            FileHandle.standardOutput.write(Data("0\n".utf8))
+            FileHandle.standardOutput.write(countOutput(0, crlfTerminated: crlfTerminated))
         }
         return matched ? 0 : 1
     }
@@ -166,7 +191,8 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literal: [UInt8],
         printWhenMatched: Bool,
-        nullTerminated: Bool
+        nullTerminated: Bool,
+        crlfTerminated: Bool = false
     ) -> Int32? {
         guard let matched = containsWordLiteral(path: path, literal: literal) else {
             return nil
@@ -175,7 +201,7 @@ public enum SwiftDarwinLiteralPreflight {
             return 1
         }
         var output = Data(path.utf8)
-        output.append(nullTerminated ? 0 : UInt8(ascii: "\n"))
+        appendPathTerminator(to: &output, nullTerminated: nullTerminated, crlfTerminated: crlfTerminated)
         FileHandle.standardOutput.write(output)
         return 0
     }
@@ -194,7 +220,8 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literals: [[UInt8]],
         printWhenMatched: Bool,
-        nullTerminated: Bool
+        nullTerminated: Bool,
+        crlfTerminated: Bool = false
     ) -> Int32? {
         guard let matched = containsAnyLiteral(path: path, literals: literals) else {
             return nil
@@ -203,7 +230,7 @@ public enum SwiftDarwinLiteralPreflight {
             return 1
         }
         var output = Data(path.utf8)
-        output.append(nullTerminated ? 0 : UInt8(ascii: "\n"))
+        appendPathTerminator(to: &output, nullTerminated: nullTerminated, crlfTerminated: crlfTerminated)
         FileHandle.standardOutput.write(output)
         return 0
     }
@@ -222,7 +249,8 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literals: [[UInt8]],
         printWhenMatched: Bool,
-        nullTerminated: Bool
+        nullTerminated: Bool,
+        crlfTerminated: Bool = false
     ) -> Int32? {
         guard let matched = containsAnyASCIICaseInsensitiveLiteral(path: path, literals: literals) else {
             return nil
@@ -231,7 +259,7 @@ public enum SwiftDarwinLiteralPreflight {
             return 1
         }
         var output = Data(path.utf8)
-        output.append(nullTerminated ? 0 : UInt8(ascii: "\n"))
+        appendPathTerminator(to: &output, nullTerminated: nullTerminated, crlfTerminated: crlfTerminated)
         FileHandle.standardOutput.write(output)
         return 0
     }
@@ -316,7 +344,8 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literal: [UInt8],
         includeZero: Bool,
-        maxCount: Int? = nil
+        maxCount: Int? = nil,
+        crlfTerminated: Bool = false
     ) -> Int32? {
         guard !literal.isEmpty,
               !literal.contains(UInt8(ascii: "\n")),
@@ -348,7 +377,7 @@ public enum SwiftDarwinLiteralPreflight {
         }
 
         if matchedLineCount > 0 || includeZero {
-            FileHandle.standardOutput.write(Data("\(matchedLineCount)\n".utf8))
+            FileHandle.standardOutput.write(countOutput(matchedLineCount, crlfTerminated: crlfTerminated))
         }
         return matchedLineCount > 0 ? 0 : 1
     }
@@ -446,7 +475,8 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literal: [UInt8],
         includeZero: Bool,
-        maxCount: Int? = nil
+        maxCount: Int? = nil,
+        crlfTerminated: Bool = false
     ) -> Int32? {
         guard !literal.isEmpty,
               !literal.contains(UInt8(ascii: "\n")),
@@ -466,7 +496,7 @@ public enum SwiftDarwinLiteralPreflight {
             maxCount: maxCount
         )
         if matchedLineCount > 0 || includeZero {
-            FileHandle.standardOutput.write(Data("\(matchedLineCount)\n".utf8))
+            FileHandle.standardOutput.write(countOutput(matchedLineCount, crlfTerminated: crlfTerminated))
         }
         return matchedLineCount > 0 ? 0 : 1
     }

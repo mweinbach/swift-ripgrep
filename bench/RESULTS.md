@@ -685,6 +685,20 @@ about 0.82 s and `-0 Sherlock` at about 0.85 s. Seven-run current checks on the
 same fixture shape measured 8.3 ms and 8.4 ms respectively, in line with the
 plain Swift preflight at 8.6 ms and Rust `--null Sherlock` at 9.0 ms.
 
+CRLF path-only and counted executable preflight output now uses Rust-compatible
+`\r\n` terminators, while `--null` path terminators still take precedence. The
+parser also tracks ordered `--null-data`/`--crlf` state so Rust-equivalent
+reset forms such as `--null-data --crlf` and `--null-data --crlf --no-crlf`
+can use the executable preflight, while active final `--null-data` remains on
+the full path. Focused coverage and direct release byte checks matched Rust for
+CRLF path summaries, CRLF counts, null path summaries, active null-data line
+records, quiet reset forms, and null-data reset path/count summaries. On a 50
+KiB dense fixture, a pre-slice shell probe for `--null-data --crlf needle`
+measured 45.0 ms before the reset fast path; final no-shell hyperfine checks
+measured 3.4 ms, versus 3.1 ms for Rust. Current no-shell CRLF summary checks
+measured `--crlf -l needle` at 3.9 ms versus 3.1 ms for Rust, and
+`--crlf -c -m1 needle` at 3.4 ms versus 2.8 ms for Rust.
+
 Explicit-file `--max-filesize` values now stay on the executable literal
 preflight because the limit applies only to non-explicit files. The parser
 accepts inline and separated K/M/G size values and leaves invalid values on the

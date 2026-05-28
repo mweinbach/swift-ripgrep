@@ -1243,6 +1243,20 @@ struct MiscTests {
 
         """.utf8))
 
+        for nullDataResetArguments in [
+            ["--null-data", "--crlf"],
+            ["--null-data", "--crlf", "--no-crlf"],
+        ] {
+            let nullDataResetOutput = try runExecutableData(
+                nullDataResetArguments + [
+                    "needle",
+                    root.path("dense.txt"),
+                ],
+                fixture: {}
+            )
+            #expect(nullDataResetOutput == output)
+        }
+
         let ignoreCaseOutput = try runExecutableData([
             "-i",
             "needle",
@@ -1337,9 +1351,13 @@ struct MiscTests {
         for (pathOnlyArguments, expectedOutput, expectedStatus) in [
             (["-l", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
             (["--line-buffered", "-l", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
+            (["--crlf", "-l", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt"))\r\n".utf8), Int32(0)),
+            (["--crlf", "--null", "-l", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt"))\0".utf8), Int32(0)),
+            (["--null-data", "--crlf", "-l", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt"))\r\n".utf8), Int32(0)),
             (["--files-with-matches", "--null", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt"))\0".utf8), Int32(0)),
             (["-l", "missing", root.path("dense.txt")], Data(), Int32(1)),
             (["--files-without-match", "missing", root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
+            (["--crlf", "--files-without-match", "missing", root.path("dense.txt")], Data("\(root.path("dense.txt"))\r\n".utf8), Int32(0)),
             (["--files-without-match", "needle", root.path("dense.txt")], Data(), Int32(1)),
             (["-li", "NEEDLE", root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
             (["--files-without-match", "-i", "NEEDLE", root.path("dense.txt")], Data(), Int32(1)),
@@ -1449,6 +1467,9 @@ struct MiscTests {
             (["--count", "missing", root.path("quiet-no-match.txt")], Data(), Int32(1)),
             (["--count", "--include-zero", "missing", root.path("quiet-no-match.txt")], Data("0\n".utf8), Int32(1)),
             (["-c", "-m1", "needle", root.path("dense.txt")], Data("1\n".utf8), Int32(0)),
+            (["--crlf", "-c", "-m1", "needle", root.path("dense.txt")], Data("1\r\n".utf8), Int32(0)),
+            (["--null-data", "--crlf", "-c", "-m1", "needle", root.path("dense.txt")], Data("1\r\n".utf8), Int32(0)),
+            (["--crlf", "-c", "-m1", "--include-zero", "missing", root.path("dense.txt")], Data("0\r\n".utf8), Int32(1)),
             (["--line-buffered", "-c", "-m1", "needle", root.path("dense.txt")], Data("1\n".utf8), Int32(0)),
             (["-c", "-m1", "-i", "NEEDLE", root.path("dense.txt")], Data("1\n".utf8), Int32(0)),
             (["-ci", "-m1", "NEEDLE", root.path("dense.txt")], Data("1\n".utf8), Int32(0)),

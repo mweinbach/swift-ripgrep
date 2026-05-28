@@ -930,6 +930,7 @@ struct RipgrepCommand {
         var parsedStats = false
         var parsedStopOnNonmatch = false
         var parsedTrim = false
+        var parsedNullData = false
         var parsedTypeDefinitionChanges: [TypeChange] = []
         var parsedUnrestrictedCount = 0
         var parsedWithFilename = false
@@ -1056,7 +1057,11 @@ struct RipgrepCommand {
                 parsedNoMmap = false
             } else if argument == "--crlf" {
                 parsedCrlf = true
+                parsedNullData = false
             } else if argument == "--no-crlf" {
+                parsedCrlf = false
+            } else if argument == "--null-data" {
+                parsedNullData = true
                 parsedCrlf = false
             } else if argument == "-U" || argument == "--multiline" {
                 parsedStopOnNonmatch = false
@@ -1427,6 +1432,7 @@ struct RipgrepCommand {
               !parsedJson,
               parsedMaxColumns == 0,
               parsedMaxDepth == 0,
+              !parsedNullData,
               !parsedPassthru,
               !parsedSearchZip,
               !parsedStats,
@@ -1498,7 +1504,8 @@ struct RipgrepCommand {
                         path: path,
                         literals: literals,
                         printWhenMatched: parsedPathOnlyMode == .matching,
-                        nullTerminated: parsedNullPathTerminator
+                        nullTerminated: parsedNullPathTerminator,
+                        crlfTerminated: parsedCrlf
                     )
                 }
             } else {
@@ -1516,7 +1523,8 @@ struct RipgrepCommand {
                         path: path,
                         literals: literals,
                         printWhenMatched: parsedPathOnlyMode == .matching,
-                        nullTerminated: parsedNullPathTerminator
+                        nullTerminated: parsedNullPathTerminator,
+                        crlfTerminated: parsedCrlf
                     )
                 }
                 guard !parsedLineBuffered else {
@@ -1607,14 +1615,16 @@ struct RipgrepCommand {
                         path: path,
                         literal: literal,
                         includeZero: parsedIncludeZero,
-                        maxCount: parsedMaxCount
+                        maxCount: parsedMaxCount,
+                        crlfTerminated: parsedCrlf
                     )
                 }
                 return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveLimitedCountLineExitCode(
                     path: path,
                     literal: literal,
                     includeZero: parsedIncludeZero,
-                    maxCount: parsedMaxCount
+                    maxCount: parsedMaxCount,
+                    crlfTerminated: parsedCrlf
                 )
             }
             if parsedLineRegexp {
@@ -1625,7 +1635,8 @@ struct RipgrepCommand {
                     path: path,
                     literal: literal,
                     includeZero: parsedIncludeZero,
-                    maxCount: parsedMaxCount
+                    maxCount: parsedMaxCount,
+                    crlfTerminated: parsedCrlf
                 )
             }
             guard let parsedMaxCount else {
@@ -1635,7 +1646,8 @@ struct RipgrepCommand {
                 path: path,
                 literal: literal,
                 includeZero: parsedIncludeZero,
-                maxCount: parsedMaxCount
+                maxCount: parsedMaxCount,
+                crlfTerminated: parsedCrlf
             )
         }
         if let parsedPathOnlyMode {
@@ -1655,14 +1667,16 @@ struct RipgrepCommand {
                         path: path,
                         literal: literal,
                         printWhenMatched: parsedPathOnlyMode == .matching,
-                        nullTerminated: parsedNullPathTerminator
+                        nullTerminated: parsedNullPathTerminator,
+                        crlfTerminated: parsedCrlf
                     )
                 }
                 return SwiftDarwinLiteralPreflight.asciiCaseInsensitivePathOnlyExitCode(
                     path: path,
                     literal: literal,
                     printWhenMatched: parsedPathOnlyMode == .matching,
-                    nullTerminated: parsedNullPathTerminator
+                    nullTerminated: parsedNullPathTerminator,
+                    crlfTerminated: parsedCrlf
                 )
             }
             if wordRegexp {
@@ -1670,7 +1684,8 @@ struct RipgrepCommand {
                     path: path,
                     literal: literal,
                     printWhenMatched: parsedPathOnlyMode == .matching,
-                    nullTerminated: parsedNullPathTerminator
+                    nullTerminated: parsedNullPathTerminator,
+                    crlfTerminated: parsedCrlf
                 )
             }
             if parsedLineRegexp {
@@ -1681,14 +1696,16 @@ struct RipgrepCommand {
                     path: path,
                     literal: literal,
                     printWhenMatched: parsedPathOnlyMode == .matching,
-                    nullTerminated: parsedNullPathTerminator
+                    nullTerminated: parsedNullPathTerminator,
+                    crlfTerminated: parsedCrlf
                 )
             }
             return SwiftDarwinLiteralPreflight.pathOnlyExitCode(
                 path: path,
                 literal: literal,
                 printWhenMatched: parsedPathOnlyMode == .matching,
-                nullTerminated: parsedNullPathTerminator
+                nullTerminated: parsedNullPathTerminator,
+                crlfTerminated: parsedCrlf
             )
         }
         guard !parsedLineBuffered else {
