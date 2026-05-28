@@ -1608,6 +1608,11 @@ struct RipgrepCommand {
         noMmap = parsedNoMmap
         wordRegexp = parsedWordRegexp
         fixedStrings = parsedFixedStrings
+        if parsedOnlyMatching,
+           parsedPrintMode == .count,
+           parsedMaxCount == nil {
+            parsedPrintMode = .countMatches
+        }
         parsedCount = parsedPrintMode == .count
         let parsedPathOnlyMode: PathOnlyMode?
         switch parsedPrintMode {
@@ -2325,6 +2330,10 @@ struct RipgrepCommand {
             && parsedPathOnlyMode == nil
             && !parsedCount
             && parsedPrintMode != .countMatches
+        let parsedOnlyMatchingAffectsPreflightOutput = parsedOnlyMatching
+            && !parsedQuiet
+            && parsedPathOnlyMode == nil
+            && parsedPrintMode != .countMatches
         guard !(parsedLineRegexp && wordRegexp) else {
             return nil
         }
@@ -2350,10 +2359,8 @@ struct RipgrepCommand {
               !parsedVimgrepAffectsPreflightOutput else {
             return nil
         }
-        if parsedOnlyMatching {
+        if parsedOnlyMatchingAffectsPreflightOutput {
             guard parsedPrintMode == .matchingLines,
-                  !parsedQuiet,
-                  parsedPathOnlyMode == nil,
                   !parsedCrlf else {
                 return nil
             }
@@ -2520,7 +2527,7 @@ struct RipgrepCommand {
                 }
                 return nil
             }
-            if parsedOnlyMatching {
+            if parsedOnlyMatchingAffectsPreflightOutput {
                 guard parsedMaxCount == nil else {
                     return nil
                 }
@@ -3056,7 +3063,7 @@ struct RipgrepCommand {
                 }
                 return nil
             }
-            if parsedOnlyMatching {
+            if parsedOnlyMatchingAffectsPreflightOutput {
                 guard parsedMaxCount == nil else {
                     return nil
                 }
@@ -3175,7 +3182,7 @@ struct RipgrepCommand {
         if parsedMaxCount == 0 {
             return nil
         }
-        if parsedOnlyMatching, !parsedLineRegexp {
+        if parsedOnlyMatchingAffectsPreflightOutput, !parsedLineRegexp {
             guard parsedPrintMode == .matchingLines,
                   parsedPathOnlyMode == nil,
                   !parsedQuiet,

@@ -145,6 +145,20 @@ falls back because Rust emits ANSI path/match styling there.
 | `--color=always -c needle` | 114.8 ms | 10.1 ms | 10.0 ms |
 | `--color=always --count-matches needle` | 109.1 ms | 6.9 ms | 18.9 ms |
 
+Only-matching now stays eligible when quiet or path-only modes suppress match
+text, and unbounded `-o -c`/`-o --count-matches` reuse the count-matches
+preflight because Rust counts individual matches in those forms. Matching
+output, CRLF only-matching output, and bounded `-o -c -mN` stay on fallback.
+
+10 timed runs on `/tmp/swift-rg-candidates/trim.txt` with 3 warmups:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `-o -q needle` | 29.2 ms | 4.6 ms | 3.8 ms |
+| `-o -l needle` | 1.435 s | 4.4 ms | 3.9 ms |
+| `-o -c needle` | 1.456 s | 6.6 ms | 18.6 ms |
+| `-o --count-matches needle` | 1.449 s | 7.1 ms | 19.0 ms |
+
 Case-sensitive repeated `-e`/`-f` and top-level literal alternation `--trim`
 forms now use the same mapped trim writer.
 Literal `--invert-match` matching-line output now has its own mapped Swift line

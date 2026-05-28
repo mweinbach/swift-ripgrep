@@ -3870,6 +3870,48 @@ struct MiscTests {
         ], fixture: {})
         #expect(prettyCountMatchesOutput == countMatchesOutput)
 
+        let onlyMatchingQuietResult = try runExecutableResult([
+            "-o",
+            "-q",
+            "needle",
+            root.path("dense.txt"),
+        ])
+        #expect(onlyMatchingQuietResult.status == 0)
+        #expect(onlyMatchingQuietResult.stdout.isEmpty)
+        #expect(onlyMatchingQuietResult.stderr.isEmpty)
+
+        let onlyMatchingPathOnlyOutput = try runExecutableData([
+            "-o",
+            "-l",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(onlyMatchingPathOnlyOutput == Data("\(root.path("dense.txt"))\n".utf8))
+
+        let onlyMatchingFilesWithoutMatchOutput = try runExecutableData([
+            "-o",
+            "--files-without-match",
+            "missing",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(onlyMatchingFilesWithoutMatchOutput == Data("\(root.path("dense.txt"))\n".utf8))
+
+        let onlyMatchingCountMatchesOutput = try runExecutableData([
+            "-o",
+            "--count-matches",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(onlyMatchingCountMatchesOutput == countMatchesOutput)
+
+        let onlyMatchingCountOutput = try runExecutableData([
+            "-o",
+            "-c",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(onlyMatchingCountOutput == countMatchesOutput)
+
         let trimCountMatchesOutput = try runExecutableData([
             "--trim",
             "--count-matches",
