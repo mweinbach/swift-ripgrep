@@ -2414,12 +2414,17 @@ struct RipgrepCommand {
         let parsedEncodingVisibleLineShapeCanUsePreflight = !wordRegexp
             && !parsedLineRegexp
             && !parsedOnlyMatching
+        let parsedUTF8EncodingVisibleLineOutputCanUsePreflight =
+            parsedEncodingVisibleLineOutput
+            && parsedEncodingSupportsUTF8LinePreflight
+            && ((!asciiCaseInsensitive
+                    && parsedEncodingVisibleLineShapeCanUsePreflight
+                    && SwiftDarwinLiteralPreflight.fileCanUseUTF8LinePreflight(path: path))
+                || (!wordRegexp && SwiftDarwinLiteralPreflight.fileCanUseASCIILinePreflight(path: path)))
         let parsedEncodingVisibleLineOutputCanUsePreflight =
-            parsedEncodingVisibleLineShapeCanUsePreflight
-            && (parsedEncodingSupportsLinePreflight
-                || (!asciiCaseInsensitive
-                    && parsedEncodingSupportsUTF8LinePreflight
-                    && SwiftDarwinLiteralPreflight.fileCanUseUTF8LinePreflight(path: path)))
+            parsedEncodingVisibleLineOutput
+            && ((parsedEncodingVisibleLineShapeCanUsePreflight && parsedEncodingSupportsLinePreflight)
+                || parsedUTF8EncodingVisibleLineOutputCanUsePreflight)
         let parsedEncodingAffectsPreflightOutput = !parsedEncodingIsAutomatic
             && (!parsedEncodingSupportsSummaryPreflight
                 || (parsedEncodingVisibleLineOutput

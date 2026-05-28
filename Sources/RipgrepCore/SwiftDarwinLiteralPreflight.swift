@@ -2877,6 +2877,13 @@ public enum SwiftDarwinLiteralPreflight {
         return String(data: data, encoding: .utf8) != nil
     }
 
+    public static func fileCanUseASCIILinePreflight(path: String) -> Bool {
+        guard let data = mappedPreflightData(path: path) else {
+            return false
+        }
+        return data.allSatisfy { $0 < 0x80 }
+    }
+
     private static func literalLineMatchCount(
         path: String,
         literal: [UInt8],

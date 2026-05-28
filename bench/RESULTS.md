@@ -240,6 +240,23 @@ fallback controls.
 | `--encoding=utf-8 -n needle` | 1.813 s | 22.5 ms | 23.5 ms |
 | `--encoding=utf-8 -m2 needle` | 908.6 ms | 7.4 ms | 5.0 ms |
 
+ASCII-only explicit UTF-8 files now also keep selected semantic visible-output
+forms on preflight. This covers ASCII ignore-case, only-matching, and
+exact-line output while preserving Unicode case-folding/word-boundary fallback
+for non-ASCII files. A same-turn probe left `--encoding=utf-8 -w needle` on the
+fallback path after it measured neutral-to-slower with the existing word writer.
+Direct byte/status checks covered `-i`, `-o`, and `-x` outputs plus `-w`,
+Unicode case-fold, and non-ASCII word fallback controls.
+
+10 timed runs on `/tmp/swift-rg-candidates/trim.txt` with 3 warmups, except
+`-x` which used `/tmp/swift-rg-candidates/exact-needle.txt`:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--encoding=utf-8 -i NEEDLE` | 4.863 s | 42.2 ms | 21.1 ms |
+| `--encoding=utf-8 -o needle` | 1.726 s | 37.3 ms | 25.4 ms |
+| `--encoding=utf-8 -x needle` | 2.445 s | 155.3 ms | 27.2 ms |
+
 `--search-zip` now stays on the executable preflight for explicit paths whose
 suffix cannot trigger decompression. Compressed suffixes still fall through to
 the normal searcher so real archives and decompressor errors keep matching

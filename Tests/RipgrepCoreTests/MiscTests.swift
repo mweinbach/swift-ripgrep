@@ -1262,6 +1262,7 @@ struct MiscTests {
         try root.write(Data("needle\0quiet\0needle\0".utf8), to: "nul-records.dat")
         try root.write(Data([0xFF]) + Data("needle raw\nquiet\n".utf8), to: "encoding-none-invalid.txt")
         try root.write(Data([0xEF, 0xBB, 0xBF]) + Data("needle\n".utf8), to: "encoding-none-bom.txt")
+        try root.write(Data([0xE2, 0x84, 0xAA, 0x0A, 0x4B, 0x0A]), to: "utf8-casefold.txt")
         try root.write("quiet\n", to: "quiet-no-match.txt")
         try root.write("""
         hay
@@ -3837,6 +3838,46 @@ struct MiscTests {
             root.path("encoding-none-bom.txt"),
         ], fixture: {})
         #expect(utf8EncodingBOMLineOutput == Data("needle\n".utf8))
+
+        let utf8EncodingIgnoreCaseOutput = try runExecutableData([
+            "--encoding=utf-8",
+            "-i",
+            "NEEDLE",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(utf8EncodingIgnoreCaseOutput == ignoreCaseOutput)
+
+        let utf8EncodingWordOutput = try runExecutableData([
+            "--encoding=utf-8",
+            "-w",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(utf8EncodingWordOutput == output)
+
+        let utf8EncodingExactLineOutput = try runExecutableData([
+            "--encoding=utf-8",
+            "-x",
+            "needle",
+            root.path("exact.txt"),
+        ], fixture: {})
+        #expect(utf8EncodingExactLineOutput == Data("needle\nneedle\n".utf8))
+
+        let utf8EncodingOnlyMatchingOutput = try runExecutableData([
+            "--encoding=utf-8",
+            "-o",
+            "needle",
+            root.path("word-count.txt"),
+        ], fixture: {})
+        #expect(utf8EncodingOnlyMatchingOutput == plainOnlyMatchingOutput)
+
+        let utf8EncodingUnicodeCaseFoldOutput = try runExecutableData([
+            "--encoding=utf-8",
+            "-i",
+            "k",
+            root.path("utf8-casefold.txt"),
+        ], fixture: {})
+        #expect(utf8EncodingUnicodeCaseFoldOutput == Data([0xE2, 0x84, 0xAA, 0x0A, 0x4B, 0x0A]))
 
         let disabledEncodingPathOnlyOutput = try runExecutableData([
             "--encoding=none",
