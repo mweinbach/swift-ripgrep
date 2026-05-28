@@ -28,6 +28,8 @@ count summaries, so heading count and count-matches forms also stay on the
 existing count preflights.
 Single-literal ASCII `--count-matches -i` now has a total-match counter that
 falls back on non-ASCII or binary-prefix haystacks.
+Case-insensitive line counts now use a byte-level matched-line scan that finds
+the next folded literal match and skips directly to the following line.
 
 Benchmarks used `/tmp/swift-rg-bench/stop-on-nonmatch-small.txt`, a 4.8 MiB
 dense ASCII fixture, with 2 warmups and 5 timed runs:
@@ -54,6 +56,9 @@ dense ASCII fixture, with 2 warmups and 5 timed runs:
 | `-n -o -i NEEDLE` | 81.4 ms | 35.2 ms | 51.8 ms |
 | `--count-matches -i NEEDLE` | 35.5 ms | 24.1 ms | 33.0 ms |
 | `--heading -H --count-matches -i NEEDLE` | 142.5 ms | 23.5 ms | 31.9 ms |
+| `-c -i NEEDLE` | 35.2 ms | 22.0 ms | 7.6 ms |
+| `--heading -H -c -i NEEDLE` | 141.3 ms | 21.5 ms | 7.8 ms |
+| `-c -i "NEEDLE\|QUIET"` | 36.6 ms | 22.8 ms | 7.8 ms |
 | `-o -i "NEEDLE\|QUIET"` | 7.718 s | 34.7 ms | 53.4 ms |
 | `-n -o -i "NEEDLE\|QUIET"` | 7.894 s | 44.2 ms | 65.1 ms |
 | `-q -w -i NEEDLE` | 99.3 ms | 5.2 ms | 2.7 ms |

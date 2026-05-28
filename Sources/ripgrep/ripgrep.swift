@@ -2397,12 +2397,9 @@ struct RipgrepCommand {
                         crlfTerminated: parsedCrlf
                     )
                 }
-                guard let parsedMaxCount else {
-                    return nil
-                }
-                return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveLimitedCountLineExitCode(
+                return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveMultiLiteralCountLineExitCode(
                     path: path,
-                    literal: literal,
+                    literals: [literal],
                     includeZero: parsedIncludeZero,
                     maxCount: parsedMaxCount,
                     countPrefix: parsedCountPrefix,

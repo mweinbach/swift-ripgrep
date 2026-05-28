@@ -560,7 +560,7 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
 
-        let matchedLineCount = asciiCaseInsensitiveLineCount(
+        let matchedLineCount = countASCIICaseInsensitiveMatchedLines(
             data: data,
             foldedLiterals: literals,
             maxCount: maxCount
@@ -1442,6 +1442,79 @@ public enum SwiftDarwinLiteralPreflight {
             }
         }
         return matchedLineCount
+    }
+
+    private static func countASCIICaseInsensitiveMatchedLines(
+        data: Data,
+        foldedLiterals: [[UInt8]],
+        maxCount: Int?
+    ) -> Int {
+        guard let minimumLiteralLength = foldedLiterals.map(\.count).min(),
+              data.count >= minimumLiteralLength else {
+            return 0
+        }
+        let limit = maxCount ?? Int.max
+        return data.withUnsafeBytes { rawData in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
+            }
+            let shifts = foldedLiterals.map { literal -> [Int] in
+                var table = [Int](repeating: literal.count, count: 256)
+                if literal.count > 1 {
+                    for index in 0..<(literal.count - 1) {
+                        table[Int(literal[index])] = literal.count - 1 - index
+                    }
+                }
+                return table
+            }
+            let base = rawBase.assumingMemoryBound(to: UInt8.self)
+            var searchOffset = 0
+            var matchedLineCount = 0
+
+            while searchOffset < data.count,
+                  matchedLineCount < limit {
+                var bestStart = Int.max
+                for literalIndex in foldedLiterals.indices {
+                    let literal = foldedLiterals[literalIndex]
+                    guard literal.count <= data.count - searchOffset else {
+                        continue
+                    }
+                    let found = literal.withUnsafeBufferPointer { literalBuffer in
+                        shifts[literalIndex].withUnsafeBufferPointer { shiftBuffer in
+                            rg_memcasemem_ascii_prepared(
+                                base.advanced(by: searchOffset),
+                                data.count - searchOffset,
+                                literalBuffer.baseAddress,
+                                literalBuffer.count,
+                                shiftBuffer.baseAddress
+                            )
+                        }
+                    }
+                    guard let found else {
+                        continue
+                    }
+                    let matchStart = base.distance(to: found)
+                    if matchStart < bestStart {
+                        bestStart = matchStart
+                    }
+                }
+                guard bestStart < data.count else {
+                    break
+                }
+                matchedLineCount += 1
+                let newline = memchr(
+                    base.advanced(by: bestStart),
+                    Int32(UInt8(ascii: "\n")),
+                    data.count - bestStart
+                )
+                if let newline {
+                    searchOffset = base.distance(to: newline.assumingMemoryBound(to: UInt8.self)) + 1
+                } else {
+                    break
+                }
+            }
+            return matchedLineCount
+        }
     }
 
     private static func countASCIICaseInsensitiveMatches(
