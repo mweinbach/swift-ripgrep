@@ -467,12 +467,14 @@ struct RipgrepCommand {
         func isOnlyMatchingFlag(_ argument: String) -> Bool {
             argument == "-o" || argument == "--only-matching"
         }
-        func colorModeMayEmitForPreflight(_ value: String) -> Bool? {
+        func colorModePreflightState(_ value: String) -> (mayEmit: Bool, forcesANSI: Bool)? {
             switch value {
             case "never":
-                return false
-            case "always", "ansi", "auto":
-                return true
+                return (false, false)
+            case "always", "ansi":
+                return (true, true)
+            case "auto":
+                return (true, false)
             default:
                 return nil
             }
@@ -1101,6 +1103,8 @@ struct RipgrepCommand {
         var parsedByteOffset = false
         var parsedColumn = false
         var parsedColorMayEmit = false
+        var parsedColorForcesANSI = false
+        var parsedColorSpecMayChangePath = false
         var parsedContextSeparator: [UInt8]? = [UInt8(ascii: "-"), UInt8(ascii: "-")]
         var parsedFixedStrings = false
         var parsedFieldMatchSeparator = [UInt8(ascii: ":")]
@@ -1351,31 +1355,36 @@ struct RipgrepCommand {
                 }
             } else if argument == "-p" || argument == "--pretty" {
                 parsedColorMayEmit = true
+                parsedColorForcesANSI = true
                 parsedHeading = true
                 parsedLineNumber = true
             } else if argument == "--color" {
                 guard argumentIndex < arguments.count,
-                      let mayEmit = colorModeMayEmitForPreflight(arguments[argumentIndex]) else {
+                      let colorState = colorModePreflightState(arguments[argumentIndex]) else {
                     return nil
                 }
-                parsedColorMayEmit = mayEmit
+                parsedColorMayEmit = colorState.mayEmit
+                parsedColorForcesANSI = colorState.forcesANSI
                 argumentIndex += 1
             } else if argument.hasPrefix("--color=") {
                 let raw = String(argument.dropFirst("--color=".count))
-                guard let mayEmit = colorModeMayEmitForPreflight(raw) else {
+                guard let colorState = colorModePreflightState(raw) else {
                     return nil
                 }
-                parsedColorMayEmit = mayEmit
+                parsedColorMayEmit = colorState.mayEmit
+                parsedColorForcesANSI = colorState.forcesANSI
             } else if argument == "--colors" {
                 guard argumentIndex < arguments.count,
                       RipgrepArgumentParser.isValidColorChange(arguments[argumentIndex]) else {
                     return nil
                 }
+                parsedColorSpecMayChangePath = true
                 argumentIndex += 1
             } else if let colorChange = inlineColorsValue(argument) {
                 guard RipgrepArgumentParser.isValidColorChange(colorChange) else {
                     return nil
                 }
+                parsedColorSpecMayChangePath = true
             } else if argument == "--hyperlink-format" {
                 guard argumentIndex < arguments.count,
                       isPreflightNeutralHyperlinkFormat(arguments[argumentIndex]) else {
@@ -1641,6 +1650,7 @@ struct RipgrepCommand {
                 }
                 if cluster.pretty {
                     parsedColorMayEmit = true
+                    parsedColorForcesANSI = true
                     parsedHeading = true
                 }
                 parsedInvertMatch = parsedInvertMatch || cluster.invertMatch
@@ -1734,10 +1744,24 @@ struct RipgrepCommand {
             ? nil
             : parsedDisplayPath
         let parsedVimgrepForcesFilename = parsedVimgrep && !parsedNoFilename
-        let parsedCountPrefix: [UInt8] = if parsedWithFilename || parsedVimgrepForcesFilename {
+        let parsedRawCountPrefix: [UInt8] = if parsedWithFilename || parsedVimgrepForcesFilename {
             parsedDisplayPath + (parsedNullPathTerminator ? [0] : [UInt8(ascii: ":")])
         } else {
             []
+        }
+        let parsedCountStyleOutput = parsedPrintMode == .count || parsedPrintMode == .countMatches
+        let parsedCanEmitDefaultColoredCountPrefix = parsedColorMayEmit
+            && parsedColorForcesANSI
+            && !parsedColorSpecMayChangePath
+            && parsedCountStyleOutput
+            && !parsedRawCountPrefix.isEmpty
+        let parsedCountPrefix: [UInt8] = if parsedCanEmitDefaultColoredCountPrefix {
+            Array("\u{1B}[0m\u{1B}[35m".utf8)
+                + parsedDisplayPath
+                + Array("\u{1B}[0m".utf8)
+                + (parsedNullPathTerminator ? [0] : [UInt8(ascii: ":")])
+        } else {
+            parsedRawCountPrefix
         }
         let parsedHeadingPrefix: [UInt8] = if parsedHeading && parsedWithFilename {
             if parsedNullPathTerminator {
@@ -2422,10 +2446,10 @@ struct RipgrepCommand {
             && parsedPathOnlyMode == nil
             && !parsedCount
             && parsedPrintMode != .countMatches
-        let parsedCountStyleOutput = parsedCount || parsedPrintMode == .countMatches
         let parsedColorAffectsPreflightOutput = parsedColorMayEmit
             && !parsedQuiet
-            && (!parsedCountStyleOutput || !parsedCountPrefix.isEmpty)
+            && (!parsedCountStyleOutput
+                || (!parsedRawCountPrefix.isEmpty && !parsedCanEmitDefaultColoredCountPrefix))
         let parsedVimgrepAffectsPreflightOutput = parsedVimgrep
             && !parsedQuiet
             && parsedPathOnlyMode == nil

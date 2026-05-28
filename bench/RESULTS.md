@@ -301,6 +301,9 @@ visible byte-offset fallback control. A follow-up accepts clustered `p`
 pretty mode when quiet or unprefixed count output makes color formatting
 unobservable, while prefixed colored counts still fall back so ANSI path
 coloring remains byte-identical to Rust.
+The next slice writes Rust's default ANSI path coloring directly for forced
+colored count prefixes, keeping `--color=auto` and custom `--colors` path
+styles on the fallback path where terminal/custom styling is observable.
 
 7 timed runs on `/tmp/swift-rg-candidates/cluster-dense.txt`, a 600,000-line
 literal fixture:
@@ -313,6 +316,16 @@ literal fixture:
 | `-Hc needle` | 43.5 ms | 13.2 ms | 10.8 ms |
 | `-pq needle` | 456.0 ms | 5.4 ms | 5.0 ms |
 | `-pc needle` | 277.5 ms | 12.7 ms | 11.8 ms |
+
+7 timed runs on a generated 300,000-line literal fixture, with the before
+column forcing the generic Swift path through `RIPGREP_CONFIG_PATH=`:
+
+| Flags | Swift before | Swift after | rg |
+|---|---:|---:|---:|
+| `--color=always -H -c needle` | 135.8 ms | 8.6 ms | 8.0 ms |
+| `-pHc needle` | 129.8 ms | 8.7 ms | 8.2 ms |
+| `--color=always --count-matches -H needle` | 136.6 ms | 7.5 ms | 13.4 ms |
+| `--color=always --null -H -c needle` | 134.4 ms | 8.1 ms | 7.7 ms |
 
 Case-sensitive repeated `-e`/`-f` and top-level literal alternation `--trim`
 forms now use the same mapped trim writer.

@@ -2957,6 +2957,38 @@ struct MiscTests {
             "\u{1B}[0m\u{1B}[35m\(root.path("dense.txt"))\u{1B}[0m:3\n".utf8
         ))
 
+        let ansiPrefixedCountOutput = try runExecutableData([
+            "--color=ansi",
+            "-H",
+            "-c",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(ansiPrefixedCountOutput == clusteredPrettyPrefixedCountOutput)
+
+        let coloredNullPrefixedCountOutput = try runExecutableData([
+            "--color=always",
+            "--null",
+            "-H",
+            "-c",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(coloredNullPrefixedCountOutput == Data(
+            ("\u{1B}[0m\u{1B}[35m\(root.path("dense.txt"))\u{1B}[0m\0" + "3\n").utf8
+        ))
+
+        let coloredPrefixedCountMatchesOutput = try runExecutableData([
+            "--color=always",
+            "--count-matches",
+            "-H",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(coloredPrefixedCountMatchesOutput == Data(
+            "\u{1B}[0m\u{1B}[35m\(root.path("dense.txt"))\u{1B}[0m:5\n".utf8
+        ))
+
         let withFilenameNullOutput = try runExecutableData([
             "--with-filename",
             "--null",
@@ -4164,6 +4196,28 @@ struct MiscTests {
         ], fixture: {})
         #expect(colorPrefixedCountOutput == Data(
             "\u{1B}[0m\u{1B}[35m\(root.path("dense.txt"))\u{1B}[0m:3\n".utf8
+        ))
+
+        let colorAutoPrefixedCountOutput = try runExecutableData([
+            "--color=auto",
+            "-H",
+            "-c",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(colorAutoPrefixedCountOutput == Data("\(root.path("dense.txt")):3\n".utf8))
+
+        let customPathColorPrefixedCountOutput = try runExecutableData([
+            "--colors",
+            "path:fg:red",
+            "--color=always",
+            "-H",
+            "-c",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(customPathColorPrefixedCountOutput == Data(
+            "\u{1B}[0m\u{1B}[31m\(root.path("dense.txt"))\u{1B}[0m:3\n".utf8
         ))
 
         let prettyCountMatchesOutput = try runExecutableData([
