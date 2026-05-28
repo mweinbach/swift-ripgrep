@@ -1862,6 +1862,8 @@ struct MiscTests {
         }
 
         for orderedResetArguments in [
+            ["--invert-match", "--no-invert-match"],
+            ["-v", "--no-invert-match"],
             ["--json", "--no-json"],
             ["--stats", "--no-stats"],
             ["--search-zip", "--no-search-zip"],
@@ -1876,6 +1878,14 @@ struct MiscTests {
             )
             #expect(orderedResetOutput == output)
         }
+
+        let clusteredInvertResetOutput = try runExecutableData([
+            "-vn",
+            "--no-invert-match",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(clusteredInvertResetOutput == lineNumberOutput)
 
         let inlineSortNoneOutput = try runExecutableData([
             "--sort=none",
@@ -1999,6 +2009,33 @@ struct MiscTests {
                 fixture: {}
             )
             #expect(zeroValueOutput == output)
+        }
+
+        for orderedZeroValueArguments in [
+            ["--max-columns=100", "--max-columns=0"],
+            ["--max-columns", "100", "--max-columns", "0"],
+            ["-M100", "-M0"],
+            ["--max-depth=1", "--max-depth=0"],
+            ["--maxdepth=1", "--maxdepth=0"],
+            ["--max-depth", "1", "--max-depth", "0"],
+            ["-d1", "-d0"],
+            ["--passthru", "--context=0"],
+            ["--passthrough", "--after-context=0"],
+            ["--context=1", "--context=0"],
+            ["--after-context=1", "--context=0", "--after-context=0"],
+            ["--before-context=1", "--context=0", "--before-context=0"],
+            ["-C1", "-C0"],
+            ["-A1", "-C0", "-A0"],
+            ["-B1", "-C0", "-B0"],
+        ] {
+            let orderedZeroValueOutput = try runExecutableData(
+                orderedZeroValueArguments + [
+                    "needle",
+                    root.path("dense.txt"),
+                ],
+                fixture: {}
+            )
+            #expect(orderedZeroValueOutput == output)
         }
 
         for neutralValueArguments in [

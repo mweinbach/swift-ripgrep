@@ -537,7 +537,7 @@ Default-reset and no-op selection flags now also stay eligible for the
 executable literal preflight when the command is still a single explicit file
 search. This covers buffering/search/output resets such as
 `--no-block-buffered`, `--no-json`, `--no-stats`, `--no-search-zip`, glob-case
-toggles without globs, ordered output/search toggles that finish disabled,
+toggles without globs, ordered output/search/invert toggles that finish disabled,
 `--sort none`/`--sortr none`, and validated `--threads N` forms. Small
 previous/current/Rust checks covered each accepted form, large current/Rust
 checks covered `--no-block-buffered`, `--sort=none`, and `--threads=1`, and
@@ -551,7 +551,10 @@ measured `--json --no-json needle` improving from 84.3 ms to 35.9 ms, versus
 42.3 ms for Rust; `--stats --no-stats needle` from 83.4 ms to 34.5 ms, versus
 43.0 ms for Rust; `--search-zip --no-search-zip needle` from 85.2 ms to
 35.5 ms, versus 42.3 ms for Rust; and `-z --no-search-zip needle` at 34.0 ms,
-versus 42.3 ms for Rust.
+versus 42.3 ms for Rust. A follow-up ordered invert reset check measured
+`--invert-match --no-invert-match needle` improving from 86.6 ms to 37.9 ms,
+versus 46.9 ms for Rust, and `-v --no-invert-match needle` from 67.0 ms to
+37.7 ms, versus 46.6 ms for Rust.
 
 Valid regex/DFA resource limit flags now also remain eligible for the
 executable literal preflight. The preflight parser accepts separated and inline
@@ -568,7 +571,9 @@ Zero-valued numeric controls now stay on the executable literal preflight when
 they are output-equivalent for a single explicit file search. This covers
 inline, separated, and short forms for `--max-columns 0`, `--max-depth 0`,
 `--maxdepth 0`, `--after-context 0`, `--before-context 0`, and `--context 0`;
-nonzero and invalid values still fall through to the normal parser/searcher.
+ordered numeric controls that finish at zero, and `--passthru`/`--passthrough`
+forms reset by later zero-context flags; nonzero final values and invalid
+values still fall through to the normal parser/searcher.
 `--no-encoding` and standalone `--max-columns-preview` are also treated as
 neutral in this preflight shape. Small previous/current/Rust checks covered
 every accepted form, large current/Rust checks covered representative
@@ -578,7 +583,12 @@ max-columns, context, max-depth, and no-encoding forms, invalid
 dense fixture measured current `--max-columns=0 Sherlock` at 444.5 ms versus
 532.2 ms before, current `--context=0 Sherlock` at 425.7 ms versus 556.2 ms
 before and 540.6 ms for Rust, and current `--max-depth=0 Sherlock` at
-449.9 ms versus 557.5 ms before.
+449.9 ms versus 557.5 ms before. Ordered reset checks on the 45 MiB fixture
+measured `--passthru --context=0 needle` improving from 91.7 ms to 38.4 ms,
+versus 47.4 ms for Rust; `--context=1 --context=0 needle` from 91.0 ms to
+38.1 ms, versus 47.4 ms for Rust; and
+`--max-columns=100 --max-columns=0 needle` from 82.4 ms to 38.1 ms, versus
+47.0 ms for Rust.
 
 Separator and metadata value flags that cannot affect plain matching-line
 bytes now also remain eligible for the executable literal preflight. The parser

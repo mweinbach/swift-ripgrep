@@ -639,48 +639,58 @@ struct RipgrepCommand {
             }
             return nil
         }
-        func zeroValueOption(_ argument: String) -> String? {
-            let inlinePrefixes = [
-                "--after-context=",
-                "--before-context=",
-                "--context=",
-                "--max-columns=",
-                "--max-depth=",
-                "--maxdepth=",
+        enum NumericPreflightOption {
+            case afterContext
+            case beforeContext
+            case context
+            case maxColumns
+            case maxDepth
+        }
+        func inlineNumericPreflightOption(_ argument: String) -> (NumericPreflightOption, String)? {
+            let inlinePrefixes: [(String, NumericPreflightOption)] = [
+                ("--after-context=", .afterContext),
+                ("--before-context=", .beforeContext),
+                ("--context=", .context),
+                ("--max-columns=", .maxColumns),
+                ("--max-depth=", .maxDepth),
+                ("--maxdepth=", .maxDepth),
             ]
-            for prefix in inlinePrefixes where argument.hasPrefix(prefix) {
-                return String(argument.dropFirst(prefix.count))
+            for (prefix, option) in inlinePrefixes where argument.hasPrefix(prefix) {
+                return (option, String(argument.dropFirst(prefix.count)))
             }
-            let shortPrefixes = ["-A", "-B", "-C", "-M", "-d"]
-            for prefix in shortPrefixes where argument.hasPrefix(prefix) && argument.count > prefix.count {
-                return String(argument.dropFirst(prefix.count))
+            let shortPrefixes: [(String, NumericPreflightOption)] = [
+                ("-A", .afterContext),
+                ("-B", .beforeContext),
+                ("-C", .context),
+                ("-M", .maxColumns),
+                ("-d", .maxDepth),
+            ]
+            for (prefix, option) in shortPrefixes where argument.hasPrefix(prefix) && argument.count > prefix.count {
+                return (option, String(argument.dropFirst(prefix.count)))
             }
             return nil
         }
-        func isSeparatedZeroValueFlag(_ argument: String) -> Bool {
+        func separatedNumericPreflightOption(_ argument: String) -> NumericPreflightOption? {
             switch argument {
             case "-A",
-                 "-B",
-                 "-C",
-                 "-M",
-                 "-d",
-                 "--after-context",
-                 "--before-context",
-                 "--context",
-                 "--max-columns",
+                 "--after-context":
+                return .afterContext
+            case "-B",
+                 "--before-context":
+                return .beforeContext
+            case "-C",
+                 "--context":
+                return .context
+            case "-M",
+                 "--max-columns":
+                return .maxColumns
+            case "-d",
                  "--max-depth",
                  "--maxdepth":
-                return true
+                return .maxDepth
             default:
-                return false
+                return nil
             }
-        }
-        func isZeroInteger(_ value: String) -> Bool {
-            guard !value.hasPrefix("-"),
-                  let number = Int(value) else {
-                return false
-            }
-            return number == 0
         }
         func isSeparatedNeutralValueFlag(_ argument: String) -> Bool {
             switch argument {
@@ -773,6 +783,7 @@ struct RipgrepCommand {
             wordRegexp: Bool,
             fixedStrings: Bool,
             allowPCREQuotedLiterals: Bool?,
+            invertMatch: Bool,
             quiet: Bool,
             count: Bool,
             pathOnlyMode: PathOnlyMode?,
@@ -791,6 +802,7 @@ struct RipgrepCommand {
             var wordRegexp = false
             var fixedStrings = false
             var allowPCREQuotedLiterals: Bool?
+            var invertMatch = false
             var quiet = false
             var count = false
             var pathOnlyMode: PathOnlyMode?
@@ -823,6 +835,8 @@ struct RipgrepCommand {
                     allowPCREQuotedLiterals = true
                 case UInt8(ascii: "a"):
                     continue
+                case UInt8(ascii: "v"):
+                    invertMatch = true
                 case UInt8(ascii: "q"):
                     quiet = true
                 case UInt8(ascii: "c"):
@@ -845,6 +859,7 @@ struct RipgrepCommand {
                 wordRegexp,
                 fixedStrings,
                 allowPCREQuotedLiterals,
+                invertMatch,
                 quiet,
                 count,
                 pathOnlyMode,
@@ -860,14 +875,22 @@ struct RipgrepCommand {
         var parsedFieldMatchSeparator = false
         var parsedHeading = false
         var parsedIncludeZero = false
+        var parsedInvertMatch = false
         var parsedJson = false
         var parsedLineNumber = false
         var parsedLineRegexp = false
         var parsedLineBuffered = false
+        var parsedAfterContext = 0
+        var parsedAfterContextWasSet = false
+        var parsedBeforeContext = 0
+        var parsedBeforeContextWasSet = false
+        var parsedMaxColumns = 0
+        var parsedMaxDepth = 0
         var parsedNullPathTerminator = false
         var parsedNoMmap = false
         var parsedPathOnlyMode: PathOnlyMode?
         var parsedPathSeparator = false
+        var parsedPassthru = false
         var parsedQuiet = false
         var parsedSearchZip = false
         var parsedMaxCount: Int?
@@ -884,6 +907,30 @@ struct RipgrepCommand {
         var parsedRegexpPattern: String?
         var patternCanStartWithDash = false
         var valueArguments: [String] = []
+        func applyNumericPreflightOption(_ option: NumericPreflightOption, value: Int) {
+            switch option {
+            case .afterContext:
+                parsedAfterContext = value
+                parsedAfterContextWasSet = true
+                parsedPassthru = false
+            case .beforeContext:
+                parsedBeforeContext = value
+                parsedBeforeContextWasSet = true
+                parsedPassthru = false
+            case .context:
+                if !parsedAfterContextWasSet {
+                    parsedAfterContext = value
+                }
+                if !parsedBeforeContextWasSet {
+                    parsedBeforeContext = value
+                }
+                parsedPassthru = false
+            case .maxColumns:
+                parsedMaxColumns = value
+            case .maxDepth:
+                parsedMaxDepth = value
+            }
+        }
         var argumentIndex = 0
         while argumentIndex < arguments.count {
             let argument = arguments[argumentIndex]
@@ -946,6 +993,12 @@ struct RipgrepCommand {
                 parsedLineRegexp = false
             } else if isQuietFlag(argument) {
                 parsedQuiet = true
+            } else if argument == "-v" || argument == "--invert-match" {
+                parsedInvertMatch = true
+            } else if argument == "--no-invert-match" {
+                parsedInvertMatch = false
+            } else if argument == "--passthru" || argument == "--passthrough" {
+                parsedPassthru = true
             } else if argument == "--json" {
                 parsedJson = true
             } else if argument == "--no-json" {
@@ -1134,16 +1187,18 @@ struct RipgrepCommand {
                 guard isValidNonNegativeInteger(threadCount) else {
                     return nil
                 }
-            } else if isSeparatedZeroValueFlag(argument) {
+            } else if let numericOption = separatedNumericPreflightOption(argument) {
                 guard argumentIndex < arguments.count,
-                      isZeroInteger(arguments[argumentIndex]) else {
+                      let numericValue = nonNegativeInteger(arguments[argumentIndex]) else {
                     return nil
                 }
+                applyNumericPreflightOption(numericOption, value: numericValue)
                 argumentIndex += 1
-            } else if let zeroValue = zeroValueOption(argument) {
-                guard isZeroInteger(zeroValue) else {
+            } else if let (numericOption, rawNumericValue) = inlineNumericPreflightOption(argument) {
+                guard let numericValue = nonNegativeInteger(rawNumericValue) else {
                     return nil
                 }
+                applyNumericPreflightOption(numericOption, value: numericValue)
             } else if argument == "--field-match-separator" {
                 guard argumentIndex < arguments.count else {
                     return nil
@@ -1226,6 +1281,7 @@ struct RipgrepCommand {
                 if let clusterPCREQuotedLiterals = cluster.allowPCREQuotedLiterals {
                     allowPCREQuotedLiterals = clusterPCREQuotedLiterals
                 }
+                parsedInvertMatch = parsedInvertMatch || cluster.invertMatch
                 parsedQuiet = parsedQuiet || cluster.quiet
                 parsedCount = parsedCount || cluster.count
                 if let clusterPathOnlyMode = cluster.pathOnlyMode {
@@ -1282,9 +1338,15 @@ struct RipgrepCommand {
         guard !parsedByteOffset,
               !parsedColumn,
               !parsedColorMayEmit,
+              parsedAfterContext == 0,
+              parsedBeforeContext == 0,
               !(parsedFieldMatchSeparator && lineNumber),
               !parsedHeading,
+              !parsedInvertMatch,
               !parsedJson,
+              parsedMaxColumns == 0,
+              parsedMaxDepth == 0,
+              !parsedPassthru,
               !parsedSearchZip,
               !parsedStats,
               !parsedTrim,
