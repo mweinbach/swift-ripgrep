@@ -1236,6 +1236,7 @@ struct MiscTests {
         try root.write("missing\nabsent\n", to: "missing-patterns.txt")
         try root.write("needle needle\nquiet line\n", to: "fixed-patterns.txt")
         try root.write("needlex xneedle needle_ _needle needle\n", to: "word-count.txt")
+        try root.write("éneedle\npre NEEDLE\nNEEDLE\n", to: "unicode-word-ci.txt")
         try root.write("needle\n", to: ".hidden.txt")
         try root.write("*.txt\n", to: ".ignore")
         try root.write("needle\n", to: "ignored.txt")
@@ -1321,6 +1322,26 @@ struct MiscTests {
 
         """.utf8))
 
+        let caseInsensitiveWordOutput = try runExecutableData([
+            "-w",
+            "-i",
+            "NEEDLE",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(caseInsensitiveWordOutput == output)
+
+        let unicodeCaseInsensitiveWordOutput = try runExecutableData([
+            "-w",
+            "-i",
+            "NEEDLE",
+            root.path("unicode-word-ci.txt"),
+        ], fixture: {})
+        #expect(unicodeCaseInsensitiveWordOutput == Data("""
+        pre NEEDLE
+        NEEDLE
+
+        """.utf8))
+
         let lineNumberOutput = try runExecutableData([
             "-n",
             "needle",
@@ -1332,6 +1353,15 @@ struct MiscTests {
         4:tail needle
 
         """.utf8))
+
+        let caseInsensitiveWordLineNumberOutput = try runExecutableData([
+            "-n",
+            "-w",
+            "-i",
+            "NEEDLE",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(caseInsensitiveWordLineNumberOutput == lineNumberOutput)
 
         let lineBufferedLineNumberOutput = try runExecutableData([
             "--line-buffered",
@@ -1556,6 +1586,9 @@ struct MiscTests {
             (["-q", "-w", "needle", root.path("dense.txt")], Int32(0)),
             (["-qw", "needle", root.path("dense.txt")], Int32(0)),
             (["-q", "-w", "eed", root.path("dense.txt")], Int32(1)),
+            (["-q", "-w", "-i", "NEEDLE", root.path("dense.txt")], Int32(0)),
+            (["-qwi", "NEEDLE", root.path("dense.txt")], Int32(0)),
+            (["-q", "-w", "-i", "EED", root.path("dense.txt")], Int32(1)),
             (["--stop-on-nonmatch", "-q", "needle", root.path("dense.txt")], Int32(0)),
             (["--stop-on-nonmatch", "-q", "missing", root.path("dense.txt")], Int32(1)),
             (["-q", "needle|tail", root.path("dense.txt")], Int32(0)),
@@ -1577,6 +1610,7 @@ struct MiscTests {
             (["-q", "-i", "-x", "MISSING|ABSENT", root.path("exact.txt")], Int32(1)),
             (["--crlf", "-q", "-x", "needle", root.path("crlf.txt")], Int32(0)),
             (["--crlf", "-q", "-i", "-x", "NEEDLE|QUIET", root.path("crlf.txt")], Int32(0)),
+            (["-q", "-w", "-i", "NEEDLE", root.path("unicode-word-ci.txt")], Int32(0)),
             (["-q", "needle", root.path("binary-mode.dat")], Int32(0)),
         ] {
             let quietResult = try runExecutableResult(quietArguments)
@@ -1615,6 +1649,10 @@ struct MiscTests {
             (["--files-with-matches", "--null", "-w", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt"))\0".utf8), Int32(0)),
             (["--files-without-match", "-w", "eed", root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
             (["--files-without-match", "-w", "needle", root.path("dense.txt")], Data(), Int32(1)),
+            (["-l", "-w", "-i", "NEEDLE", root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
+            (["--files-with-matches", "--null", "-w", "-i", "NEEDLE", root.path("dense.txt")], Data("\(root.path("dense.txt"))\0".utf8), Int32(0)),
+            (["--files-without-match", "-w", "-i", "EED", root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
+            (["--files-without-match", "-w", "-i", "NEEDLE", root.path("dense.txt")], Data(), Int32(1)),
             (["--stop-on-nonmatch", "-l", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
             (["--stop-on-nonmatch", "-l", "missing", root.path("dense.txt")], Data(), Int32(1)),
             (["--stop-on-nonmatch", "--files-without-match", "needle", root.path("dense.txt")], Data(), Int32(1)),
@@ -1992,6 +2030,9 @@ struct MiscTests {
             (["-c", "-m1", "-i", "12345", root.path("dense.txt")], Data(), Int32(1)),
             (["-c", "-m1", "-i", "--include-zero", "12345", root.path("dense.txt")], Data("0\n".utf8), Int32(1)),
             (["-c", "-w", "--include-zero", "missing", root.path("dense.txt")], Data("0\n".utf8), Int32(1)),
+            (["-c", "-w", "-i", "NEEDLE", root.path("dense.txt")], Data("3\n".utf8), Int32(0)),
+            (["-c", "-m2", "-w", "-i", "NEEDLE", root.path("dense.txt")], Data("2\n".utf8), Int32(0)),
+            (["-c", "-w", "-i", "--include-zero", "EED", root.path("dense.txt")], Data("0\n".utf8), Int32(1)),
             (["-c", "-i", "NEEDLE|QUIET", root.path("dense.txt")], Data("4\n".utf8), Int32(0)),
             (["-c", "-m2", "-i", "NEEDLE|QUIET", root.path("dense.txt")], Data("2\n".utf8), Int32(0)),
             (["-H", "-c", "-i", "NEEDLE|QUIET", root.path("dense.txt")], Data("\(root.path("dense.txt")):4\n".utf8), Int32(0)),
@@ -2037,6 +2078,24 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(wordCountOutput == Data("3\n".utf8))
+
+        let caseInsensitiveWordCountOutput = try runExecutableData([
+            "-c",
+            "-w",
+            "-i",
+            "NEEDLE",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(caseInsensitiveWordCountOutput == wordCountOutput)
+
+        let unicodeCaseInsensitiveWordCountOutput = try runExecutableData([
+            "-c",
+            "-w",
+            "-i",
+            "NEEDLE",
+            root.path("unicode-word-ci.txt"),
+        ], fixture: {})
+        #expect(unicodeCaseInsensitiveWordCountOutput == Data("2\n".utf8))
 
         let embeddedWordCountOutput = try runExecutableData([
             "-c",
@@ -2088,6 +2147,16 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(prefixedWordCountOutput == singleLiteralPrefixedCountOutput)
+
+        let prefixedCaseInsensitiveWordCountOutput = try runExecutableData([
+            "-H",
+            "-c",
+            "-w",
+            "-i",
+            "NEEDLE",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(prefixedCaseInsensitiveWordCountOutput == singleLiteralPrefixedCountOutput)
 
         let singleLiteralNullPrefixedCountOutput = try runExecutableData([
             "-H",
