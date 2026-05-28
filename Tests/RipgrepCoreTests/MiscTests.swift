@@ -1282,6 +1282,9 @@ struct MiscTests {
             (["--quiet", "missing", root.path("quiet-no-match.txt")], Int32(1)),
             (["-qn", "needle", root.path("dense.txt")], Int32(0)),
             (["-qi", "needle", root.path("dense.txt")], Int32(0)),
+            (["-q", "-x", "needle", root.path("exact.txt")], Int32(0)),
+            (["-q", "-x", "missing", root.path("exact.txt")], Int32(1)),
+            (["--crlf", "-q", "-x", "needle", root.path("crlf.txt")], Int32(0)),
             (["-q", "needle", root.path("binary-mode.dat")], Int32(0)),
         ] {
             let quietResult = try runExecutableResult(quietArguments)
@@ -1297,6 +1300,11 @@ struct MiscTests {
             (["--files-without-match", "missing", root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
             (["--files-without-match", "needle", root.path("dense.txt")], Data(), Int32(1)),
             (["-q", "-l", "needle", root.path("dense.txt")], Data(), Int32(0)),
+            (["-l", "-x", "needle", root.path("exact.txt")], Data("\(root.path("exact.txt"))\n".utf8), Int32(0)),
+            (["-l", "-x", "missing", root.path("exact.txt")], Data(), Int32(1)),
+            (["--files-with-matches", "--null", "-x", "needle", root.path("exact.txt")], Data("\(root.path("exact.txt"))\0".utf8), Int32(0)),
+            (["--files-without-match", "-x", "missing", root.path("exact.txt")], Data("\(root.path("exact.txt"))\n".utf8), Int32(0)),
+            (["--files-without-match", "-x", "needle", root.path("exact.txt")], Data(), Int32(1)),
         ] {
             let pathOnlyResult = try runExecutableResult(pathOnlyArguments)
             #expect(pathOnlyResult.stdout == expectedOutput)

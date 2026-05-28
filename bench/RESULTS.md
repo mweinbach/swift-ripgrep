@@ -406,6 +406,16 @@ matched lines. On the same fixture,
 `-c -x 'needle needle needle quiet tail needle'` improved from 13.070 s to
 370.6 ms, versus 99.2 ms for Rust.
 
+Exact-line quiet and path-only explicit-file searches now use the same
+Swift-first full-line existence check. The preflight writes no output for
+`-q -x`, prints only the file path for `-l -x`, preserves
+`--files-without-match` and `--null`, and still falls through for `--crlf`,
+custom path separators, and early binary detection. On the same fixture,
+`-q -x 'needle needle needle quiet tail needle'` improved from 13.112 s to
+3.2 ms, versus 3.0 ms for Rust; `-l -x` improved from 13.043 s to 3.4 ms,
+versus 3.0 ms for Rust. No-match exact-line quiet/path-only scans measured
+12.4 ms, versus 7.0 ms and 6.9 ms for Rust.
+
 Type-definition flags that do not activate a type filter now also stay
 eligible for the executable preflight. The preflight replays
 `--type-add`/`--type-clear` through `FileTypeRegistry.apply`, so invalid

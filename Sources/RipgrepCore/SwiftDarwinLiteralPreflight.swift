@@ -32,6 +32,34 @@ public enum SwiftDarwinLiteralPreflight {
         return 0
     }
 
+    public static func exactLineQuietExitCode(
+        path: String,
+        literal: [UInt8]
+    ) -> Int32? {
+        guard let matched = containsExactLine(path: path, literal: literal) else {
+            return nil
+        }
+        return matched ? 0 : 1
+    }
+
+    public static func exactLinePathOnlyExitCode(
+        path: String,
+        literal: [UInt8],
+        printWhenMatched: Bool,
+        nullTerminated: Bool
+    ) -> Int32? {
+        guard let matched = containsExactLine(path: path, literal: literal) else {
+            return nil
+        }
+        guard matched == printWhenMatched else {
+            return 1
+        }
+        var output = Data(path.utf8)
+        output.append(nullTerminated ? 0 : UInt8(ascii: "\n"))
+        FileHandle.standardOutput.write(output)
+        return 0
+    }
+
     public static func limitedLineExitCode(
         path: String,
         literal: [UInt8],
@@ -378,6 +406,23 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         return true
+    }
+
+    private static func containsExactLine(path: String, literal: [UInt8]) -> Bool? {
+        guard !literal.isEmpty,
+              !literal.contains(UInt8(ascii: "\n")) else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return false
+        }
+        guard !hasBinaryDetectionPrefix(data) else {
+            return nil
+        }
+        return exactLineCount(data: data, literal: literal, maxCount: 1) > 0
     }
 
     private static func mappedPreflightData(path: String) -> Data? {

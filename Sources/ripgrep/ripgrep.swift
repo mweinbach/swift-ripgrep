@@ -1248,10 +1248,18 @@ struct RipgrepCommand {
         }
         if parsedQuiet {
             guard !wordRegexp,
-                  !parsedLineRegexp,
                   !asciiCaseInsensitive,
                   !asciiBoundary else {
                 return nil
+            }
+            if parsedLineRegexp {
+                guard !parsedCrlf else {
+                    return nil
+                }
+                return SwiftDarwinLiteralPreflight.exactLineQuietExitCode(
+                    path: path,
+                    literal: literal
+                )
             }
             return SwiftDarwinLiteralPreflight.quietExitCode(
                 path: path,
@@ -1288,11 +1296,21 @@ struct RipgrepCommand {
         }
         if let parsedPathOnlyMode {
             guard !wordRegexp,
-                  !parsedLineRegexp,
                   !asciiCaseInsensitive,
                   !asciiBoundary,
                   !parsedPathSeparator else {
                 return nil
+            }
+            if parsedLineRegexp {
+                guard !parsedCrlf else {
+                    return nil
+                }
+                return SwiftDarwinLiteralPreflight.exactLinePathOnlyExitCode(
+                    path: path,
+                    literal: literal,
+                    printWhenMatched: parsedPathOnlyMode == .matching,
+                    nullTerminated: parsedNullPathTerminator
+                )
             }
             return SwiftDarwinLiteralPreflight.pathOnlyExitCode(
                 path: path,
