@@ -39,6 +39,25 @@ public enum SwiftDarwinLiteralPreflight {
         output.append(contentsOf: linePrefix)
     }
 
+    private static func pathOnlyOutput(
+        path: String,
+        outputPath: [UInt8]?,
+        nullTerminated: Bool,
+        crlfTerminated: Bool
+    ) -> Data {
+        var output = if let outputPath {
+            Data(outputPath)
+        } else {
+            Data(path.utf8)
+        }
+        appendPathTerminator(
+            to: &output,
+            nullTerminated: nullTerminated,
+            crlfTerminated: crlfTerminated
+        )
+        return output
+    }
+
     public static func quietExitCode(
         path: String,
         literal: [UInt8]
@@ -54,7 +73,8 @@ public enum SwiftDarwinLiteralPreflight {
         literal: [UInt8],
         printWhenMatched: Bool,
         nullTerminated: Bool,
-        crlfTerminated: Bool = false
+        crlfTerminated: Bool = false,
+        outputPath: [UInt8]? = nil
     ) -> Int32? {
         guard let matched = containsLiteral(path: path, literal: literal) else {
             return nil
@@ -62,8 +82,12 @@ public enum SwiftDarwinLiteralPreflight {
         guard matched == printWhenMatched else {
             return 1
         }
-        var output = Data(path.utf8)
-        appendPathTerminator(to: &output, nullTerminated: nullTerminated, crlfTerminated: crlfTerminated)
+        let output = pathOnlyOutput(
+            path: path,
+            outputPath: outputPath,
+            nullTerminated: nullTerminated,
+            crlfTerminated: crlfTerminated
+        )
         FileHandle.standardOutput.write(output)
         return 0
     }
@@ -83,7 +107,8 @@ public enum SwiftDarwinLiteralPreflight {
         literal: [UInt8],
         printWhenMatched: Bool,
         nullTerminated: Bool,
-        crlfTerminated: Bool = false
+        crlfTerminated: Bool = false,
+        outputPath: [UInt8]? = nil
     ) -> Int32? {
         guard let matched = containsASCIICaseInsensitiveLiteral(path: path, literal: literal) else {
             return nil
@@ -91,8 +116,12 @@ public enum SwiftDarwinLiteralPreflight {
         guard matched == printWhenMatched else {
             return 1
         }
-        var output = Data(path.utf8)
-        appendPathTerminator(to: &output, nullTerminated: nullTerminated, crlfTerminated: crlfTerminated)
+        let output = pathOnlyOutput(
+            path: path,
+            outputPath: outputPath,
+            nullTerminated: nullTerminated,
+            crlfTerminated: crlfTerminated
+        )
         FileHandle.standardOutput.write(output)
         return 0
     }
@@ -112,7 +141,8 @@ public enum SwiftDarwinLiteralPreflight {
         literal: [UInt8],
         printWhenMatched: Bool,
         nullTerminated: Bool,
-        crlfTerminated: Bool = false
+        crlfTerminated: Bool = false,
+        outputPath: [UInt8]? = nil
     ) -> Int32? {
         guard let matched = containsExactLine(path: path, literal: literal) else {
             return nil
@@ -120,8 +150,12 @@ public enum SwiftDarwinLiteralPreflight {
         guard matched == printWhenMatched else {
             return 1
         }
-        var output = Data(path.utf8)
-        appendPathTerminator(to: &output, nullTerminated: nullTerminated, crlfTerminated: crlfTerminated)
+        let output = pathOnlyOutput(
+            path: path,
+            outputPath: outputPath,
+            nullTerminated: nullTerminated,
+            crlfTerminated: crlfTerminated
+        )
         FileHandle.standardOutput.write(output)
         return 0
     }
@@ -141,7 +175,8 @@ public enum SwiftDarwinLiteralPreflight {
         literal: [UInt8],
         printWhenMatched: Bool,
         nullTerminated: Bool,
-        crlfTerminated: Bool = false
+        crlfTerminated: Bool = false,
+        outputPath: [UInt8]? = nil
     ) -> Int32? {
         guard let matched = containsASCIICaseInsensitiveExactLine(path: path, literal: literal) else {
             return nil
@@ -149,8 +184,12 @@ public enum SwiftDarwinLiteralPreflight {
         guard matched == printWhenMatched else {
             return 1
         }
-        var output = Data(path.utf8)
-        appendPathTerminator(to: &output, nullTerminated: nullTerminated, crlfTerminated: crlfTerminated)
+        let output = pathOnlyOutput(
+            path: path,
+            outputPath: outputPath,
+            nullTerminated: nullTerminated,
+            crlfTerminated: crlfTerminated
+        )
         FileHandle.standardOutput.write(output)
         return 0
     }
@@ -208,7 +247,8 @@ public enum SwiftDarwinLiteralPreflight {
         literal: [UInt8],
         printWhenMatched: Bool,
         nullTerminated: Bool,
-        crlfTerminated: Bool = false
+        crlfTerminated: Bool = false,
+        outputPath: [UInt8]? = nil
     ) -> Int32? {
         guard let matched = containsWordLiteral(path: path, literal: literal) else {
             return nil
@@ -216,8 +256,12 @@ public enum SwiftDarwinLiteralPreflight {
         guard matched == printWhenMatched else {
             return 1
         }
-        var output = Data(path.utf8)
-        appendPathTerminator(to: &output, nullTerminated: nullTerminated, crlfTerminated: crlfTerminated)
+        let output = pathOnlyOutput(
+            path: path,
+            outputPath: outputPath,
+            nullTerminated: nullTerminated,
+            crlfTerminated: crlfTerminated
+        )
         FileHandle.standardOutput.write(output)
         return 0
     }
@@ -237,7 +281,8 @@ public enum SwiftDarwinLiteralPreflight {
         literals: [[UInt8]],
         printWhenMatched: Bool,
         nullTerminated: Bool,
-        crlfTerminated: Bool = false
+        crlfTerminated: Bool = false,
+        outputPath: [UInt8]? = nil
     ) -> Int32? {
         guard let matched = containsAnyLiteral(path: path, literals: literals) else {
             return nil
@@ -245,8 +290,12 @@ public enum SwiftDarwinLiteralPreflight {
         guard matched == printWhenMatched else {
             return 1
         }
-        var output = Data(path.utf8)
-        appendPathTerminator(to: &output, nullTerminated: nullTerminated, crlfTerminated: crlfTerminated)
+        let output = pathOnlyOutput(
+            path: path,
+            outputPath: outputPath,
+            nullTerminated: nullTerminated,
+            crlfTerminated: crlfTerminated
+        )
         FileHandle.standardOutput.write(output)
         return 0
     }
@@ -266,7 +315,8 @@ public enum SwiftDarwinLiteralPreflight {
         literals: [[UInt8]],
         printWhenMatched: Bool,
         nullTerminated: Bool,
-        crlfTerminated: Bool = false
+        crlfTerminated: Bool = false,
+        outputPath: [UInt8]? = nil
     ) -> Int32? {
         guard let matched = containsAnyASCIICaseInsensitiveLiteral(path: path, literals: literals) else {
             return nil
@@ -274,8 +324,12 @@ public enum SwiftDarwinLiteralPreflight {
         guard matched == printWhenMatched else {
             return 1
         }
-        var output = Data(path.utf8)
-        appendPathTerminator(to: &output, nullTerminated: nullTerminated, crlfTerminated: crlfTerminated)
+        let output = pathOnlyOutput(
+            path: path,
+            outputPath: outputPath,
+            nullTerminated: nullTerminated,
+            crlfTerminated: crlfTerminated
+        )
         FileHandle.standardOutput.write(output)
         return 0
     }

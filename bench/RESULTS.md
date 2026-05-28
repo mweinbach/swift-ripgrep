@@ -1041,6 +1041,16 @@ forms. On the 50 KiB dense fixture, five-run checks measured
 Rust; `-H --path-separator Z -n needle` measured 3.1 ms versus 49.6 ms before
 and 3.0 ms for Rust.
 
+Path-only `--path-separator` output now also stays on the Swift executable
+preflight by sharing the parsed display-path bytes with `-l` and
+`--files-without-match` emitters. Release byte checks matched Rust for
+matching and nonmatching path modes, NUL path terminators, ignore-case,
+safe multi-literal, exact-line, word-regexp, escaped separators, and automatic
+reset. On the 50 KiB dense fixture, five-run checks measured
+`-l --path-separator Z needle` at 3.2 ms versus 27.5 ms before and 2.9 ms for
+Rust; `--files-without-match --path-separator Z missing` measured 3.0 ms
+versus 30.3 ms before and 2.9 ms for Rust.
+
 Filename-prefixed literal count output now also stays on the direct Swift
 writer for `-c` and `--count-matches`, including `--include-zero path:0`
 semantics. Output and exit status for matching, no-match, include-zero,
