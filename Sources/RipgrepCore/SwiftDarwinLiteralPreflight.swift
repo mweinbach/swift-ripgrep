@@ -7380,6 +7380,27 @@ private func writeASCIIWordMatchedLines(
         var currentLineNumber = 1
         var lineCountOffset = 0
         var emittedHeading = false
+        let simpleOutput = !lineNumber && linePrefix.isEmpty && headingPrefix.isEmpty
+        var pendingOutputStart: Int?
+        var pendingOutputEnd = 0
+        var pendingNeedsFinalNewline = false
+
+        func flushPendingSimpleOutput() -> Bool {
+            guard let start = pendingOutputStart else {
+                return true
+            }
+            guard output.write(base.advanced(by: start), count: pendingOutputEnd - start) else {
+                return false
+            }
+            if pendingNeedsFinalNewline,
+               !output.writeByte(UInt8(ascii: "\n")) {
+                return false
+            }
+            pendingOutputStart = nil
+            pendingOutputEnd = 0
+            pendingNeedsFinalNewline = false
+            return true
+        }
 
         func matchAtSearchOffset(_ literal: [UInt8]) -> Bool? {
             guard literal.count <= data.count - searchOffset else {
@@ -7494,9 +7515,11 @@ private func writeASCIIWordMatchedLines(
                 break
             }
 
-            var lineStart = bestStart
-            while lineStart > 0, base[lineStart - 1] != UInt8(ascii: "\n") {
-                lineStart -= 1
+            var lineStart = bestStart == searchOffset ? searchOffset : bestStart
+            if lineStart != searchOffset {
+                while lineStart > 0, base[lineStart - 1] != UInt8(ascii: "\n") {
+                    lineStart -= 1
+                }
             }
             let newline = memchr(
                 base.advanced(by: bestEnd),
@@ -7507,6 +7530,23 @@ private func writeASCIIWordMatchedLines(
                 base.distance(to: $0.assumingMemoryBound(to: UInt8.self))
             } ?? data.count
             let outputEnd = newline == nil ? data.count : lineEnd + 1
+
+            if simpleOutput {
+                if pendingOutputStart != nil,
+                   pendingOutputEnd != lineStart || pendingNeedsFinalNewline {
+                    guard flushPendingSimpleOutput() else {
+                        return nil
+                    }
+                    pendingOutputStart = lineStart
+                } else if pendingOutputStart == nil {
+                    pendingOutputStart = lineStart
+                }
+                pendingOutputEnd = outputEnd
+                pendingNeedsFinalNewline = newline == nil
+                matchedLineCount += 1
+                searchOffset = outputEnd
+                continue
+            }
 
             guard output.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading) else {
                 return nil
@@ -7540,6 +7580,9 @@ private func writeASCIIWordMatchedLines(
             searchOffset = outputEnd
         }
 
+        guard flushPendingSimpleOutput() else {
+            return nil
+        }
         guard output.flush() else {
             return nil
         }

@@ -4209,6 +4209,22 @@ struct MiscTests {
         ], fixture: {})
         #expect(disabledEncodingMultiWordOutput == utf8EncodingMultiWordOutput)
 
+        try root.write("needle one\nmiss\nquiet two", to: "sparse-multi-word-no-final.txt")
+        let disabledEncodingSparseMultiWordOutput = try runExecutableData([
+            "--encoding=none",
+            "-w",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("sparse-multi-word-no-final.txt"),
+        ], fixture: {})
+        #expect(disabledEncodingSparseMultiWordOutput == Data("""
+        needle one
+        quiet two
+
+        """.utf8))
+
         let disabledEncodingIgnoreCaseWordOutput = try runExecutableData([
             "--encoding=none",
             "-i",

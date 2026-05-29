@@ -3868,6 +3868,14 @@ forms.
 | `--encoding=utf-8 -w -e needle -e quiet` | 3.800 s | 32.0 ms | 23.6 ms |
 | `--encoding=utf-8 -i -w -e NEEDLE -e QUIET` | n/a | 32.3 ms | 30.9 ms |
 
+The simple unnumbered multi-literal word writer now coalesces contiguous
+matching output lines into larger stdout-buffer writes instead of taking the
+full prefix/write path once per line. Sparse output and no-final-newline
+fixtures still matched Rust byte-for-byte. On the same dense fixture, 10-run
+checks measured `--encoding=none -w -e needle -e quiet` at 7.3 ms versus
+24.2 ms for Rust, and `--encoding=utf-8 -w -e needle -e quiet` at 8.3 ms
+versus 24.6 ms for Rust.
+
 Dense multi-literal word line output now checks for a word-literal match at the
 current line start before probing every literal through the rest of the file.
 That shortcut preserves file-order output and helps repeated dense lines where
