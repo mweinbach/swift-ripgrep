@@ -1294,6 +1294,7 @@ struct MiscTests {
         quiet
         needle four
         """, to: "stop-run.txt")
+        try root.write("alpha\nquiet\n", to: "summary.txt")
 
         func runExecutableResult(_ arguments: [String]) throws -> (stdout: Data, stderr: Data, status: Int32) {
             let executable = ripgrepPackageRootURL().appendingPathComponent(".build/debug/ripgrep")
@@ -1310,6 +1311,38 @@ struct MiscTests {
             process.waitUntilExit()
             return (data, errorData, process.terminationStatus)
         }
+
+        let jsonNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let statsNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "-q",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+
+        #expect(jsonNoMatchSummary.status == 1)
+        #expect(jsonNoMatchSummary.stderr.isEmpty)
+        #expect(jsonNoMatchSummary.stdout == Data((#"{"data":{"elapsed_total":{"human":"0.000000s","nanos":0,"secs":0},"stats":{"bytes_printed":0,"bytes_searched":12,"elapsed":{"human":"0.000000s","nanos":0,"secs":0},"matched_lines":0,"matches":0,"searches":1,"searches_with_match":0}},"type":"summary"}"# + "\n").utf8))
+        #expect(statsNoMatchSummary.status == 1)
+        #expect(statsNoMatchSummary.stderr.isEmpty)
+        #expect(statsNoMatchSummary.stdout == Data("""
+
+        0 matches
+        0 matched lines
+        0 files contained matches
+        1 files searched
+        0 bytes printed
+        12 bytes searched
+        0.000000 seconds spent searching
+        0.000000 seconds total
+
+        """.utf8))
 
         let output = try runExecutableData([
             "needle",

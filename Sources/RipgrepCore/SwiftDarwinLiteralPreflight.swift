@@ -109,6 +109,37 @@ public enum SwiftDarwinLiteralPreflight {
         return matched ? 0 : 1
     }
 
+    public static func literalNoMatchSummaryExitCode(
+        path: String,
+        literal: [UInt8],
+        json: Bool,
+        stats: Bool
+    ) -> Int32? {
+        guard json || stats,
+              let bytesSearched = literalNoMatchByteCount(path: path, literal: literal) else {
+            return nil
+        }
+        if json {
+            let line = #"{"data":{"elapsed_total":{"human":"0.000000s","nanos":0,"secs":0},"stats":{"bytes_printed":0,"bytes_searched":\#(bytesSearched),"elapsed":{"human":"0.000000s","nanos":0,"secs":0},"matched_lines":0,"matches":0,"searches":1,"searches_with_match":0}},"type":"summary"}"#
+            FileHandle.standardOutput.write(Data((line + "\n").utf8))
+        } else {
+            let output = """
+
+            0 matches
+            0 matched lines
+            0 files contained matches
+            1 files searched
+            0 bytes printed
+            \(bytesSearched) bytes searched
+            0.000000 seconds spent searching
+            0.000000 seconds total
+
+            """
+            FileHandle.standardOutput.write(Data(output.utf8))
+        }
+        return 1
+    }
+
     public static func pathOnlyExitCode(
         path: String,
         literal: [UInt8],
@@ -3238,6 +3269,22 @@ public enum SwiftDarwinLiteralPreflight {
             return false
         }
         return dataContainsLiteralUsingSIMD(data, literal: literal)
+    }
+
+    private static func literalNoMatchByteCount(path: String, literal: [UInt8]) -> Int? {
+        guard !literal.isEmpty else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !hasBinaryDetectionPrefix(data) else {
+            return nil
+        }
+        guard !dataContainsLiteralUsingSIMD(data, literal: literal) else {
+            return nil
+        }
+        return data.count
     }
 
     private static func dataContainsLiteralUsingSIMD(_ data: Data, literal: [UInt8]) -> Bool {

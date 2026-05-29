@@ -106,6 +106,19 @@ versus 19.0 ms baseline. The order-flipped 60-run confirmation measured
 versus 19.0 ms baseline, with Rust `-w -q` at 6.3 ms. The early-match
 `-w -q needle` control stayed flat at 2.8 ms for both binaries.
 
+JSON/stats summary-only no-matches now get a narrow executable preflight for
+simple single-file literal searches. When the literal is absent and the mapped
+file has no binary prefix, Swift emits the same zero-match JSON or stats summary
+without constructing full search results. Exact Swift output matched the
+previous binary for JSON/stats no-match, small match, and binary fallback
+controls; JSON no-match also matched Rust through the parity harness after
+normalizing elapsed fields. On the 46 MiB ASCII file, a 20-run A/B measured
+`--json missingliteral` at 7.7 ms for the probe versus 2.201 s baseline and
+7.3 ms for Rust; `--stats -q missingliteral` measured 7.6 ms versus 2.186 s
+baseline; `--stats missingliteral` measured 7.5 ms versus 2.196 s baseline. An
+order-flipped 10-run confirmation measured JSON at 7.5 ms probe versus 2.155 s
+baseline and quiet stats at 8.0 ms probe versus 2.202 s baseline.
+
 Files-mode controls on `/tmp/swift-rg-bench/linux` isolated the cost to VCS
 ignore handling. A 30-run slice measured Swift `--files` at 101.3 ms ± 2.9 ms,
 Swift `--hidden --files` at 101.6 ms ± 2.7 ms, Swift

@@ -2740,6 +2740,48 @@ struct RipgrepCommand {
                     && !parsedEncodingExactLineMatchingOutputCanUsePreflight
                     && !parsedEncodingASCIIExactLineMatchingOutputCanUsePreflight))
         let parsedSearchZipAffectsPreflight = parsedSearchZip && pathMayUseSearchZip(path)
+        if parsedJson || parsedStats,
+           parsedPrintMode == .matchingLines,
+           !parsedOnlyMatching,
+           !parsedVimgrep,
+           !parsedLineRegexp,
+           !wordRegexp,
+           !asciiCaseInsensitive,
+           parsedAfterContext == 0,
+           parsedBeforeContext == 0,
+           !parsedInvertMatch,
+           parsedMaxCount == nil,
+           parsedMaxColumns == 0,
+           !parsedNullData,
+           !parsedPassthru,
+           !parsedReplacement,
+           !parsedSearchZipAffectsPreflight,
+           !parsedStopOnNonmatch,
+           !parsedTrim,
+           !parsedCrlf,
+           !parsedEncodingAffectsPreflightOutput,
+           (patternCanStartWithDash || !pattern.hasPrefix("-")),
+           path != "-" {
+            let summaryLiteralPattern = fixedStrings
+                ? pattern
+                : RegexLiteralParser.literal(
+                    fromPlainRegexPattern: pattern,
+                    allowPCREQuotedLiterals: allowPCREQuotedLiterals
+                )
+            if let summaryLiteralPattern {
+                let summaryLiteral = Array(summaryLiteralPattern.utf8)
+                if !summaryLiteral.isEmpty,
+                   !summaryLiteral.contains(UInt8(ascii: "\n")),
+                   let exitCode = SwiftDarwinLiteralPreflight.literalNoMatchSummaryExitCode(
+                    path: path,
+                    literal: summaryLiteral,
+                    json: parsedJson,
+                    stats: parsedStats
+                   ) {
+                    return exitCode
+                }
+            }
+        }
         guard !(parsedLineRegexp && wordRegexp) else {
             return nil
         }
