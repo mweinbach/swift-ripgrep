@@ -476,6 +476,9 @@ private func miscParityCases() -> [ParityCase] {
     let caseInsensitiveUnicodeFallbackFixture: (URL) throws -> Void = { dir in
         try write("alpha\nstraße\nCAFÉ\nİstanbul\n", to: "unicode", in: dir)
     }
+    let wordUnicodeBoundaryFallbackFixture: (URL) throws -> Void = { dir in
+        try write("émissingliteral\nmissingliteralé\nplain\n", to: "unicode-word", in: dir)
+    }
     return [
         ParityCase(name: "misc::single_file", fixture: sherlockFixture, arguments: ["Sherlock", "sherlock"]),
         ParityCase(name: "misc::dir", fixture: sherlockFixture, arguments: ["Sherlock"]),
@@ -492,6 +495,10 @@ private func miscParityCases() -> [ParityCase] {
         ParityCase(name: "misc::case_insensitive_files_without_match_ascii_no_match", fixture: caseInsensitiveASCIIProofFixture, arguments: ["-i", "-L", "missingliteral", "ascii"]),
         ParityCase(name: "misc::case_insensitive_unicode_fallback", fixture: caseInsensitiveUnicodeFallbackFixture, arguments: ["-i", "-q", "strasse", "unicode"]),
         ParityCase(name: "misc::word", fixture: sherlockFixture, arguments: ["-w", "as", "sherlock"]),
+        ParityCase(name: "misc::word_quiet_ascii_no_match", fixture: caseInsensitiveASCIIProofFixture, arguments: ["-w", "-q", "missingliteral", "ascii"]),
+        ParityCase(name: "misc::word_files_with_matches_ascii_no_match", fixture: caseInsensitiveASCIIProofFixture, arguments: ["-w", "-l", "missingliteral", "ascii"]),
+        ParityCase(name: "misc::word_files_without_match_ascii_no_match", fixture: caseInsensitiveASCIIProofFixture, arguments: ["-w", "-L", "missingliteral", "ascii"]),
+        ParityCase(name: "misc::word_unicode_boundary_fallback", fixture: wordUnicodeBoundaryFallbackFixture, arguments: ["-w", "-q", "missingliteral", "unicode-word"]),
         ParityCase(name: "misc::word_period", fixture: { dir in try write("...", to: "haystack", in: dir) }, arguments: ["-ow", ".", "haystack"]),
         ParityCase(name: "misc::line", fixture: sherlockFixture, arguments: ["-x", "Watson|and exhibited clearly, with a label attached.", "sherlock"]),
         ParityCase(name: "misc::literal", fixture: { dir in try write(SHERLOCK, to: "sherlock", in: dir); try write("blib\n()\nblab\n", to: "file", in: dir) }, arguments: ["-F", "()", "file"]),

@@ -4289,28 +4289,7 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
 
-        let needle = Data(literal)
-        var searchStart = data.startIndex
-        var rejectedBoundaryCandidates = 0
-        let maxRejectedBoundaryCandidates = 128
-        while searchStart < data.endIndex,
-              let matchRange = data.range(of: needle, in: searchStart..<data.endIndex) {
-            guard !matchRange.isEmpty else {
-                return nil
-            }
-            guard let bounded = isASCIIWordBoundaryMatch(data: data, matchRange: matchRange) else {
-                return nil
-            }
-            if bounded {
-                return true
-            }
-            rejectedBoundaryCandidates += 1
-            guard rejectedBoundaryCandidates <= maxRejectedBoundaryCandidates else {
-                return nil
-            }
-            searchStart = data.index(after: matchRange.lowerBound)
-        }
-        return false
+        return countASCIIWordMatchedLines(in: data, literal: literal, maxCount: 1).map { $0 > 0 }
     }
 
     private static func isASCIIWordBoundaryMatch(

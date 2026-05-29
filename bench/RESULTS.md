@@ -92,6 +92,20 @@ baseline. The order-flipped 60-run confirmation measured `-i -q` at 9.5 ms
 probe versus 34.4 ms baseline and `-i -l` at 9.4 ms probe versus 33.5 ms
 baseline, with Rust `-i -q` at 9.7 ms.
 
+Word-regexp quiet/path-only existence checks now reuse the existing Swift byte
+scanner and ASCII boundary helper instead of `Data.range(of:)`. This preserves
+the binary guard, Unicode-boundary fallback, and rejected-boundary cap while
+making literal-absent word searches match the plain literal scanner path.
+Targeted status/stdout/stderr checks matched the previous Swift binary and Rust
+for word `-q`, `-l`, `-L`, fixed-string word controls, Unicode boundary
+fallback, binary, and rejected-boundary fixtures. On the same 46 MiB ASCII file,
+a 40-run A/B measured `-w -q missingliteral` at 7.2 ms for the probe versus
+18.7 ms baseline and 6.9 ms for Rust; `-w -l missingliteral` measured 7.4 ms
+versus 19.0 ms baseline. The order-flipped 60-run confirmation measured
+`-w -q` at 7.1 ms probe versus 19.4 ms baseline and `-w -l` at 7.3 ms probe
+versus 19.0 ms baseline, with Rust `-w -q` at 6.3 ms. The early-match
+`-w -q needle` control stayed flat at 2.8 ms for both binaries.
+
 Files-mode controls on `/tmp/swift-rg-bench/linux` isolated the cost to VCS
 ignore handling. A 30-run slice measured Swift `--files` at 101.3 ms ± 2.9 ms,
 Swift `--hidden --files` at 101.6 ms ± 2.7 ms, Swift
