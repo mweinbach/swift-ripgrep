@@ -4217,6 +4217,64 @@ struct MiscTests {
             "\(root.path("unicode-word-ci.txt")):2:5:pre NEEDLE\n\(root.path("unicode-word-ci.txt")):3:1:NEEDLE\n".utf8
         ))
 
+        let encodingNoneWordOnlyMatchingVimgrepOutput = try runExecutableData([
+            "--encoding=none",
+            "--vimgrep",
+            "-w",
+            "-o",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(encodingNoneWordOnlyMatchingVimgrepOutput == Data("""
+        \(root.path("dense.txt")):1:1:needle
+        \(root.path("dense.txt")):1:8:needle
+        \(root.path("dense.txt")):1:15:needle
+        \(root.path("dense.txt")):2:1:quiet
+        \(root.path("dense.txt")):3:8:needle
+        \(root.path("dense.txt")):4:6:needle
+
+        """.utf8))
+
+        let utf8EncodingIgnoreCaseWordOnlyMatchingVimgrepOutput = try runExecutableData([
+            "--encoding=utf-8",
+            "--ignore-case",
+            "--vimgrep",
+            "--word-regexp",
+            "--only-matching",
+            "-e",
+            "NEEDLE",
+            "-e",
+            "QUIET",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(utf8EncodingIgnoreCaseWordOnlyMatchingVimgrepOutput == Data("""
+        \(root.path("dense.txt")):1:1:needle
+        \(root.path("dense.txt")):1:8:needle
+        \(root.path("dense.txt")):1:15:needle
+        \(root.path("dense.txt")):2:1:quiet
+        \(root.path("dense.txt")):3:1:NEEDLE
+        \(root.path("dense.txt")):3:8:needle
+        \(root.path("dense.txt")):3:15:Needle
+        \(root.path("dense.txt")):4:6:needle
+
+        """.utf8))
+
+        let utf8EncodingWordOnlyMatchingVimgrepUnicodeFallback = try runExecutableData([
+            "--encoding=utf-8",
+            "--ignore-case",
+            "--vimgrep",
+            "--word-regexp",
+            "--only-matching",
+            "needle",
+            root.path("unicode-word-ci.txt"),
+        ], fixture: {})
+        #expect(utf8EncodingWordOnlyMatchingVimgrepUnicodeFallback == Data(
+            "\(root.path("unicode-word-ci.txt")):2:5:NEEDLE\n\(root.path("unicode-word-ci.txt")):3:1:NEEDLE\n".utf8
+        ))
+
         let vimgrepQuietResult = try runExecutableResult([
             "--vimgrep",
             "-q",
