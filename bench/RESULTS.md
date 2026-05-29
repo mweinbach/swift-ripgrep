@@ -89,6 +89,15 @@ versus 105.1 ms baseline and hidden at 105.9 ms versus 104.8 ms; the
 order-flipped confirmation measured default at 104.8 ms probe versus 107.4 ms
 baseline and hidden at 104.1 ms probe versus 108.7 ms baseline.
 
+`GlobMatcher.compileFastMatcher` now derives unsupported-meta, simple-glob-meta,
+and star-count facts with one Swift UTF-8 scan instead of constructing
+`CharacterSet` values and doing multiple Foundation string searches for every
+ignore rule. Exact Swift output matched the saved pre-change binary for default
+and hidden file listing, and sorted output matched Rust. Initial same-machine
+40-run A/Bs were noisy but pointed at lower system time for the probe; isolated
+80-run confirmations measured default `--files` at 101.2 ms for the probe versus
+102.7 ms baseline and hidden `--files` at 101.3 ms versus 105.7 ms.
+
 Rejected Swift-only probes from this continuation preserved exact Swift output
 and sorted Rust parity unless noted, but did not improve the checkpoint:
 

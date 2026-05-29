@@ -32,6 +32,16 @@ public struct GlobMatcher: Equatable {
         let tokens: [Token]
     }
 
+    private struct FastMatcherPatternMeta {
+        let hasUnsupportedMeta: Bool
+        let hasQuestionOrClassMeta: Bool
+        let starCount: Int
+
+        var hasAnyGlobMeta: Bool {
+            hasQuestionOrClassMeta || starCount > 0
+        }
+    }
+
     #if canImport(Darwin)
     private struct IndexedRule: Equatable {
         let ruleIndex: Int
@@ -844,24 +854,20 @@ public struct GlobMatcher: Equatable {
         guard !caseInsensitive else {
             return nil
         }
-        let unsupportedMetaCharacters = CharacterSet(charactersIn: "{}\\")
-        guard pattern.rangeOfCharacter(from: unsupportedMetaCharacters) == nil else {
+        let meta = fastMatcherPatternMeta(pattern)
+        guard !meta.hasUnsupportedMeta else {
             return nil
-        }
-        let hasSimpleGlobMeta = pattern.contains("?") || pattern.contains("[") || pattern.contains("]")
-        let starCount = pattern.reduce(0) { count, character in
-            character == "*" ? count + 1 : count
         }
         #if canImport(Darwin)
         if pattern.hasPrefix("**/") {
             let suffix = String(pattern.dropFirst(3))
             if !suffix.isEmpty,
-               suffix.rangeOfCharacter(from: CharacterSet(charactersIn: "*?[]")) == nil {
+               !fastMatcherPatternMeta(suffix).hasAnyGlobMeta {
                 return .exact(suffix)
             }
         }
         #endif
-        if hasSimpleGlobMeta {
+        if meta.hasQuestionOrClassMeta {
             #if canImport(Darwin)
             if let simpleGlob = compileSimpleGlob(pattern, basenameOnly: basenameOnly) {
                 return .simpleGlob(simpleGlob)
@@ -869,7 +875,7 @@ public struct GlobMatcher: Equatable {
             #endif
             return nil
         }
-        if starCount == 0 {
+        if meta.starCount == 0 {
             return .exact(pattern)
         }
         #if canImport(Darwin)
@@ -883,22 +889,22 @@ public struct GlobMatcher: Equatable {
         if pattern == "*" {
             return .any
         }
-        if starCount == 1, pattern.hasPrefix("*") {
+        if meta.starCount == 1, pattern.hasPrefix("*") {
             let suffix = String(pattern.dropFirst())
             return suffix.isEmpty ? .any : .suffix(suffix)
         }
-        if starCount == 1, pattern.hasSuffix("*") {
+        if meta.starCount == 1, pattern.hasSuffix("*") {
             let prefix = String(pattern.dropLast())
             return prefix.isEmpty ? .any : .prefix(prefix)
         }
-        if starCount == 1, let star = pattern.firstIndex(of: "*") {
+        if meta.starCount == 1, let star = pattern.firstIndex(of: "*") {
             let prefix = String(pattern[..<star])
             let suffix = String(pattern[pattern.index(after: star)...])
             if !prefix.isEmpty, !suffix.isEmpty {
                 return .prefixSuffix(prefix: prefix, suffix: suffix)
             }
         }
-        if starCount == 2, pattern.hasPrefix("*"), pattern.hasSuffix("*") {
+        if meta.starCount == 2, pattern.hasPrefix("*"), pattern.hasSuffix("*") {
             let needle = pattern.dropFirst().dropLast()
             return needle.isEmpty ? .any : .contains(String(needle))
         }
@@ -908,6 +914,29 @@ public struct GlobMatcher: Equatable {
         }
         #endif
         return nil
+    }
+
+    private static func fastMatcherPatternMeta(_ pattern: String) -> FastMatcherPatternMeta {
+        var hasUnsupportedMeta = false
+        var hasQuestionOrClassMeta = false
+        var starCount = 0
+        for byte in pattern.utf8 {
+            switch byte {
+            case UInt8(ascii: "{"), UInt8(ascii: "}"), UInt8(ascii: "\\"):
+                hasUnsupportedMeta = true
+            case UInt8(ascii: "*"):
+                starCount += 1
+            case UInt8(ascii: "?"), UInt8(ascii: "["), UInt8(ascii: "]"):
+                hasQuestionOrClassMeta = true
+            default:
+                break
+            }
+        }
+        return FastMatcherPatternMeta(
+            hasUnsupportedMeta: hasUnsupportedMeta,
+            hasQuestionOrClassMeta: hasQuestionOrClassMeta,
+            starCount: starCount
+        )
     }
 
     private func matchesSimpleGlob(_ glob: SimpleGlob, _ value: String) -> Bool {
