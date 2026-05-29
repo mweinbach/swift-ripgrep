@@ -64,7 +64,9 @@ public enum RipgrepCLI {
                 for diagnostic in runtimeDebugDiagnostics(options: options, fileManager: fileManager) {
                     stderr("rg: \(diagnostic)")
                 }
-                try validateTypeChanges(options.typeChanges)
+                if !options.typeChanges.isEmpty {
+                    try validateTypeChanges(options.typeChanges)
+                }
                 if options.mode == .search, options.maxCount == 0 {
                     return 1
                 }
