@@ -3659,7 +3659,11 @@ owns final output eligibility. Direct release comparisons matched Rust stdout,
 stderr, and status for deferred `--no-config` vimgrep, quiet, prefixed count,
 word-vimgrep, only-matching vimgrep, inline and separated sort/reverse-sort,
 inline and separated thread count, inline and separated max-count, and separated
-engine selector forms under an active config environment.
+engine selector forms under an active config environment. A follow-up extends
+the same guard to explicit pattern-source and replacement flags before
+`--no-config`; direct checks matched Rust for separated `-e`, inline
+`--regexp=`, short inline `-ePATTERN`, separated `-r`, and inline `--replace=`
+vimgrep forms.
 
 The before column is the same command measured before the relevant parser
 change, where the outer config guard forced the generic Swift path.
@@ -3669,6 +3673,7 @@ change, where the outer config guard forced the generic Swift path.
 | `--vimgrep --heading --no-config -e needle -e quiet` | 5.067 s | 50.9 ms | 89.2 ms |
 | `--sort=path --vimgrep --heading --no-config -e needle -e quiet` | 5.074 s | 47.6 ms | 93.1 ms |
 | `--sort path --vimgrep --heading --no-config -e needle -e quiet` | 5.246 s | 48.9 ms | 96.2 ms |
+| `-e needle --no-config --vimgrep --heading -e quiet` | 5.116 s | 47.9 ms | 93.5 ms |
 
 Plain multi-literal only-matching field output now uses the same field-prefix
 preflight for `-b`, `--column`, and `--vimgrep -o` forms. The route covers

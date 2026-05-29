@@ -4244,12 +4244,18 @@ struct RipgrepCommand {
             return leadingNoConfigNonNegativeInteger(value)
         case "--engine":
             return isEngineSelectorValue(value)
+        case "-e", "--regexp", "-f", "--file", "-r", "--replace":
+            return true
         default:
             return false
         }
     }
 
     private static func leadingNoConfigInlinePreflightFlag(_ argument: String) -> Bool {
+        if leadingNoConfigInlinePatternSourceFlag(argument)
+            || leadingNoConfigInlineReplacementFlag(argument) {
+            return true
+        }
         if let sortValue = leadingNoConfigInlineValue(argument, prefix: "--sort=")
             ?? leadingNoConfigInlineValue(argument, prefix: "--sortr=") {
             return leadingNoConfigSortValue(sortValue)
@@ -4261,6 +4267,18 @@ struct RipgrepCommand {
             return leadingNoConfigNonNegativeInteger(count)
         }
         return false
+    }
+
+    private static func leadingNoConfigInlinePatternSourceFlag(_ argument: String) -> Bool {
+        leadingNoConfigInlineValue(argument, prefix: "--regexp=") != nil
+            || leadingNoConfigInlineShortValue(argument, prefix: "-e") != nil
+            || leadingNoConfigInlineValue(argument, prefix: "--file=") != nil
+            || leadingNoConfigInlineShortValue(argument, prefix: "-f") != nil
+    }
+
+    private static func leadingNoConfigInlineReplacementFlag(_ argument: String) -> Bool {
+        leadingNoConfigInlineValue(argument, prefix: "--replace=") != nil
+            || leadingNoConfigInlineShortValue(argument, prefix: "-r") != nil
     }
 
     private static func leadingNoConfigInlineValue(_ argument: String, prefix: String) -> String? {
