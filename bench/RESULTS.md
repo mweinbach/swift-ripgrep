@@ -3629,28 +3629,32 @@ count, and Unicode fallback forms.
 | `--count-matches -i -m100000 NEEDLE` | 3.312 s | 18.4 ms | 21.1 ms |
 
 Bounded ASCII word count-matches now stays on the executable preflight for
-`-w --count-matches -mN`, while Unicode-adjacent word-boundary cases still
-fall back. Direct release comparisons were byte-identical for unprefixed, `-H`
-prefixed, `--include-zero`, only-matching count, and Unicode-boundary fallback
-forms.
+`-w --count-matches -mN` and counts matches while selecting the first N matching
+lines, instead of copying and rescanning the selected prefix. Unicode-adjacent
+word-boundary cases still fall back. Direct release comparisons were
+byte-identical for unprefixed, `-H` prefixed, `--include-zero`, only-matching
+count, and Unicode-boundary fallback forms.
 
 10 timed runs on the same 7.5 MiB dense literal fixture:
 
 | Command | Preflight bypassed | Current Swift | Rust `rg` |
 | --- | ---: | ---: | ---: |
-| `--count-matches -w -m100000 needle` | 1.958 s | 38.2 ms | 20.0 ms |
+| `--count-matches -w -m100000 needle` | 1.958 s | 5.0 ms | 16.4 ms |
 
-Bounded ASCII ignore-case word count-matches now also stays on the executable
-preflight for `-w -i --count-matches -mN`, while preserving Unicode-boundary
-fallback behavior. Direct release comparisons were byte-identical for
-unprefixed, `-H` prefixed, `--include-zero`, only-matching count, and
-Unicode-boundary fallback forms.
+The tiny word-bound control `--count-matches -w -m2 needle` measured 2.7 ms
+versus 3.7 ms for Rust.
+
+Bounded ASCII ignore-case word count-matches now also shares the one-pass
+selection/counting path for `-w -i --count-matches -mN`, while preserving
+Unicode-boundary fallback behavior. Direct release comparisons were
+byte-identical for unprefixed, `-H` prefixed, `--include-zero`, only-matching
+count, and Unicode-boundary fallback forms.
 
 10 timed runs on the same 7.5 MiB dense literal fixture:
 
 | Command | Preflight bypassed | Current Swift | Rust `rg` |
 | --- | ---: | ---: | ---: |
-| `--count-matches -w -i -m100000 NEEDLE` | 4.951 s | 40.0 ms | 27.3 ms |
+| `--count-matches -w -i -m100000 NEEDLE` | 4.951 s | 5.6 ms | 22.7 ms |
 
 Bounded non-overlapping multi-literal count-matches now uses the executable
 preflight for repeated `-e`, pattern-file, and top-level alternation forms with

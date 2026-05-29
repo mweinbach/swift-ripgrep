@@ -4059,6 +4059,33 @@ public enum SwiftDarwinLiteralPreflight {
         return true
     }
 
+    private static func isASCIIWordBoundaryMatch(
+        base: UnsafePointer<UInt8>,
+        dataCount: Int,
+        matchStart: Int,
+        matchEnd: Int
+    ) -> Bool? {
+        if matchStart > 0 {
+            let before = base[matchStart - 1]
+            if before >= 0x80 {
+                return nil
+            }
+            if rgSwiftIsASCIIRegexWordByte(before) {
+                return false
+            }
+        }
+        if matchEnd < dataCount {
+            let after = base[matchEnd]
+            if after >= 0x80 {
+                return nil
+            }
+            if rgSwiftIsASCIIRegexWordByte(after) {
+                return false
+            }
+        }
+        return true
+    }
+
     private static func mappedPreflightData(path: String) -> Data? {
         let data: Data
         do {
@@ -4400,32 +4427,12 @@ public enum SwiftDarwinLiteralPreflight {
         literal: [UInt8],
         maxCount: Int
     ) -> Int? {
-        let newline = UInt8(ascii: "\n")
-        var lineStart = data.startIndex
-        var matchedLineCount = 0
-        var matchCount = 0
-
-        while matchedLineCount < maxCount,
-              lineStart < data.endIndex {
-            let lineEnd = data[lineStart..<data.endIndex].firstIndex(of: newline) ?? data.endIndex
-            guard let lineMatchCount = countASCIIWordMatches(
-                in: Data(data[lineStart..<lineEnd]),
-                literal: literal,
-                asciiCaseInsensitive: true
-            ) else {
-                return nil
-            }
-            if lineMatchCount > 0 {
-                matchedLineCount += 1
-                matchCount += lineMatchCount
-            }
-            if lineEnd < data.endIndex {
-                lineStart = data.index(after: lineEnd)
-            } else {
-                lineStart = data.endIndex
-            }
-        }
-        return matchCount
+        countASCIIWordMatchesWithinFirstMatchingLines(
+            data: data,
+            literal: literal,
+            maxCount: maxCount,
+            asciiCaseInsensitive: true
+        )
     }
 
     public static func asciiCaseInsensitiveWordLineExitCode(
@@ -5185,50 +5192,105 @@ public enum SwiftDarwinLiteralPreflight {
     private static func countASCIIWordMatchesWithinFirstMatchingLines(
         data: Data,
         literal: [UInt8],
-        maxCount: Int
+        maxCount: Int,
+        asciiCaseInsensitive: Bool = false
     ) -> Int? {
-        let needle = Data(literal)
-        let newline = UInt8(ascii: "\n")
-        var searchStart = data.startIndex
-        var matchedLineCount = 0
-        var selectedPrefixEnd = data.startIndex
-        var rejectedBoundaryCandidates = 0
-        let maxRejectedBoundaryCandidates = 128
-
-        while matchedLineCount < maxCount,
-              searchStart < data.endIndex,
-              let matchRange = data.range(of: needle, in: searchStart..<data.endIndex) {
-            guard !matchRange.isEmpty else {
-                return nil
-            }
-            guard let bounded = isASCIIWordBoundaryMatch(data: data, matchRange: matchRange) else {
-                return nil
-            }
-            if bounded {
-                matchedLineCount += 1
-                if let newlineIndex = data[matchRange.upperBound...].firstIndex(of: newline) {
-                    selectedPrefixEnd = newlineIndex
-                    searchStart = data.index(after: newlineIndex)
-                } else {
-                    selectedPrefixEnd = data.endIndex
-                    searchStart = data.endIndex
-                }
-            } else {
-                rejectedBoundaryCandidates += 1
-                guard rejectedBoundaryCandidates <= maxRejectedBoundaryCandidates else {
-                    return nil
-                }
-                searchStart = data.index(after: matchRange.lowerBound)
-            }
-        }
-
-        guard matchedLineCount > 0 else {
+        guard maxCount > 0,
+              !literal.isEmpty,
+              data.count >= literal.count else {
             return 0
         }
-        return countASCIIWordMatches(
-            in: Data(data[..<selectedPrefixEnd]),
-            literal: literal
-        )
+        let searchLiteral = asciiCaseInsensitive ? literal.map(rgSwiftASCIILower) : literal
+        var caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
+        if asciiCaseInsensitive, searchLiteral.count > 1 {
+            for index in 0..<(searchLiteral.count - 1) {
+                caseInsensitiveShifts[Int(searchLiteral[index])] = searchLiteral.count - 1 - index
+            }
+        }
+
+        return data.withUnsafeBytes { rawData -> Int? in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
+            }
+            let base = rawBase.assumingMemoryBound(to: UInt8.self)
+            return searchLiteral.withUnsafeBufferPointer { needle -> Int? in
+                guard let needleBase = needle.baseAddress else {
+                    return 0
+                }
+
+                func countWithPreparedSearch(_ shifts: UnsafePointer<Int>?) -> Int? {
+                    var searchOffset = 0
+                    var matchedLineCount = 0
+                    var matchCount = 0
+                    var selectedLineEnd = -1
+                    var rejectedBoundaryCandidates = 0
+                    let maxRejectedBoundaryCandidates = 128
+
+                    while searchOffset <= data.count - literal.count {
+                        let found = if asciiCaseInsensitive {
+                            rg_memcasemem_ascii_prepared(
+                                base.advanced(by: searchOffset),
+                                data.count - searchOffset,
+                                needleBase,
+                                needle.count,
+                                shifts
+                            )
+                        } else {
+                            rg_memmem_simple(
+                                base.advanced(by: searchOffset),
+                                data.count - searchOffset,
+                                needleBase,
+                                needle.count
+                            )
+                        }
+                        guard let found else {
+                            break
+                        }
+
+                        let matchStart = base.distance(to: found)
+                        let matchEnd = matchStart + literal.count
+                        guard let bounded = isASCIIWordBoundaryMatch(
+                            base: base,
+                            dataCount: data.count,
+                            matchStart: matchStart,
+                            matchEnd: matchEnd
+                        ) else {
+                            return nil
+                        }
+                        if bounded {
+                            if matchStart >= selectedLineEnd {
+                                guard matchedLineCount < maxCount else {
+                                    break
+                                }
+                                matchedLineCount += 1
+                                selectedLineEnd = rgSwiftDarwinNextLineStart(
+                                    base: base,
+                                    haystackLength: data.count,
+                                    from: matchEnd
+                                )
+                            }
+                            matchCount += 1
+                            searchOffset = matchEnd
+                        } else {
+                            rejectedBoundaryCandidates += 1
+                            guard rejectedBoundaryCandidates <= maxRejectedBoundaryCandidates else {
+                                return nil
+                            }
+                            searchOffset = matchStart + 1
+                        }
+                    }
+
+                    return matchCount
+                }
+
+                if asciiCaseInsensitive {
+                    return caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
+                        countWithPreparedSearch(shifts.baseAddress)
+                    }
+                }
+                return countWithPreparedSearch(nil)
+            }
+        }
     }
 
     public static func wordCountMatchesExitCode(
