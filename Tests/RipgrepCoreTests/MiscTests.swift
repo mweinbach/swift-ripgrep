@@ -6160,6 +6160,55 @@ struct MiscTests {
         ], fixture: {})
         #expect(deferredInlinePatternNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
 
+        let deferredColorNoConfigVimgrepOutput = try runExecutableData([
+            "--color",
+            "never",
+            "--vimgrep",
+            "--heading",
+            "--no-config",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredColorNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
+
+        let deferredInlineColorNoConfigVimgrepOutput = try runExecutableData([
+            "--color=never",
+            "--vimgrep",
+            "--heading",
+            "--no-config",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredInlineColorNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
+
+        let deferredColorsNoConfigVimgrepOutput = try runExecutableData([
+            "--colors",
+            "path:fg:red",
+            "--color",
+            "never",
+            "--vimgrep",
+            "--heading",
+            "--no-config",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredColorsNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
+
         let deferredInlineMaxCountNoConfigOutput = try runExecutableData([
             "-m1",
             "--no-config",

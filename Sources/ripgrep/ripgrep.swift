@@ -4244,6 +4244,10 @@ struct RipgrepCommand {
             return leadingNoConfigNonNegativeInteger(value)
         case "--engine":
             return isEngineSelectorValue(value)
+        case "--color":
+            return leadingNoConfigColorValue(value)
+        case "--colors":
+            return RipgrepArgumentParser.isValidColorChange(value)
         case "-e", "--regexp", "-f", "--file", "-r", "--replace":
             return true
         default:
@@ -4255,6 +4259,12 @@ struct RipgrepCommand {
         if leadingNoConfigInlinePatternSourceFlag(argument)
             || leadingNoConfigInlineReplacementFlag(argument) {
             return true
+        }
+        if let colorValue = leadingNoConfigInlineValue(argument, prefix: "--color=") {
+            return leadingNoConfigColorValue(colorValue)
+        }
+        if let colorChange = leadingNoConfigInlineValue(argument, prefix: "--colors=") {
+            return RipgrepArgumentParser.isValidColorChange(colorChange)
         }
         if let sortValue = leadingNoConfigInlineValue(argument, prefix: "--sort=")
             ?? leadingNoConfigInlineValue(argument, prefix: "--sortr=") {
@@ -4293,6 +4303,15 @@ struct RipgrepCommand {
 
     private static func leadingNoConfigNonNegativeInteger(_ value: String) -> Bool {
         !value.hasPrefix("-") && Int(value) != nil
+    }
+
+    private static func leadingNoConfigColorValue(_ value: String) -> Bool {
+        switch value {
+        case "never", "always", "ansi", "auto":
+            return true
+        default:
+            return false
+        }
     }
 
     private static func leadingNoConfigSortValue(_ value: String) -> Bool {
