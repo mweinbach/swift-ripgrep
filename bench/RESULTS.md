@@ -68,10 +68,10 @@ and 2.716 s for Rust.
 
 The executable ASCII case-insensitive containment proof now uses the existing
 folded byte scanner instead of building exact/lower/upper `Data` variants. It
-still only proves no-match for literals without ASCII letters; lettered
-no-matches fall back as before. Direct status/stdout/stderr checks matched the
-previous Swift binary and Rust for explicit-file quiet, path-only, without-match,
-and digit no-match controls. A 30-run A/B on the 23 MiB Linux register header
+initially only proved no-match for literals without ASCII letters; lettered
+no-matches fell back. Direct status/stdout/stderr checks matched the previous
+Swift binary and Rust for explicit-file quiet, path-only, without-match, and
+digit no-match controls. A 30-run A/B on the 23 MiB Linux register header
 measured `-q -i ReG_MaSk` at 3.2 ms versus 23.6 ms before and 3.3 ms for Rust;
 `-l -i ReG_MaSk` measured 3.1 ms versus 23.6 ms before and 3.3 ms for Rust. A
 digit no-match control improved from 9.8 ms to 5.6 ms. A follow-up no-letter
@@ -79,6 +79,18 @@ literal branch reuses the plain byte scanner, keeping mixed-case controls in the
 same band while improving the digit no-match control again to 4.9 ms in an
 order-flipped 60-run check, versus 5.4 ms for the folded scanner and 4.8 ms for
 Rust.
+
+Lettered ASCII case-insensitive quiet/path-only no-matches now use the same
+folded byte scanner, then only return no-match when the mapped haystack has no
+non-ASCII bytes. Non-ASCII haystacks still fall back for Unicode case folding.
+Targeted status/stdout/stderr checks matched the previous Swift binary and Rust
+for ASCII match/no-match, `-q`, `-l`, `-L`, Unicode fallback, binary, and empty
+file controls. On a 46 MiB ASCII file, a 40-run A/B measured
+`-i -q missingliteral` at 9.5 ms for the probe versus 33.3 ms baseline and
+9.6 ms for Rust; `-i -l missingliteral` measured 9.4 ms versus 33.4 ms
+baseline. The order-flipped 60-run confirmation measured `-i -q` at 9.5 ms
+probe versus 34.4 ms baseline and `-i -l` at 9.4 ms probe versus 33.5 ms
+baseline, with Rust `-i -q` at 9.7 ms.
 
 Files-mode controls on `/tmp/swift-rg-bench/linux` isolated the cost to VCS
 ignore handling. A 30-run slice measured Swift `--files` at 101.3 ms ± 2.9 ms,

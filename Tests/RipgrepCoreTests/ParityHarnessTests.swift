@@ -470,6 +470,12 @@ private func miscParityCases() -> [ParityCase] {
         try write("Sherlock", to: "file.py", in: dir)
         try write("Sherlock", to: "file.rs", in: dir)
     }
+    let caseInsensitiveASCIIProofFixture: (URL) throws -> Void = { dir in
+        try write("alpha\nNeedle here\nplain tail\n", to: "ascii", in: dir)
+    }
+    let caseInsensitiveUnicodeFallbackFixture: (URL) throws -> Void = { dir in
+        try write("alpha\nstraße\nCAFÉ\nİstanbul\n", to: "unicode", in: dir)
+    }
     return [
         ParityCase(name: "misc::single_file", fixture: sherlockFixture, arguments: ["Sherlock", "sherlock"]),
         ParityCase(name: "misc::dir", fixture: sherlockFixture, arguments: ["Sherlock"]),
@@ -481,6 +487,10 @@ private func miscParityCases() -> [ParityCase] {
         ParityCase(name: "misc::inverted", fixture: sherlockFixture, arguments: ["-v", "Sherlock", "sherlock"]),
         ParityCase(name: "misc::inverted_line_numbers", fixture: sherlockFixture, arguments: ["-n", "-v", "Sherlock", "sherlock"]),
         ParityCase(name: "misc::case_insensitive", fixture: sherlockFixture, arguments: ["-i", "sherlock", "sherlock"]),
+        ParityCase(name: "misc::case_insensitive_quiet_ascii_no_match", fixture: caseInsensitiveASCIIProofFixture, arguments: ["-i", "-q", "missingliteral", "ascii"]),
+        ParityCase(name: "misc::case_insensitive_files_with_matches_ascii_no_match", fixture: caseInsensitiveASCIIProofFixture, arguments: ["-i", "-l", "missingliteral", "ascii"]),
+        ParityCase(name: "misc::case_insensitive_files_without_match_ascii_no_match", fixture: caseInsensitiveASCIIProofFixture, arguments: ["-i", "-L", "missingliteral", "ascii"]),
+        ParityCase(name: "misc::case_insensitive_unicode_fallback", fixture: caseInsensitiveUnicodeFallbackFixture, arguments: ["-i", "-q", "strasse", "unicode"]),
         ParityCase(name: "misc::word", fixture: sherlockFixture, arguments: ["-w", "as", "sherlock"]),
         ParityCase(name: "misc::word_period", fixture: { dir in try write("...", to: "haystack", in: dir) }, arguments: ["-ow", ".", "haystack"]),
         ParityCase(name: "misc::line", fixture: sherlockFixture, arguments: ["-x", "Watson|and exhibited clearly, with a label attached.", "sherlock"]),

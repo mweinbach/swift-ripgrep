@@ -4160,7 +4160,7 @@ public enum SwiftDarwinLiteralPreflight {
         if dataContainsASCIICaseInsensitiveLiteral(data, foldedLiteral: foldedLiteral) {
             return true
         }
-        return nil
+        return containsNonASCIIByte(data) ? nil : false
     }
 
     private static func containsASCIICaseInsensitiveExactLine(path: String, literal: [UInt8]) -> Bool? {
