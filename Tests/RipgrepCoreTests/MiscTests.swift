@@ -4015,6 +4015,23 @@ struct MiscTests {
         ], fixture: {})
         #expect(utf8EncodingWordOutput == output)
 
+        let utf8EncodingMultiWordOutput = try runExecutableData([
+            "--encoding=utf-8",
+            "-w",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(utf8EncodingMultiWordOutput == Data("""
+        needle needle needle
+        quiet line
+        NEEDLE needle Needle
+        tail needle
+
+        """.utf8))
+
         let utf8EncodingIgnoreCaseWordOutput = try runExecutableData([
             "--encoding=utf-8",
             "-i",
@@ -4097,6 +4114,17 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(disabledEncodingWordOutput == output)
+
+        let disabledEncodingMultiWordOutput = try runExecutableData([
+            "--encoding=none",
+            "-w",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(disabledEncodingMultiWordOutput == utf8EncodingMultiWordOutput)
 
         let disabledEncodingIgnoreCaseWordOutput = try runExecutableData([
             "--encoding=none",

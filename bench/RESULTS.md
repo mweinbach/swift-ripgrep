@@ -18,7 +18,9 @@ numbers, counts, quiet mode, path-only mode, files-without-match, and a
 Unicode-adjacent fallback fixture. Follow-ups extend the same ASCII-only guard
 to single-literal `--count-matches -w -i`, multi-literal word/count modes,
 single-literal only-matching word/case output, and plain single- or
-multi-literal only-match output. The non-word `-o`/`-o -i` path emits the
+multi-literal only-match output. Encoded multi-literal word line output now
+uses the same ASCII-safe line writer before falling back. The non-word
+`-o`/`-o -i` path emits the
 original matched bytes, preserves line-number and filename prefixes, handles
 overlapping alternatives with Rust-compatible leftmost/alternation order, and
 falls back for binary-prefix haystacks; ignore-case additionally falls back for
@@ -3795,6 +3797,22 @@ invalid UTF-8 fallback forms. Five-run probes on
 `--encoding=utf-8 -w needle` improving from 2.691 s to 15.5 ms. The
 case-insensitive encoded forms measured 14.1 ms for raw and 15.5 ms for UTF-8,
 versus 29.3 ms for Rust.
+
+Encoded multi-literal word line output now has a dedicated ASCII-only mapped
+writer instead of falling through the full encoding path. It scans all
+candidate literals, emits each matching line once in file order, preserves line
+number/max-count/heading prefixes, and falls back for non-ASCII, binary, or
+ambiguous boundary cases. Direct release byte/status checks matched Rust for
+raw, UTF-8, UTF-8 ignore-case, line-number, max-count, and Unicode fallback
+forms.
+
+10 timed runs on `/tmp/swift-rg-candidates/countm-big.txt`:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--encoding=none -w -e needle -e quiet` | 5.286 s | 37.8 ms | 23.0 ms |
+| `--encoding=utf-8 -w -e needle -e quiet` | 3.800 s | 38.1 ms | 23.4 ms |
+| `--encoding=utf-8 -i -w -e NEEDLE -e QUIET` | n/a | 38.6 ms | 29.8 ms |
 
 Exact line-regexp vimgrep output now uses a Swift mapped-line writer for
 case-sensitive literal `-x`/`--line-regexp` searches. It preserves vimgrep
