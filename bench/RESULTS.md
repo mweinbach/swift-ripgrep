@@ -4134,6 +4134,19 @@ control.
 | `--encoding=utf-8 --vimgrep -x needle` | 1.317 s | 4.5 ms | 13.4 ms |
 | `--encoding=none --vimgrep -x needle` | 1.899 s | 4.3 ms | 10.0 ms |
 
+Case-sensitive exact-line vimgrep for repeated `-e` and pattern-file literals
+now uses the same stdout-buffer mapped-byte writer as matching-line output
+instead of the older `Data` line writer. Direct byte/status checks matched the
+previous Swift binary and Rust for repeated `-e`, raw, UTF-8, byte-offset,
+no-column, no-line-number, custom field separators, no-filename output, bounded,
+pattern-file, no-match, and final-line-without-newline forms. On
+`/tmp/swift-rg-candidates/countm-big.txt`, 25-run checks measured
+`--vimgrep -x -e 'needle needle quiet tail' -e 'missing line'` at 15.2 ms
+versus 141.1 ms before and 62.8 ms for Rust; `--encoding=none` at 15.4 ms
+versus 138.4 ms before and 62.8 ms for Rust; `--encoding=utf-8` at 16.5 ms
+versus 139.8 ms before and 63.8 ms for Rust; and the no-match repeated-`-e`
+form at 5.6 ms versus 28.5 ms before and 4.4 ms for Rust.
+
 `--heading` is now output-neutral for executable vimgrep preflights. Rust does
 not emit separate heading records for vimgrep output, so the parser keeps
 full-line, only-matching, and word-boundary vimgrep shapes on their existing
