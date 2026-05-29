@@ -3759,18 +3759,28 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literal: [UInt8],
         includeZero: Bool,
+        maxCount: Int? = nil,
         countPrefix: [UInt8] = [],
         crlfTerminated: Bool = false
     ) -> Int32? {
         guard !literal.isEmpty,
-              !literal.contains(UInt8(ascii: "\n")) else {
+              !literal.contains(UInt8(ascii: "\n")),
+              maxCount.map({ $0 > 0 }) ?? true else {
             return nil
         }
         guard let data = mappedPreflightData(path: path) else {
             return nil
         }
 
-        let matchCount = countNonOverlappingMatches(in: data, literal: literal)
+        let matchCount = if let maxCount {
+            countNonOverlappingMatchesWithinFirstMatchingLines(
+                inFirstMatchingLinesOf: data,
+                literal: literal,
+                maxCount: maxCount
+            )
+        } else {
+            countNonOverlappingMatches(in: data, literal: literal)
+        }
 
         if matchCount > 0 || includeZero {
             guard writeCountOutput(
@@ -3782,6 +3792,43 @@ public enum SwiftDarwinLiteralPreflight {
             }
         }
         return matchCount > 0 ? 0 : 1
+    }
+
+    private static func countNonOverlappingMatchesWithinFirstMatchingLines(
+        inFirstMatchingLinesOf data: Data,
+        literal: [UInt8],
+        maxCount: Int
+    ) -> Int {
+        let needle = Data(literal)
+        let newline = UInt8(ascii: "\n")
+        var searchStart = data.startIndex
+        var matchedLineCount = 0
+        var selectedPrefixEnd = data.startIndex
+
+        while matchedLineCount < maxCount,
+              searchStart < data.endIndex,
+              let matchRange = data.range(of: needle, in: searchStart..<data.endIndex) {
+            guard !matchRange.isEmpty else {
+                return 0
+            }
+
+            matchedLineCount += 1
+            if let newlineIndex = data[matchRange.upperBound...].firstIndex(of: newline) {
+                selectedPrefixEnd = newlineIndex
+                searchStart = data.index(after: newlineIndex)
+            } else {
+                selectedPrefixEnd = data.endIndex
+                searchStart = data.endIndex
+            }
+        }
+
+        guard matchedLineCount > 0 else {
+            return 0
+        }
+        return countNonOverlappingMatches(
+            in: Data(data[..<selectedPrefixEnd]),
+            literal: literal
+        )
     }
 
     public static func wordCountMatchesExitCode(

@@ -3452,6 +3452,19 @@ literal scanning. The raw hyperfine exports live under
 `/tmp/swift-rg-bench/no-c-shim-literal-warm-*.json` and
 `/tmp/swift-rg-bench/no-c-shim-files-warm-*.json`.
 
+Bounded single-literal count-matches now keeps the executable Swift preflight
+when `--max-count` limits the number of matching lines. `-o -c -mN` uses the
+same count-matches semantics, matching Rust's "matches within the first N
+matching lines" output. Direct release comparisons were byte-identical for
+unprefixed, `-H` prefixed, `--include-zero`, and only-matching count forms.
+
+10 timed runs on `/tmp/swift-rg-candidates/countm-big.txt`, a 7.5 MiB dense
+literal fixture with 300,000 lines:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--count-matches -m100000 needle` | 1.56 s | 36.6 ms | 10.8 ms |
+
 ### Rejected A/B checks — 2026-05-25
 
 The following plausible Darwin optimizations were measured against checkpoint

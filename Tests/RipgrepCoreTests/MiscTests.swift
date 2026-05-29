@@ -4588,6 +4588,32 @@ struct MiscTests {
         ], fixture: {})
         #expect(prefixedPatternFileCountMatchesOutput == Data("\(root.path("dense.txt")):6\n".utf8))
 
+        let boundedCountMatchesOutput = try runExecutableData([
+            "--count-matches",
+            "-m1",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(boundedCountMatchesOutput == Data("3\n".utf8))
+
+        let boundedOnlyMatchingCountOutput = try runExecutableData([
+            "-o",
+            "-c",
+            "-m2",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(boundedOnlyMatchingCountOutput == Data("4\n".utf8))
+
+        let prefixedBoundedCountMatchesOutput = try runExecutableData([
+            "-H",
+            "--count-matches",
+            "-m1",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(prefixedBoundedCountMatchesOutput == Data("\(root.path("dense.txt")):3\n".utf8))
+
         let includeZeroCountMatchesResult = try runExecutableResult([
             "--include-zero",
             "--count-matches",

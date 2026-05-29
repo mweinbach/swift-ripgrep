@@ -1723,8 +1723,7 @@ struct RipgrepCommand {
         wordRegexp = parsedWordRegexp
         fixedStrings = parsedFixedStrings
         if parsedOnlyMatching,
-           parsedPrintMode == .count,
-           parsedMaxCount == nil {
+           parsedPrintMode == .count {
             parsedPrintMode = .countMatches
         }
         parsedCount = parsedPrintMode == .count
@@ -3456,11 +3455,13 @@ struct RipgrepCommand {
             }
             guard parsedPathOnlyMode == nil,
                   !parsedLineRegexp,
-                  !asciiBoundary,
-                  parsedMaxCount == nil else {
+                  !asciiBoundary else {
                 return nil
             }
             if wordRegexp {
+                guard parsedMaxCount == nil else {
+                    return nil
+                }
                 if asciiCaseInsensitive {
                     return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveWordCountMatchesExitCode(
                         path: path,
@@ -3479,6 +3480,9 @@ struct RipgrepCommand {
                 )
             }
             if asciiCaseInsensitive {
+                guard parsedMaxCount == nil else {
+                    return nil
+                }
                 return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveCountMatchesExitCode(
                     path: path,
                     literal: literal,
@@ -3491,6 +3495,7 @@ struct RipgrepCommand {
                 path: path,
                 literal: literal,
                 includeZero: parsedIncludeZero,
+                maxCount: parsedMaxCount,
                 countPrefix: parsedCountPrefix,
                 crlfTerminated: parsedCrlf
             )
