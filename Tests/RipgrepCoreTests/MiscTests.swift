@@ -1340,10 +1340,50 @@ struct MiscTests {
             "missingliteral",
             root.path("summary.txt"),
         ])
+        let jsonContextNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "-C",
+            "2",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let jsonMaxColumnsNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "--max-columns",
+            "1",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let jsonReplacementNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "-r",
+            "x",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
         let statsNoMatchSummary = try runExecutableResult([
             "--no-config",
             "--stats",
             "-q",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let statsContextNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "-C",
+            "2",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let statsMaxCountNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "-m",
+            "1",
             "missingliteral",
             root.path("summary.txt"),
         ])
@@ -1389,6 +1429,9 @@ struct MiscTests {
             jsonIgnoreCaseNoMatchSummary,
             jsonWordNoMatchSummary,
             jsonIgnoreCaseWordNoMatchSummary,
+            jsonContextNoMatchSummary,
+            jsonMaxColumnsNoMatchSummary,
+            jsonReplacementNoMatchSummary,
         ] {
             #expect(result.status == 1)
             #expect(result.stderr.isEmpty)
@@ -1399,6 +1442,8 @@ struct MiscTests {
             statsIgnoreCaseNoMatchSummary,
             statsWordNoMatchSummary,
             statsIgnoreCaseWordNoMatchSummary,
+            statsContextNoMatchSummary,
+            statsMaxCountNoMatchSummary,
         ] {
             #expect(result.status == 1)
             #expect(result.stderr.isEmpty)

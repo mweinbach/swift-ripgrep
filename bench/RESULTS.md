@@ -145,6 +145,19 @@ matched the previous Swift binary and Rust for `--json -i -w` and
 probe versus 4.967 s baseline and 11.3 ms for Rust; `--stats -i -w` measured
 11.0 ms versus 4.989 s baseline and 9.1 ms for Rust.
 
+The summary preflight gate now admits formatting-only no-match modes that cannot
+change a proven zero-match summary: context flags, `--max-columns`,
+replacement text, and nonzero `--max-count`. `--max-count 0`, passthrough,
+trim/CRLF, stop-on-nonmatch, null-data, and other semantic modes still fall
+back. Direct status/stdout/stderr checks matched the previous Swift binary and
+Rust for the measured cases after normalizing elapsed timing fields. On the
+46 MiB ASCII file, five-run A/Bs measured `--json --max-columns 1` at 8.5 ms
+for the probe versus 2.188 s baseline and 7.2 ms for Rust; `--json -C 2` at
+8.6 ms versus 2.182 s and 7.7 ms for Rust; `--json -r x` at 8.9 ms versus
+2.218 s and 7.4 ms for Rust; `--stats -m 1` at 8.5 ms versus 2.188 s and
+6.4 ms for Rust; and `--stats -C 2` at 8.6 ms versus 2.195 s and 6.6 ms for
+Rust.
+
 Files-mode controls on `/tmp/swift-rg-bench/linux` isolated the cost to VCS
 ignore handling. A 30-run slice measured Swift `--files` at 101.3 ms ± 2.9 ms,
 Swift `--hidden --files` at 101.6 ms ± 2.7 ms, Swift
