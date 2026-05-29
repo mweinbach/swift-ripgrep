@@ -4279,6 +4279,8 @@ struct RipgrepCommand {
             return leadingNoConfigKnownEncoding(value)
         case "--ignore-file":
             return leadingNoConfigReadableRegularFile(value)
+        case "--type-add", "--type-clear", "-t", "--type", "-T", "--type-not":
+            return true
         case "-e", "--regexp", "-f", "--file", "-r", "--replace":
             return true
         default:
@@ -4330,6 +4332,9 @@ struct RipgrepCommand {
         }
         if let ignoreFile = leadingNoConfigInlineValue(argument, prefix: "--ignore-file=") {
             return leadingNoConfigReadableRegularFile(ignoreFile)
+        }
+        if leadingNoConfigInlineTypeValue(argument) != nil {
+            return true
         }
         if let sortValue = leadingNoConfigInlineValue(argument, prefix: "--sort=")
             ?? leadingNoConfigInlineValue(argument, prefix: "--sortr=") {
@@ -4397,6 +4402,27 @@ struct RipgrepCommand {
         ]
         for prefix in valuePrefixes {
             if let value = leadingNoConfigInlineValue(argument, prefix: prefix) {
+                return value
+            }
+        }
+        return nil
+    }
+
+    private static func leadingNoConfigInlineTypeValue(_ argument: String) -> String? {
+        let valuePrefixes = [
+            "--type-add=",
+            "--type-clear=",
+            "--type=",
+            "--type-not=",
+        ]
+        for prefix in valuePrefixes {
+            if let value = leadingNoConfigInlineValue(argument, prefix: prefix) {
+                return value
+            }
+        }
+        let shortPrefixes = ["-t", "-T"]
+        for prefix in shortPrefixes {
+            if let value = leadingNoConfigInlineShortValue(argument, prefix: prefix) {
                 return value
             }
         }
