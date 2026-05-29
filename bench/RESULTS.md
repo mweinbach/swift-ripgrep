@@ -99,6 +99,12 @@ and sorted Rust parity unless noted, but did not improve the checkpoint:
   measured 101.7 ms baseline versus 101.2 ms for the probe, and
   `--no-ignore --files` measured 65.1 ms baseline versus 64.4 ms for the probe.
   The existing setup path stayed to avoid a neutral churn-only change.
+- Caching `GlobMatcher`'s scoped strip-prefix character count avoided
+  recomputing it during directory-local ignore decisions and preserved sorted
+  Rust parity for default and hidden file listing, but a same-machine 30-run A/B
+  was flat: default `--files` measured 101.8 ms baseline versus 101.4 ms for
+  the probe, while `--hidden --files` measured 103.0 ms baseline versus
+  102.7 ms for the probe. The extra stored field stayed out.
 - Removing the 4 KiB size gate from the retained multi-literal no-match
   preflight was noisier against the Linux alternation corpus; the ungated probe
   measured 2.298 s ± 0.058 s mean versus the gated probe at 2.286 s ± 0.010 s,
