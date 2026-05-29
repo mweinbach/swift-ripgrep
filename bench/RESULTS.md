@@ -3528,6 +3528,21 @@ preflight-bypassed `-w -i` probe used 3 timed runs:
 | `--count-matches -w -m100000 -e needle -e quiet` | 2.761 s | 47.3 ms | 28.0 ms |
 | `--count-matches -w -i -m100000 -e NEEDLE -e QUIET` | 6.545 s | 57.1 ms | 30.1 ms |
 
+Bounded fixed-lookaround PCRE count-matches now also stays on the executable
+preflight for ASCII fixed lookbehind, fixed lookahead, and reset-start
+`prefix\Kliteral` forms. Direct release comparisons were byte-identical for
+unprefixed, `-H` prefixed, `--include-zero`, lookahead, lookbehind, and
+reset-start bounded count-matches forms, including the `-o --count-matches`
+spelling.
+
+10 timed runs on `/tmp/swift-rg-candidates/lookaround-countm-big.txt`, a
+9.2 MiB dense lookaround fixture with 300,000 lines:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `-P --count-matches -m100000 '(?<=prefix)needle'` | 1.378 s | 11.1 ms | 13.8 ms |
+| `-P --count-matches -m100000 'prefix(?=needle)'` | 1.343 s | 10.3 ms | 14.6 ms |
+
 ### Rejected A/B checks — 2026-05-25
 
 The following plausible Darwin optimizations were measured against checkpoint

@@ -1130,6 +1130,13 @@ struct PCRE2Tests {
             "(?<=Sherlock )Holmes",
             temp.path("pcre.txt"),
         ]) {}
+        let boundedCountMatchesOutput = try runExecutableData([
+            "-P",
+            "--count-matches",
+            "-m1",
+            "(?<=Sherlock )Holmes",
+            temp.path("pcre.txt"),
+        ]) {}
         let overlappingPositiveCountOutput = try runExecutableData([
             "-P",
             "-c",
@@ -1145,6 +1152,7 @@ struct PCRE2Tests {
 
         #expect(countOutput == Data("1\n".utf8))
         #expect(countMatchesOutput == Data("2\n".utf8))
+        #expect(boundedCountMatchesOutput == countMatchesOutput)
         #expect(overlappingPositiveCountOutput == Data("1\n".utf8))
         #expect(overlappingNegativeCountMatchesOutput == Data("1\n".utf8))
     }
@@ -1323,6 +1331,13 @@ struct PCRE2Tests {
             "Sherlock(?= Holmes)",
             temp.path("pcre.txt"),
         ]) {}
+        let boundedCountMatchesOutput = try runExecutableData([
+            "-P",
+            "--count-matches",
+            "-m1",
+            "Sherlock(?= Holmes)",
+            temp.path("pcre.txt"),
+        ]) {}
         let negativeCountMatchesOutput = try runExecutableData([
             "-P",
             "--count-matches",
@@ -1338,6 +1353,7 @@ struct PCRE2Tests {
 
         #expect(countOutput == Data("1\n".utf8))
         #expect(countMatchesOutput == Data("2\n".utf8))
+        #expect(boundedCountMatchesOutput == countMatchesOutput)
         #expect(negativeCountMatchesOutput == Data("2\n".utf8))
         #expect(overlappingNegativeCountOutput == Data("1\n".utf8))
     }

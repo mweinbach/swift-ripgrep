@@ -2842,7 +2842,7 @@ struct RipgrepCommand {
                 )
             }
             if parsedPrintMode == .countMatches {
-                guard parsedMaxCount == nil else {
+                guard parsedMaxCount != 0 else {
                     return nil
                 }
                 return SwiftDarwinLiteralPreflight.fixedLookbehindCountMatchesExitCode(
@@ -2851,6 +2851,7 @@ struct RipgrepCommand {
                     literal: fixedLookbehind.literal,
                     prefixShouldMatch: fixedLookbehind.prefixShouldMatch,
                     includeZero: parsedIncludeZero,
+                    maxCount: parsedMaxCount,
                     countPrefix: parsedCountPrefix,
                     crlfTerminated: parsedCrlf
                 )
@@ -2929,7 +2930,7 @@ struct RipgrepCommand {
                 )
             }
             if parsedPrintMode == .countMatches {
-                guard parsedMaxCount == nil else {
+                guard parsedMaxCount != 0 else {
                     return nil
                 }
                 return SwiftDarwinLiteralPreflight.fixedLookaheadCountMatchesExitCode(
@@ -2938,6 +2939,7 @@ struct RipgrepCommand {
                     suffix: fixedLookahead.suffix,
                     suffixShouldMatch: fixedLookahead.suffixShouldMatch,
                     includeZero: parsedIncludeZero,
+                    maxCount: parsedMaxCount,
                     countPrefix: parsedCountPrefix,
                     crlfTerminated: parsedCrlf
                 )
@@ -3016,7 +3018,7 @@ struct RipgrepCommand {
                 )
             }
             if parsedPrintMode == .countMatches {
-                guard parsedMaxCount == nil else {
+                guard parsedMaxCount != 0 else {
                     return nil
                 }
                 return SwiftDarwinLiteralPreflight.fixedLookbehindCountMatchesExitCode(
@@ -3025,6 +3027,7 @@ struct RipgrepCommand {
                     literal: fixedResetStart.literal,
                     prefixShouldMatch: true,
                     includeZero: parsedIncludeZero,
+                    maxCount: parsedMaxCount,
                     countPrefix: parsedCountPrefix,
                     crlfTerminated: parsedCrlf
                 )

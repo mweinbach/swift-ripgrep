@@ -276,15 +276,18 @@ public enum SwiftDarwinLiteralPreflight {
         literal: [UInt8],
         prefixShouldMatch: Bool,
         includeZero: Bool,
+        maxCount: Int? = nil,
         countPrefix: [UInt8] = [],
         crlfTerminated: Bool = false
     ) -> Int32? {
         guard fixedLookaroundInputsAreSafe(literal, prefix),
+              maxCount.map({ $0 > 0 }) ?? true,
               let matchCount = countFixedLookbehindMatches(
                 path: path,
                 prefix: prefix,
                 literal: literal,
-                prefixShouldMatch: prefixShouldMatch
+                prefixShouldMatch: prefixShouldMatch,
+                maxCount: maxCount
               ) else {
             return nil
         }
@@ -437,15 +440,18 @@ public enum SwiftDarwinLiteralPreflight {
         suffix: [UInt8],
         suffixShouldMatch: Bool,
         includeZero: Bool,
+        maxCount: Int? = nil,
         countPrefix: [UInt8] = [],
         crlfTerminated: Bool = false
     ) -> Int32? {
         guard fixedLookaroundInputsAreSafe(literal, suffix),
+              maxCount.map({ $0 > 0 }) ?? true,
               let matchCount = countFixedLookaheadMatches(
                 path: path,
                 literal: literal,
                 suffix: suffix,
-                suffixShouldMatch: suffixShouldMatch
+                suffixShouldMatch: suffixShouldMatch,
+                maxCount: maxCount
               ) else {
             return nil
         }
@@ -2260,7 +2266,8 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         prefix: [UInt8],
         literal: [UInt8],
-        prefixShouldMatch: Bool
+        prefixShouldMatch: Bool,
+        maxCount: Int? = nil
     ) -> Int? {
         guard let data = mappedPreflightData(path: path) else {
             return nil
@@ -2268,7 +2275,40 @@ public enum SwiftDarwinLiteralPreflight {
         guard data.count >= literal.count else {
             return 0
         }
+        if let maxCount {
+            guard let selectedPrefixEnd = fixedLookbehindSelectedPrefixEnd(
+                data: data,
+                prefix: prefix,
+                literal: literal,
+                prefixShouldMatch: prefixShouldMatch,
+                maxCount: maxCount
+            ) else {
+                return nil
+            }
+            guard selectedPrefixEnd > 0 else {
+                return 0
+            }
+            return countFixedLookbehindMatches(
+                in: Data(data[..<selectedPrefixEnd]),
+                prefix: prefix,
+                literal: literal,
+                prefixShouldMatch: prefixShouldMatch
+            )
+        }
+        return countFixedLookbehindMatches(
+            in: data,
+            prefix: prefix,
+            literal: literal,
+            prefixShouldMatch: prefixShouldMatch
+        )
+    }
 
+    private static func countFixedLookbehindMatches(
+        in data: Data,
+        prefix: [UInt8],
+        literal: [UInt8],
+        prefixShouldMatch: Bool
+    ) -> Int? {
         return data.withUnsafeBytes { rawData in
             guard let rawBase = rawData.baseAddress else {
                 return 0
@@ -2306,6 +2346,65 @@ public enum SwiftDarwinLiteralPreflight {
                         }
                     }
                     return matchCount
+                }
+            }
+        }
+    }
+
+    private static func fixedLookbehindSelectedPrefixEnd(
+        data: Data,
+        prefix: [UInt8],
+        literal: [UInt8],
+        prefixShouldMatch: Bool,
+        maxCount: Int
+    ) -> Int? {
+        guard data.count >= literal.count else {
+            return 0
+        }
+        return data.withUnsafeBytes { rawData in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
+            }
+            let base = rawBase.assumingMemoryBound(to: UInt8.self)
+            return prefix.withUnsafeBufferPointer { prefixBytes in
+                literal.withUnsafeBufferPointer { literalBytes in
+                    guard let prefixBase = prefixBytes.baseAddress,
+                          let literalBase = literalBytes.baseAddress else {
+                        return 0
+                    }
+                    var searchOffset = 0
+                    var matchedLineCount = 0
+                    var selectedPrefixEnd = 0
+                    while matchedLineCount < maxCount,
+                          searchOffset <= data.count - literal.count {
+                        guard let found = rg_memmem_simple(
+                            base.advanced(by: searchOffset),
+                            data.count - searchOffset,
+                            literalBase,
+                            literal.count
+                        ) else {
+                            return selectedPrefixEnd
+                        }
+                        let matchStart = base.distance(to: found)
+                        let hasPrefix = matchStart >= prefix.count
+                            && memcmp(
+                                base.advanced(by: matchStart - prefix.count),
+                                prefixBase,
+                                prefix.count
+                            ) == 0
+                        if hasPrefix == prefixShouldMatch {
+                            matchedLineCount += 1
+                            selectedPrefixEnd = nextLineStart(
+                                after: matchStart + literal.count,
+                                in: base,
+                                count: data.count
+                            )
+                            searchOffset = selectedPrefixEnd
+                        } else {
+                            searchOffset = matchStart + 1
+                        }
+                    }
+                    return selectedPrefixEnd
                 }
             }
         }
@@ -2378,7 +2477,8 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literal: [UInt8],
         suffix: [UInt8],
-        suffixShouldMatch: Bool
+        suffixShouldMatch: Bool,
+        maxCount: Int? = nil
     ) -> Int? {
         guard let data = mappedPreflightData(path: path) else {
             return nil
@@ -2386,7 +2486,40 @@ public enum SwiftDarwinLiteralPreflight {
         guard data.count >= literal.count else {
             return 0
         }
+        if let maxCount {
+            guard let selectedPrefixEnd = fixedLookaheadSelectedPrefixEnd(
+                data: data,
+                literal: literal,
+                suffix: suffix,
+                suffixShouldMatch: suffixShouldMatch,
+                maxCount: maxCount
+            ) else {
+                return nil
+            }
+            guard selectedPrefixEnd > 0 else {
+                return 0
+            }
+            return countFixedLookaheadMatches(
+                in: Data(data[..<selectedPrefixEnd]),
+                literal: literal,
+                suffix: suffix,
+                suffixShouldMatch: suffixShouldMatch
+            )
+        }
+        return countFixedLookaheadMatches(
+            in: data,
+            literal: literal,
+            suffix: suffix,
+            suffixShouldMatch: suffixShouldMatch
+        )
+    }
 
+    private static func countFixedLookaheadMatches(
+        in data: Data,
+        literal: [UInt8],
+        suffix: [UInt8],
+        suffixShouldMatch: Bool
+    ) -> Int? {
         return data.withUnsafeBytes { rawData in
             guard let rawBase = rawData.baseAddress else {
                 return 0
@@ -2425,6 +2558,66 @@ public enum SwiftDarwinLiteralPreflight {
                         }
                     }
                     return matchCount
+                }
+            }
+        }
+    }
+
+    private static func fixedLookaheadSelectedPrefixEnd(
+        data: Data,
+        literal: [UInt8],
+        suffix: [UInt8],
+        suffixShouldMatch: Bool,
+        maxCount: Int
+    ) -> Int? {
+        guard data.count >= literal.count else {
+            return 0
+        }
+        return data.withUnsafeBytes { rawData in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
+            }
+            let base = rawBase.assumingMemoryBound(to: UInt8.self)
+            return literal.withUnsafeBufferPointer { literalBytes in
+                suffix.withUnsafeBufferPointer { suffixBytes in
+                    guard let literalBase = literalBytes.baseAddress,
+                          let suffixBase = suffixBytes.baseAddress else {
+                        return 0
+                    }
+                    var searchOffset = 0
+                    var matchedLineCount = 0
+                    var selectedPrefixEnd = 0
+                    while matchedLineCount < maxCount,
+                          searchOffset <= data.count - literal.count {
+                        guard let found = rg_memmem_simple(
+                            base.advanced(by: searchOffset),
+                            data.count - searchOffset,
+                            literalBase,
+                            literal.count
+                        ) else {
+                            return selectedPrefixEnd
+                        }
+                        let matchStart = base.distance(to: found)
+                        let suffixStart = matchStart + literal.count
+                        let hasSuffix = suffixStart + suffix.count <= data.count
+                            && memcmp(
+                                base.advanced(by: suffixStart),
+                                suffixBase,
+                                suffix.count
+                            ) == 0
+                        if hasSuffix == suffixShouldMatch {
+                            matchedLineCount += 1
+                            selectedPrefixEnd = nextLineStart(
+                                after: suffixStart,
+                                in: base,
+                                count: data.count
+                            )
+                            searchOffset = selectedPrefixEnd
+                        } else {
+                            searchOffset = matchStart + 1
+                        }
+                    }
+                    return selectedPrefixEnd
                 }
             }
         }
