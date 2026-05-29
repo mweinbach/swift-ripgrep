@@ -3606,9 +3606,7 @@ forms.
 | `-w --column -o -e needle -e quiet` | 4.286 s | 46.0 ms | 108.9 ms |
 
 Word only-matching vimgrep output now also uses the field-prefix preflight for
-the visible `--vimgrep -o` shape. This remains scoped to only-matching output;
-full-line vimgrep output still falls back to the existing formatter because it
-prints the full source line once per match. Direct release comparisons were
+the visible `--vimgrep -o` shape. Direct release comparisons were
 byte-identical for repeated `-e`, byte-offset, `--no-filename`, ignore-case,
 alternation, single-literal, and Unicode-adjacent fallback forms.
 
@@ -3617,6 +3615,24 @@ alternation, single-literal, and Unicode-adjacent fallback forms.
 | Command | Preflight bypassed | Current Swift | Rust `rg` |
 | --- | ---: | ---: | ---: |
 | `--vimgrep -w -o -e needle -e quiet` | 5.679 s | 49.9 ms | 126.6 ms |
+
+Word full-line vimgrep output now shares that same ASCII-boundary executable
+preflight for repeated `-e`, top-level alternation, single-literal, and ASCII
+ignore-case forms. It emits the full source line once per accepted word match
+with Rust-compatible path, line, column, optional byte-offset, `--no-filename`,
+`-N`, and `--no-column` layouts, while non-ASCII haystacks and unsupported
+vimgrep shapes continue to fall back. Direct release comparisons were
+byte-identical for repeated literals, byte offsets, no-filename, single literal,
+alternation, bounded `-m`, `-N`, `--no-column`, no-field vimgrep, ignore-case,
+and Unicode fallback fixtures.
+
+10 timed runs on the same dense literal fixture:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--vimgrep -w -e needle -e quiet` | 5.762 s | 50.7 ms | 127.3 ms |
+| `--vimgrep -w -i -e NEEDLE -e QUIET` | 10.668 s | 50.8 ms | 136.9 ms |
+| `--vimgrep -w -m100000 -e needle -e quiet` | 3.146 s | 20.7 ms | 44.7 ms |
 
 Plain multi-literal only-matching field output now uses the same field-prefix
 preflight for `-b`, `--column`, and `--vimgrep -o` forms. The route covers

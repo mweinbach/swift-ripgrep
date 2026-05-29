@@ -1194,6 +1194,97 @@ public enum SwiftDarwinLiteralPreflight {
         return matchCount > 0 ? 0 : 1
     }
 
+    public static func asciiCaseInsensitiveMultiLiteralWordVimgrepLineExitCode(
+        path: String,
+        literals: [[UInt8]],
+        lineNumber: Bool = true,
+        column: Bool = true,
+        byteOffset: Bool = false,
+        maxCount: Int? = nil,
+        lineNumberFieldSeparator: [UInt8] = [58],
+        linePrefix: [UInt8] = []
+    ) -> Int32? {
+        guard let literals = distinctASCIICaseInsensitiveWordLiterals(literals),
+              !literals.isEmpty,
+              maxCount.map({ $0 > 0 }) ?? true,
+              let data = mappedPreflightData(path: path),
+              !hasBinaryDetectionPrefix(data),
+              !containsNonASCIIByte(data) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return 1
+        }
+
+        guard let matchCount = data.withUnsafeBytes({ rawData -> Int? in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
+            }
+            return rgSwiftDarwinWriteMultiLiteralVimgrepLines(
+                rawBase.assumingMemoryBound(to: UInt8.self),
+                haystackLength: data.count,
+                literals: literals,
+                asciiCaseInsensitive: true,
+                wordBoundary: true,
+                lineNumber: lineNumber,
+                column: column,
+                byteOffset: byteOffset,
+                maxCount: maxCount ?? Int.max,
+                lineNumberFieldSeparator: lineNumberFieldSeparator,
+                linePrefix: linePrefix
+            )
+        }) else {
+            return nil
+        }
+        return matchCount > 0 ? 0 : 1
+    }
+
+    public static func multiLiteralWordVimgrepLineExitCode(
+        path: String,
+        literals: [[UInt8]],
+        lineNumber: Bool = true,
+        column: Bool = true,
+        byteOffset: Bool = false,
+        maxCount: Int? = nil,
+        lineNumberFieldSeparator: [UInt8] = [58],
+        linePrefix: [UInt8] = []
+    ) -> Int32? {
+        guard let literals = distinctASCIIWordLiterals(literals),
+              !literals.isEmpty,
+              literals.allSatisfy({ literal in literal.allSatisfy { byte in byte < 0x80 } }),
+              maxCount.map({ $0 > 0 }) ?? true,
+              let data = mappedPreflightData(path: path),
+              !hasBinaryDetectionPrefix(data),
+              !containsNonASCIIByte(data) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return 1
+        }
+
+        guard let matchCount = data.withUnsafeBytes({ rawData -> Int? in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
+            }
+            return rgSwiftDarwinWriteMultiLiteralVimgrepLines(
+                rawBase.assumingMemoryBound(to: UInt8.self),
+                haystackLength: data.count,
+                literals: literals,
+                asciiCaseInsensitive: false,
+                wordBoundary: true,
+                lineNumber: lineNumber,
+                column: column,
+                byteOffset: byteOffset,
+                maxCount: maxCount ?? Int.max,
+                lineNumberFieldSeparator: lineNumberFieldSeparator,
+                linePrefix: linePrefix
+            )
+        }) else {
+            return nil
+        }
+        return matchCount > 0 ? 0 : 1
+    }
+
     public static func asciiCaseInsensitiveMultiLiteralVimgrepLineExitCode(
         path: String,
         literals: [[UInt8]],
@@ -7454,6 +7545,7 @@ private func rgSwiftDarwinWriteMultiLiteralVimgrepLines(
     haystackLength: Int,
     literals: [[UInt8]],
     asciiCaseInsensitive: Bool,
+    wordBoundary: Bool = false,
     lineNumber: Bool,
     column: Bool,
     byteOffset: Bool,
@@ -7553,8 +7645,26 @@ private func rgSwiftDarwinWriteMultiLiteralVimgrepLines(
         guard matchStart < haystackLength else {
             break
         }
-        let literalLength = literals[candidates[candidateIndex].literalIndex].count
+        let literalIndex = candidates[candidateIndex].literalIndex
+        let literalLength = literals[literalIndex].count
         let matchEnd = matchStart + literalLength
+        if wordBoundary {
+            guard let bounded = isASCIIWordBoundaryMatch(
+                base: base,
+                dataCount: haystackLength,
+                matchStart: matchStart,
+                matchEnd: matchEnd
+            ) else {
+                return nil
+            }
+            guard bounded else {
+                candidates[candidateIndex] = nextCandidate(
+                    literalIndex: literalIndex,
+                    from: matchStart + 1
+                )
+                continue
+            }
+        }
 
         if matchStart >= selectedLineEnd {
             guard matchedLineCount < maxCount else {

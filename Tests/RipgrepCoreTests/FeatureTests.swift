@@ -2621,6 +2621,35 @@ struct FeatureTests {
         #expect(vimgrepMultiWordOnlyMatchingOutput == Data(
             "\(root.path("multi-word-only.txt")):1:10:foo\n\(root.path("multi-word-only.txt")):1:14:bar\n".utf8
         ))
+        let vimgrepMultiWordLineOutput = try runExecutableData([
+            "--vimgrep",
+            "-w",
+            "-m1",
+            "-e",
+            "foo",
+            "-e",
+            "bar",
+            root.path("multi-word-only.txt"),
+        ]) {}
+        #expect(vimgrepMultiWordLineOutput == Data((
+            "\(root.path("multi-word-only.txt")):1:10:foo_food foo bar food\n"
+                + "\(root.path("multi-word-only.txt")):1:14:foo_food foo bar food\n"
+        ).utf8))
+        let vimgrepMultiWordLineByteOutput = try runExecutableData([
+            "--vimgrep",
+            "-w",
+            "-b",
+            "-m1",
+            "-e",
+            "foo",
+            "-e",
+            "bar",
+            root.path("multi-word-only.txt"),
+        ]) {}
+        #expect(vimgrepMultiWordLineByteOutput == Data((
+            "\(root.path("multi-word-only.txt")):1:10:9:foo_food foo bar food\n"
+                + "\(root.path("multi-word-only.txt")):1:14:13:foo_food foo bar food\n"
+        ).utf8))
         let prefixedMultiWordOnlyMatchingOutput = try runExecutableData([
             "--with-filename",
             "-w",
@@ -2662,6 +2691,22 @@ struct FeatureTests {
             "\(root.path("multi-word-ignore-only.txt")):1:1:FOO_food Foo bar BAR\n"
                 + "\(root.path("multi-word-ignore-only.txt")):1:5:FOO_food Foo bar BAR\n"
                 + "\(root.path("multi-word-ignore-only.txt")):1:10:FOO_food Foo bar BAR\n"
+                + "\(root.path("multi-word-ignore-only.txt")):1:14:FOO_food Foo bar BAR\n"
+                + "\(root.path("multi-word-ignore-only.txt")):1:18:FOO_food Foo bar BAR\n"
+        ).utf8))
+        let vimgrepIgnoreCaseMultiWordLineOutput = try runExecutableData([
+            "--vimgrep",
+            "-w",
+            "-i",
+            "-m1",
+            "-e",
+            "FOO",
+            "-e",
+            "BAR",
+            root.path("multi-word-ignore-only.txt"),
+        ]) {}
+        #expect(vimgrepIgnoreCaseMultiWordLineOutput == Data((
+            "\(root.path("multi-word-ignore-only.txt")):1:10:FOO_food Foo bar BAR\n"
                 + "\(root.path("multi-word-ignore-only.txt")):1:14:FOO_food Foo bar BAR\n"
                 + "\(root.path("multi-word-ignore-only.txt")):1:18:FOO_food Foo bar BAR\n"
         ).utf8))
