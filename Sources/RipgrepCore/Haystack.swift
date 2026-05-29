@@ -144,6 +144,15 @@ private struct DarwinFilePathStringChunk: @unchecked Sendable {
     let filtered: Bool
 }
 
+private struct DarwinFilePathDataChunk: @unchecked Sendable {
+    let data: Data
+    let count: Int
+    let messages: [String]
+    let warnings: [String]
+    let diagnostics: [String]
+    let filtered: Bool
+}
+
 private final class DarwinNoIgnoreFilePathChunkStore: @unchecked Sendable {
     private let lock = NSLock()
     private var chunks: [Result<DarwinNoIgnoreFilePathChunk, Error>?]
@@ -183,6 +192,30 @@ private final class DarwinFilePathStringChunkStore: @unchecked Sendable {
     }
 
     func orderedChunks() throws -> [DarwinFilePathStringChunk] {
+        lock.lock()
+        let snapshot = chunks
+        lock.unlock()
+        return try snapshot.map { result in
+            try result!.get()
+        }
+    }
+}
+
+private final class DarwinFilePathDataChunkStore: @unchecked Sendable {
+    private let lock = NSLock()
+    private var chunks: [Result<DarwinFilePathDataChunk, Error>?]
+
+    init(count: Int) {
+        self.chunks = Array(repeating: nil, count: count)
+    }
+
+    func store(_ result: Result<DarwinFilePathDataChunk, Error>, at index: Int) {
+        lock.lock()
+        chunks[index] = result
+        lock.unlock()
+    }
+
+    func orderedChunks() throws -> [DarwinFilePathDataChunk] {
         lock.lock()
         let snapshot = chunks
         lock.unlock()
@@ -362,9 +395,11 @@ public struct FileWalker: @unchecked Sendable {
         #if canImport(Darwin)
         guard canFastWalkFilePaths(options: options),
               options.effectiveRoots.count == 1,
-              options.noIgnore,
               !stopAfterFirst else {
             return nil
+        }
+        if !options.noIgnore {
+            return try writeDarwinIgnoreFilePathsWithMessages(for: options, writeBytes: writeBytes)
         }
         var messages: [String] = []
         var outputBuffer = Data()
@@ -431,6 +466,80 @@ public struct FileWalker: @unchecked Sendable {
         return nil
         #endif
     }
+
+    #if canImport(Darwin)
+    private func writeDarwinIgnoreFilePathsWithMessages(
+        for options: RipgrepOptions,
+        writeBytes: (UnsafeRawBufferPointer) -> Void
+    ) throws -> FilePathStreamResults? {
+        var messages: [String] = []
+        var warnings: [String] = []
+        var diagnostics: [String] = []
+        var filtered = false
+        let root = options.effectiveRoots[0]
+        let rootExists = fileManager.fileExists(atPath: root.path)
+        guard rootExists else {
+            let displayPath = rootDisplayPath(at: 0, root: root, options: options)
+            messages.append(missingRootMessage(displayPath, options: options, hasExistingRoot: false))
+            return FilePathStreamResults(
+                count: 0,
+                messages: messages,
+                warnings: warnings,
+                diagnostics: diagnostics,
+                filtered: false
+            )
+        }
+
+        let rootURL = root.standardizedFileURL
+        let rootBase = rootBase(for: rootURL)
+        guard rootBase.standardizedFileURL.path == rootURL.path else {
+            return nil
+        }
+        let rootArgument = options.rootPathArguments.first ?? ""
+        guard !rootArgument.isEmpty,
+              (rootArgument as NSString).isAbsolutePath,
+              URL(fileURLWithPath: rootArgument).standardizedFileURL.path == rootURL.path,
+              isDirectoryPath(rootURL.path) else {
+            return nil
+        }
+
+        var rootIgnoreStack = IgnoreStack()
+        appendExplicitIgnoreFiles(
+            to: &rootIgnoreStack,
+            rootBase: rootBase,
+            warnings: &warnings,
+            diagnostics: &diagnostics,
+            options: options
+        )
+        appendGlobalIgnoreFile(to: &rootIgnoreStack, rootBase: rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
+        appendParentIgnoreFiles(to: &rootIgnoreStack, rootBase: rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
+        let rootVCSContext = options.noRequireGit || isInGitRepository(rootBase)
+
+        guard let parallelResults = try writeFilePathsInOutputOrderParallel(
+            rootURL: rootURL,
+            rootBase: rootBase,
+            rootDebugDisplayPath: rootDisplayPath(at: 0, root: root, options: options),
+            rootVCSContext: rootVCSContext,
+            rootIgnoreStack: rootIgnoreStack,
+            options: options,
+            writeBytes: writeBytes
+        ) else {
+            return nil
+        }
+
+        messages.append(contentsOf: parallelResults.messages)
+        warnings.append(contentsOf: parallelResults.warnings)
+        diagnostics.append(contentsOf: parallelResults.diagnostics)
+        filtered = filtered || parallelResults.filtered
+        return FilePathStreamResults(
+            count: parallelResults.count,
+            messages: messages,
+            warnings: warnings,
+            diagnostics: diagnostics,
+            filtered: filtered
+        )
+    }
+    #endif
 
     public func haystacksWithMessages(for options: RipgrepOptions) throws -> FileWalkResults {
         var haystacks: [Haystack] = []
@@ -792,6 +901,210 @@ public struct FileWalker: @unchecked Sendable {
             emittedCount += chunk.lines.count
             for line in chunk.lines {
                 emit(line)
+            }
+            messages.append(contentsOf: chunk.messages)
+            warnings.append(contentsOf: chunk.warnings)
+            diagnostics.append(contentsOf: chunk.diagnostics)
+            filtered = filtered || chunk.filtered
+        }
+        return FilePathStreamResults(
+            count: emittedCount,
+            messages: messages,
+            warnings: warnings,
+            diagnostics: diagnostics,
+            filtered: filtered
+        )
+    }
+
+    private func writeFilePathsInOutputOrderParallel(
+        rootURL: URL,
+        rootBase: URL,
+        rootDebugDisplayPath: String,
+        rootVCSContext: Bool,
+        rootIgnoreStack: IgnoreStack,
+        options: RipgrepOptions,
+        writeBytes: (UnsafeRawBufferPointer) -> Void
+    ) throws -> FilePathStreamResults? {
+        guard !options.noIgnore,
+              options.loggingMode == nil else {
+            return nil
+        }
+
+        let contents = try fastDirectoryContents(atPath: rootURL.path)
+        let directoryVCSContext = rootVCSContext || (!options.noIgnoreVCS && contents.hasGitMarker)
+        var directoryIgnoreStack = rootIgnoreStack
+        var rootWarnings: [String] = []
+        var rootDiagnostics: [String] = []
+        if hasLoadableIgnoreFiles(
+            hasGitMarker: contents.hasGitMarker,
+            hasGitignore: contents.hasGitignore,
+            hasIgnore: contents.hasIgnore,
+            hasRgignore: contents.hasRgignore,
+            vcsContext: directoryVCSContext,
+            options: options
+        ) {
+            appendIgnoreFiles(
+                in: rootURL,
+                to: &directoryIgnoreStack,
+                warnings: &rootWarnings,
+                diagnostics: &rootDiagnostics,
+                rootBase: rootBase,
+                rootDebugDisplayPath: rootDebugDisplayPath,
+                rootArgumentIsAbsolute: true,
+                vcsContext: directoryVCSContext,
+                scope: directoryIgnoreScope(relativePath: ""),
+                directoryContents: DirectoryContents(
+                    children: [],
+                    hasGitMarker: contents.hasGitMarker,
+                    hasGitignore: contents.hasGitignore,
+                    hasIgnore: contents.hasIgnore,
+                    hasRgignore: contents.hasRgignore
+                ),
+                options: options
+            )
+        }
+
+        let directoryPathPrefix = rootURL.path + "/"
+        let logicalDirectoryPathPrefix = rootURL.path + "/"
+        let rootPathIsASCII = rootURL.path.utf8.allSatisfy { $0 < 0x80 }
+        var orderedChildren: [FastDirectoryChild] = []
+        orderedChildren.reserveCapacity(contents.children.count)
+        var directoryCount = 0
+        var rootFiltered = false
+        for child in contents.children.reversed() {
+            if child.kind == .symbolicLink {
+                continue
+            }
+            let childRelativePath = child.name
+            let isDirectory = child.kind.isDirectory
+            if !options.hidden,
+               child.isHidden,
+               !isIncludedByIgnore(
+                   relativePath: childRelativePath,
+                   basename: child.name,
+                   isDirectory: isDirectory,
+                   ignoreStack: directoryIgnoreStack
+               ) {
+                continue
+            }
+            guard directoryIgnoreStack.allows(
+                relativePath: childRelativePath,
+                basename: child.name,
+                isDirectory: isDirectory
+            ) else {
+                rootFiltered = true
+                continue
+            }
+            if child.kind.isDirectory {
+                directoryCount += 1
+                orderedChildren.append(child)
+            } else if child.kind.isFile {
+                orderedChildren.append(child)
+            }
+        }
+        guard directoryCount >= 2 else {
+            return nil
+        }
+
+        let store = DarwinFilePathDataChunkStore(count: orderedChildren.count)
+        let group = DispatchGroup()
+        let queue = DispatchQueue.global(qos: .userInitiated)
+        let parallelIgnoreStack = directoryIgnoreStack
+
+        for (index, child) in orderedChildren.enumerated() {
+            if child.kind.isFile {
+                var output = Data()
+                output.reserveCapacity(logicalDirectoryPathPrefix.utf8.count + child.name.utf8.count + 1)
+                let line = outputPath(
+                    logicalDirectoryPathPrefix: logicalDirectoryPathPrefix,
+                    logicalDirectoryPathIsASCII: rootPathIsASCII,
+                    child: child
+                )
+                appendUTF8(line, to: &output)
+                output.append(UInt8(ascii: "\n"))
+                store.store(
+                    .success(DarwinFilePathDataChunk(
+                        data: output,
+                        count: 1,
+                        messages: [],
+                        warnings: [],
+                        diagnostics: [],
+                        filtered: false
+                    )),
+                    at: index
+                )
+                continue
+            }
+
+            let childName = child.name
+            let childIsASCII = child.isASCII
+            group.enter()
+            queue.async {
+                defer {
+                    group.leave()
+                }
+                var output = Data()
+                output.reserveCapacity(64 * 1024)
+                var emittedCount = 0
+                var messages: [String] = []
+                var warnings: [String] = []
+                var diagnostics: [String] = []
+                var filtered = false
+                var didStop = false
+                do {
+                    try walkFilePathsInOutputOrder(
+                        directoryPath: directoryPathPrefix + childName,
+                        logicalDirectoryPath: logicalDirectoryPathPrefix + childName,
+                        logicalDirectoryPathIsASCII: rootPathIsASCII && childIsASCII,
+                        relativePath: childName,
+                        rootBase: rootBase,
+                        rootDebugDisplayPath: rootDebugDisplayPath,
+                        rootArgumentIsAbsolute: true,
+                        vcsContext: directoryVCSContext,
+                        messages: &messages,
+                        warnings: &warnings,
+                        diagnostics: &diagnostics,
+                        filtered: &filtered,
+                        ignoreStack: parallelIgnoreStack,
+                        options: options,
+                        stopAfterFirst: false,
+                        didStop: &didStop
+                    ) { line in
+                        emittedCount += 1
+                        appendUTF8(line, to: &output)
+                        output.append(UInt8(ascii: "\n"))
+                    }
+                    store.store(
+                        .success(DarwinFilePathDataChunk(
+                            data: output,
+                            count: emittedCount,
+                            messages: messages,
+                            warnings: warnings,
+                            diagnostics: diagnostics,
+                            filtered: filtered
+                        )),
+                        at: index
+                    )
+                } catch {
+                    store.store(.failure(error), at: index)
+                }
+            }
+        }
+
+        group.wait()
+        let chunks = try store.orderedChunks()
+        var emittedCount = 0
+        var messages: [String] = []
+        var warnings = rootWarnings
+        var diagnostics = rootDiagnostics
+        var filtered = rootFiltered
+        for chunk in chunks {
+            emittedCount += chunk.count
+            chunk.data.withUnsafeBytes { bytes in
+                guard !bytes.isEmpty else {
+                    return
+                }
+                writeBytes(bytes)
             }
             messages.append(contentsOf: chunk.messages)
             warnings.append(contentsOf: chunk.warnings)

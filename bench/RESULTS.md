@@ -122,9 +122,26 @@ and hidden file listing, and sorted output matched Rust. Initial same-machine
 80-run confirmations measured default `--files` at 101.2 ms for the probe versus
 102.7 ms baseline and hidden `--files` at 101.3 ms versus 105.7 ms.
 
+Ignore-aware `--files` now writes each top-level parallel chunk as UTF-8 `Data`
+instead of merging arrays of path strings and converting them later in the CLI.
+Exact Swift output matched the pre-change binary for default, hidden,
+`--no-ignore-vcs`, and `--no-ignore`; sorted output matched Rust. A same-machine
+40-run A/B measured default `--files` at 98.3 ms for the probe versus 104.8 ms
+baseline, hidden at 97.6 ms versus 103.1 ms, and `--no-ignore-vcs --files` at
+70.1 ms versus 74.1 ms. The order-flipped 80-run confirmation measured default
+at 97.6 ms probe versus 102.2 ms baseline, hidden at 97.6 ms versus 104.4 ms,
+and `--no-ignore-vcs` at 71.5 ms versus 74.5 ms with one first-run probe
+outlier; Rust default measured 75.5 ms in that same run.
+
 Rejected Swift-only probes from this continuation preserved exact Swift output
 and sorted Rust parity unless noted, but did not improve the checkpoint:
 
+- Raising the CLI file-path output buffer from 64 KiB to 256 KiB preserved exact
+  Swift output and sorted Rust parity for default, hidden, and no-ignore file
+  listing, but was flat to slightly worse. A 40-run A/B measured default
+  `--files` at 106.3 ms baseline versus 106.2 ms probe, hidden at 104.2 ms
+  baseline versus 105.0 ms probe, and `--no-ignore --files` at 67.9 ms baseline
+  versus 70.3 ms probe.
 - Reusing one root Git-context check for global-ignore setup measured
   103.5 ms ± 6.4 ms, essentially flat.
 - Threading known ASCII path state into ignore decisions regressed to
