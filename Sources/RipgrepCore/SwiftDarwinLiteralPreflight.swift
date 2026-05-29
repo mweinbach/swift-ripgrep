@@ -1537,6 +1537,9 @@ public enum SwiftDarwinLiteralPreflight {
                 headingPrefix: []
             )
         }
+        guard dataContainsAnyLiteral(data, literals: literals) else {
+            return 1
+        }
 
         let limit = maxCount ?? Int.max
         let newline = UInt8(ascii: "\n")
@@ -2361,6 +2364,10 @@ public enum SwiftDarwinLiteralPreflight {
         }
         guard !hasBinaryDetectionPrefix(data) else {
             return nil
+        }
+        if literals.count > 1,
+           !dataContainsAnyLiteral(data, literals: literals) {
+            return 1
         }
 
         let limit = maxCount ?? Int.max
@@ -3235,6 +3242,13 @@ public enum SwiftDarwinLiteralPreflight {
                 ) != nil
             }
         }
+    }
+
+    private static func dataContainsAnyLiteral(_ data: Data, literals: [[UInt8]]) -> Bool {
+        for literal in literals where dataContainsLiteralUsingSIMD(data, literal: literal) {
+            return true
+        }
+        return false
     }
 
     private static func containsFixedLookbehindLiteral(
@@ -4141,10 +4155,7 @@ public enum SwiftDarwinLiteralPreflight {
         guard !hasBinaryDetectionPrefix(data) else {
             return nil
         }
-        for literal in literals where dataContainsLiteralUsingSIMD(data, literal: literal) {
-            return true
-        }
-        return false
+        return dataContainsAnyLiteral(data, literals: literals)
     }
 
     private static func containsAnyLiteralUsingSIMD(path: String, literals: [[UInt8]]) -> Bool? {
@@ -4163,10 +4174,7 @@ public enum SwiftDarwinLiteralPreflight {
         guard !hasBinaryDetectionPrefix(data) else {
             return nil
         }
-        for literal in literals where dataContainsLiteralUsingSIMD(data, literal: literal) {
-            return true
-        }
-        return false
+        return dataContainsAnyLiteral(data, literals: literals)
     }
 
     private static func containsExactLine(path: String, literal: [UInt8]) -> Bool? {

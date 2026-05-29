@@ -1493,6 +1493,15 @@ improved from 341.2 ms to 29.4 ms, versus 111.1 ms for Rust; numbered output
 improved from 483.8 ms to 44.2 ms, versus 138.0 ms for Rust; and no-match
 alternation improved from 148.9 ms to 16.0 ms, versus 10.1 ms for Rust.
 
+A follow-up no-match guard checks the mapped file for any exact-line literal
+bytes before entering the line scanner. It returns status 1 immediately only
+when none of the candidate bytes appear anywhere, so matching output stays on
+the same writer. Direct byte/status checks matched the previous Swift binary
+and Rust for plain, numbered, byte-offset, bounded, pattern-file, and no-match
+forms. On the 46 MiB dense fixture, `-x -e absent -e missing` improved from
+16.8 ms to 10.7 ms, versus 11.4 ms for Rust; matching output stayed flat at
+29.0 ms.
+
 Single-literal exact-line field output now uses the same stdout-buffer byte
 scanner as plain exact-line output. It emits fields in Rust order (`line`,
 `column`, `byte-offset`) when requested, treats `--column` as line-numbered
@@ -4165,6 +4174,12 @@ versus 141.1 ms before and 62.8 ms for Rust; `--encoding=none` at 15.4 ms
 versus 138.4 ms before and 62.8 ms for Rust; `--encoding=utf-8` at 16.5 ms
 versus 139.8 ms before and 63.8 ms for Rust; and the no-match repeated-`-e`
 form at 5.6 ms versus 28.5 ms before and 4.4 ms for Rust.
+
+The same no-match guard now applies before the repeated/pattern-file exact-line
+vimgrep writer. Direct byte/status checks matched the previous Swift binary and
+Rust for repeated `-e`, pattern-file, no-column, no-line-number, and no-match
+forms. On `/tmp/swift-rg-candidates/countm-big.txt`, `--vimgrep -x -e absent
+-e missing` improved from 5.2 ms to 3.8 ms, versus 4.1 ms for Rust.
 
 `--heading` is now output-neutral for executable vimgrep preflights. Rust does
 not emit separate heading records for vimgrep output, so the parser keeps
