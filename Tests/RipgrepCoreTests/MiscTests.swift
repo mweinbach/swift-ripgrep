@@ -6302,6 +6302,144 @@ struct MiscTests {
         ], fixture: {})
         #expect(deferredInlineGlobNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
 
+        let deferredMaxDepthNoConfigVimgrepOutput = try runExecutableData([
+            "--max-depth",
+            "1",
+            "--vimgrep",
+            "--heading",
+            "--no-config",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredMaxDepthNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
+
+        let deferredInlineMaxDepthNoConfigVimgrepOutput = try runExecutableData([
+            "--max-depth=1",
+            "--vimgrep",
+            "--heading",
+            "--no-config",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredInlineMaxDepthNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
+
+        let leadingFieldSeparatorNoConfigVimgrepOutput = try runExecutableData([
+            "--no-config",
+            "--field-match-separator",
+            "|",
+            "--vimgrep",
+            "--heading",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        let deferredFieldSeparatorNoConfigVimgrepOutput = try runExecutableData([
+            "--field-match-separator",
+            "|",
+            "--vimgrep",
+            "--heading",
+            "--no-config",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredFieldSeparatorNoConfigVimgrepOutput == leadingFieldSeparatorNoConfigVimgrepOutput)
+
+        let deferredInlineFieldSeparatorNoConfigVimgrepOutput = try runExecutableData([
+            "--field-match-separator=|",
+            "--vimgrep",
+            "--heading",
+            "--no-config",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredInlineFieldSeparatorNoConfigVimgrepOutput == leadingFieldSeparatorNoConfigVimgrepOutput)
+
+        let deferredMaxFilesizeNoConfigVimgrepOutput = try runExecutableData([
+            "--max-filesize",
+            "1K",
+            "--vimgrep",
+            "--heading",
+            "--no-config",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredMaxFilesizeNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
+
+        let deferredInlineResourceLimitNoConfigVimgrepOutput = try runExecutableData([
+            "--dfa-size-limit=10M",
+            "--vimgrep",
+            "--heading",
+            "--no-config",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredInlineResourceLimitNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
+
+        let deferredEncodingNoConfigVimgrepOutput = try runExecutableData([
+            "--encoding",
+            "auto",
+            "--vimgrep",
+            "--heading",
+            "--no-config",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredEncodingNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
+
+        let deferredInlineEncodingNoConfigVimgrepOutput = try runExecutableData([
+            "-Eauto",
+            "--vimgrep",
+            "--heading",
+            "--no-config",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredInlineEncodingNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
+
         let deferredInlineMaxCountNoConfigOutput = try runExecutableData([
             "-m1",
             "--no-config",

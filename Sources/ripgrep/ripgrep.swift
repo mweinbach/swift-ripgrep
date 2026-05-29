@@ -4254,6 +4254,26 @@ struct RipgrepCommand {
             return value.isEmpty
         case "--pre-glob", "-g", "--glob", "--iglob":
             return leadingNoConfigStrictGlob(value)
+        case "-A",
+             "--after-context",
+             "-B",
+             "--before-context",
+             "-C",
+             "--context",
+             "-M",
+             "--max-columns",
+             "-d",
+             "--max-depth",
+             "--maxdepth":
+            return leadingNoConfigNonNegativeInteger(value)
+        case "--field-match-separator", "--field-context-separator", "--context-separator":
+            return true
+        case "--path-separator":
+            return preflightPathSeparator(value) != nil
+        case "--dfa-size-limit", "--regex-size-limit", "--max-filesize":
+            return leadingNoConfigHumanReadableSize(value)
+        case "-E", "--encoding":
+            return leadingNoConfigKnownEncoding(value)
         case "-e", "--regexp", "-f", "--file", "-r", "--replace":
             return true
         default:
@@ -4283,6 +4303,24 @@ struct RipgrepCommand {
             ?? leadingNoConfigInlineShortValue(argument, prefix: "-g")
             ?? leadingNoConfigInlineValue(argument, prefix: "--iglob=") {
             return leadingNoConfigStrictGlob(glob)
+        }
+        if let number = leadingNoConfigInlineNumericValue(argument) {
+            return leadingNoConfigNonNegativeInteger(number)
+        }
+        if leadingNoConfigInlineValue(argument, prefix: "--field-match-separator=") != nil
+            || leadingNoConfigInlineValue(argument, prefix: "--field-context-separator=") != nil
+            || leadingNoConfigInlineValue(argument, prefix: "--context-separator=") != nil {
+            return true
+        }
+        if let pathSeparator = leadingNoConfigInlineValue(argument, prefix: "--path-separator=") {
+            return preflightPathSeparator(pathSeparator) != nil
+        }
+        if let resourceLimit = leadingNoConfigInlineResourceLimit(argument) {
+            return leadingNoConfigHumanReadableSize(resourceLimit)
+        }
+        if let encoding = leadingNoConfigInlineValue(argument, prefix: "--encoding=")
+            ?? leadingNoConfigInlineShortValue(argument, prefix: "-E") {
+            return leadingNoConfigKnownEncoding(encoding)
         }
         if let sortValue = leadingNoConfigInlineValue(argument, prefix: "--sort=")
             ?? leadingNoConfigInlineValue(argument, prefix: "--sortr=") {
@@ -4317,6 +4355,43 @@ struct RipgrepCommand {
         argument.hasPrefix(prefix) && argument.count > prefix.count
             ? String(argument.dropFirst(prefix.count))
             : nil
+    }
+
+    private static func leadingNoConfigInlineNumericValue(_ argument: String) -> String? {
+        let valuePrefixes = [
+            "--after-context=",
+            "--before-context=",
+            "--context=",
+            "--max-columns=",
+            "--max-depth=",
+            "--maxdepth=",
+        ]
+        for prefix in valuePrefixes {
+            if let value = leadingNoConfigInlineValue(argument, prefix: prefix) {
+                return value
+            }
+        }
+        let shortPrefixes = ["-A", "-B", "-C", "-M", "-d"]
+        for prefix in shortPrefixes {
+            if let value = leadingNoConfigInlineShortValue(argument, prefix: prefix) {
+                return value
+            }
+        }
+        return nil
+    }
+
+    private static func leadingNoConfigInlineResourceLimit(_ argument: String) -> String? {
+        let valuePrefixes = [
+            "--dfa-size-limit=",
+            "--regex-size-limit=",
+            "--max-filesize=",
+        ]
+        for prefix in valuePrefixes {
+            if let value = leadingNoConfigInlineValue(argument, prefix: prefix) {
+                return value
+            }
+        }
+        return nil
     }
 
     private static func leadingNoConfigNonNegativeInteger(_ value: String) -> Bool {
@@ -4374,6 +4449,49 @@ struct RipgrepCommand {
             index = pattern.index(after: index)
         }
         return false
+    }
+
+    private static func leadingNoConfigHumanReadableSize(_ raw: String) -> Bool {
+        guard !raw.isEmpty else {
+            return false
+        }
+        let multiplier: UInt64
+        let digits: Substring
+        switch raw.last {
+        case "K":
+            multiplier = 1024
+            digits = raw.dropLast()
+        case "M":
+            multiplier = 1024 * 1024
+            digits = raw.dropLast()
+        case "G":
+            multiplier = 1024 * 1024 * 1024
+            digits = raw.dropLast()
+        default:
+            multiplier = 1
+            digits = Substring(raw)
+        }
+        guard !digits.isEmpty,
+              digits.allSatisfy(\.isNumber),
+              let value = UInt64(digits) else {
+            return false
+        }
+        return !value.multipliedReportingOverflow(by: multiplier).overflow
+    }
+
+    private static func leadingNoConfigKnownEncoding(_ raw: String) -> Bool {
+        switch leadingNoConfigNormalizedEncoding(raw) {
+        case "auto", "none":
+            return true
+        default:
+            return TextEncoding.isKnownLabel(raw)
+        }
+    }
+
+    private static func leadingNoConfigNormalizedEncoding(_ raw: String) -> String {
+        raw.trimmingCharacters(
+            in: CharacterSet(charactersIn: "\u{0009}\u{000A}\u{000C}\u{000D}\u{0020}")
+        ).lowercased()
     }
 
     private static func leadingNoConfigColorValue(_ value: String) -> Bool {
