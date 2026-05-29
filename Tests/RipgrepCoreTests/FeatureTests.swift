@@ -2976,12 +2976,26 @@ struct FeatureTests {
         try root.write("\n\ntest\n", to: "empty.txt")
 
         let reset = "\u{1B}[0m"
+        let blue = "\u{1B}[34m"
         let green = "\u{1B}[32m"
         let magenta = "\u{1B}[35m"
         let redBold = "\u{1B}[1m\u{1B}[31m"
 
         #expect(try run(["--color=always", "-n", "needle", root.path("a.txt")]) == [
             "\(reset)\(green)1\(reset):alpha \(reset)\(redBold)needle\(reset) beta",
+        ])
+        #expect(try run(["--color=always", "-b", "needle", root.path("a.txt")]) == [
+            "\(reset)0\(reset):alpha \(reset)\(redBold)needle\(reset) beta",
+        ])
+        #expect(try run([
+            "--color=always",
+            "--colors=column:fg:blue",
+            "-n",
+            "-b",
+            "needle",
+            root.path("a.txt"),
+        ]) == [
+            "\(reset)\(green)1\(reset):\(reset)\(blue)0\(reset):alpha \(reset)\(redBold)needle\(reset) beta",
         ])
         #expect(try run(["--trim", "--color=always", "needle", root.path("a.txt")]) == [
             "alpha \(reset)\(redBold)needle\(reset) beta",

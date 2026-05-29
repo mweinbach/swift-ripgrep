@@ -212,7 +212,7 @@ public struct StandardPrinter {
             fields.append(OutputField("\(column)", colorTarget: .column))
         }
         if options.byteOffset {
-            fields.append(OutputField("\(match.absoluteOffset)", colorTarget: nil))
+            fields.append(OutputField("\(match.absoluteOffset)", colorTarget: .column))
         }
 
         let prefixText = prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator)
@@ -350,7 +350,7 @@ public struct StandardPrinter {
             fields.append(OutputField("\(match.lineNumber)", colorTarget: .line))
         }
         if options.byteOffset {
-            fields.append(OutputField("\(match.absoluteOffset)", colorTarget: nil))
+            fields.append(OutputField("\(match.absoluteOffset)", colorTarget: .column))
         }
         let path = showPath ? renderPath(for: match.fileURL, line: match.lineNumber) : nil
         let text = displayLine(for: match)
@@ -603,7 +603,7 @@ public struct StandardPrinter {
                 fields.append(OutputField("\(column)", colorTarget: .column))
             }
             if options.byteOffset {
-                fields.append(OutputField("\(match.absoluteOffset + replacementStartByte)", colorTarget: nil))
+                fields.append(OutputField("\(match.absoluteOffset + replacementStartByte)", colorTarget: .column))
             }
             let prefixText = prefix(path: path, fields: fields, fieldSeparator: separator)
             let text = onlyMatchingOutputText(span, in: match)
@@ -687,7 +687,7 @@ public struct StandardPrinter {
             fields.append(OutputField("\(column)", colorTarget: .column))
         }
         if options.byteOffset {
-            fields.append(OutputField("\(match.absoluteOffset)", colorTarget: nil))
+            fields.append(OutputField("\(match.absoluteOffset)", colorTarget: .column))
         }
         let text = "\(renderedText(for: match))\(outputTerminator(match.lineTerminator, line: match.line, crlfMatchTerminator: true))"
         return "\(prefix(path: path, fields: fields, fieldSeparator: fieldSeparator))\(text)"
@@ -830,7 +830,7 @@ public struct StandardPrinter {
             fields.append(OutputField("\(match.lineNumber)", colorTarget: .line))
         }
         if options.byteOffset {
-            fields.append(OutputField("\(match.absoluteOffset)", colorTarget: nil))
+            fields.append(OutputField("\(match.absoluteOffset)", colorTarget: .column))
         }
         let text = "\(renderedLine(match.line))\(outputTerminator(match.lineTerminator, line: match.line))"
         return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(text)"
@@ -858,7 +858,7 @@ public struct StandardPrinter {
                 fields.append(OutputField("\(column)", colorTarget: .column))
             }
             if options.byteOffset {
-                fields.append(OutputField("\(match.absoluteOffset + span.startByte)", colorTarget: nil))
+                fields.append(OutputField("\(match.absoluteOffset + span.startByte)", colorTarget: .column))
             }
             return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(colors.apply(.match, to: chunk.text))\(outputTerminator(match.lineTerminator, line: chunk.text, crlfMatchTerminator: true))"
         }
@@ -882,7 +882,7 @@ public struct StandardPrinter {
                 fields.append(OutputField("\(column)", colorTarget: .column))
             }
             if options.byteOffset {
-                fields.append(OutputField("\(runningByteOffset)", colorTarget: nil))
+                fields.append(OutputField("\(runningByteOffset)", colorTarget: .column))
             }
             runningByteOffset += chunk.utf8.count + 1
             return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(colors.apply(.match, to: chunk))\(outputTerminator(match.lineTerminator, line: chunk, crlfMatchTerminator: true))"
@@ -1390,7 +1390,7 @@ public struct StandardPrinter {
             fields.append(OutputField("\(line.lineNumber)", colorTarget: .line))
         }
         if options.byteOffset {
-            fields.append(OutputField("\(line.absoluteOffset)", colorTarget: nil))
+            fields.append(OutputField("\(line.absoluteOffset)", colorTarget: .column))
         }
 
         let text = displayLine(for: line)
@@ -1421,7 +1421,7 @@ public struct StandardPrinter {
             fields.append(OutputField("\(line.lineNumber)", colorTarget: .line))
         }
         if options.byteOffset {
-            fields.append(OutputField("\(line.absoluteOffset)", colorTarget: nil))
+            fields.append(OutputField("\(line.absoluteOffset)", colorTarget: .column))
         }
 
         let text = displayLine(for: line)
@@ -1456,7 +1456,7 @@ public struct StandardPrinter {
             fields.append(OutputField("\(column)", colorTarget: .column))
         }
         if options.byteOffset, let match {
-            fields.append(OutputField("\(match.absoluteOffset)", colorTarget: nil))
+            fields.append(OutputField("\(match.absoluteOffset)", colorTarget: .column))
         }
 
         let text = displayLine(for: line)
