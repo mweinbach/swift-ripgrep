@@ -1461,6 +1461,19 @@ versus 16.9 ms for Rust. On the 48 MiB dense fixture, current plain output
 measured 351.4 ms versus 114.9 ms for Rust, and numbered output measured
 499.2 ms versus 144.9 ms for Rust.
 
+The exact-line multi-literal matching writer now uses the same stdout buffer
+and mapped-byte line scan shape as the adjacent exact-line field writers,
+avoiding per-match `Data` output growth and `Data.Index` line walking while
+preserving file-order output. Direct byte/status checks matched the previous
+Swift binary and Rust for plain, numbered, byte-offset, bounded, repeated `-e`,
+pattern-file, no-match, and final-line-without-newline forms. On a 4.6 MiB
+dense fixture, plain `-x 'needle...|missing'` improved from 38.2 ms to
+6.3 ms, versus 14.1 ms for Rust, and numbered output improved from 54.0 ms to
+7.6 ms, versus 16.9 ms for Rust. On a 46 MiB dense fixture, plain output
+improved from 341.2 ms to 29.4 ms, versus 111.1 ms for Rust; numbered output
+improved from 483.8 ms to 44.2 ms, versus 138.0 ms for Rust; and no-match
+alternation improved from 148.9 ms to 16.0 ms, versus 10.1 ms for Rust.
+
 Single-literal exact-line field output now uses the same stdout-buffer byte
 scanner as plain exact-line output. It emits fields in Rust order (`line`,
 `column`, `byte-offset`) when requested, treats `--column` as line-numbered
