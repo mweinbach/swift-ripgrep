@@ -4141,6 +4141,27 @@ struct MiscTests {
         ], fixture: {})
         #expect(searchZipCountMatchesOutput == countMatchesOutput)
 
+        let vimgrepHeadingOutput = try runExecutableData([
+            "--vimgrep",
+            "--heading",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        let utf8EncodingVimgrepHeadingOutput = try runExecutableData([
+            "--encoding=utf-8",
+            "--vimgrep",
+            "--heading",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(utf8EncodingVimgrepHeadingOutput == vimgrepHeadingOutput)
+
         let vimgrepQuietResult = try runExecutableResult([
             "--vimgrep",
             "-q",
@@ -6594,6 +6615,21 @@ struct MiscTests {
             "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
         ], fixture: {})
         #expect(deferredEncodingNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
+
+        let deferredUTF8EncodingNoConfigVimgrepOutput = try runExecutableData([
+            "--encoding=utf-8",
+            "--vimgrep",
+            "--heading",
+            "--no-config",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredUTF8EncodingNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
 
         let deferredInlineEncodingNoConfigVimgrepOutput = try runExecutableData([
             "-Eauto",

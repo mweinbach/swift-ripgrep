@@ -2453,6 +2453,24 @@ struct RipgrepCommand {
             && parsedPathOnlyMode == nil
             && !parsedCount
             && parsedPrintMode != .countMatches
+        let parsedEncodingVisibleLineOutput = !parsedQuiet
+            && parsedPathOnlyMode == nil
+            && !parsedCount
+            && parsedPrintMode != .countMatches
+        let parsedEncodingVisibleLineShapeCanUsePreflight = !wordRegexp
+            && !parsedLineRegexp
+            && !parsedOnlyMatching
+        let parsedUTF8EncodingVisibleLineOutputCanUsePreflight =
+            parsedEncodingVisibleLineOutput
+            && parsedEncodingSupportsUTF8LinePreflight
+            && ((!asciiCaseInsensitive
+                    && parsedEncodingVisibleLineShapeCanUsePreflight
+                    && SwiftDarwinLiteralPreflight.fileCanUseUTF8LinePreflight(path: path))
+                || (!wordRegexp && SwiftDarwinLiteralPreflight.fileCanUseASCIILinePreflight(path: path)))
+        let parsedEncodingVisibleLineOutputCanUsePreflight =
+            parsedEncodingVisibleLineOutput
+            && ((parsedEncodingVisibleLineShapeCanUsePreflight && parsedEncodingSupportsLinePreflight)
+                || parsedUTF8EncodingVisibleLineOutputCanUsePreflight)
         let parsedOnlyMatchingFieldsCanUsePreflight = parsedOnlyMatching
             && !parsedQuiet
             && parsedPathOnlyMode == nil
@@ -2469,7 +2487,7 @@ struct RipgrepCommand {
             && !parsedCount
             && parsedPrintMode == .matchingLines
             && !parsedColorMayEmit
-            && parsedEncodingIsAutomatic
+            && (parsedEncodingIsAutomatic || parsedEncodingVisibleLineOutputCanUsePreflight)
             && parsedAfterContext == 0
             && parsedBeforeContext == 0
             && !parsedInvertMatch
@@ -2542,24 +2560,6 @@ struct RipgrepCommand {
             && parsedPathOnlyMode == nil
             && !parsedCount
             && parsedPrintMode != .countMatches
-        let parsedEncodingVisibleLineOutput = !parsedQuiet
-            && parsedPathOnlyMode == nil
-            && !parsedCount
-            && parsedPrintMode != .countMatches
-        let parsedEncodingVisibleLineShapeCanUsePreflight = !wordRegexp
-            && !parsedLineRegexp
-            && !parsedOnlyMatching
-        let parsedUTF8EncodingVisibleLineOutputCanUsePreflight =
-            parsedEncodingVisibleLineOutput
-            && parsedEncodingSupportsUTF8LinePreflight
-            && ((!asciiCaseInsensitive
-                    && parsedEncodingVisibleLineShapeCanUsePreflight
-                    && SwiftDarwinLiteralPreflight.fileCanUseUTF8LinePreflight(path: path))
-                || (!wordRegexp && SwiftDarwinLiteralPreflight.fileCanUseASCIILinePreflight(path: path)))
-        let parsedEncodingVisibleLineOutputCanUsePreflight =
-            parsedEncodingVisibleLineOutput
-            && ((parsedEncodingVisibleLineShapeCanUsePreflight && parsedEncodingSupportsLinePreflight)
-                || parsedUTF8EncodingVisibleLineOutputCanUsePreflight)
         let parsedEncodingAffectsPreflightOutput = !parsedEncodingIsAutomatic
             && (!parsedEncodingSupportsSummaryPreflight
                 || (parsedEncodingVisibleLineOutput

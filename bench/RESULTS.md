@@ -257,6 +257,14 @@ Unicode case-fold, and non-ASCII word fallback controls.
 | `--encoding=utf-8 -o needle` | 1.726 s | 37.3 ms | 25.4 ms |
 | `--encoding=utf-8 -x needle` | 2.445 s | 155.3 ms | 27.2 ms |
 
+Explicit UTF-8 compatible files now also keep literal vimgrep line output on
+the Swift executable preflight, while non-ASCII ignore-case files continue to
+fall back through the existing ASCII guard. Direct byte/status checks covered
+plain vimgrep, ASCII ignore-case vimgrep, and deferred `--no-config` ordering.
+On `/tmp/swift-rg-candidates/countm-big.txt`, `--encoding=utf-8 --vimgrep --heading -e needle -e quiet`
+improved from 5.142 s to 47.9 ms, ASCII ignore-case UTF-8 vimgrep measured
+76.0 ms, and Rust measured 90.4 ms.
+
 `--search-zip` now stays on the executable preflight for explicit paths whose
 suffix cannot trigger decompression. Compressed suffixes still fall through to
 the normal searcher so real archives and decompressor errors keep matching
