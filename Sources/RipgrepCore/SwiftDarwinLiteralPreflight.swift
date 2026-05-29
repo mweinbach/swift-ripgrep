@@ -694,6 +694,19 @@ public enum SwiftDarwinLiteralPreflight {
               !containsNonASCIIByte(data) else {
             return nil
         }
+        if literals.count > 1,
+           !dataContainsAnyASCIICaseInsensitiveLiteral(data, foldedLiterals: literals) {
+            if includeZero {
+                guard writeCountOutput(
+                    0,
+                    countPrefix: countPrefix,
+                    crlfTerminated: crlfTerminated
+                ) else {
+                    return nil
+                }
+            }
+            return 1
+        }
 
         let matchedLineCount = asciiCaseInsensitiveExactLineCount(
             data: data,
@@ -1664,6 +1677,9 @@ public enum SwiftDarwinLiteralPreflight {
                 headingPrefix: []
             )
         }
+        guard dataContainsAnyASCIICaseInsensitiveLiteral(data, foldedLiterals: literals) else {
+            return 1
+        }
 
         let limit = maxCount ?? Int.max
         let newline = UInt8(ascii: "\n")
@@ -2498,6 +2514,9 @@ public enum SwiftDarwinLiteralPreflight {
                 headingPrefix: headingPrefix
             )
         }
+        guard dataContainsAnyASCIICaseInsensitiveLiteral(data, foldedLiterals: literals) else {
+            return 1
+        }
 
         let limit = maxCount ?? Int.max
         let newline = UInt8(ascii: "\n")
@@ -3246,6 +3265,45 @@ public enum SwiftDarwinLiteralPreflight {
 
     private static func dataContainsAnyLiteral(_ data: Data, literals: [[UInt8]]) -> Bool {
         for literal in literals where dataContainsLiteralUsingSIMD(data, literal: literal) {
+            return true
+        }
+        return false
+    }
+
+    private static func dataContainsASCIICaseInsensitiveLiteral(
+        _ data: Data,
+        foldedLiteral: [UInt8]
+    ) -> Bool {
+        guard !foldedLiteral.isEmpty,
+              data.count >= foldedLiteral.count else {
+            return false
+        }
+        return data.withUnsafeBytes { rawData in
+            guard let rawBase = rawData.baseAddress else {
+                return false
+            }
+            let base = rawBase.assumingMemoryBound(to: UInt8.self)
+            return foldedLiteral.withUnsafeBufferPointer { literalBuffer in
+                guard let literalBase = literalBuffer.baseAddress else {
+                    return false
+                }
+                return rg_memcasemem_ascii_prepared(
+                    base,
+                    data.count,
+                    literalBase,
+                    literalBuffer.count,
+                    nil
+                ) != nil
+            }
+        }
+    }
+
+    private static func dataContainsAnyASCIICaseInsensitiveLiteral(
+        _ data: Data,
+        foldedLiterals: [[UInt8]]
+    ) -> Bool {
+        for literal in foldedLiterals
+        where dataContainsASCIICaseInsensitiveLiteral(data, foldedLiteral: literal) {
             return true
         }
         return false
@@ -4119,6 +4177,10 @@ public enum SwiftDarwinLiteralPreflight {
         }
         guard !hasBinaryDetectionPrefix(data) else {
             return nil
+        }
+        if literals.count > 1,
+           !dataContainsAnyASCIICaseInsensitiveLiteral(data, foldedLiterals: literals) {
+            return containsNonASCIIByte(data) ? nil : false
         }
         if asciiCaseInsensitiveExactLineCount(data: data, foldedLiterals: literals, maxCount: 1) > 0 {
             return true

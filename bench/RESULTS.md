@@ -1667,6 +1667,18 @@ the same fixture, 25-run checks measured
 143.3 ms before and 66.8 ms for Rust; and the no-match alternation at 6.1 ms
 versus 29.2 ms before and 4.9 ms for Rust.
 
+Case-insensitive multi-literal exact-line no-match forms now first check the
+mapped file for any folded candidate bytes. A false result returns status 1
+only after the existing ASCII safety guard, so Unicode fallback behavior is
+unchanged. Direct byte/status checks matched the previous Swift binary and Rust
+for repeated `-e`, pattern-file, quiet/path-only, `--include-zero`, bounded
+output, and vimgrep field variants. On the 46 MiB exact-line fixture,
+`-i -x -e absent -e missing` improved from 15.0 ms to 12.1 ms, versus 9.9 ms
+for Rust; matching output stayed flat at 45.6 ms versus 45.3 ms before and
+115.7 ms for Rust. On `/tmp/swift-rg-candidates/countm-big.txt`,
+`-i --vimgrep -x -e absent -e missing` improved from 5.3 ms to 4.3 ms, matching
+Rust at 4.3 ms.
+
 The same ASCII exact-line scanner now counts case-insensitive `-c -i -x` and
 `--count-matches -i -x` matches without emitting lines. Byte/status checks
 matched Rust for line counts, count-matches, bounded counts, include-zero,
