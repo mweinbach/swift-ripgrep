@@ -1493,6 +1493,38 @@ struct MiscTests {
         ], fixture: {})
         #expect(plainOnlyMatchingOutput == caseInsensitiveOnlyMatchingOutput)
 
+        let utf8OnlyMatchingOutput = try runExecutableData([
+            "--encoding=utf-8",
+            "-o",
+            "needle",
+            root.path("word-count.txt"),
+        ], fixture: {})
+        #expect(utf8OnlyMatchingOutput == plainOnlyMatchingOutput)
+
+        let utf8OnlyMatchingLineNumberOutput = try runExecutableData([
+            "--encoding=utf-8",
+            "-n",
+            "-o",
+            "needle",
+            root.path("word-count.txt"),
+        ], fixture: {})
+        #expect(utf8OnlyMatchingLineNumberOutput == Data("""
+        1:needle
+        1:needle
+        1:needle
+        1:needle
+        1:needle
+
+        """.utf8))
+
+        let utf8OnlyMatchingUnicodeFallbackOutput = try runExecutableData([
+            "--encoding=utf-8",
+            "-o",
+            "needle",
+            root.path("unicode-word-ci.txt"),
+        ], fixture: {})
+        #expect(utf8OnlyMatchingUnicodeFallbackOutput == Data("needle\n".utf8))
+
         let unicodeCaseInsensitiveOnlyMatchingOutput = try runExecutableData([
             "-o",
             "-i",

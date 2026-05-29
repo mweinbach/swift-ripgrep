@@ -1177,11 +1177,66 @@ public enum SwiftDarwinLiteralPreflight {
         linePrefix: [UInt8] = [],
         headingPrefix: [UInt8] = []
     ) -> Int32? {
+        multiLiteralOnlyMatchingExitCode(
+            path: path,
+            literals: literals,
+            lineNumber: lineNumber,
+            byteOffset: byteOffset,
+            column: column,
+            maxCount: maxCount,
+            lineNumberFieldSeparator: lineNumberFieldSeparator,
+            linePrefix: linePrefix,
+            headingPrefix: headingPrefix,
+            requireASCIIHaystack: false
+        )
+    }
+
+    public static func asciiMultiLiteralOnlyMatchingExitCode(
+        path: String,
+        literals: [[UInt8]],
+        lineNumber: Bool,
+        byteOffset: Bool = false,
+        column: Bool = false,
+        maxCount: Int? = nil,
+        lineNumberFieldSeparator: [UInt8] = [58],
+        linePrefix: [UInt8] = [],
+        headingPrefix: [UInt8] = []
+    ) -> Int32? {
+        multiLiteralOnlyMatchingExitCode(
+            path: path,
+            literals: literals,
+            lineNumber: lineNumber,
+            byteOffset: byteOffset,
+            column: column,
+            maxCount: maxCount,
+            lineNumberFieldSeparator: lineNumberFieldSeparator,
+            linePrefix: linePrefix,
+            headingPrefix: headingPrefix,
+            requireASCIIHaystack: true
+        )
+    }
+
+    private static func multiLiteralOnlyMatchingExitCode(
+        path: String,
+        literals: [[UInt8]],
+        lineNumber: Bool,
+        byteOffset: Bool,
+        column: Bool,
+        maxCount: Int?,
+        lineNumberFieldSeparator: [UInt8],
+        linePrefix: [UInt8],
+        headingPrefix: [UInt8],
+        requireASCIIHaystack: Bool
+    ) -> Int32? {
         guard let literals = distinctExactLineLiterals(literals),
               !literals.isEmpty,
               maxCount.map({ $0 > 0 }) ?? true,
               let data = mappedPreflightData(path: path),
               !hasBinaryDetectionPrefix(data) else {
+            return nil
+        }
+        if requireASCIIHaystack,
+           containsNonASCIIByte(data) {
             return nil
         }
         guard !data.isEmpty else {

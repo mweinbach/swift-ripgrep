@@ -258,7 +258,7 @@ moved single-literal unnumbered exact-line output onto the stdout buffer.
 | Command | Preflight bypassed | Current Swift | Rust `rg` |
 | --- | ---: | ---: | ---: |
 | `--encoding=utf-8 -i NEEDLE` | 4.863 s | 12.9 ms | 16.8 ms |
-| `--encoding=utf-8 -o needle` | 1.726 s | 37.3 ms | 25.4 ms |
+| `--encoding=utf-8 -o needle` | 1.726 s | 9.9 ms | 20.2 ms |
 | `--encoding=utf-8 -x needle` | 2.445 s | 9.2 ms | 22.1 ms |
 
 The same buffered exact-line writer measured plain `-x needle` at 9.0 ms and
@@ -271,6 +271,12 @@ emitting. Direct checks matched Rust for ASCII, line-numbered, no-match,
 Unicode casefold fallback, accent fallback, and vimgrep fallback forms. On the
 same trim fixture, `--encoding=utf-8 -n -i NEEDLE` measured 17.4 ms versus
 24.4 ms for Rust; a dense-line probe measured 12.5 ms versus 18.8 ms for Rust.
+
+Explicit UTF-8 only-matching output now uses the same in-map ASCII validation
+pattern before entering the existing only-match writer. Direct checks matched
+Rust for ASCII, line-numbered, no-match, non-ASCII fallback, and vimgrep
+only-match forms. On the same trim fixture, `--encoding=utf-8 -n -o needle`
+measured 15.0 ms versus 26.2 ms for Rust.
 
 Explicit UTF-8 compatible files now also keep literal vimgrep line output on
 the Swift executable preflight, while non-ASCII ignore-case files continue to
