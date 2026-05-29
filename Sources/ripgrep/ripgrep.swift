@@ -4081,7 +4081,8 @@ struct RipgrepCommand {
             if argument == "--no-config" {
                 return true
             }
-            if leadingNoConfigPreflightFlag(argument) {
+            if leadingNoConfigPreflightFlag(argument)
+                || leadingNoConfigInlinePreflightFlag(argument) {
                 continue
             }
             return false
@@ -4218,6 +4219,43 @@ struct RipgrepCommand {
              "--vimgrep",
              "--with-filename",
              "--word-regexp":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func leadingNoConfigInlinePreflightFlag(_ argument: String) -> Bool {
+        if let sortValue = leadingNoConfigInlineValue(argument, prefix: "--sort=")
+            ?? leadingNoConfigInlineValue(argument, prefix: "--sortr=") {
+            return leadingNoConfigSortValue(sortValue)
+        }
+        if let count = leadingNoConfigInlineValue(argument, prefix: "--threads=")
+            ?? leadingNoConfigInlineShortValue(argument, prefix: "-j")
+            ?? leadingNoConfigInlineValue(argument, prefix: "--max-count=")
+            ?? leadingNoConfigInlineShortValue(argument, prefix: "-m") {
+            return leadingNoConfigNonNegativeInteger(count)
+        }
+        return false
+    }
+
+    private static func leadingNoConfigInlineValue(_ argument: String, prefix: String) -> String? {
+        argument.hasPrefix(prefix) ? String(argument.dropFirst(prefix.count)) : nil
+    }
+
+    private static func leadingNoConfigInlineShortValue(_ argument: String, prefix: String) -> String? {
+        argument.hasPrefix(prefix) && argument.count > prefix.count
+            ? String(argument.dropFirst(prefix.count))
+            : nil
+    }
+
+    private static func leadingNoConfigNonNegativeInteger(_ value: String) -> Bool {
+        !value.hasPrefix("-") && Int(value) != nil
+    }
+
+    private static func leadingNoConfigSortValue(_ value: String) -> Bool {
+        switch value {
+        case "none", "path", "modified", "accessed", "created":
             return true
         default:
             return false
