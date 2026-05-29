@@ -2499,6 +2499,38 @@ struct FeatureTests {
         ]) {}
         #expect(unicodeAdjacentWordOnlyMatchingOutput == Data("foo\n".utf8))
         try root.write("foo_food foo bar food\nquiet foo bar\n", to: "multi-word-only.txt")
+        let fieldedMultiOnlyMatchingOutput = try runExecutableData([
+            "-n",
+            "--column",
+            "-b",
+            "-o",
+            "-m1",
+            "-e",
+            "foo",
+            "-e",
+            "bar",
+            root.path("multi-word-only.txt"),
+        ]) {}
+        #expect(fieldedMultiOnlyMatchingOutput == Data(
+            "1:1:0:foo\n1:5:4:foo\n1:10:9:foo\n1:14:13:bar\n1:18:17:foo\n".utf8
+        ))
+        let vimgrepMultiOnlyMatchingOutput = try runExecutableData([
+            "--vimgrep",
+            "-o",
+            "-m1",
+            "-e",
+            "foo",
+            "-e",
+            "bar",
+            root.path("multi-word-only.txt"),
+        ]) {}
+        #expect(vimgrepMultiOnlyMatchingOutput == Data((
+            "\(root.path("multi-word-only.txt")):1:1:foo\n"
+                + "\(root.path("multi-word-only.txt")):1:5:foo\n"
+                + "\(root.path("multi-word-only.txt")):1:10:foo\n"
+                + "\(root.path("multi-word-only.txt")):1:14:bar\n"
+                + "\(root.path("multi-word-only.txt")):1:18:foo\n"
+        ).utf8))
         let boundedMultiWordOnlyMatchingOutput = try runExecutableData([
             "-w",
             "-n",

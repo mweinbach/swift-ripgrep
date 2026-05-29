@@ -1016,6 +1016,8 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literals: [[UInt8]],
         lineNumber: Bool,
+        byteOffset: Bool = false,
+        column: Bool = false,
         maxCount: Int? = nil,
         lineNumberFieldSeparator: [UInt8] = [58],
         linePrefix: [UInt8] = [],
@@ -1042,6 +1044,8 @@ public enum SwiftDarwinLiteralPreflight {
                 haystackLength: data.count,
                 foldedLiterals: literals,
                 lineNumber: lineNumber,
+                byteOffset: byteOffset,
+                column: column,
                 maxCount: maxCount ?? Int.max,
                 lineNumberFieldSeparator: lineNumberFieldSeparator,
                 linePrefix: linePrefix,
@@ -1103,6 +1107,8 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literals: [[UInt8]],
         lineNumber: Bool,
+        byteOffset: Bool = false,
+        column: Bool = false,
         maxCount: Int? = nil,
         lineNumberFieldSeparator: [UInt8] = [58],
         linePrefix: [UInt8] = [],
@@ -1128,6 +1134,8 @@ public enum SwiftDarwinLiteralPreflight {
                 haystackLength: data.count,
                 literals: literals,
                 lineNumber: lineNumber,
+                byteOffset: byteOffset,
+                column: column,
                 maxCount: maxCount ?? Int.max,
                 lineNumberFieldSeparator: lineNumberFieldSeparator,
                 linePrefix: linePrefix,
@@ -7036,6 +7044,8 @@ private func rgSwiftDarwinWriteASCIICaseInsensitiveMultiLiteralOnlyMatches(
     haystackLength: Int,
     foldedLiterals: [[UInt8]],
     lineNumber: Bool,
+    byteOffset: Bool,
+    column: Bool,
     maxCount: Int,
     lineNumberFieldSeparator: [UInt8],
     linePrefix: [UInt8],
@@ -7071,6 +7081,18 @@ private func rgSwiftDarwinWriteASCIICaseInsensitiveMultiLiteralOnlyMatches(
     var matchedLineCount = 0
     var selectedLineEnd = -1
     var emittedHeading = false
+    var currentLineStart = 0
+    let newline = UInt8(ascii: "\n")
+
+    func advanceLineState(to matchStart: Int) {
+        while lineCountOffset < matchStart {
+            if base[lineCountOffset] == newline {
+                currentLineNumber += 1
+                currentLineStart = lineCountOffset + 1
+            }
+            lineCountOffset += 1
+        }
+    }
 
     while searchOffset < haystackLength {
         var bestStart = Int.max
@@ -7124,19 +7146,45 @@ private func rgSwiftDarwinWriteASCIICaseInsensitiveMultiLiteralOnlyMatches(
         guard output.writeBytes(linePrefix) else {
             return nil
         }
+        if column {
+            advanceLineState(to: bestStart)
+        }
         if lineNumber {
-            currentLineNumber += rg_memcount_byte(
-                base.advanced(by: lineCountOffset),
-                bestStart - lineCountOffset,
-                UInt8(ascii: "\n")
-            )
-            lineCountOffset = bestStart
-            guard output.writeLineNumberPrefix(
-                currentLineNumber,
-                fieldSeparator: lineNumberFieldSeparator
-            ) else {
-                return nil
+            if column {
+                guard output.writeLineNumberPrefix(
+                    currentLineNumber,
+                    fieldSeparator: lineNumberFieldSeparator
+                ) else {
+                    return nil
+                }
+            } else {
+                currentLineNumber += rg_memcount_byte(
+                    base.advanced(by: lineCountOffset),
+                    bestStart - lineCountOffset,
+                    newline
+                )
+                lineCountOffset = bestStart
+                guard output.writeLineNumberPrefix(
+                    currentLineNumber,
+                    fieldSeparator: lineNumberFieldSeparator
+                ) else {
+                    return nil
+                }
             }
+        }
+        if column,
+           !output.writeLineNumberPrefix(
+            bestStart - currentLineStart + 1,
+            fieldSeparator: lineNumberFieldSeparator
+           ) {
+            return nil
+        }
+        if byteOffset,
+           !output.writeLineNumberPrefix(
+            bestStart,
+            fieldSeparator: lineNumberFieldSeparator
+           ) {
+            return nil
         }
         guard output.write(base.advanced(by: bestStart), count: literalLength),
               output.writeByte(UInt8(ascii: "\n")) else {
@@ -7157,6 +7205,8 @@ private func rgSwiftDarwinWriteMultiLiteralOnlyMatches(
     haystackLength: Int,
     literals: [[UInt8]],
     lineNumber: Bool,
+    byteOffset: Bool,
+    column: Bool,
     maxCount: Int,
     lineNumberFieldSeparator: [UInt8],
     linePrefix: [UInt8],
@@ -7214,6 +7264,18 @@ private func rgSwiftDarwinWriteMultiLiteralOnlyMatches(
     var matchedLineCount = 0
     var selectedLineEnd = -1
     var emittedHeading = false
+    var currentLineStart = 0
+    let newline = UInt8(ascii: "\n")
+
+    func advanceLineState(to matchStart: Int) {
+        while lineCountOffset < matchStart {
+            if base[lineCountOffset] == newline {
+                currentLineNumber += 1
+                currentLineStart = lineCountOffset + 1
+            }
+            lineCountOffset += 1
+        }
+    }
 
     while let candidateIndex = earliestCandidateIndex(in: candidates) {
         let matchStart = candidates[candidateIndex].start
@@ -7240,19 +7302,45 @@ private func rgSwiftDarwinWriteMultiLiteralOnlyMatches(
         guard output.writeBytes(linePrefix) else {
             return nil
         }
+        if column {
+            advanceLineState(to: matchStart)
+        }
         if lineNumber {
-            currentLineNumber += rg_memcount_byte(
-                base.advanced(by: lineCountOffset),
-                matchStart - lineCountOffset,
-                UInt8(ascii: "\n")
-            )
-            lineCountOffset = matchStart
-            guard output.writeLineNumberPrefix(
-                currentLineNumber,
-                fieldSeparator: lineNumberFieldSeparator
-            ) else {
-                return nil
+            if column {
+                guard output.writeLineNumberPrefix(
+                    currentLineNumber,
+                    fieldSeparator: lineNumberFieldSeparator
+                ) else {
+                    return nil
+                }
+            } else {
+                currentLineNumber += rg_memcount_byte(
+                    base.advanced(by: lineCountOffset),
+                    matchStart - lineCountOffset,
+                    newline
+                )
+                lineCountOffset = matchStart
+                guard output.writeLineNumberPrefix(
+                    currentLineNumber,
+                    fieldSeparator: lineNumberFieldSeparator
+                ) else {
+                    return nil
+                }
             }
+        }
+        if column,
+           !output.writeLineNumberPrefix(
+            matchStart - currentLineStart + 1,
+            fieldSeparator: lineNumberFieldSeparator
+           ) {
+            return nil
+        }
+        if byteOffset,
+           !output.writeLineNumberPrefix(
+            matchStart,
+            fieldSeparator: lineNumberFieldSeparator
+           ) {
+            return nil
         }
         guard output.write(base.advanced(by: matchStart), count: literalLength),
               output.writeByte(UInt8(ascii: "\n")) else {

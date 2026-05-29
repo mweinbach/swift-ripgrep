@@ -3599,6 +3599,21 @@ alternation, single-literal, and Unicode-adjacent fallback forms.
 | --- | ---: | ---: | ---: |
 | `--vimgrep -w -o -e needle -e quiet` | 5.679 s | 49.9 ms | 126.6 ms |
 
+Plain multi-literal only-matching field output now uses the same field-prefix
+preflight for `-b`, `--column`, and `--vimgrep -o` forms. The route covers
+single-literal, repeated `-e`, alternation, ASCII ignore-case, filename
+prefixes, and vimgrep no-filename output, while non-ASCII ignore-case haystacks
+stay on fallback. Direct release comparisons were byte-identical for those
+fielded, prefixed, vimgrep, single-literal, and Unicode fallback forms.
+
+10 timed runs on the same dense literal fixture:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `-b -o -e needle -e quiet` | 113.4 ms | 36.6 ms | 62.9 ms |
+| `--column -o -e needle -e quiet` | 153.8 ms | 44.7 ms | 74.7 ms |
+| `--vimgrep -o -e needle -e quiet` | 189.8 ms | 47.6 ms | 91.4 ms |
+
 Bounded fixed-lookaround PCRE count-matches now also stays on the executable
 preflight for ASCII fixed lookbehind, fixed lookahead, and reset-start
 `prefix\Kliteral` forms. Direct release comparisons were byte-identical for
