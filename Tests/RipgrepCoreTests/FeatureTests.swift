@@ -2531,6 +2531,18 @@ struct FeatureTests {
                 + "\(root.path("multi-word-only.txt")):1:14:bar\n"
                 + "\(root.path("multi-word-only.txt")):1:18:foo\n"
         ).utf8))
+        let headingVimgrepMultiOnlyMatchingOutput = try runExecutableData([
+            "--heading",
+            "--vimgrep",
+            "-o",
+            "-m1",
+            "-e",
+            "foo",
+            "-e",
+            "bar",
+            root.path("multi-word-only.txt"),
+        ]) {}
+        #expect(headingVimgrepMultiOnlyMatchingOutput == vimgrepMultiOnlyMatchingOutput)
         let vimgrepMultiLineOutput = try runExecutableData([
             "--vimgrep",
             "-m1",
@@ -2547,6 +2559,17 @@ struct FeatureTests {
                 + "\(root.path("multi-word-only.txt")):1:14:foo_food foo bar food\n"
                 + "\(root.path("multi-word-only.txt")):1:18:foo_food foo bar food\n"
         ).utf8))
+        let headingVimgrepMultiLineOutput = try runExecutableData([
+            "--heading",
+            "--vimgrep",
+            "-m1",
+            "-e",
+            "foo",
+            "-e",
+            "bar",
+            root.path("multi-word-only.txt"),
+        ]) {}
+        #expect(headingVimgrepMultiLineOutput == vimgrepMultiLineOutput)
         let vimgrepMultiLineByteOutput = try runExecutableData([
             "--vimgrep",
             "-b",
@@ -2635,6 +2658,18 @@ struct FeatureTests {
             "\(root.path("multi-word-only.txt")):1:10:foo_food foo bar food\n"
                 + "\(root.path("multi-word-only.txt")):1:14:foo_food foo bar food\n"
         ).utf8))
+        let headingVimgrepMultiWordLineOutput = try runExecutableData([
+            "--heading",
+            "--vimgrep",
+            "-w",
+            "-m1",
+            "-e",
+            "foo",
+            "-e",
+            "bar",
+            root.path("multi-word-only.txt"),
+        ]) {}
+        #expect(headingVimgrepMultiWordLineOutput == vimgrepMultiWordLineOutput)
         let vimgrepMultiWordLineByteOutput = try runExecutableData([
             "--vimgrep",
             "-w",

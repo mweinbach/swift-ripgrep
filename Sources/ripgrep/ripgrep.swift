@@ -2459,7 +2459,6 @@ struct RipgrepCommand {
             && !parsedCrlf
         let parsedOnlyMatchingVimgrepCanUsePreflight = parsedOnlyMatchingFieldsCanUsePreflight
             && parsedVimgrep
-            && !parsedHeading
         let parsedLiteralVimgrepLineCanUsePreflight = parsedVimgrep
             && !wordRegexp
             && !parsedLineRegexp
@@ -2468,7 +2467,6 @@ struct RipgrepCommand {
             && parsedPathOnlyMode == nil
             && !parsedCount
             && parsedPrintMode == .matchingLines
-            && !parsedHeading
             && !parsedColorMayEmit
             && parsedEncodingIsAutomatic
             && parsedAfterContext == 0
@@ -2492,7 +2490,6 @@ struct RipgrepCommand {
             && parsedPathOnlyMode == nil
             && !parsedCount
             && parsedPrintMode == .matchingLines
-            && !parsedHeading
             && !parsedColorMayEmit
             && parsedEncodingIsAutomatic
             && parsedAfterContext == 0

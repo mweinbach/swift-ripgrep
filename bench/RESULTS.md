@@ -3634,6 +3634,23 @@ and Unicode fallback fixtures.
 | `--vimgrep -w -i -e NEEDLE -e QUIET` | 10.668 s | 50.8 ms | 136.9 ms |
 | `--vimgrep -w -m100000 -e needle -e quiet` | 3.146 s | 20.7 ms | 44.7 ms |
 
+`--heading` is now output-neutral for executable vimgrep preflights. Rust does
+not emit separate heading records for vimgrep output, so the parser keeps
+full-line, only-matching, and word-boundary vimgrep shapes on their existing
+Swift writers while preserving the usual field layouts and fallback guards.
+Direct release comparisons were byte-identical for repeated literals,
+only-matching, byte offsets, no-filename, ignore-case, word, word ignore-case,
+alternation, single literal, `-N --no-column`, explicit `--with-filename`, and
+Unicode fallback fixtures.
+
+10 timed runs on the same dense literal fixture:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--heading --vimgrep -e needle -e quiet` | 5.016 s | 49.3 ms | 91.1 ms |
+| `--heading --vimgrep -o -e needle -e quiet` | 4.994 s | 47.0 ms | 92.4 ms |
+| `--heading --vimgrep -w -e needle -e quiet` | 5.741 s | 50.0 ms | 128.7 ms |
+
 Plain multi-literal only-matching field output now uses the same field-prefix
 preflight for `-b`, `--column`, and `--vimgrep -o` forms. The route covers
 single-literal, repeated `-e`, alternation, ASCII ignore-case, filename
