@@ -1954,6 +1954,25 @@ Five-run checks measured `--vimgrep 'Sherlock Holmes'` at 139.3 ms versus
 `--vimgrep 'Sherlock|Watson'` form measured 269.9 ms versus 16.119 s before
 and 44.3 ms for Rust.
 
+Plain literal `--vimgrep` full-line output now also stays on the executable
+preflight for explicit repeated `-e`, single-literal, top-level alternation,
+and ASCII ignore-case forms. The writer emits full source-line bytes once per
+match with Rust-compatible path, line, column, optional byte-offset,
+`--no-filename`, `-N`, and `--no-column` field layouts, while word-boundary,
+replacement, context, trim, invert, max-column, and non-ASCII ignore-case
+haystacks continue to fall back. Direct byte/status checks matched Rust for
+repeated literals, byte offsets, no-filename, single literal, alternation,
+bounded `-m`, `-N`, `--no-column`, no-field vimgrep, and Unicode fallback
+fixtures.
+
+10 timed runs on `/tmp/swift-rg-candidates/countm-big.txt` with 3 warmups:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--vimgrep -e needle -e quiet` | 198.0 ms | 47.8 ms | 90.9 ms |
+| `--vimgrep -i -e NEEDLE -e QUIET` | 10.106 s | 50.0 ms | 124.3 ms |
+| `--vimgrep -m100000 -e needle -e quiet` | 92.9 ms | 19.0 ms | 32.7 ms |
+
 Only-matching `--vimgrep -o` output now reuses that direct vimgrep writer,
 emitting matched bytes instead of the containing line while preserving path,
 line, column, byte-offset and no-filename field combinations. Output for

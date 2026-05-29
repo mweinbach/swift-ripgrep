@@ -1194,6 +1194,93 @@ public enum SwiftDarwinLiteralPreflight {
         return matchCount > 0 ? 0 : 1
     }
 
+    public static func asciiCaseInsensitiveMultiLiteralVimgrepLineExitCode(
+        path: String,
+        literals: [[UInt8]],
+        lineNumber: Bool = true,
+        column: Bool = true,
+        byteOffset: Bool = false,
+        maxCount: Int? = nil,
+        lineNumberFieldSeparator: [UInt8] = [58],
+        linePrefix: [UInt8] = []
+    ) -> Int32? {
+        guard let literals = distinctASCIICaseInsensitiveLiterals(literals),
+              !literals.isEmpty,
+              maxCount.map({ $0 > 0 }) ?? true,
+              let data = mappedPreflightData(path: path),
+              !hasBinaryDetectionPrefix(data),
+              !containsNonASCIIByte(data) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return 1
+        }
+
+        guard let matchCount = data.withUnsafeBytes({ rawData -> Int? in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
+            }
+            return rgSwiftDarwinWriteMultiLiteralVimgrepLines(
+                rawBase.assumingMemoryBound(to: UInt8.self),
+                haystackLength: data.count,
+                literals: literals,
+                asciiCaseInsensitive: true,
+                lineNumber: lineNumber,
+                column: column,
+                byteOffset: byteOffset,
+                maxCount: maxCount ?? Int.max,
+                lineNumberFieldSeparator: lineNumberFieldSeparator,
+                linePrefix: linePrefix
+            )
+        }) else {
+            return nil
+        }
+        return matchCount > 0 ? 0 : 1
+    }
+
+    public static func multiLiteralVimgrepLineExitCode(
+        path: String,
+        literals: [[UInt8]],
+        lineNumber: Bool = true,
+        column: Bool = true,
+        byteOffset: Bool = false,
+        maxCount: Int? = nil,
+        lineNumberFieldSeparator: [UInt8] = [58],
+        linePrefix: [UInt8] = []
+    ) -> Int32? {
+        guard let literals = distinctExactLineLiterals(literals),
+              !literals.isEmpty,
+              maxCount.map({ $0 > 0 }) ?? true,
+              let data = mappedPreflightData(path: path),
+              !hasBinaryDetectionPrefix(data) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return 1
+        }
+
+        guard let matchCount = data.withUnsafeBytes({ rawData -> Int? in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
+            }
+            return rgSwiftDarwinWriteMultiLiteralVimgrepLines(
+                rawBase.assumingMemoryBound(to: UInt8.self),
+                haystackLength: data.count,
+                literals: literals,
+                asciiCaseInsensitive: false,
+                lineNumber: lineNumber,
+                column: column,
+                byteOffset: byteOffset,
+                maxCount: maxCount ?? Int.max,
+                lineNumberFieldSeparator: lineNumberFieldSeparator,
+                linePrefix: linePrefix
+            )
+        }) else {
+            return nil
+        }
+        return matchCount > 0 ? 0 : 1
+    }
+
     public static func limitedLineExitCode(
         path: String,
         literal: [UInt8],
@@ -7352,6 +7439,181 @@ private func rgSwiftDarwinWriteMultiLiteralOnlyMatches(
             candidates[index] = nextCandidate(
                 literalIndex: candidates[index].literalIndex,
                 from: nextSearchOffset
+            )
+        }
+    }
+
+    guard output.flush() else {
+        return nil
+    }
+    return matchCount
+}
+
+private func rgSwiftDarwinWriteMultiLiteralVimgrepLines(
+    _ base: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    literals: [[UInt8]],
+    asciiCaseInsensitive: Bool,
+    lineNumber: Bool,
+    column: Bool,
+    byteOffset: Bool,
+    maxCount: Int,
+    lineNumberFieldSeparator: [UInt8],
+    linePrefix: [UInt8]
+) -> Int? {
+    guard maxCount > 0 else {
+        return nil
+    }
+    guard !literals.isEmpty else {
+        return 0
+    }
+    guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+        return nil
+    }
+    defer {
+        output.deallocate()
+    }
+
+    let shifts = asciiCaseInsensitive
+        ? literals.map { literal -> [Int] in
+            var table = [Int](repeating: literal.count, count: 256)
+            if literal.count > 1 {
+                for index in 0..<(literal.count - 1) {
+                    table[Int(literal[index])] = literal.count - 1 - index
+                }
+            }
+            return table
+        }
+        : []
+
+    func nextCandidate(literalIndex: Int, from offset: Int) -> (start: Int, literalIndex: Int) {
+        let safeOffset = min(offset, haystackLength)
+        let literal = literals[literalIndex]
+        guard literal.count <= haystackLength - safeOffset else {
+            return (Int.max, literalIndex)
+        }
+        let found = literal.withUnsafeBufferPointer { literalBuffer -> UnsafePointer<UInt8>? in
+            if asciiCaseInsensitive {
+                return shifts[literalIndex].withUnsafeBufferPointer { shiftBuffer in
+                    rg_memcasemem_ascii_prepared(
+                        base.advanced(by: safeOffset),
+                        haystackLength - safeOffset,
+                        literalBuffer.baseAddress,
+                        literalBuffer.count,
+                        shiftBuffer.baseAddress
+                    )
+                }
+            }
+            return rg_memmem_simple(
+                base.advanced(by: safeOffset),
+                haystackLength - safeOffset,
+                literalBuffer.baseAddress,
+                literalBuffer.count
+            )
+        }
+        guard let found else {
+            return (Int.max, literalIndex)
+        }
+        return (base.distance(to: found), literalIndex)
+    }
+
+    func earliestCandidateIndex(in candidates: [(start: Int, literalIndex: Int)]) -> Int? {
+        var selectedIndex: Int?
+        var selectedStart = Int.max
+        for index in candidates.indices where candidates[index].start < selectedStart {
+            selectedStart = candidates[index].start
+            selectedIndex = index
+        }
+        return selectedStart == Int.max ? nil : selectedIndex
+    }
+
+    var candidates = literals.indices.map {
+        nextCandidate(literalIndex: $0, from: 0)
+    }
+    var currentLineNumber = 1
+    var currentLineStart = 0
+    var lineCountOffset = 0
+    var matchCount = 0
+    var matchedLineCount = 0
+    var selectedLineEnd = -1
+    let newline = UInt8(ascii: "\n")
+
+    func advanceLineState(to matchStart: Int) {
+        while lineCountOffset < matchStart {
+            if base[lineCountOffset] == newline {
+                currentLineNumber += 1
+                currentLineStart = lineCountOffset + 1
+            }
+            lineCountOffset += 1
+        }
+    }
+
+    while let candidateIndex = earliestCandidateIndex(in: candidates) {
+        let matchStart = candidates[candidateIndex].start
+        guard matchStart < haystackLength else {
+            break
+        }
+        let literalLength = literals[candidates[candidateIndex].literalIndex].count
+        let matchEnd = matchStart + literalLength
+
+        if matchStart >= selectedLineEnd {
+            guard matchedLineCount < maxCount else {
+                break
+            }
+            matchedLineCount += 1
+            selectedLineEnd = rgSwiftDarwinNextLineStart(
+                base: base,
+                haystackLength: haystackLength,
+                from: matchStart
+            )
+        }
+
+        advanceLineState(to: matchStart)
+        let lineOutputEnd = if selectedLineEnd > currentLineStart,
+                               selectedLineEnd <= haystackLength,
+                               base[selectedLineEnd - 1] == newline {
+            selectedLineEnd - 1
+        } else {
+            selectedLineEnd
+        }
+
+        guard output.writeBytes(linePrefix) else {
+            return nil
+        }
+        if lineNumber,
+           !output.writeLineNumberPrefix(
+                currentLineNumber,
+                fieldSeparator: lineNumberFieldSeparator
+           ) {
+            return nil
+        }
+        if column,
+           !output.writeLineNumberPrefix(
+                matchStart - currentLineStart + 1,
+                fieldSeparator: lineNumberFieldSeparator
+           ) {
+            return nil
+        }
+        if byteOffset,
+           !output.writeLineNumberPrefix(
+            matchStart,
+            fieldSeparator: lineNumberFieldSeparator
+           ) {
+            return nil
+        }
+        guard output.write(
+            base.advanced(by: currentLineStart),
+            count: lineOutputEnd - currentLineStart
+        ),
+              output.writeByte(newline) else {
+            return nil
+        }
+        matchCount += 1
+
+        for index in candidates.indices where candidates[index].start < matchEnd {
+            candidates[index] = nextCandidate(
+                literalIndex: candidates[index].literalIndex,
+                from: matchEnd
             )
         }
     }

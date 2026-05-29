@@ -2531,6 +2531,56 @@ struct FeatureTests {
                 + "\(root.path("multi-word-only.txt")):1:14:bar\n"
                 + "\(root.path("multi-word-only.txt")):1:18:foo\n"
         ).utf8))
+        let vimgrepMultiLineOutput = try runExecutableData([
+            "--vimgrep",
+            "-m1",
+            "-e",
+            "foo",
+            "-e",
+            "bar",
+            root.path("multi-word-only.txt"),
+        ]) {}
+        #expect(vimgrepMultiLineOutput == Data((
+            "\(root.path("multi-word-only.txt")):1:1:foo_food foo bar food\n"
+                + "\(root.path("multi-word-only.txt")):1:5:foo_food foo bar food\n"
+                + "\(root.path("multi-word-only.txt")):1:10:foo_food foo bar food\n"
+                + "\(root.path("multi-word-only.txt")):1:14:foo_food foo bar food\n"
+                + "\(root.path("multi-word-only.txt")):1:18:foo_food foo bar food\n"
+        ).utf8))
+        let vimgrepMultiLineByteOutput = try runExecutableData([
+            "--vimgrep",
+            "-b",
+            "-m1",
+            "-e",
+            "foo",
+            "-e",
+            "bar",
+            root.path("multi-word-only.txt"),
+        ]) {}
+        #expect(vimgrepMultiLineByteOutput == Data((
+            "\(root.path("multi-word-only.txt")):1:1:0:foo_food foo bar food\n"
+                + "\(root.path("multi-word-only.txt")):1:5:4:foo_food foo bar food\n"
+                + "\(root.path("multi-word-only.txt")):1:10:9:foo_food foo bar food\n"
+                + "\(root.path("multi-word-only.txt")):1:14:13:foo_food foo bar food\n"
+                + "\(root.path("multi-word-only.txt")):1:18:17:foo_food foo bar food\n"
+        ).utf8))
+        let vimgrepMultiLineNoFilenameOutput = try runExecutableData([
+            "--vimgrep",
+            "--no-filename",
+            "-m1",
+            "-e",
+            "foo",
+            "-e",
+            "bar",
+            root.path("multi-word-only.txt"),
+        ]) {}
+        #expect(vimgrepMultiLineNoFilenameOutput == Data((
+            "1:1:foo_food foo bar food\n"
+                + "1:5:foo_food foo bar food\n"
+                + "1:10:foo_food foo bar food\n"
+                + "1:14:foo_food foo bar food\n"
+                + "1:18:foo_food foo bar food\n"
+        ).utf8))
         let boundedMultiWordOnlyMatchingOutput = try runExecutableData([
             "-w",
             "-n",
@@ -2598,6 +2648,23 @@ struct FeatureTests {
             root.path("multi-word-ignore-only.txt"),
         ]) {}
         #expect(boundedIgnoreCaseMultiWordOnlyMatchingOutput == Data("Foo\nbar\nBAR\n".utf8))
+        let vimgrepIgnoreCaseMultiLineOutput = try runExecutableData([
+            "--vimgrep",
+            "-i",
+            "-m1",
+            "-e",
+            "FOO",
+            "-e",
+            "BAR",
+            root.path("multi-word-ignore-only.txt"),
+        ]) {}
+        #expect(vimgrepIgnoreCaseMultiLineOutput == Data((
+            "\(root.path("multi-word-ignore-only.txt")):1:1:FOO_food Foo bar BAR\n"
+                + "\(root.path("multi-word-ignore-only.txt")):1:5:FOO_food Foo bar BAR\n"
+                + "\(root.path("multi-word-ignore-only.txt")):1:10:FOO_food Foo bar BAR\n"
+                + "\(root.path("multi-word-ignore-only.txt")):1:14:FOO_food Foo bar BAR\n"
+                + "\(root.path("multi-word-ignore-only.txt")):1:18:FOO_food Foo bar BAR\n"
+        ).utf8))
         try root.write("delta bravo delta\nbravo\n", to: "bounded-alternation-only.txt")
         let boundedAlternationOnlyMatchingOutput = try runExecutableData([
             "-n",
@@ -2607,6 +2674,17 @@ struct FeatureTests {
             root.path("bounded-alternation-only.txt"),
         ]) {}
         #expect(boundedAlternationOnlyMatchingOutput == Data("1:delta\n1:bravo\n1:delta\n".utf8))
+        let boundedAlternationVimgrepLineOutput = try runExecutableData([
+            "--vimgrep",
+            "-m1",
+            "bravo|delta",
+            root.path("bounded-alternation-only.txt"),
+        ]) {}
+        #expect(boundedAlternationVimgrepLineOutput == Data((
+            "\(root.path("bounded-alternation-only.txt")):1:1:delta bravo delta\n"
+                + "\(root.path("bounded-alternation-only.txt")):1:7:delta bravo delta\n"
+                + "\(root.path("bounded-alternation-only.txt")):1:13:delta bravo delta\n"
+        ).utf8))
         let boundedWordAlternationOnlyMatchingOutput = try runExecutableData([
             "-w",
             "-n",
