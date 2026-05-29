@@ -3197,13 +3197,7 @@ public enum SwiftDarwinLiteralPreflight {
         guard !data.isEmpty else {
             return false
         }
-        guard let matchRange = data.range(of: Data(literal)) else {
-            return false
-        }
-        guard !matchRange.isEmpty else {
-            return nil
-        }
-        return true
+        return dataContainsLiteralUsingSIMD(data, literal: literal)
     }
 
     private static func containsLiteralUsingSIMD(path: String, literal: [UInt8]) -> Bool? {
@@ -4147,7 +4141,7 @@ public enum SwiftDarwinLiteralPreflight {
         guard !hasBinaryDetectionPrefix(data) else {
             return nil
         }
-        for literal in literals where data.range(of: Data(literal)) != nil {
+        for literal in literals where dataContainsLiteralUsingSIMD(data, literal: literal) {
             return true
         }
         return false

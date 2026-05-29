@@ -1298,6 +1298,15 @@ path-separator, and statistics forms still fall through. On the same fixture,
 `--files-without-match absent_literal` improved from 45.5 ms to 21.5 ms,
 versus 9.3 ms for Rust.
 
+A later Swift-only cleanup moved single-literal quiet/path-only probes from
+Foundation `Data.range` to the existing mapped byte scanner already used by the
+negative path-only branch. Direct byte/status checks matched the previous Swift
+binary and Rust for quiet, path-only, files-without-match, binary-prefix
+fallback, and no-match forms. On `/tmp/swift-rg-candidates/trim.txt`, 80
+no-shell runs measured `-q absent_literal` at 3.6 ms versus 5.1 ms before and
+3.5 ms for Rust, while matching `-q needle` and `-l needle` stayed flat in the
+2.7 ms band.
+
 ASCII word-boundary quiet and path-only searches now use a conservative
 Swift-first mapped existence check. It accepts only literals whose first and
 last bytes are ASCII regex word bytes, falls back on non-ASCII candidate
@@ -1319,6 +1328,16 @@ executable preflight. On the same fixture, `-q 'needle|tail'` now emits no
 stdout and measures 2.9 ms, versus 2.4 ms for Rust; `-l 'needle|tail'` emits
 only the file path and measures 3.4 ms, versus 2.5 ms for Rust. The two-literal
 no-match form measured 59.3-62.2 ms, versus 8.8 ms for Rust.
+
+Those multi-literal quiet/path-only probes now share the same mapped byte
+scanner too, removing the remaining per-literal `Data.range` no-match cost.
+Direct byte/status checks matched the previous Swift binary and Rust for
+top-level alternations, repeated `-e`, pattern files, fixed-string literals,
+path separators, files-without-match, and binary-prefix fallback. On the 7 MiB
+`trim.txt` fixture, 80 no-shell runs measured `-q 'absent|missing'` at 3.9 ms
+versus 9.0 ms before and 4.4 ms for Rust; `-l 'absent|missing'` at 3.9 ms
+versus 9.0 ms before and 3.9 ms for Rust; and matching `-q 'needle|tail'`
+stayed flat at 2.8 ms.
 
 Case-insensitive quiet and path-only searches now have a conservative
 Swift-first match-only preflight. It probes exact, lowercase, and uppercase
