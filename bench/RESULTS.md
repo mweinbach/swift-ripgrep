@@ -158,6 +158,21 @@ for the probe versus 2.188 s baseline and 7.2 ms for Rust; `--json -C 2` at
 6.4 ms for Rust; and `--stats -C 2` at 8.6 ms versus 2.195 s and 6.6 ms for
 Rust.
 
+The summary preflight gate now also admits match-shaping modes that cannot
+change a proven zero-match summary: line-regexp, only-matching, and vimgrep.
+The preflight still has to prove the literal is absent, so matching cases and
+literal-present line-boundary cases remain on the regular path. Direct
+status/stdout/stderr checks matched the previous Swift binary and Rust for JSON
+and stats line-regexp, only-matching, and vimgrep controls after normalizing
+elapsed timing fields. On the 46 MiB ASCII file, five-run A/Bs measured
+`--json -x` at 8.4 ms for the probe versus 2.197 s baseline and 7.3 ms for
+Rust; `--json -x -i` at 12.9 ms versus 5.086 s and 11.2 ms for Rust;
+`--json -o` at 9.0 ms versus 2.189 s and 7.5 ms for Rust; `--json --vimgrep`
+at 8.7 ms versus 2.220 s and 7.3 ms for Rust; `--stats -x` at 8.7 ms versus
+2.204 s and 6.9 ms for Rust; `--stats -o` at 8.5 ms versus 2.194 s and
+6.4 ms for Rust; and `--stats --vimgrep` at 8.8 ms versus 2.201 s and 7.6 ms
+for Rust.
+
 Files-mode controls on `/tmp/swift-rg-bench/linux` isolated the cost to VCS
 ignore handling. A 30-run slice measured Swift `--files` at 101.3 ms ± 2.9 ms,
 Swift `--hidden --files` at 101.6 ms ± 2.7 ms, Swift

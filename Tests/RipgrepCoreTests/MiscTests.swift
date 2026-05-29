@@ -1364,10 +1364,52 @@ struct MiscTests {
             "missingliteral",
             root.path("summary.txt"),
         ])
+        let jsonLineRegexpNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "-x",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let jsonOnlyMatchingNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "-o",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let jsonVimgrepNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "--vimgrep",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
         let statsNoMatchSummary = try runExecutableResult([
             "--no-config",
             "--stats",
             "-q",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let statsLineRegexpNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "-x",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let statsOnlyMatchingNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "-o",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let statsVimgrepNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "--vimgrep",
             "missingliteral",
             root.path("summary.txt"),
         ])
@@ -1432,6 +1474,9 @@ struct MiscTests {
             jsonContextNoMatchSummary,
             jsonMaxColumnsNoMatchSummary,
             jsonReplacementNoMatchSummary,
+            jsonLineRegexpNoMatchSummary,
+            jsonOnlyMatchingNoMatchSummary,
+            jsonVimgrepNoMatchSummary,
         ] {
             #expect(result.status == 1)
             #expect(result.stderr.isEmpty)
@@ -1444,6 +1489,9 @@ struct MiscTests {
             statsIgnoreCaseWordNoMatchSummary,
             statsContextNoMatchSummary,
             statsMaxCountNoMatchSummary,
+            statsLineRegexpNoMatchSummary,
+            statsOnlyMatchingNoMatchSummary,
+            statsVimgrepNoMatchSummary,
         ] {
             #expect(result.status == 1)
             #expect(result.stderr.isEmpty)

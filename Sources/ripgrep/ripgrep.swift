@@ -2742,9 +2742,6 @@ struct RipgrepCommand {
         let parsedSearchZipAffectsPreflight = parsedSearchZip && pathMayUseSearchZip(path)
         if parsedJson || parsedStats,
            parsedPrintMode == .matchingLines,
-           !parsedOnlyMatching,
-           !parsedVimgrep,
-           !parsedLineRegexp,
            !parsedInvertMatch,
            parsedMaxCount != 0,
            !parsedNullData,
