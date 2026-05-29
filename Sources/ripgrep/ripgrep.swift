@@ -2745,8 +2745,7 @@ struct RipgrepCommand {
            !parsedOnlyMatching,
            !parsedVimgrep,
            !parsedLineRegexp,
-           !wordRegexp,
-           !asciiCaseInsensitive,
+           !(wordRegexp && asciiCaseInsensitive),
            parsedAfterContext == 0,
            parsedBeforeContext == 0,
            !parsedInvertMatch,
@@ -2771,14 +2770,32 @@ struct RipgrepCommand {
             if let summaryLiteralPattern {
                 let summaryLiteral = Array(summaryLiteralPattern.utf8)
                 if !summaryLiteral.isEmpty,
-                   !summaryLiteral.contains(UInt8(ascii: "\n")),
-                   let exitCode = SwiftDarwinLiteralPreflight.literalNoMatchSummaryExitCode(
-                    path: path,
-                    literal: summaryLiteral,
-                    json: parsedJson,
-                    stats: parsedStats
-                   ) {
-                    return exitCode
+                   !summaryLiteral.contains(UInt8(ascii: "\n")) {
+                    let exitCode: Int32? = if asciiCaseInsensitive {
+                        SwiftDarwinLiteralPreflight.asciiCaseInsensitiveNoMatchSummaryExitCode(
+                            path: path,
+                            literal: summaryLiteral,
+                            json: parsedJson,
+                            stats: parsedStats
+                        )
+                    } else if wordRegexp {
+                        SwiftDarwinLiteralPreflight.wordNoMatchSummaryExitCode(
+                            path: path,
+                            literal: summaryLiteral,
+                            json: parsedJson,
+                            stats: parsedStats
+                        )
+                    } else {
+                        SwiftDarwinLiteralPreflight.literalNoMatchSummaryExitCode(
+                            path: path,
+                            literal: summaryLiteral,
+                            json: parsedJson,
+                            stats: parsedStats
+                        )
+                    }
+                    if let exitCode {
+                        return exitCode
+                    }
                 }
             }
         }

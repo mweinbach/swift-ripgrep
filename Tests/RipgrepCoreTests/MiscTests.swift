@@ -1318,6 +1318,20 @@ struct MiscTests {
             "missingliteral",
             root.path("summary.txt"),
         ])
+        let jsonIgnoreCaseNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "-i",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let jsonWordNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "-w",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
         let statsNoMatchSummary = try runExecutableResult([
             "--no-config",
             "--stats",
@@ -1325,13 +1339,23 @@ struct MiscTests {
             "missingliteral",
             root.path("summary.txt"),
         ])
+        let statsIgnoreCaseNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "-i",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let statsWordNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "-w",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
 
-        #expect(jsonNoMatchSummary.status == 1)
-        #expect(jsonNoMatchSummary.stderr.isEmpty)
-        #expect(jsonNoMatchSummary.stdout == Data((#"{"data":{"elapsed_total":{"human":"0.000000s","nanos":0,"secs":0},"stats":{"bytes_printed":0,"bytes_searched":12,"elapsed":{"human":"0.000000s","nanos":0,"secs":0},"matched_lines":0,"matches":0,"searches":1,"searches_with_match":0}},"type":"summary"}"# + "\n").utf8))
-        #expect(statsNoMatchSummary.status == 1)
-        #expect(statsNoMatchSummary.stderr.isEmpty)
-        #expect(statsNoMatchSummary.stdout == Data("""
+        let expectedJsonNoMatchSummary = Data((#"{"data":{"elapsed_total":{"human":"0.000000s","nanos":0,"secs":0},"stats":{"bytes_printed":0,"bytes_searched":12,"elapsed":{"human":"0.000000s","nanos":0,"secs":0},"matched_lines":0,"matches":0,"searches":1,"searches_with_match":0}},"type":"summary"}"# + "\n").utf8)
+        let expectedStatsNoMatchSummary = Data("""
 
         0 matches
         0 matched lines
@@ -1342,7 +1366,18 @@ struct MiscTests {
         0.000000 seconds spent searching
         0.000000 seconds total
 
-        """.utf8))
+        """.utf8)
+
+        for result in [jsonNoMatchSummary, jsonIgnoreCaseNoMatchSummary, jsonWordNoMatchSummary] {
+            #expect(result.status == 1)
+            #expect(result.stderr.isEmpty)
+            #expect(result.stdout == expectedJsonNoMatchSummary)
+        }
+        for result in [statsNoMatchSummary, statsIgnoreCaseNoMatchSummary, statsWordNoMatchSummary] {
+            #expect(result.status == 1)
+            #expect(result.stderr.isEmpty)
+            #expect(result.stdout == expectedStatsNoMatchSummary)
+        }
 
         let output = try runExecutableData([
             "needle",

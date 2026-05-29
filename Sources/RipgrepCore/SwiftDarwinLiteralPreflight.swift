@@ -119,6 +119,36 @@ public enum SwiftDarwinLiteralPreflight {
               let bytesSearched = literalNoMatchByteCount(path: path, literal: literal) else {
             return nil
         }
+        return writeNoMatchSummary(bytesSearched: bytesSearched, json: json)
+    }
+
+    public static func asciiCaseInsensitiveNoMatchSummaryExitCode(
+        path: String,
+        literal: [UInt8],
+        json: Bool,
+        stats: Bool
+    ) -> Int32? {
+        guard json || stats,
+              let bytesSearched = asciiCaseInsensitiveNoMatchByteCount(path: path, literal: literal) else {
+            return nil
+        }
+        return writeNoMatchSummary(bytesSearched: bytesSearched, json: json)
+    }
+
+    public static func wordNoMatchSummaryExitCode(
+        path: String,
+        literal: [UInt8],
+        json: Bool,
+        stats: Bool
+    ) -> Int32? {
+        guard json || stats,
+              let bytesSearched = wordNoMatchByteCount(path: path, literal: literal) else {
+            return nil
+        }
+        return writeNoMatchSummary(bytesSearched: bytesSearched, json: json)
+    }
+
+    private static func writeNoMatchSummary(bytesSearched: Int, json: Bool) -> Int32 {
         if json {
             let line = #"{"data":{"elapsed_total":{"human":"0.000000s","nanos":0,"secs":0},"stats":{"bytes_printed":0,"bytes_searched":\#(bytesSearched),"elapsed":{"human":"0.000000s","nanos":0,"secs":0},"matched_lines":0,"matches":0,"searches":1,"searches_with_match":0}},"type":"summary"}"#
             FileHandle.standardOutput.write(Data((line + "\n").utf8))
@@ -3282,6 +3312,47 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         guard !dataContainsLiteralUsingSIMD(data, literal: literal) else {
+            return nil
+        }
+        return data.count
+    }
+
+    private static func asciiCaseInsensitiveNoMatchByteCount(path: String, literal: [UInt8]) -> Int? {
+        guard !literal.isEmpty,
+              !literal.contains(UInt8(ascii: "\n")),
+              literal.allSatisfy({ $0 < 0x80 }) else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !hasBinaryDetectionPrefix(data),
+              let matched = containsASCIICaseInsensitiveLiteral(data: data, literal: literal),
+              !matched else {
+            return nil
+        }
+        return data.count
+    }
+
+    private static func wordNoMatchByteCount(path: String, literal: [UInt8]) -> Int? {
+        guard !literal.isEmpty,
+              !literal.contains(UInt8(ascii: "\n")),
+              let first = literal.first,
+              let last = literal.last,
+              rgSwiftIsASCIIRegexWordByte(first),
+              rgSwiftIsASCIIRegexWordByte(last) else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !hasBinaryDetectionPrefix(data),
+              let matchedLineCount = countASCIIWordMatchedLines(
+                in: data,
+                literal: literal,
+                maxCount: 1
+              ),
+              matchedLineCount == 0 else {
             return nil
         }
         return data.count

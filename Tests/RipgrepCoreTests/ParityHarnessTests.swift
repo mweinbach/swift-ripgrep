@@ -495,6 +495,8 @@ private func miscParityCases() -> [ParityCase] {
         ParityCase(name: "misc::case_insensitive_files_without_match_ascii_no_match", fixture: caseInsensitiveASCIIProofFixture, arguments: ["-i", "-L", "missingliteral", "ascii"]),
         ParityCase(name: "misc::case_insensitive_unicode_fallback", fixture: caseInsensitiveUnicodeFallbackFixture, arguments: ["-i", "-q", "strasse", "unicode"]),
         ParityCase(name: "misc::json_ascii_no_match_summary", fixture: caseInsensitiveASCIIProofFixture, arguments: ["--json", "missingliteral", "ascii"]),
+        ParityCase(name: "misc::json_ascii_ignore_case_no_match_summary", fixture: caseInsensitiveASCIIProofFixture, arguments: ["--json", "-i", "missingliteral", "ascii"]),
+        ParityCase(name: "misc::json_word_no_match_summary", fixture: caseInsensitiveASCIIProofFixture, arguments: ["--json", "-w", "missingliteral", "ascii"]),
         ParityCase(name: "misc::word", fixture: sherlockFixture, arguments: ["-w", "as", "sherlock"]),
         ParityCase(name: "misc::word_quiet_ascii_no_match", fixture: caseInsensitiveASCIIProofFixture, arguments: ["-w", "-q", "missingliteral", "ascii"]),
         ParityCase(name: "misc::word_files_with_matches_ascii_no_match", fixture: caseInsensitiveASCIIProofFixture, arguments: ["-w", "-l", "missingliteral", "ascii"]),

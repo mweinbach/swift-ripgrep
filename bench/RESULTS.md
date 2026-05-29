@@ -119,6 +119,22 @@ baseline; `--stats missingliteral` measured 7.5 ms versus 2.196 s baseline. An
 order-flipped 10-run confirmation measured JSON at 7.5 ms probe versus 2.155 s
 baseline and quiet stats at 8.0 ms probe versus 2.202 s baseline.
 
+The JSON/stats summary preflight now also covers conservative ASCII
+case-insensitive and word-regexp no-match proofs. `-i` summaries use the
+existing folded byte scanner and only prove no-match when non-ASCII haystack
+bytes cannot affect Unicode case folding; `-w` summaries use the existing ASCII
+word-boundary byte scanner and fall back on non-ASCII boundaries or too many
+rejected boundary candidates. Combined `-i -w` summaries still fall back. Direct
+status/stdout/stderr checks matched the previous Swift binary and Rust for
+`--json -i`, `--json -w`, `--stats -i`, and `--stats -w` on the 46 MiB ASCII
+file after normalizing elapsed timing fields. `MiscTests` covered exact
+zero-match JSON/stats output for the new modes, and the Rust parity harness
+covered JSON summary parity. A five-run A/B measured `--json -i missingliteral`
+at 10.8 ms for the probe versus 4.929 s baseline and 11.2 ms for Rust;
+`--json -w` at 8.6 ms versus 2.182 s baseline and 7.7 ms for Rust;
+`--stats -i` at 10.9 ms versus 4.961 s baseline and 9.8 ms for Rust; and
+`--stats -w` at 9.0 ms versus 2.187 s baseline and 6.7 ms for Rust.
+
 Files-mode controls on `/tmp/swift-rg-bench/linux` isolated the cost to VCS
 ignore handling. A 30-run slice measured Swift `--files` at 101.3 ms ± 2.9 ms,
 Swift `--hidden --files` at 101.6 ms ± 2.7 ms, Swift
