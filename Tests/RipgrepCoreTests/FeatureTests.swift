@@ -2999,6 +2999,12 @@ struct FeatureTests {
         #expect(try run(["--pretty", "--vimgrep", "needle", root.path("a.txt")]) == [
             "\(reset)\(magenta)\(root.path("a.txt"))\(reset):\(reset)\(green)1\(reset):\(reset)7\(reset):alpha \(reset)\(redBold)needle\(reset) beta",
         ])
+        #expect(try run(["-Np", "needle", root.path("a.txt")]) == [
+            "\(reset)\(green)1\(reset):alpha \(reset)\(redBold)needle\(reset) beta",
+        ])
+        #expect(try run(["-pN", "needle", root.path("a.txt")]) == [
+            "alpha \(reset)\(redBold)needle\(reset) beta",
+        ])
         #expect(try run(["--vimgrep", "--color=always", "-o", "needle", root.path("a.txt")]) == [
             "\(reset)\(magenta)\(root.path("a.txt"))\(reset):\(reset)\(green)1\(reset):\(reset)7\(reset):\(reset)\(redBold)needle\(reset)",
         ])

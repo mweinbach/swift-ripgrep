@@ -1599,6 +1599,7 @@ public enum RipgrepArgumentParser {
                 options.colorMode = .always
                 options.heading = true
                 options.lineNumber = true
+                options.noLineNumber = false
             case "N":
                 options.lineNumber = false
                 options.noLineNumber = true
