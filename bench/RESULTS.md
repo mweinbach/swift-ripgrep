@@ -132,6 +132,13 @@ and sorted Rust parity unless noted, but did not improve the checkpoint:
   103.0 ms baseline versus 104.2 ms for the probe, while `--hidden --files`
   measured 101.7 ms baseline versus 102.6 ms for the probe. The URL loader
   stayed.
+- Reading ignore files through `Data(contentsOf:)` plus explicit UTF-8 decoding
+  instead of `String(contentsOfFile:encoding:)` preserved sorted Rust parity, but
+  did not survive order-flipped confirmation. The first 40-run A/B was noisy
+  (default `--files` 118.3 ms baseline versus 111.7 ms probe, hidden
+  103.5 ms baseline versus 108.0 ms probe); the flipped run measured default
+  102.5 ms baseline versus 102.7 ms probe and hidden 104.7 ms baseline versus
+  102.8 ms probe. The direct String loader stayed.
 
 ## Swift-only word/case checkpoint — 2026-05-28
 
