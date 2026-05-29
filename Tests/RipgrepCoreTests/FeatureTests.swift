@@ -2440,6 +2440,49 @@ struct FeatureTests {
             "1:1:0:X",
             "1:7:6:X",
         ])
+        try root.write("foo bar foo\nfoo\nbar foo\n", to: "bounded-only.txt")
+        let boundedOnlyMatchingOutput = try runExecutableData([
+            "-o",
+            "-m1",
+            "foo",
+            root.path("bounded-only.txt"),
+        ]) {}
+        #expect(boundedOnlyMatchingOutput == Data("foo\nfoo\n".utf8))
+        let boundedLineNumberOnlyMatchingOutput = try runExecutableData([
+            "-n",
+            "-o",
+            "-m2",
+            "foo",
+            root.path("bounded-only.txt"),
+        ]) {}
+        #expect(boundedLineNumberOnlyMatchingOutput == Data("1:foo\n1:foo\n2:foo\n".utf8))
+        let boundedIgnoreCaseOnlyMatchingOutput = try runExecutableData([
+            "-i",
+            "-o",
+            "-m1",
+            "FOO",
+            root.path("bounded-only.txt"),
+        ]) {}
+        #expect(boundedIgnoreCaseOnlyMatchingOutput == Data("foo\nfoo\n".utf8))
+        try root.write("foo food FOO\nbar foo\n", to: "bounded-word-only.txt")
+        let boundedIgnoreCaseWordOnlyMatchingOutput = try runExecutableData([
+            "-w",
+            "-i",
+            "-o",
+            "-m1",
+            "FOO",
+            root.path("bounded-word-only.txt"),
+        ]) {}
+        #expect(boundedIgnoreCaseWordOnlyMatchingOutput == Data("foo\nFOO\n".utf8))
+        try root.write("delta bravo delta\nbravo\n", to: "bounded-alternation-only.txt")
+        let boundedAlternationOnlyMatchingOutput = try runExecutableData([
+            "-n",
+            "-o",
+            "-m1",
+            "bravo|delta",
+            root.path("bounded-alternation-only.txt"),
+        ]) {}
+        #expect(boundedAlternationOnlyMatchingOutput == Data("1:delta\n1:bravo\n1:delta\n".utf8))
         try root.write("Watson Sherlock\nSherlock Watson\n", to: "multi-literal-replace.txt")
         #expect(try run(["--replace", "X", "Sherlock|Watson", root.path("multi-literal-replace.txt")]) == [
             "X X",

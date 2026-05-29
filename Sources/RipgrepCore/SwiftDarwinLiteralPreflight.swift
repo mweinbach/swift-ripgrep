@@ -1016,12 +1016,14 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literals: [[UInt8]],
         lineNumber: Bool,
+        maxCount: Int? = nil,
         lineNumberFieldSeparator: [UInt8] = [58],
         linePrefix: [UInt8] = [],
         headingPrefix: [UInt8] = []
     ) -> Int32? {
         guard let literals = distinctASCIICaseInsensitiveLiterals(literals),
               !literals.isEmpty,
+              maxCount.map({ $0 > 0 }) ?? true,
               let data = mappedPreflightData(path: path),
               !hasBinaryDetectionPrefix(data),
               !containsNonASCIIByte(data) else {
@@ -1040,6 +1042,7 @@ public enum SwiftDarwinLiteralPreflight {
                 haystackLength: data.count,
                 foldedLiterals: literals,
                 lineNumber: lineNumber,
+                maxCount: maxCount ?? Int.max,
                 lineNumberFieldSeparator: lineNumberFieldSeparator,
                 linePrefix: linePrefix,
                 headingPrefix: headingPrefix
@@ -1054,12 +1057,14 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literals: [[UInt8]],
         lineNumber: Bool,
+        maxCount: Int? = nil,
         lineNumberFieldSeparator: [UInt8] = [58],
         linePrefix: [UInt8] = [],
         headingPrefix: [UInt8] = []
     ) -> Int32? {
         guard let literals = distinctExactLineLiterals(literals),
               !literals.isEmpty,
+              maxCount.map({ $0 > 0 }) ?? true,
               let data = mappedPreflightData(path: path),
               !hasBinaryDetectionPrefix(data) else {
             return nil
@@ -1077,6 +1082,7 @@ public enum SwiftDarwinLiteralPreflight {
                 haystackLength: data.count,
                 literals: literals,
                 lineNumber: lineNumber,
+                maxCount: maxCount ?? Int.max,
                 lineNumberFieldSeparator: lineNumberFieldSeparator,
                 linePrefix: linePrefix,
                 headingPrefix: headingPrefix
@@ -3487,11 +3493,13 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literal: [UInt8],
         lineNumber: Bool,
+        maxCount: Int? = nil,
         lineNumberFieldSeparator: [UInt8] = [58],
         linePrefix: [UInt8] = [],
         headingPrefix: [UInt8] = []
     ) -> Int32? {
-        guard isSafeASCIIWordLiteral(literal) else {
+        guard isSafeASCIIWordLiteral(literal),
+              maxCount.map({ $0 > 0 }) ?? true else {
             return nil
         }
 
@@ -3532,6 +3540,7 @@ public enum SwiftDarwinLiteralPreflight {
                 haystackLength: haystackLength,
                 literal: literalBuffer,
                 lineNumber: lineNumber,
+                maxCount: maxCount ?? Int.max,
                 lineNumberFieldSeparator: lineNumberFieldSeparator,
                 linePrefix: linePrefix,
                 headingPrefix: headingPrefix
@@ -6662,17 +6671,36 @@ private func rgSwiftDarwinWriteFixedLookaroundLines(
     return matchedLineCount
 }
 
+@inline(__always)
+private func rgSwiftDarwinNextLineStart(
+    base: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    from offset: Int
+) -> Int {
+    guard offset < haystackLength,
+          let newline = memchr(
+            base.advanced(by: offset),
+            Int32(UInt8(ascii: "\n")),
+            haystackLength - offset
+          ) else {
+        return haystackLength
+    }
+    return base.distance(to: newline.assumingMemoryBound(to: UInt8.self)) + 1
+}
+
 private func rgSwiftDarwinWriteASCIICaseInsensitiveWordOnlyMatches(
     _ base: UnsafePointer<UInt8>,
     haystackLength: Int,
     literal: UnsafeBufferPointer<UInt8>,
     lineNumber: Bool,
+    maxCount: Int,
     lineNumberFieldSeparator: [UInt8],
     linePrefix: [UInt8],
     headingPrefix: [UInt8]
 ) -> Int? {
     guard let literalBase = literal.baseAddress,
-          literal.count > 0 else {
+          literal.count > 0,
+          maxCount > 0 else {
         return nil
     }
     if haystackLength >= 3,
@@ -6711,6 +6739,8 @@ private func rgSwiftDarwinWriteASCIICaseInsensitiveWordOnlyMatches(
     var searchOffset = 0
     var currentLineNumber = 1
     var matchCount = 0
+    var matchedLineCount = 0
+    var selectedLineEnd = -1
     var emittedHeading = false
     var rejectedBoundaryCandidates = 0
     let maxRejectedBoundaryCandidates = 128
@@ -6758,6 +6788,17 @@ private func rgSwiftDarwinWriteASCIICaseInsensitiveWordOnlyMatches(
         }
         let matchedLineNumber = currentLineNumber + newlinesBeforeMatch
         if bounded {
+            if matchStart >= selectedLineEnd {
+                guard matchedLineCount < maxCount else {
+                    break
+                }
+                matchedLineCount += 1
+                selectedLineEnd = rgSwiftDarwinNextLineStart(
+                    base: base,
+                    haystackLength: haystackLength,
+                    from: matchStart
+                )
+            }
             guard output.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading) else {
                 return nil
             }
@@ -6799,10 +6840,14 @@ private func rgSwiftDarwinWriteASCIICaseInsensitiveMultiLiteralOnlyMatches(
     haystackLength: Int,
     foldedLiterals: [[UInt8]],
     lineNumber: Bool,
+    maxCount: Int,
     lineNumberFieldSeparator: [UInt8],
     linePrefix: [UInt8],
     headingPrefix: [UInt8]
 ) -> Int? {
+    guard maxCount > 0 else {
+        return nil
+    }
     guard !foldedLiterals.isEmpty else {
         return 0
     }
@@ -6827,6 +6872,8 @@ private func rgSwiftDarwinWriteASCIICaseInsensitiveMultiLiteralOnlyMatches(
     var currentLineNumber = 1
     var lineCountOffset = 0
     var matchCount = 0
+    var matchedLineCount = 0
+    var selectedLineEnd = -1
     var emittedHeading = false
 
     while searchOffset < haystackLength {
@@ -6864,6 +6911,17 @@ private func rgSwiftDarwinWriteASCIICaseInsensitiveMultiLiteralOnlyMatches(
         }
 
         let literalLength = foldedLiterals[bestLiteralIndex].count
+        if bestStart >= selectedLineEnd {
+            guard matchedLineCount < maxCount else {
+                break
+            }
+            matchedLineCount += 1
+            selectedLineEnd = rgSwiftDarwinNextLineStart(
+                base: base,
+                haystackLength: haystackLength,
+                from: bestStart
+            )
+        }
         guard output.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading) else {
             return nil
         }
@@ -6903,10 +6961,14 @@ private func rgSwiftDarwinWriteMultiLiteralOnlyMatches(
     haystackLength: Int,
     literals: [[UInt8]],
     lineNumber: Bool,
+    maxCount: Int,
     lineNumberFieldSeparator: [UInt8],
     linePrefix: [UInt8],
     headingPrefix: [UInt8]
 ) -> Int? {
+    guard maxCount > 0 else {
+        return nil
+    }
     guard !literals.isEmpty else {
         return 0
     }
@@ -6953,6 +7015,8 @@ private func rgSwiftDarwinWriteMultiLiteralOnlyMatches(
     var currentLineNumber = 1
     var lineCountOffset = 0
     var matchCount = 0
+    var matchedLineCount = 0
+    var selectedLineEnd = -1
     var emittedHeading = false
 
     while let candidateIndex = earliestCandidateIndex(in: candidates) {
@@ -6962,6 +7026,17 @@ private func rgSwiftDarwinWriteMultiLiteralOnlyMatches(
         }
         let literalLength = literals[candidates[candidateIndex].literalIndex].count
         let nextSearchOffset = matchStart + literalLength
+        if matchStart >= selectedLineEnd {
+            guard matchedLineCount < maxCount else {
+                break
+            }
+            matchedLineCount += 1
+            selectedLineEnd = rgSwiftDarwinNextLineStart(
+                base: base,
+                haystackLength: haystackLength,
+                from: matchStart
+            )
+        }
 
         guard output.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading) else {
             return nil

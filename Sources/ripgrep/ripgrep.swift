@@ -2520,10 +2520,6 @@ struct RipgrepCommand {
                 guard !wordRegexp else {
                     return nil
                 }
-            } else {
-                guard parsedMaxCount == nil else {
-                    return nil
-                }
             }
         }
 
@@ -2682,14 +2678,12 @@ struct RipgrepCommand {
                 return nil
             }
             if parsedOnlyMatchingAffectsPreflightOutput {
-                guard parsedMaxCount == nil else {
-                    return nil
-                }
                 if asciiCaseInsensitive {
                     return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveMultiLiteralOnlyMatchingExitCode(
                         path: path,
                         literals: literals,
                         lineNumber: lineNumber,
+                        maxCount: parsedMaxCount,
                         lineNumberFieldSeparator: parsedFieldMatchSeparator,
                         linePrefix: parsedLinePrefix,
                         headingPrefix: parsedHeadingPrefix
@@ -2699,6 +2693,7 @@ struct RipgrepCommand {
                     path: path,
                     literals: literals,
                     lineNumber: lineNumber,
+                    maxCount: parsedMaxCount,
                     lineNumberFieldSeparator: parsedFieldMatchSeparator,
                     linePrefix: parsedLinePrefix,
                     headingPrefix: parsedHeadingPrefix
@@ -3224,14 +3219,12 @@ struct RipgrepCommand {
                 return nil
             }
             if parsedOnlyMatchingAffectsPreflightOutput {
-                guard parsedMaxCount == nil else {
-                    return nil
-                }
                 if asciiCaseInsensitive {
                     return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveMultiLiteralOnlyMatchingExitCode(
                         path: path,
                         literals: literals,
                         lineNumber: lineNumber,
+                        maxCount: parsedMaxCount,
                         lineNumberFieldSeparator: parsedFieldMatchSeparator,
                         linePrefix: parsedLinePrefix,
                         headingPrefix: parsedHeadingPrefix
@@ -3241,6 +3234,7 @@ struct RipgrepCommand {
                     path: path,
                     literals: literals,
                     lineNumber: lineNumber,
+                    maxCount: parsedMaxCount,
                     lineNumberFieldSeparator: parsedFieldMatchSeparator,
                     linePrefix: parsedLinePrefix,
                     headingPrefix: parsedHeadingPrefix
@@ -3347,7 +3341,6 @@ struct RipgrepCommand {
             guard parsedPrintMode == .matchingLines,
                   parsedPathOnlyMode == nil,
                   !parsedQuiet,
-                  parsedMaxCount == nil,
                   !parsedCrlf else {
                 return nil
             }
@@ -3360,6 +3353,7 @@ struct RipgrepCommand {
                     path: path,
                     literals: [literal],
                     lineNumber: lineNumber,
+                    maxCount: parsedMaxCount,
                     lineNumberFieldSeparator: parsedFieldMatchSeparator,
                     linePrefix: parsedLinePrefix,
                     headingPrefix: parsedHeadingPrefix
@@ -3373,6 +3367,7 @@ struct RipgrepCommand {
                     path: path,
                     literals: [literal],
                     lineNumber: lineNumber,
+                    maxCount: parsedMaxCount,
                     lineNumberFieldSeparator: parsedFieldMatchSeparator,
                     linePrefix: parsedLinePrefix,
                     headingPrefix: parsedHeadingPrefix
@@ -3382,6 +3377,7 @@ struct RipgrepCommand {
                 path: path,
                 literal: literal,
                 lineNumber: lineNumber,
+                maxCount: parsedMaxCount,
                 lineNumberFieldSeparator: parsedFieldMatchSeparator,
                 linePrefix: parsedLinePrefix,
                 headingPrefix: parsedHeadingPrefix

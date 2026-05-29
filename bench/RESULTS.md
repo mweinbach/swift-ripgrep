@@ -3528,6 +3528,19 @@ preflight-bypassed `-w -i` probe used 3 timed runs:
 | `--count-matches -w -m100000 -e needle -e quiet` | 2.761 s | 47.3 ms | 28.0 ms |
 | `--count-matches -w -i -m100000 -e NEEDLE -e QUIET` | 6.545 s | 57.1 ms | 30.1 ms |
 
+Bounded only-matching output now stays on the executable preflight for
+single-literal, ASCII ignore-case, ASCII ignore-case word, and multi-literal
+forms. The writer stops after the first N matching lines while still emitting
+all matches from the final selected line. Direct release comparisons were
+byte-identical for line-numbered, filename-prefixed, heading, ignore-case,
+word ignore-case, alternation, no-match, and `-m0` forms.
+
+10 timed runs on `/tmp/swift-rg-candidates/countm-big.txt`:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `-o -m100000 needle` | 1.656 s | 10.4 ms | 14.5 ms |
+
 Bounded fixed-lookaround PCRE count-matches now also stays on the executable
 preflight for ASCII fixed lookbehind, fixed lookahead, and reset-start
 `prefix\Kliteral` forms. Direct release comparisons were byte-identical for
