@@ -1960,6 +1960,189 @@ public enum SwiftDarwinLiteralPreflight {
         return matchedLineCount > 0 ? 0 : 1
     }
 
+    public static func exactLineFieldExitCode(
+        path: String,
+        literal: [UInt8],
+        maxCount: Int? = nil,
+        lineNumber: Bool = false,
+        column: Bool = false,
+        byteOffset: Bool = false,
+        lineNumberFieldSeparator: [UInt8] = [58],
+        linePrefix: [UInt8] = [],
+        headingPrefix: [UInt8] = []
+    ) -> Int32? {
+        guard !literal.isEmpty,
+              !literal.contains(UInt8(ascii: "\n")),
+              maxCount.map({ $0 > 0 }) ?? true else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return 1
+        }
+        guard !hasBinaryDetectionPrefix(data) else {
+            return nil
+        }
+
+        if !lineNumber, !column, !byteOffset {
+            return exactLineWithoutLineNumbers(
+                data: data,
+                literal: literal,
+                maxCount: maxCount,
+                linePrefix: linePrefix,
+                headingPrefix: headingPrefix
+            )
+        }
+
+        let newline = UInt8(ascii: "\n")
+        let limit = maxCount ?? Int.max
+        var lineNeedle = literal
+        lineNeedle.append(newline)
+        guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+            return nil
+        }
+        defer {
+            output.deallocate()
+        }
+
+        let matchedLineCount = data.withUnsafeBytes { rawData -> Int? in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
+            }
+            let base = rawBase.assumingMemoryBound(to: UInt8.self)
+            return literal.withUnsafeBufferPointer { literalBuffer -> Int? in
+                guard let literalBase = literalBuffer.baseAddress else {
+                    return 0
+                }
+                return lineNeedle.withUnsafeBufferPointer { lineNeedleBuffer -> Int? in
+                    guard let lineNeedleBase = lineNeedleBuffer.baseAddress else {
+                        return 0
+                    }
+
+                    var searchOffset = 0
+                    var lineCountOffset = 0
+                    var currentLineNumber = 1
+                    var matchedLineCount = 0
+                    var emittedHeading = false
+
+                    while matchedLineCount < limit,
+                          searchOffset < data.count,
+                          let found = rg_memmem_simple(
+                            base.advanced(by: searchOffset),
+                            data.count - searchOffset,
+                            lineNeedleBase,
+                            lineNeedle.count
+                          ) {
+                        let matchStart = base.distance(to: found)
+                        if matchStart == 0 || base[matchStart - 1] == newline {
+                            if lineNumber {
+                                currentLineNumber += rg_memcount_byte(
+                                    base.advanced(by: lineCountOffset),
+                                    matchStart - lineCountOffset,
+                                    newline
+                                )
+                                lineCountOffset = matchStart
+                            }
+                            guard output.writeHeadingPrefix(
+                                headingPrefix,
+                                emittedHeading: &emittedHeading
+                            ),
+                                output.writeBytes(linePrefix) else {
+                                return nil
+                            }
+                            if lineNumber,
+                               !output.writeLineNumberPrefix(
+                                currentLineNumber,
+                                fieldSeparator: lineNumberFieldSeparator
+                               ) {
+                                return nil
+                            }
+                            if column,
+                               !output.writeLineNumberPrefix(
+                                1,
+                                fieldSeparator: lineNumberFieldSeparator
+                               ) {
+                                return nil
+                            }
+                            if byteOffset,
+                               !output.writeLineNumberPrefix(
+                                matchStart,
+                                fieldSeparator: lineNumberFieldSeparator
+                               ) {
+                                return nil
+                            }
+                            guard output.write(lineNeedleBase, count: lineNeedle.count) else {
+                                return nil
+                            }
+                            matchedLineCount += 1
+                        }
+                        searchOffset = matchStart + lineNeedle.count
+                    }
+
+                    if matchedLineCount < limit,
+                       data.count >= literal.count,
+                       data.count > 0,
+                       base[data.count - 1] != newline {
+                        let suffixStart = data.count - literal.count
+                        if suffixStart >= 0,
+                           (suffixStart == 0 || base[suffixStart - 1] == newline),
+                           memcmp(base.advanced(by: suffixStart), literalBase, literal.count) == 0 {
+                            if lineNumber {
+                                currentLineNumber += rg_memcount_byte(
+                                    base.advanced(by: lineCountOffset),
+                                    suffixStart - lineCountOffset,
+                                    newline
+                                )
+                            }
+                            guard output.writeHeadingPrefix(
+                                headingPrefix,
+                                emittedHeading: &emittedHeading
+                            ),
+                                output.writeBytes(linePrefix) else {
+                                return nil
+                            }
+                            if lineNumber,
+                               !output.writeLineNumberPrefix(
+                                currentLineNumber,
+                                fieldSeparator: lineNumberFieldSeparator
+                               ) {
+                                return nil
+                            }
+                            if column,
+                               !output.writeLineNumberPrefix(
+                                1,
+                                fieldSeparator: lineNumberFieldSeparator
+                               ) {
+                                return nil
+                            }
+                            if byteOffset,
+                               !output.writeLineNumberPrefix(
+                                suffixStart,
+                                fieldSeparator: lineNumberFieldSeparator
+                               ) {
+                                return nil
+                            }
+                            guard output.write(literalBase, count: literal.count),
+                                  output.writeByte(newline) else {
+                                return nil
+                            }
+                            matchedLineCount += 1
+                        }
+                    }
+                    return matchedLineCount
+                }
+            }
+        }
+
+        guard let matchedLineCount,
+              output.flush() else {
+            return nil
+        }
+        return matchedLineCount > 0 ? 0 : 1
+    }
+
     public static func exactLineCountExitCode(
         path: String,
         literal: [UInt8],

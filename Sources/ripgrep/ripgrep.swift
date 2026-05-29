@@ -4228,13 +4228,13 @@ struct RipgrepCommand {
                 return nil
             }
             if parsedExactLineVimgrepLineCanUsePreflight {
-                return SwiftDarwinLiteralPreflight.multiLiteralExactLineVimgrepLineExitCode(
+                return SwiftDarwinLiteralPreflight.exactLineFieldExitCode(
                     path: path,
-                    literals: [literal],
+                    literal: literal,
+                    maxCount: parsedMaxCount,
                     lineNumber: parsedVimgrepLineNumber,
                     column: parsedVimgrepColumn,
                     byteOffset: parsedByteOffset,
-                    maxCount: parsedMaxCount,
                     lineNumberFieldSeparator: parsedFieldMatchSeparator,
                     linePrefix: parsedVimgrepLinePrefix
                 )
@@ -4263,9 +4263,9 @@ struct RipgrepCommand {
                 )
             }
             if lineNumber || parsedByteOffset || parsedColumn {
-                return SwiftDarwinLiteralPreflight.multiLiteralExactLineExitCode(
+                return SwiftDarwinLiteralPreflight.exactLineFieldExitCode(
                     path: path,
-                    literals: [literal],
+                    literal: literal,
                     maxCount: parsedMaxCount,
                     lineNumber: lineNumber || parsedColumn,
                     column: parsedColumn,

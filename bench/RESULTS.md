@@ -1263,36 +1263,39 @@ versus 16.9 ms for Rust. On the 48 MiB dense fixture, current plain output
 measured 351.4 ms versus 114.9 ms for Rust, and numbered output measured
 499.2 ms versus 144.9 ms for Rust.
 
-Exact-line matching output now also covers byte-offset and column field
-prefixes. The line scanner emits fields in Rust order (`line`, `column`,
-`byte-offset`) when requested, treats `--column` as line-numbered output, and
-preserves custom field separators, repeated `-e`, heading/prefixed output,
-max-count, and no-match status. Direct release byte/status checks matched Rust
-for those forms.
+Single-literal exact-line field output now uses the same stdout-buffer byte
+scanner as plain exact-line output. It emits fields in Rust order (`line`,
+`column`, `byte-offset`) when requested, treats `--column` as line-numbered
+output, and preserves custom field separators, heading/prefixed output,
+max-count, final no-newline matches, and no-match status. Direct release
+byte/status checks matched Rust for those forms. On the matching
+`/tmp/swift-rg-candidates/exact-needle.txt` fixture, current Swift measured
+17.9 ms for `-n -x needle`, 15.4 ms for `-b -x needle`, and 22.0 ms for
+`--vimgrep -x needle`, versus 34.5 ms, 33.8 ms, and 69.2 ms for Rust.
 
 10 timed runs on `/tmp/swift-rg-candidates/countm-big.txt`:
 
 | Command | Preflight bypassed | Current Swift | Rust `rg` |
 | --- | ---: | ---: | ---: |
-| `-b -x needle` | 1.306 s | 27.2 ms | 9.3 ms |
-| `--column -x needle` | 1.306 s | 27.2 ms | 9.6 ms |
+| `-b -x needle` | 1.306 s | 3.5 ms | 9.3 ms |
+| `--column -x needle` | 1.306 s | 3.5 ms | 9.4 ms |
 
-Explicit `--encoding=none` and ASCII-safe UTF-8 exact-line field output now
-share that same scanner. Raw `none` field output uses byte offsets directly,
-while UTF-8 validates an ASCII haystack first so the emitted byte-offset and
-column fields remain Rust-compatible. Direct release byte/status checks matched
-Rust for raw byte-offset, raw column, combined fields, repeated `-e`, `-E
-utf8`, and a non-ASCII UTF-8 fallback control.
+Explicit `--encoding=none` and ASCII-safe UTF-8 exact-line field output share
+that same single-literal field writer. Raw `none` field output uses byte offsets
+directly, while UTF-8 validates an ASCII haystack first so the emitted
+byte-offset and column fields remain Rust-compatible. Direct release
+byte/status checks matched Rust for raw byte-offset, raw column, combined
+fields, repeated `-e`, `-E utf8`, and a non-ASCII UTF-8 fallback control.
 
 10 timed runs on the same dense literal fixture:
 
 | Command | Preflight bypassed | Current Swift | Rust `rg` |
 | --- | ---: | ---: | ---: |
-| `--encoding=none -b -x needle` | 1.935 s | 28.1 ms | 10.0 ms |
-| `--encoding=utf-8 -b -x needle` | 1.338 s | 28.0 ms | 10.3 ms |
+| `--encoding=none -b -x needle` | 1.935 s | 3.5 ms | 9.3 ms |
+| `--encoding=utf-8 -b -x needle` | 1.338 s | 4.5 ms | 9.9 ms |
 
-Single-literal numbered exact-line output now also uses the line-by-line
-scanner instead of the candidate-substring line-number path. Direct release
+Single-literal numbered exact-line output now also uses the stdout-buffer field
+writer instead of the candidate-substring line-number path. Direct release
 byte/status checks matched Rust for numbered output, exact only-matching with
 line numbers, headings, max-count, and encoded raw only-matching.
 
@@ -1300,7 +1303,7 @@ line numbers, headings, max-count, and encoded raw only-matching.
 
 | Command | Preflight bypassed | Current Swift | Rust `rg` |
 | --- | ---: | ---: | ---: |
-| `-n -x needle` | 1.305 s | 27.1 ms | 9.4 ms |
+| `-n -x needle` | 1.305 s | 3.9 ms | 9.6 ms |
 
 Exact-line only-matching output now shares that same literal alternation,
 repeated `-e`, and pattern-file route. The executable preflight parses
@@ -1316,7 +1319,7 @@ improved from 2.149 s to 54.8 ms, versus 31.7 ms for Rust.
 
 Raw `--encoding=none` exact-line only-matching now stays on the same exact-line
 output preflight too. The raw unnumbered form can use the fast no-line-number
-exact scanner, while numbered output shares the line-by-line scanner above.
+exact scanner, while numbered output shares the field writer above.
 Direct release byte/status checks matched Rust for unnumbered, numbered,
 repeated `-e`, max-count, UTF-8 ASCII, and non-ASCII UTF-8 fallback forms.
 
@@ -1325,12 +1328,12 @@ repeated `-e`, max-count, UTF-8 ASCII, and non-ASCII UTF-8 fallback forms.
 | Command | Preflight bypassed | Current Swift | Rust `rg` |
 | --- | ---: | ---: | ---: |
 | `--encoding=none -o -x needle` | 1.888 s | 7.7 ms | 9.4 ms |
-| `--encoding=none -n -o -x needle` | 1.891 s | 26.9 ms | 9.8 ms |
+| `--encoding=none -n -o -x needle` | 1.891 s | 3.5 ms | 9.4 ms |
 
 Raw `--encoding=none` exact-line matching output now also keeps the normal
 line-output forms on the exact-line preflight. The unnumbered and bounded forms
 can use the fast no-line-number scanner, while numbered output shares the
-line-by-line scanner. Direct release byte/status checks matched Rust for plain,
+field writer. Direct release byte/status checks matched Rust for plain,
 numbered, max-count, repeated `-e`, ASCII UTF-8, and non-ASCII UTF-8 fallback
 forms.
 
@@ -1339,7 +1342,7 @@ forms.
 | Command | Preflight bypassed | Current Swift | Rust `rg` |
 | --- | ---: | ---: | ---: |
 | `--encoding=none -x needle` | 1.897 s | 7.5 ms | 9.3 ms |
-| `--encoding=none -n -x needle` | 1.920 s | 28.4 ms | 9.9 ms |
+| `--encoding=none -n -x needle` | 1.920 s | 4.0 ms | 9.9 ms |
 | `--encoding=none -m1 -x needle` | 1.903 s | 7.6 ms | 9.3 ms |
 
 Raw `--encoding=none` and ASCII-safe UTF-8 case-insensitive exact-line
@@ -3831,19 +3834,19 @@ forms.
 | `--encoding=utf-8 -w -e needle -e quiet` | 3.800 s | 38.1 ms | 23.4 ms |
 | `--encoding=utf-8 -i -w -e NEEDLE -e QUIET` | n/a | 38.6 ms | 29.8 ms |
 
-Exact line-regexp vimgrep output now uses a Swift mapped-line writer for
-case-sensitive literal `-x`/`--line-regexp` searches. It preserves vimgrep
-line, column, byte-offset, max-count, filename-prefix, and repeated-pattern
-layouts while keeping ignore-case, CRLF, null-data, color, trim, stats, and
-other observable modes on the fallback path. Direct release byte/status checks
-matched Rust for matching, repeated `-e`, byte-offset, no-match, and deferred
-`--no-config` forms.
+Exact line-regexp vimgrep output now uses the single-literal stdout-buffer field
+writer for case-sensitive literal `-x`/`--line-regexp` searches. It preserves
+vimgrep line, column, byte-offset, max-count, filename-prefix, and
+repeated-pattern layouts while keeping ignore-case, CRLF, null-data, color,
+trim, stats, and other observable modes on the fallback path. Direct release
+byte/status checks matched Rust for matching, repeated `-e`, byte-offset,
+no-match, and deferred `--no-config` forms.
 
 10 timed runs on the same dense literal fixture:
 
 | Command | Preflight bypassed | Current Swift | Rust `rg` |
 | --- | ---: | ---: | ---: |
-| `--vimgrep -x needle` | 1.303 s | 27.2 ms | 9.5 ms |
+| `--vimgrep -x needle` | 1.303 s | 3.5 ms | 11.9 ms |
 
 Explicit `--encoding=none` and ASCII-safe UTF-8 exact-line vimgrep now share
 that route. `none` can write raw bytes directly, while UTF-8 first proves the
@@ -3856,8 +3859,8 @@ control.
 
 | Command | Preflight bypassed | Current Swift | Rust `rg` |
 | --- | ---: | ---: | ---: |
-| `--encoding=utf-8 --vimgrep -x needle` | 1.317 s | 28.0 ms | 9.9 ms |
-| `--encoding=none --vimgrep -x needle` | 1.899 s | 27.1 ms | 9.8 ms |
+| `--encoding=utf-8 --vimgrep -x needle` | 1.317 s | 4.5 ms | 13.4 ms |
+| `--encoding=none --vimgrep -x needle` | 1.899 s | 4.3 ms | 10.0 ms |
 
 `--heading` is now output-neutral for executable vimgrep preflights. Rust does
 not emit separate heading records for vimgrep output, so the parser keeps
