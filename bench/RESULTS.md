@@ -79,6 +79,16 @@ versus 101.9 ms baseline; an order-flipped 80-run confirmation measured
 versus 101.7 ms in the 30-run A/B and 101.1 ms versus 102.7 ms in the
 order-flipped confirmation.
 
+`GlobMatcher.Rule` now only compiles the fallback `**/pattern` regex when the
+matcher was created with slash-patterns-match-anywhere semantics. Directory-local
+ignore matchers pass that mode as false, so they keep their direct regex fallback
+without paying for an unused second ICU regex. Exact Swift output matched the
+saved pre-change binary for default and hidden file listing, and sorted output
+matched Rust. A 40-run A/B measured default `--files` at 103.8 ms for the probe
+versus 105.1 ms baseline and hidden at 105.9 ms versus 104.8 ms; the
+order-flipped confirmation measured default at 104.8 ms probe versus 107.4 ms
+baseline and hidden at 104.1 ms probe versus 108.7 ms baseline.
+
 Rejected Swift-only probes from this continuation preserved exact Swift output
 and sorted Rust parity unless noted, but did not improve the checkpoint:
 

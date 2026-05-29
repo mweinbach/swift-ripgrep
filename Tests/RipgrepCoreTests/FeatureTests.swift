@@ -4288,6 +4288,14 @@ struct FeatureTests {
         #expect(anywhereSlashMatcher.decision(relativePath: "foo/bar", isDirectory: false) == .exclude)
         #expect(anywhereSlashMatcher.decision(relativePath: "nested/foo/bar", isDirectory: false) == .exclude)
         #expect(anywhereSlashMatcher.decision(relativePath: "nested/foo/baz", isDirectory: false) == nil)
+
+        let anywhereRegexMatcher = GlobMatcher(patterns: ["foo/{bar,baz}"])
+        #expect(anywhereRegexMatcher.decision(relativePath: "nested/foo/bar", isDirectory: false) == .exclude)
+        #expect(anywhereRegexMatcher.decision(relativePath: "nested/foo/quux", isDirectory: false) == nil)
+
+        let scopedRegexMatcher = GlobMatcher(patterns: ["foo/{bar,baz}"], slashPatternsMatchAnywhere: false)
+        #expect(scopedRegexMatcher.decision(relativePath: "foo/bar", isDirectory: false) == .exclude)
+        #expect(scopedRegexMatcher.decision(relativePath: "nested/foo/bar", isDirectory: false) == nil)
     }
 
     @Test("honors git info exclude and its toggle")

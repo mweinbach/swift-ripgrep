@@ -78,7 +78,13 @@ public struct GlobMatcher: Equatable {
         let regex: NSRegularExpression?
         let anywhereRegex: NSRegularExpression?
 
-        init(pattern: String, decision: Decision, caseInsensitive: Bool, sourcePath: String?) {
+        init(
+            pattern: String,
+            decision: Decision,
+            caseInsensitive: Bool,
+            sourcePath: String?,
+            compileAnywhereRegex: Bool
+        ) {
             var source = pattern.replacingOccurrences(of: #"\/"#, with: "/")
             let directoryOnly = source.hasSuffix("/")
             if directoryOnly {
@@ -120,7 +126,9 @@ public struct GlobMatcher: Equatable {
             }
             self.fastMatcher = fastMatcher
             self.regex = needsRegexFallback ? GlobMatcher.compileGlobRegex(source, caseInsensitive: caseInsensitive) : nil
-            self.anywhereRegex = needsRegexFallback ? GlobMatcher.compileGlobRegex("**/\(source)", caseInsensitive: caseInsensitive) : nil
+            self.anywhereRegex = needsRegexFallback && compileAnywhereRegex
+                ? GlobMatcher.compileGlobRegex("**/\(source)", caseInsensitive: caseInsensitive)
+                : nil
         }
 
         static public func == (lhs: Rule, rhs: Rule) -> Bool {
@@ -178,6 +186,7 @@ public struct GlobMatcher: Equatable {
         slashPatternsMatchAnywhere: Bool? = nil,
         sourcePath: String? = nil
     ) {
+        let resolvedSlashPatternsMatchAnywhere = slashPatternsMatchAnywhere ?? !overrideSemantics
         var rules: [Rule] = []
         var lastPattern: String?
         var lastDecision: Decision?
@@ -210,7 +219,8 @@ public struct GlobMatcher: Equatable {
                 pattern: pattern,
                 decision: decision,
                 caseInsensitive: entry.caseInsensitive,
-                sourcePath: sourcePath
+                sourcePath: sourcePath,
+                compileAnywhereRegex: resolvedSlashPatternsMatchAnywhere
             )
             rules.append(rule)
             hasIncludeRules = hasIncludeRules || decision == .include
@@ -227,7 +237,6 @@ public struct GlobMatcher: Equatable {
         self.allRulesUnanchoredBasenameOnly = !rules.isEmpty && allRulesUnanchoredBasenameOnly
         self.hasIncludeRules = hasIncludeRules
         self.overrideSemantics = overrideSemantics
-        let resolvedSlashPatternsMatchAnywhere = slashPatternsMatchAnywhere ?? !overrideSemantics
         self.slashPatternsMatchAnywhere = resolvedSlashPatternsMatchAnywhere
         self.stripBasePath = stripBasePath?.isEmpty == true ? nil : stripBasePath
         self.stripBasePathPrefix = self.stripBasePath.map { "\($0)/" }
