@@ -2863,7 +2863,7 @@ public struct FileWalker: @unchecked Sendable {
 
         let contents: String
         do {
-            contents = try String(contentsOf: fileURL, encoding: .utf8)
+            contents = try String(contentsOfFile: fileURL.path, encoding: .utf8)
         } catch {
             let messages = reportLoadErrors ? [ignoreFileLoadMessage(for: fileURL, displayPath: displayPath)] : []
             return LoadedIgnoreMatcher(matcher: GlobMatcher(patterns: []), messages: messages, diagnostics: [])
