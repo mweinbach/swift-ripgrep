@@ -1332,10 +1332,26 @@ struct MiscTests {
             "missingliteral",
             root.path("summary.txt"),
         ])
+        let jsonIgnoreCaseWordNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "-i",
+            "-w",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
         let statsNoMatchSummary = try runExecutableResult([
             "--no-config",
             "--stats",
             "-q",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let statsIgnoreCaseWordNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "-i",
+            "-w",
             "missingliteral",
             root.path("summary.txt"),
         ])
@@ -1368,12 +1384,22 @@ struct MiscTests {
 
         """.utf8)
 
-        for result in [jsonNoMatchSummary, jsonIgnoreCaseNoMatchSummary, jsonWordNoMatchSummary] {
+        for result in [
+            jsonNoMatchSummary,
+            jsonIgnoreCaseNoMatchSummary,
+            jsonWordNoMatchSummary,
+            jsonIgnoreCaseWordNoMatchSummary,
+        ] {
             #expect(result.status == 1)
             #expect(result.stderr.isEmpty)
             #expect(result.stdout == expectedJsonNoMatchSummary)
         }
-        for result in [statsNoMatchSummary, statsIgnoreCaseNoMatchSummary, statsWordNoMatchSummary] {
+        for result in [
+            statsNoMatchSummary,
+            statsIgnoreCaseNoMatchSummary,
+            statsWordNoMatchSummary,
+            statsIgnoreCaseWordNoMatchSummary,
+        ] {
             #expect(result.status == 1)
             #expect(result.stderr.isEmpty)
             #expect(result.stdout == expectedStatsNoMatchSummary)

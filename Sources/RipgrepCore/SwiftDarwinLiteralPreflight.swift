@@ -148,6 +148,19 @@ public enum SwiftDarwinLiteralPreflight {
         return writeNoMatchSummary(bytesSearched: bytesSearched, json: json)
     }
 
+    public static func asciiCaseInsensitiveWordNoMatchSummaryExitCode(
+        path: String,
+        literal: [UInt8],
+        json: Bool,
+        stats: Bool
+    ) -> Int32? {
+        guard json || stats,
+              let bytesSearched = asciiCaseInsensitiveWordNoMatchByteCount(path: path, literal: literal) else {
+            return nil
+        }
+        return writeNoMatchSummary(bytesSearched: bytesSearched, json: json)
+    }
+
     private static func writeNoMatchSummary(bytesSearched: Int, json: Bool) -> Int32 {
         if json {
             let line = #"{"data":{"elapsed_total":{"human":"0.000000s","nanos":0,"secs":0},"stats":{"bytes_printed":0,"bytes_searched":\#(bytesSearched),"elapsed":{"human":"0.000000s","nanos":0,"secs":0},"matched_lines":0,"matches":0,"searches":1,"searches_with_match":0}},"type":"summary"}"#
@@ -3353,6 +3366,27 @@ public enum SwiftDarwinLiteralPreflight {
                 maxCount: 1
               ),
               matchedLineCount == 0 else {
+            return nil
+        }
+        return data.count
+    }
+
+    private static func asciiCaseInsensitiveWordNoMatchByteCount(path: String, literal: [UInt8]) -> Int? {
+        guard isSafeASCIIWordLiteral(literal) else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard let matchedLineCount = countASCIIWordMatchedLines(
+            in: data,
+            literals: [literal],
+            maxCount: 1,
+            asciiCaseInsensitive: true
+        ),
+              matchedLineCount == 0,
+              !containsNULByte(data),
+              !containsNonASCIIByte(data) else {
             return nil
         }
         return data.count

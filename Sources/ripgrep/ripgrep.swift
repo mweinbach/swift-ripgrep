@@ -2745,7 +2745,6 @@ struct RipgrepCommand {
            !parsedOnlyMatching,
            !parsedVimgrep,
            !parsedLineRegexp,
-           !(wordRegexp && asciiCaseInsensitive),
            parsedAfterContext == 0,
            parsedBeforeContext == 0,
            !parsedInvertMatch,
@@ -2771,7 +2770,14 @@ struct RipgrepCommand {
                 let summaryLiteral = Array(summaryLiteralPattern.utf8)
                 if !summaryLiteral.isEmpty,
                    !summaryLiteral.contains(UInt8(ascii: "\n")) {
-                    let exitCode: Int32? = if asciiCaseInsensitive {
+                    let exitCode: Int32? = if asciiCaseInsensitive && wordRegexp {
+                        SwiftDarwinLiteralPreflight.asciiCaseInsensitiveWordNoMatchSummaryExitCode(
+                            path: path,
+                            literal: summaryLiteral,
+                            json: parsedJson,
+                            stats: parsedStats
+                        )
+                    } else if asciiCaseInsensitive {
                         SwiftDarwinLiteralPreflight.asciiCaseInsensitiveNoMatchSummaryExitCode(
                             path: path,
                             literal: summaryLiteral,
