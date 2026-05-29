@@ -125,6 +125,13 @@ and sorted Rust parity unless noted, but did not improve the checkpoint:
   preflight was noisier against the Linux alternation corpus; the ungated probe
   measured 2.298 s ± 0.058 s mean versus the gated probe at 2.286 s ± 0.010 s,
   so tiny files continue to use the existing line scanner.
+- Loading scanned local `.gitignore`/`.ignore`/`.rgignore` files through a
+  string-path helper instead of `URL.appendingPathComponent` preserved exact
+  Swift output and sorted Rust parity for default and hidden file listing, but
+  the same-machine 40-run A/B was slightly worse: default `--files` measured
+  103.0 ms baseline versus 104.2 ms for the probe, while `--hidden --files`
+  measured 101.7 ms baseline versus 102.6 ms for the probe. The URL loader
+  stayed.
 
 ## Swift-only word/case checkpoint — 2026-05-28
 
