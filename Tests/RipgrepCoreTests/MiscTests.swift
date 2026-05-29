@@ -6160,6 +6160,62 @@ struct MiscTests {
         ], fixture: {})
         #expect(deferredInlinePatternNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
 
+        let leadingClusterNoConfigVimgrepOutput = try runExecutableData([
+            "--no-config",
+            "-iw",
+            "--vimgrep",
+            "--heading",
+            "-e",
+            "NEEDLE",
+            "-e",
+            "QUIET",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        let deferredClusterNoConfigVimgrepOutput = try runExecutableData([
+            "-iw",
+            "--vimgrep",
+            "--heading",
+            "--no-config",
+            "-e",
+            "NEEDLE",
+            "-e",
+            "QUIET",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredClusterNoConfigVimgrepOutput == leadingClusterNoConfigVimgrepOutput)
+
+        let leadingUnrestrictedClusterNoConfigVimgrepOutput = try runExecutableData([
+            "--no-config",
+            "-uuuF",
+            "--vimgrep",
+            "--heading",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        let deferredUnrestrictedClusterNoConfigVimgrepOutput = try runExecutableData([
+            "-uuuF",
+            "--vimgrep",
+            "--heading",
+            "--no-config",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredUnrestrictedClusterNoConfigVimgrepOutput == leadingUnrestrictedClusterNoConfigVimgrepOutput)
+
         let deferredColorNoConfigVimgrepOutput = try runExecutableData([
             "--color",
             "never",

@@ -4102,7 +4102,8 @@ struct RipgrepCommand {
     }
 
     private static func leadingNoConfigPreflightFlag(_ argument: String) -> Bool {
-        if isSingleArgumentEngineSelector(argument) {
+        if isSingleArgumentEngineSelector(argument)
+            || leadingNoConfigShortFlagCluster(argument) {
             return true
         }
         switch argument {
@@ -4234,6 +4235,53 @@ struct RipgrepCommand {
         default:
             return false
         }
+    }
+
+    private static func leadingNoConfigShortFlagCluster(_ argument: String) -> Bool {
+        let bytes = Array(argument.utf8)
+        guard bytes.count > 2,
+              bytes.first == UInt8(ascii: "-"),
+              bytes.dropFirst().first != UInt8(ascii: "-") else {
+            return false
+        }
+        var unrestrictedCount = 0
+        for byte in bytes.dropFirst() {
+            switch byte {
+            case UInt8(ascii: "0"),
+                 UInt8(ascii: "."),
+                 UInt8(ascii: "F"),
+                 UInt8(ascii: "H"),
+                 UInt8(ascii: "I"),
+                 UInt8(ascii: "L"),
+                 UInt8(ascii: "N"),
+                 UInt8(ascii: "P"),
+                 UInt8(ascii: "S"),
+                 UInt8(ascii: "U"),
+                 UInt8(ascii: "a"),
+                 UInt8(ascii: "b"),
+                 UInt8(ascii: "c"),
+                 UInt8(ascii: "i"),
+                 UInt8(ascii: "l"),
+                 UInt8(ascii: "n"),
+                 UInt8(ascii: "o"),
+                 UInt8(ascii: "p"),
+                 UInt8(ascii: "q"),
+                 UInt8(ascii: "s"),
+                 UInt8(ascii: "v"),
+                 UInt8(ascii: "w"),
+                 UInt8(ascii: "x"),
+                 UInt8(ascii: "z"):
+                continue
+            case UInt8(ascii: "u"):
+                unrestrictedCount += 1
+                guard unrestrictedCount <= 3 else {
+                    return false
+                }
+            default:
+                return false
+            }
+        }
+        return true
     }
 
     private static func leadingNoConfigSeparatedPreflightFlag(_ argument: String, value: String) -> Bool {
