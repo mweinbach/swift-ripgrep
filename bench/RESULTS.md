@@ -3651,6 +3651,21 @@ Unicode fallback fixtures.
 | `--heading --vimgrep -o -e needle -e quiet` | 4.994 s | 47.0 ms | 92.4 ms |
 | `--heading --vimgrep -w -e needle -e quiet` | 5.741 s | 50.0 ms | 128.7 ms |
 
+When `RIPGREP_CONFIG_PATH` is set, supported no-value preflight flags may now
+precede `--no-config` without disabling the Swift executable preflight. The
+outer config guard stays conservative around value-consuming flags and pattern
+sources, while the full parser still owns final output eligibility. Direct
+release comparisons matched Rust stdout, stderr, and status for deferred
+`--no-config` vimgrep, quiet, prefixed count, word-vimgrep, and only-matching
+vimgrep forms under an active config environment.
+
+The before column is the same command measured immediately before this parser
+change, where the outer config guard forced the generic Swift path.
+
+| Command | Before | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--vimgrep --heading --no-config -e needle -e quiet` | 5.067 s | 50.9 ms | 89.2 ms |
+
 Plain multi-literal only-matching field output now uses the same field-prefix
 preflight for `-b`, `--column`, and `--vimgrep -o` forms. The route covers
 single-literal, repeated `-e`, alternation, ASCII ignore-case, filename
