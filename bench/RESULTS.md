@@ -93,6 +93,12 @@ and sorted Rust parity unless noted, but did not improve the checkpoint:
 - A single-matcher fast path in `IgnoreStack` preserved the exact Swift
   `--files` output hash and sorted Rust parity, but the same-machine A/B was
   flat at 101.3 ms versus 101.5 ms, so the simpler stack iteration stayed.
+- Collapsing fast-path root existence, directory, and root-base checks into one
+  Darwin status probe preserved sorted Rust parity for default and no-ignore
+  file listing, but a same-machine 30-run A/B was flat: default `--files`
+  measured 101.7 ms baseline versus 101.2 ms for the probe, and
+  `--no-ignore --files` measured 65.1 ms baseline versus 64.4 ms for the probe.
+  The existing setup path stayed to avoid a neutral churn-only change.
 - Removing the 4 KiB size gate from the retained multi-literal no-match
   preflight was noisier against the Linux alternation corpus; the ungated probe
   measured 2.298 s ± 0.058 s mean versus the gated probe at 2.286 s ± 0.010 s,
