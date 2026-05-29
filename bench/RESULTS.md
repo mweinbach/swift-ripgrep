@@ -1269,6 +1269,20 @@ for those forms.
 | `-b -x needle` | 1.306 s | 27.2 ms | 9.3 ms |
 | `--column -x needle` | 1.306 s | 27.2 ms | 9.6 ms |
 
+Explicit `--encoding=none` and ASCII-safe UTF-8 exact-line field output now
+share that same scanner. Raw `none` field output uses byte offsets directly,
+while UTF-8 validates an ASCII haystack first so the emitted byte-offset and
+column fields remain Rust-compatible. Direct release byte/status checks matched
+Rust for raw byte-offset, raw column, combined fields, repeated `-e`, `-E
+utf8`, and a non-ASCII UTF-8 fallback control.
+
+10 timed runs on the same dense literal fixture:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--encoding=none -b -x needle` | 1.935 s | 28.1 ms | 10.0 ms |
+| `--encoding=utf-8 -b -x needle` | 1.338 s | 76.8 ms | 10.3 ms |
+
 Exact-line only-matching output now shares that same literal alternation,
 repeated `-e`, and pattern-file route. The executable preflight parses
 `-o`/`--only-matching` and short clusters such as `-nox`, but keeps `-o` on the
