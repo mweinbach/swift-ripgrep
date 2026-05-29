@@ -5449,32 +5449,128 @@ public enum SwiftDarwinLiteralPreflight {
         maxCount: Int,
         asciiCaseInsensitive: Bool = false
     ) -> Int? {
-        let newline = UInt8(ascii: "\n")
-        var lineStart = data.startIndex
-        var matchedLineCount = 0
-        var matchCount = 0
-
-        while matchedLineCount < maxCount,
-              lineStart < data.endIndex {
-            let lineEnd = data[lineStart..<data.endIndex].firstIndex(of: newline) ?? data.endIndex
-            guard let lineMatchCount = countNonOverlappingMultiLiteralWordMatches(
-                in: Data(data[lineStart..<lineEnd]),
-                literals: literals,
-                asciiCaseInsensitive: asciiCaseInsensitive
-            ) else {
-                return nil
-            }
-            if lineMatchCount > 0 {
-                matchedLineCount += 1
-                matchCount += lineMatchCount
-            }
-            if lineEnd < data.endIndex {
-                lineStart = data.index(after: lineEnd)
-            } else {
-                lineStart = data.endIndex
-            }
+        guard maxCount > 0,
+              !literals.isEmpty,
+              !data.isEmpty else {
+            return 0
         }
-        return matchCount
+        let searchLiterals = asciiCaseInsensitive
+            ? literals.map { $0.map(rgSwiftASCIILower) }
+            : literals
+        let caseInsensitiveShifts = searchLiterals.map { literal in
+            var table = [Int](repeating: literal.count, count: 256)
+            if asciiCaseInsensitive, literal.count > 1 {
+                for index in 0..<(literal.count - 1) {
+                    table[Int(literal[index])] = literal.count - 1 - index
+                }
+            }
+            return table
+        }
+
+        return data.withUnsafeBytes { rawData -> Int? in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
+            }
+            let base = rawBase.assumingMemoryBound(to: UInt8.self)
+
+            func nextCandidate(literalIndex: Int, from offset: Int) -> (start: Int, literalIndex: Int) {
+                let literal = searchLiterals[literalIndex]
+                let safeOffset = min(offset, data.count)
+                guard !literal.isEmpty,
+                      literal.count <= data.count - safeOffset else {
+                    return (Int.max, literalIndex)
+                }
+                let found = literal.withUnsafeBufferPointer { literalBuffer in
+                    if asciiCaseInsensitive {
+                        return caseInsensitiveShifts[literalIndex].withUnsafeBufferPointer { shifts in
+                            rg_memcasemem_ascii_prepared(
+                                base.advanced(by: safeOffset),
+                                data.count - safeOffset,
+                                literalBuffer.baseAddress,
+                                literal.count,
+                                shifts.baseAddress
+                            )
+                        }
+                    }
+                    return rg_memmem_simple(
+                        base.advanced(by: safeOffset),
+                        data.count - safeOffset,
+                        literalBuffer.baseAddress,
+                        literal.count
+                    )
+                }
+                guard let found else {
+                    return (Int.max, literalIndex)
+                }
+                return (base.distance(to: found), literalIndex)
+            }
+
+            func earliestCandidateIndex(in candidates: [(start: Int, literalIndex: Int)]) -> Int? {
+                var selectedIndex: Int?
+                var selectedStart = Int.max
+                for index in candidates.indices where candidates[index].start < selectedStart {
+                    selectedStart = candidates[index].start
+                    selectedIndex = index
+                }
+                return selectedStart == Int.max ? nil : selectedIndex
+            }
+
+            var candidates = literals.indices.map {
+                nextCandidate(literalIndex: $0, from: 0)
+            }
+            var matchedLineCount = 0
+            var matchCount = 0
+            var selectedLineEnd = -1
+            var rejectedBoundaryCandidates = 0
+            let maxRejectedBoundaryCandidates = max(128, literals.count * 128)
+
+            while let candidateIndex = earliestCandidateIndex(in: candidates) {
+                let matchStart = candidates[candidateIndex].start
+                let literalIndex = candidates[candidateIndex].literalIndex
+                let literalCount = literals[literalIndex].count
+                guard matchStart < data.count else {
+                    break
+                }
+                let matchEnd = matchStart + literalCount
+                guard let bounded = isASCIIWordBoundaryMatch(
+                    base: base,
+                    dataCount: data.count,
+                    matchStart: matchStart,
+                    matchEnd: matchEnd
+                ) else {
+                    return nil
+                }
+                if bounded {
+                    if matchStart >= selectedLineEnd {
+                        guard matchedLineCount < maxCount else {
+                            break
+                        }
+                        matchedLineCount += 1
+                        selectedLineEnd = rgSwiftDarwinNextLineStart(
+                            base: base,
+                            haystackLength: data.count,
+                            from: matchEnd
+                        )
+                    }
+                    matchCount += 1
+                    candidates[candidateIndex] = nextCandidate(
+                        literalIndex: literalIndex,
+                        from: matchEnd
+                    )
+                } else {
+                    rejectedBoundaryCandidates += 1
+                    guard rejectedBoundaryCandidates <= maxRejectedBoundaryCandidates else {
+                        return nil
+                    }
+                    candidates[candidateIndex] = nextCandidate(
+                        literalIndex: literalIndex,
+                        from: matchStart + 1
+                    )
+                }
+            }
+
+            return matchCount
+        }
     }
 
     private static func countNonOverlappingMultiLiteralWordMatches(

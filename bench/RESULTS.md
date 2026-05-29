@@ -3673,20 +3673,22 @@ and alternation forms.
 The tiny bound control `--count-matches -m2 -e needle -e quiet` measured
 2.8 ms versus 2.4 ms for Rust.
 
-Bounded multi-literal word count-matches now also uses the executable preflight
-for repeated `-e`, pattern-file, and top-level alternation forms with
-`-w --count-matches -mN`, including the ASCII ignore-case variant. Direct
-release comparisons were byte-identical for unprefixed, `-H` prefixed,
-`--include-zero`, only-matching count, pattern-file, alternation, and
-ignore-case forms.
+Bounded multi-literal word count-matches now also counts while selecting the
+first N matching lines for repeated `-e`, pattern-file, and top-level
+alternation forms with `-w --count-matches -mN`, including the ASCII
+ignore-case variant. It keeps per-literal candidates in file order and falls
+back on Unicode-adjacent word-boundary ambiguity. Direct release comparisons
+were byte-identical for unprefixed, `-H` prefixed, `--include-zero`,
+only-matching count, pattern-file, alternation, ignore-case, and Unicode
+fallback forms.
 
 10 timed runs on the same 7.5 MiB dense literal fixture, except the
 preflight-bypassed `-w -i` probe used 3 timed runs:
 
 | Command | Preflight bypassed | Current Swift | Rust `rg` |
 | --- | ---: | ---: | ---: |
-| `--count-matches -w -m100000 -e needle -e quiet` | 2.761 s | 47.3 ms | 28.0 ms |
-| `--count-matches -w -i -m100000 -e NEEDLE -e QUIET` | 6.545 s | 57.1 ms | 30.1 ms |
+| `--count-matches -w -m100000 -e needle -e quiet` | 2.761 s | 8.7 ms | 22.7 ms |
+| `--count-matches -w -i -m100000 -e NEEDLE -e QUIET` | 6.545 s | 8.9 ms | 28.2 ms |
 
 Bounded only-matching output now stays on the executable preflight for
 single-literal, ASCII ignore-case, ASCII ignore-case word, and multi-literal
