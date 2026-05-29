@@ -1719,15 +1719,26 @@ uppercase `NEEDLE`/`ABSENT`:
 
 Null path terminator flags now stay on the executable literal preflight when
 the command shape cannot print a path. This covers standalone `--null` and
-`-0`; clustered `-0n` remains on the current parser path because Rust accepts
-it but the current Swift CLI does not. Focused executable coverage checked
-matching-line, line-number, and binary-fallback forms, and direct release byte
-checks matched Rust on small, large, and binary representatives while confirming
-clustered `-0n` still falls through to the existing parser error. On a generated
-4.8 MiB text fixture, single-run before probes measured `--null Sherlock` at
-about 0.82 s and `-0 Sherlock` at about 0.85 s. Seven-run current checks on the
-same fixture shape measured 8.3 ms and 8.4 ms respectively, in line with the
-plain Swift preflight at 8.6 ms and Rust `--null Sherlock` at 9.0 ms.
+`-0`, and a follow-up accepts Rust-compatible `0` inside short clusters in both
+the executable preflight and the main Swift option parser. Focused executable
+coverage checked matching-line, line-number, path-only, count, quiet, and
+binary-fallback forms, and direct release byte checks matched Rust on small,
+large, and binary representatives. On a generated 4.8 MiB text fixture,
+single-run before probes measured `--null Sherlock` at about 0.82 s and
+`-0 Sherlock` at about 0.85 s. Seven-run current checks on the same fixture
+shape measured 8.3 ms and 8.4 ms respectively, in line with the plain Swift
+preflight at 8.6 ms and Rust `--null Sherlock` at 9.0 ms.
+
+Clustered `-0` checks used a generated 300,000-line fixture after the parser
+fix, with the fallback column forcing the generic Swift path through
+`RIPGREP_CONFIG_PATH=`:
+
+| Flags | Swift fallback | Swift preflight | rg |
+|---|---:|---:|---:|
+| `-0n needle` | 229.7 ms | 12.4 ms | 12.7 ms |
+| `-0Hc needle` | 84.6 ms | 7.1 ms | 7.4 ms |
+| `-0l needle` | 64.3 ms | 4.5 ms | 3.8 ms |
+| `-0q needle` | 99.2 ms | 4.3 ms | 3.8 ms |
 
 CRLF path-only and counted executable preflight output now uses Rust-compatible
 `\r\n` terminators, while `--null` path terminators still take precedence. The

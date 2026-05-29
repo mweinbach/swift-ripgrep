@@ -4730,6 +4730,8 @@ struct MiscTests {
             (["--null", "-n"], lineNumberOutput),
             (["-0", "-n"], lineNumberOutput),
             (["-n", "-0"], lineNumberOutput),
+            (["-0n"], lineNumberOutput),
+            (["-n0"], lineNumberOutput),
         ] {
             let nullPathOutput = try runExecutableData(
                 nullPathArguments + [
@@ -4741,6 +4743,29 @@ struct MiscTests {
             #expect(nullPathOutput == expectedOutput)
         }
 
+        let clusteredNullPathOnlyOutput = try runExecutableData([
+            "-0l",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(clusteredNullPathOnlyOutput == Data("\(root.path("dense.txt"))\0".utf8))
+
+        let clusteredNullPrefixedCountOutput = try runExecutableData([
+            "-0Hc",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(clusteredNullPrefixedCountOutput == Data(("\(root.path("dense.txt"))\0" + "3\n").utf8))
+
+        let clusteredNullQuietResult = try runExecutableResult([
+            "-0q",
+            "needle",
+            root.path("dense.txt"),
+        ])
+        #expect(clusteredNullQuietResult.status == 0)
+        #expect(clusteredNullQuietResult.stdout.isEmpty)
+        #expect(clusteredNullQuietResult.stderr.isEmpty)
+
         let nullPathBinaryFallbackOutput = try runExecutableData([
             "--null",
             "needle",
@@ -4750,6 +4775,13 @@ struct MiscTests {
         binary file matches (found "\\0" byte around offset 3)
 
         """.utf8))
+
+        let clusteredNullBinaryFallbackOutput = try runExecutableData([
+            "-0n",
+            "needle",
+            root.path("binary-mode.dat"),
+        ], fixture: {})
+        #expect(clusteredNullBinaryFallbackOutput == nullPathBinaryFallbackOutput)
 
         let countBinaryFallbackOutput = try runExecutableData([
             "-c",

@@ -998,6 +998,7 @@ struct RipgrepCommand {
             count: Bool,
             onlyMatching: Bool,
             pathOnlyMode: PathOnlyMode?,
+            nullPathTerminator: Bool,
             searchZip: Bool,
             unrestrictedCount: Int
         )? {
@@ -1023,6 +1024,7 @@ struct RipgrepCommand {
             var count = false
             var onlyMatching = false
             var pathOnlyMode: PathOnlyMode?
+            var nullPathTerminator = false
             var searchZip = false
             var unrestrictedCount = 0
             for byte in bytes.dropFirst() {
@@ -1072,6 +1074,8 @@ struct RipgrepCommand {
                     onlyMatching = true
                 case UInt8(ascii: "l"):
                     pathOnlyMode = .matching
+                case UInt8(ascii: "0"):
+                    nullPathTerminator = true
                 case UInt8(ascii: "z"):
                     searchZip = true
                 case UInt8(ascii: "u"):
@@ -1099,6 +1103,7 @@ struct RipgrepCommand {
                 count,
                 onlyMatching,
                 pathOnlyMode,
+                nullPathTerminator,
                 searchZip,
                 unrestrictedCount
             )
@@ -1677,6 +1682,7 @@ struct RipgrepCommand {
                         parsedPrintMode = .filesWithoutMatch
                     }
                 }
+                parsedNullPathTerminator = parsedNullPathTerminator || cluster.nullPathTerminator
                 parsedSearchZip = parsedSearchZip || cluster.searchZip
                 parsedUnrestrictedCount += cluster.unrestrictedCount
                 guard parsedUnrestrictedCount <= 3 else {
