@@ -140,6 +140,7 @@ public struct GlobMatcher: Equatable {
     private let rules: [Rule]
     private let requirePositiveMatch: Bool
     private let hasBasenameOnlyRules: Bool
+    private let allRulesUnanchoredBasenameOnly: Bool
     private let hasIncludeRules: Bool
     private let slashPatternsMatchAnywhere: Bool
     private let stripBasePath: String?
@@ -183,6 +184,7 @@ public struct GlobMatcher: Equatable {
         var lastCaseInsensitive: Bool?
         var hasIncludeRules = false
         var hasBasenameOnlyRules = false
+        var allRulesUnanchoredBasenameOnly = true
         for entry in patternEntries {
             let raw = entry.pattern
             let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -213,6 +215,7 @@ public struct GlobMatcher: Equatable {
             rules.append(rule)
             hasIncludeRules = hasIncludeRules || decision == .include
             hasBasenameOnlyRules = hasBasenameOnlyRules || rule.basenameOnly
+            allRulesUnanchoredBasenameOnly = allRulesUnanchoredBasenameOnly && rule.basenameOnly && !rule.anchored
             lastPattern = pattern
             lastDecision = decision
             lastCaseInsensitive = entry.caseInsensitive
@@ -221,6 +224,7 @@ public struct GlobMatcher: Equatable {
         self.rules = rules
         self.requirePositiveMatch = overrideSemantics && hasIncludeRules
         self.hasBasenameOnlyRules = hasBasenameOnlyRules
+        self.allRulesUnanchoredBasenameOnly = !rules.isEmpty && allRulesUnanchoredBasenameOnly
         self.hasIncludeRules = hasIncludeRules
         self.overrideSemantics = overrideSemantics
         let resolvedSlashPatternsMatchAnywhere = slashPatternsMatchAnywhere ?? !overrideSemantics
@@ -271,23 +275,29 @@ public struct GlobMatcher: Equatable {
     }
 
     public func decision(relativePath: String, basename pathBasename: String?, isDirectory: Bool) -> Decision? {
-        guard let scopedPath = scopedPath(for: relativePath) else {
-            return nil
+        let scopedRelativePath: String
+        if canUseUnscopedBasename(relativePath: relativePath) {
+            scopedRelativePath = relativePath
+        } else {
+            guard let path = scopedPath(for: relativePath) else {
+                return nil
+            }
+            scopedRelativePath = path
         }
         #if canImport(Darwin)
-        let pathBasename = hasBasenameOnlyRules ? (pathBasename ?? basename(scopedPath)) : nil
+        let pathBasename = hasBasenameOnlyRules ? (pathBasename ?? basename(scopedRelativePath)) : nil
         if let fastRuleIndex {
             return fastDecision(
-                relativePath: scopedPath,
+                relativePath: scopedRelativePath,
                 basename: pathBasename,
                 isDirectory: isDirectory,
                 fastRuleIndex: fastRuleIndex
             )
         }
         #else
-        let pathBasename = pathBasename ?? basename(scopedPath)
+        let pathBasename = pathBasename ?? basename(scopedRelativePath)
         #endif
-        return reverseDecision(relativePath: scopedPath, basename: pathBasename, isDirectory: isDirectory)
+        return reverseDecision(relativePath: scopedRelativePath, basename: pathBasename, isDirectory: isDirectory)
     }
 
     private func reverseDecision(relativePath: String, basename pathBasename: String?, isDirectory: Bool) -> Decision? {
@@ -570,13 +580,19 @@ public struct GlobMatcher: Equatable {
     }
 
     public func matchingRule(relativePath: String, basename pathBasename: String?, isDirectory: Bool) -> Rule? {
-        guard let scopedPath = scopedPath(for: relativePath) else {
-            return nil
+        let scopedRelativePath: String
+        if canUseUnscopedBasename(relativePath: relativePath) {
+            scopedRelativePath = relativePath
+        } else {
+            guard let path = scopedPath(for: relativePath) else {
+                return nil
+            }
+            scopedRelativePath = path
         }
         #if canImport(Darwin)
-        let pathBasename = hasBasenameOnlyRules ? (pathBasename ?? basename(scopedPath)) : nil
+        let pathBasename = hasBasenameOnlyRules ? (pathBasename ?? basename(scopedRelativePath)) : nil
         #else
-        let pathBasename = pathBasename ?? basename(scopedPath)
+        let pathBasename = pathBasename ?? basename(scopedRelativePath)
         #endif
         var matchedRule: Rule?
         rules.withUnsafeBufferPointer { buffer in
@@ -587,13 +603,32 @@ public struct GlobMatcher: Equatable {
             while offset > 0 {
                 offset -= 1
                 let rule = baseAddress.advanced(by: offset)
-                if matches(rule, relativePath: scopedPath, basename: pathBasename, isDirectory: isDirectory) {
+                if matches(rule, relativePath: scopedRelativePath, basename: pathBasename, isDirectory: isDirectory) {
                     matchedRule = rule.pointee
                     return
                 }
             }
         }
         return matchedRule
+    }
+
+    private func canUseUnscopedBasename(relativePath: String) -> Bool {
+        guard allRulesUnanchoredBasenameOnly else {
+            return false
+        }
+        if !pathPrefix.isEmpty && relativePath.isEmpty {
+            return false
+        }
+        guard let stripBasePath else {
+            return true
+        }
+        if relativePath == stripBasePath {
+            return true
+        }
+        guard let stripBasePathPrefix else {
+            return false
+        }
+        return relativePath.hasPrefix(stripBasePathPrefix)
     }
 
     private func scopedPath(for relativePath: String) -> String? {
