@@ -3513,6 +3513,21 @@ and alternation forms.
 | --- | ---: | ---: | ---: |
 | `--count-matches -m100000 -e needle -e quiet` | 2.233 s | 39.8 ms | 14.6 ms |
 
+Bounded multi-literal word count-matches now also uses the executable preflight
+for repeated `-e`, pattern-file, and top-level alternation forms with
+`-w --count-matches -mN`, including the ASCII ignore-case variant. Direct
+release comparisons were byte-identical for unprefixed, `-H` prefixed,
+`--include-zero`, only-matching count, pattern-file, alternation, and
+ignore-case forms.
+
+10 timed runs on the same 7.5 MiB dense literal fixture, except the
+preflight-bypassed `-w -i` probe used 3 timed runs:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--count-matches -w -m100000 -e needle -e quiet` | 2.761 s | 47.3 ms | 28.0 ms |
+| `--count-matches -w -i -m100000 -e NEEDLE -e QUIET` | 6.545 s | 57.1 ms | 30.1 ms |
+
 ### Rejected A/B checks — 2026-05-25
 
 The following plausible Darwin optimizations were measured against checkpoint

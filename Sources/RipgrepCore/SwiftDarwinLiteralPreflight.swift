@@ -4031,24 +4031,38 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literals: [[UInt8]],
         includeZero: Bool,
+        maxCount: Int? = nil,
         countPrefix: [UInt8] = [],
         crlfTerminated: Bool = false
     ) -> Int32? {
         guard let literals = nonOverlappingDistinctLiterals(literals),
               distinctASCIIWordLiterals(literals) != nil,
-              !literals.isEmpty else {
+              !literals.isEmpty,
+              maxCount.map({ $0 > 0 }) ?? true else {
             return nil
         }
         guard let data = mappedPreflightData(path: path) else {
             return nil
         }
 
-        var matchCount = 0
-        for literal in literals {
-            guard let literalCount = countASCIIWordMatches(in: data, literal: literal) else {
+        let matchCount: Int
+        if let maxCount {
+            guard let boundedMatchCount = countMultiLiteralWordMatchesWithinFirstMatchingLines(
+                data: data,
+                literals: literals,
+                maxCount: maxCount
+            ) else {
                 return nil
             }
-            matchCount += literalCount
+            matchCount = boundedMatchCount
+        } else {
+            guard let totalMatchCount = countNonOverlappingMultiLiteralWordMatches(
+                in: data,
+                literals: literals
+            ) else {
+                return nil
+            }
+            matchCount = totalMatchCount
         }
 
         if matchCount > 0 || includeZero {
@@ -4067,27 +4081,39 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literals: [[UInt8]],
         includeZero: Bool,
+        maxCount: Int? = nil,
         countPrefix: [UInt8] = [],
         crlfTerminated: Bool = false
     ) -> Int32? {
         guard let literals = nonOverlappingDistinctASCIICaseInsensitiveWordLiterals(literals),
               !literals.isEmpty,
+              maxCount.map({ $0 > 0 }) ?? true,
               let data = mappedPreflightData(path: path),
               !hasBinaryDetectionPrefix(data),
               !containsNonASCIIByte(data) else {
             return nil
         }
 
-        var matchCount = 0
-        for literal in literals {
-            guard let literalCount = countASCIIWordMatches(
-                in: data,
-                literal: literal,
+        let matchCount: Int
+        if let maxCount {
+            guard let boundedMatchCount = countMultiLiteralWordMatchesWithinFirstMatchingLines(
+                data: data,
+                literals: literals,
+                maxCount: maxCount,
                 asciiCaseInsensitive: true
             ) else {
                 return nil
             }
-            matchCount += literalCount
+            matchCount = boundedMatchCount
+        } else {
+            guard let totalMatchCount = countNonOverlappingMultiLiteralWordMatches(
+                in: data,
+                literals: literals,
+                asciiCaseInsensitive: true
+            ) else {
+                return nil
+            }
+            matchCount = totalMatchCount
         }
 
         if matchCount > 0 || includeZero {
@@ -4100,6 +4126,59 @@ public enum SwiftDarwinLiteralPreflight {
             }
         }
         return matchCount > 0 ? 0 : 1
+    }
+
+    private static func countMultiLiteralWordMatchesWithinFirstMatchingLines(
+        data: Data,
+        literals: [[UInt8]],
+        maxCount: Int,
+        asciiCaseInsensitive: Bool = false
+    ) -> Int? {
+        let newline = UInt8(ascii: "\n")
+        var lineStart = data.startIndex
+        var matchedLineCount = 0
+        var matchCount = 0
+
+        while matchedLineCount < maxCount,
+              lineStart < data.endIndex {
+            let lineEnd = data[lineStart..<data.endIndex].firstIndex(of: newline) ?? data.endIndex
+            guard let lineMatchCount = countNonOverlappingMultiLiteralWordMatches(
+                in: Data(data[lineStart..<lineEnd]),
+                literals: literals,
+                asciiCaseInsensitive: asciiCaseInsensitive
+            ) else {
+                return nil
+            }
+            if lineMatchCount > 0 {
+                matchedLineCount += 1
+                matchCount += lineMatchCount
+            }
+            if lineEnd < data.endIndex {
+                lineStart = data.index(after: lineEnd)
+            } else {
+                lineStart = data.endIndex
+            }
+        }
+        return matchCount
+    }
+
+    private static func countNonOverlappingMultiLiteralWordMatches(
+        in data: Data,
+        literals: [[UInt8]],
+        asciiCaseInsensitive: Bool = false
+    ) -> Int? {
+        var matchCount = 0
+        for literal in literals {
+            guard let literalCount = countASCIIWordMatches(
+                in: data,
+                literal: literal,
+                asciiCaseInsensitive: asciiCaseInsensitive
+            ) else {
+                return nil
+            }
+            matchCount += literalCount
+        }
+        return matchCount
     }
 
     public static func multiLiteralCountMatchesExitCode(
