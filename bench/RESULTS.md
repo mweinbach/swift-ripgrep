@@ -1334,6 +1334,19 @@ forms.
 | `--encoding=none -n -x needle` | 1.920 s | 28.4 ms | 9.9 ms |
 | `--encoding=none -m1 -x needle` | 1.903 s | 7.6 ms | 9.3 ms |
 
+Raw `--encoding=none` and ASCII-safe UTF-8 case-insensitive exact-line
+matching output now keep the same folded exact-line writer. This covers normal,
+numbered, only-matching, repeated `-e`, and ASCII UTF-8 forms, while the
+existing non-ASCII UTF-8 fallback guard still preserves Unicode case-folding.
+Direct release byte/status checks matched Rust for those forms.
+
+10 timed runs on the same dense literal fixture:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--encoding=none -i -x "NEEDLE NEEDLE QUIET TAIL"` | 5.972 s | 10.0 ms | 24.0 ms |
+| `--encoding=none -n -i -x "NEEDLE NEEDLE QUIET TAIL"` | 6.234 s | 13.4 ms | 31.0 ms |
+
 Case-insensitive exact-line quiet and path-only searches now have a conservative
 match-only Swift preflight. It probes exact, lowercase, and uppercase ASCII
 whole-line variants and falls back whenever it cannot prove a match, preserving
