@@ -56,6 +56,16 @@ about a 1.19x speedup. A focused harness recheck measured Swift at 2.276 s for
 `linux_alternates`; neighboring `linux_alternates_casei` and `linux_literal`
 remained in the Swift-win band.
 
+The same recursive no-match preflight now probes mapped file buffers with the
+existing Swift byte scanner instead of allocating `Data` for each literal search.
+Direct byte/status checks matched the previous Swift binary and sorted Rust
+output for the Linux alternation, literal, no-literal, and case-insensitive
+controls. A seven-run A/B on the Linux
+`ERR_SYS|PME_TURN_OFF|LINK_REQ_RST|CFG_BME_EVT` workload improved from 2.309 s
+to 1.938 s, versus 2.775 s for Rust. The neighboring single-literal
+`spin_lock` control stayed in the same band at 1.790 s versus 1.738 s before
+and 2.716 s for Rust.
+
 Files-mode controls on `/tmp/swift-rg-bench/linux` isolated the cost to VCS
 ignore handling. A 30-run slice measured Swift `--files` at 101.3 ms ± 2.9 ms,
 Swift `--hidden --files` at 101.6 ms ± 2.7 ms, Swift
@@ -187,6 +197,12 @@ and sorted Rust parity unless noted, but did not improve the checkpoint:
   101.6 ms probe; the 80-run flipped run measured default at 102.7 ms probe
   versus 103.6 ms baseline, but hidden regressed to 105.2 ms probe versus
   102.7 ms baseline. The explicit suffix meta scan stayed.
+- Disabling the ignore-aware top-level parallel file-list walker preserved exact
+  Swift output and sorted Rust parity for default and hidden file listing, but it
+  regressed hard. A 30-run A/B measured default `--files` at 100.8 ms baseline
+  versus 166.8 ms probe, hidden at 100.4 ms baseline versus 172.3 ms probe, and
+  `--no-ignore-vcs --files` at 73.3 ms baseline versus 112.8 ms probe. The
+  top-level parallel walker stayed.
 
 ## Swift-only word/case checkpoint — 2026-05-28
 

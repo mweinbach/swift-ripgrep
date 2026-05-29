@@ -7178,8 +7178,16 @@ public struct RipgrepSearcher: @unchecked Sendable {
                    fastPath.literals.count > 1,
                    dataCount >= 4 * 1024 {
                     var hasAnyLiteral = false
-                    for literal in fastPath.literals where !literal.isEmpty {
-                        if data.range(of: Data(literal)) != nil {
+                    for literal in fastPath.literals where !literal.isEmpty && literal.count <= dataCount {
+                        let foundPointer = literal.withUnsafeBufferPointer { needle in
+                            rg_memmem_simple(
+                                baseAddress,
+                                dataCount,
+                                needle.baseAddress,
+                                needle.count
+                            )
+                        }
+                        if foundPointer != nil {
                             hasAnyLiteral = true
                             break
                         }
