@@ -74,7 +74,11 @@ previous Swift binary and Rust for explicit-file quiet, path-only, without-match
 and digit no-match controls. A 30-run A/B on the 23 MiB Linux register header
 measured `-q -i ReG_MaSk` at 3.2 ms versus 23.6 ms before and 3.3 ms for Rust;
 `-l -i ReG_MaSk` measured 3.1 ms versus 23.6 ms before and 3.3 ms for Rust. A
-digit no-match control improved from 9.8 ms to 5.6 ms.
+digit no-match control improved from 9.8 ms to 5.6 ms. A follow-up no-letter
+literal branch reuses the plain byte scanner, keeping mixed-case controls in the
+same band while improving the digit no-match control again to 4.9 ms in an
+order-flipped 60-run check, versus 5.4 ms for the folded scanner and 4.8 ms for
+Rust.
 
 Files-mode controls on `/tmp/swift-rg-bench/linux` isolated the cost to VCS
 ignore handling. A 30-run slice measured Swift `--files` at 101.3 ms ± 2.9 ms,
