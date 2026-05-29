@@ -870,8 +870,21 @@ public enum SwiftDarwinLiteralPreflight {
               let data = mappedPreflightData(path: path),
               !data.isEmpty,
               !hasBinaryDetectionPrefix(data),
-              !containsNonASCIIByte(data),
-              !data.contains(0),
+              !containsNULByte(data) else {
+            return nil
+        }
+        if let maxCount,
+           !lineNumber,
+           linePrefix.isEmpty,
+           headingPrefix.isEmpty,
+           let matchedLineCount = writeBoundedASCIIWordMatchedLines(
+            in: data,
+            literals: literals,
+            maxCount: maxCount
+           ) {
+            return matchedLineCount > 0 ? 0 : 1
+        }
+        guard !containsNonASCIIByte(data),
               let matchedLineCount = writeASCIIWordMatchedLines(
                 in: data,
                 literals: literals,
@@ -902,7 +915,7 @@ public enum SwiftDarwinLiteralPreflight {
               !data.isEmpty,
               !hasBinaryDetectionPrefix(data),
               !containsNonASCIIByte(data),
-              !data.contains(0),
+              !containsNULByte(data),
               let matchedLineCount = writeASCIIWordMatchedLines(
                 in: data,
                 literals: literals,
@@ -3006,9 +3019,20 @@ public enum SwiftDarwinLiteralPreflight {
     }
 
     private static func hasBinaryDetectionPrefix(_ data: Data) -> Bool {
-        let prefixLength = min(data.count, 64 * 1024)
-        let prefixEnd = data.index(data.startIndex, offsetBy: prefixLength)
-        return data.range(of: Data([0]), in: data.startIndex..<prefixEnd) != nil
+        containsNULByte(data, limit: 64 * 1024)
+    }
+
+    private static func containsNULByte(_ data: Data, limit: Int? = nil) -> Bool {
+        data.withUnsafeBytes { rawData in
+            guard let rawBase = rawData.baseAddress else {
+                return false
+            }
+            let byteCount = min(rawData.count, max(0, limit ?? rawData.count))
+            guard byteCount > 0 else {
+                return false
+            }
+            return memchr(rawBase, 0, byteCount) != nil
+        }
     }
 
     private static func containsNonASCIIByte(_ data: Data) -> Bool {
@@ -7142,6 +7166,169 @@ private func countASCIIWordMatchedLines(
         return matchedLineCount
     }
 
+}
+
+private func writeBoundedASCIIWordMatchedLines(
+    in data: Data,
+    literals: [[UInt8]],
+    maxCount: Int
+) -> Int? {
+    guard maxCount > 0,
+          !literals.isEmpty else {
+        return 0
+    }
+    struct PendingLine {
+        let start: Int
+        let outputEnd: Int
+        let needsFinalNewline: Bool
+    }
+
+    return data.withUnsafeBytes { rawData in
+        guard let rawBase = rawData.baseAddress else {
+            return 0
+        }
+        let base = rawBase.assumingMemoryBound(to: UInt8.self)
+        var searchOffset = 0
+        var rejectedBoundaryCandidates = 0
+        let maxRejectedBoundaryCandidates = 128
+        let newline = UInt8(ascii: "\n")
+        var pendingLines: [PendingLine] = []
+        pendingLines.reserveCapacity(min(maxCount, 1024))
+
+        func literalMatchesAtSearchOffset(_ literal: [UInt8]) -> Bool? {
+            guard literal.count <= data.count - searchOffset else {
+                return false
+            }
+            for index in literal.indices where base[searchOffset + index] != literal[index] {
+                return false
+            }
+            return isASCIIWordBoundaryMatch(
+                base: base,
+                dataCount: data.count,
+                matchStart: searchOffset,
+                matchEnd: searchOffset + literal.count
+            )
+        }
+
+        while searchOffset < data.count,
+              pendingLines.count < maxCount {
+            var bestStart = Int.max
+            var bestEnd = Int.max
+            var needsFallback = false
+
+            for literal in literals {
+                guard let bounded = literalMatchesAtSearchOffset(literal) else {
+                    return nil
+                }
+                if bounded {
+                    bestStart = searchOffset
+                    bestEnd = searchOffset + literal.count
+                    break
+                }
+            }
+
+            if bestStart == Int.max {
+                for literal in literals {
+                    literal.withUnsafeBufferPointer { needle in
+                        guard !needsFallback,
+                              let needleBase = needle.baseAddress else {
+                            return
+                        }
+                        var literalSearchOffset = searchOffset
+                        while literalSearchOffset < data.count {
+                            guard let found = rg_memmem_simple(
+                                base.advanced(by: literalSearchOffset),
+                                data.count - literalSearchOffset,
+                                needleBase,
+                                literal.count
+                            ) else {
+                                break
+                            }
+
+                            let matchStart = base.distance(to: found)
+                            let matchEnd = matchStart + literal.count
+                            guard let bounded = isASCIIWordBoundaryMatch(
+                                base: base,
+                                dataCount: data.count,
+                                matchStart: matchStart,
+                                matchEnd: matchEnd
+                            ) else {
+                                needsFallback = true
+                                return
+                            }
+                            if bounded {
+                                if matchStart < bestStart {
+                                    bestStart = matchStart
+                                    bestEnd = matchEnd
+                                }
+                                break
+                            }
+
+                            rejectedBoundaryCandidates += 1
+                            guard rejectedBoundaryCandidates <= maxRejectedBoundaryCandidates else {
+                                needsFallback = true
+                                return
+                            }
+                            literalSearchOffset = matchStart + 1
+                        }
+                    }
+                    if needsFallback {
+                        return nil
+                    }
+                }
+            }
+
+            guard bestStart != Int.max else {
+                break
+            }
+
+            var lineStart = bestStart
+            while lineStart > 0, base[lineStart - 1] != newline {
+                lineStart -= 1
+            }
+            let lineEndPointer = memchr(
+                base.advanced(by: bestEnd),
+                Int32(newline),
+                data.count - bestEnd
+            )
+            let outputEnd: Int
+            let needsFinalNewline: Bool
+            if let lineEndPointer {
+                outputEnd = base.distance(to: lineEndPointer.assumingMemoryBound(to: UInt8.self)) + 1
+                needsFinalNewline = false
+            } else {
+                outputEnd = data.count
+                needsFinalNewline = true
+            }
+
+            pendingLines.append(PendingLine(
+                start: lineStart,
+                outputEnd: outputEnd,
+                needsFinalNewline: needsFinalNewline
+            ))
+            searchOffset = outputEnd
+        }
+
+        guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+            return nil
+        }
+        defer {
+            output.deallocate()
+        }
+        for line in pendingLines {
+            guard output.write(base.advanced(by: line.start), count: line.outputEnd - line.start) else {
+                return nil
+            }
+            if line.needsFinalNewline,
+               !output.writeByte(newline) {
+                return nil
+            }
+        }
+        guard output.flush() else {
+            return nil
+        }
+        return pendingLines.count
+    }
 }
 
 private func writeASCIIWordMatchedLines(

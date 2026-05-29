@@ -19,7 +19,9 @@ Unicode-adjacent fallback fixture. Follow-ups extend the same ASCII-only guard
 to single-literal `--count-matches -w -i`, multi-literal word/count modes,
 single-literal only-matching word/case output, and plain single- or
 multi-literal only-match output. Encoded multi-literal word line output now
-uses the same ASCII-safe line writer before falling back. The non-word
+uses the same ASCII-safe line writer before falling back, and bounded
+multi-literal word output buffers proven line ranges before writing so tiny
+`-mN` searches avoid full-line scans. The non-word
 `-o`/`-o -i` path emits the
 original matched bytes, preserves line-number and filename prefixes, handles
 overlapping alternatives with Rust-compatible leftmost/alternation order, and
@@ -3854,11 +3856,15 @@ forms.
 Dense multi-literal word line output now checks for a word-literal match at the
 current line start before probing every literal through the rest of the file.
 That shortcut preserves file-order output and helps repeated dense lines where
-the earliest selected match is at the line boundary. Direct checks matched Rust
-for raw, UTF-8, UTF-8 ignore-case, line-numbered, bounded max-count,
-alternation, and Unicode fallback forms. The tiny encoded
-`--encoding=none -m2 -w -e needle -e quiet` control remains a gap at 28.5 ms
-versus 2.5 ms for Rust.
+the earliest selected match is at the line boundary. A follow-up adds a bounded
+max-count writer for unprefixed case-sensitive output; it collects candidate
+line ranges before writing, so Unicode/binary fallbacks still happen before any
+stdout bytes are emitted. Direct checks matched Rust for raw, UTF-8, UTF-8
+ignore-case, line-numbered, bounded max-count, alternation, no-final-newline,
+no-match, and Unicode fallback forms. A 20-run bounded control on
+`/tmp/swift-rg-candidates/countm-big.txt` measured
+`--encoding=none -m2 -w -e needle -e quiet` at 4.3 ms versus 2.6 ms for Rust,
+and the UTF-8 form at 4.2 ms versus 2.3 ms for Rust.
 
 Exact line-regexp vimgrep output now uses the single-literal stdout-buffer field
 writer for case-sensitive literal `-x`/`--line-regexp` searches. It preserves
