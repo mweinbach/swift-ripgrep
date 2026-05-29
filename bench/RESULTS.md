@@ -105,6 +105,12 @@ and sorted Rust parity unless noted, but did not improve the checkpoint:
   was flat: default `--files` measured 101.8 ms baseline versus 101.4 ms for
   the probe, while `--hidden --files` measured 103.0 ms baseline versus
   102.7 ms for the probe. The extra stored field stayed out.
+- Walking `SimpleGlob` tokens through `withUnsafeBufferPointer` instead of
+  binding `glob.tokens` to a local array preserved sorted Rust parity for
+  default and hidden file listing, but regressed the hot path: a 20-run probe
+  measured default `--files` at 118.2 ms ± 4.0 ms and `--hidden --files` at
+  119.7 ms ± 4.5 ms, with user CPU rising above 300 ms. The simpler token loop
+  stayed.
 - Removing the 4 KiB size gate from the retained multi-literal no-match
   preflight was noisier against the Linux alternation corpus; the ungated probe
   measured 2.298 s ± 0.058 s mean versus the gated probe at 2.286 s ± 0.010 s,
