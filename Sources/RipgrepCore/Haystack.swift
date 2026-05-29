@@ -2584,7 +2584,7 @@ public struct FileWalker: @unchecked Sendable {
     }
 
     private func gitDirectory(fromGitFile gitFileURL: URL, worktreeDirectory: URL) -> URL? {
-        guard let contents = try? String(contentsOf: gitFileURL, encoding: .utf8) else {
+        guard let contents = try? String(contentsOfFile: gitFileURL.path, encoding: .utf8) else {
             return nil
         }
         guard let rawLine = contents.components(separatedBy: .newlines).first(where: {
@@ -2603,7 +2603,7 @@ public struct FileWalker: @unchecked Sendable {
 
     private func commonGitDirectory(from gitDirectory: URL) -> URL {
         let commondirURL = gitDirectory.appendingPathComponent("commondir")
-        guard let contents = try? String(contentsOf: commondirURL, encoding: .utf8) else {
+        guard let contents = try? String(contentsOfFile: commondirURL.path, encoding: .utf8) else {
             return gitDirectory
         }
         let value = contents.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3036,7 +3036,7 @@ public struct FileWalker: @unchecked Sendable {
         guard let url else {
             return nil
         }
-        return try? String(contentsOf: url, encoding: .utf8)
+        return try? String(contentsOfFile: url.path, encoding: .utf8)
     }
 
     private func homeGitConfigURL() -> URL? {

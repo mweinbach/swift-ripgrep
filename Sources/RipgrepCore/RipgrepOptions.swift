@@ -1690,7 +1690,7 @@ public enum RipgrepArgumentParser {
         }
         let contents: String
         do {
-            contents = try String(contentsOf: URL(fileURLWithPath: path), encoding: .utf8)
+            contents = try String(contentsOfFile: path, encoding: .utf8)
         } catch {
             return ([], [
                 "failed to read the file specified in RIPGREP_CONFIG_PATH: \(path): \(configReadErrorDescription(path: path, error: error))",
