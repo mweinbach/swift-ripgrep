@@ -2230,51 +2230,84 @@ public enum SwiftDarwinLiteralPreflight {
     ) -> Int32? {
         let newline = UInt8(ascii: "\n")
         let limit = maxCount ?? Int.max
-        let needle = Data(literal)
-        var lineNeedle = needle
+        var lineNeedle = literal
         lineNeedle.append(newline)
-        var searchStart = data.startIndex
-        var matchedLineCount = 0
-        var emittedHeading = false
-        var output = Data()
-        output.reserveCapacity(64 * 1024)
+        guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+            return nil
+        }
+        defer {
+            output.deallocate()
+        }
 
-        while matchedLineCount < limit,
-              searchStart < data.endIndex,
-              let matchRange = data.range(of: lineNeedle, in: searchStart..<data.endIndex) {
-            guard !matchRange.isEmpty else {
-                return nil
+        let matchedLineCount = data.withUnsafeBytes { rawData -> Int? in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
             }
-            if matchRange.lowerBound == data.startIndex
-                || data[data.index(before: matchRange.lowerBound)] == newline {
-                appendHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading, to: &output)
-                appendLinePrefix(linePrefix, to: &output)
-                output.append(lineNeedle)
-                matchedLineCount += 1
-                if output.count >= 64 * 1024 {
-                    FileHandle.standardOutput.write(output)
-                    output.removeAll(keepingCapacity: true)
+            let base = rawBase.assumingMemoryBound(to: UInt8.self)
+            return literal.withUnsafeBufferPointer { literalBuffer -> Int? in
+                guard let literalBase = literalBuffer.baseAddress else {
+                    return 0
+                }
+                return lineNeedle.withUnsafeBufferPointer { lineNeedleBuffer -> Int? in
+                    guard let lineNeedleBase = lineNeedleBuffer.baseAddress else {
+                        return 0
+                    }
+
+                    var searchOffset = 0
+                    var matchedLineCount = 0
+                    var emittedHeading = false
+
+                    while matchedLineCount < limit,
+                          searchOffset < data.count,
+                          let found = rg_memmem_simple(
+                            base.advanced(by: searchOffset),
+                            data.count - searchOffset,
+                            lineNeedleBase,
+                            lineNeedle.count
+                          ) {
+                        let matchStart = base.distance(to: found)
+                        if matchStart == 0 || base[matchStart - 1] == newline {
+                            guard output.writeHeadingPrefix(
+                                headingPrefix,
+                                emittedHeading: &emittedHeading
+                            ),
+                                output.writeBytes(linePrefix),
+                                output.write(lineNeedleBase, count: lineNeedle.count) else {
+                                return nil
+                            }
+                            matchedLineCount += 1
+                        }
+                        searchOffset = matchStart + lineNeedle.count
+                    }
+
+                    if matchedLineCount < limit,
+                       data.count >= literal.count,
+                       data.count > 0,
+                       base[data.count - 1] != newline {
+                        let suffixStart = data.count - literal.count
+                        if suffixStart >= 0,
+                           (suffixStart == 0 || base[suffixStart - 1] == newline),
+                           memcmp(base.advanced(by: suffixStart), literalBase, literal.count) == 0 {
+                            guard output.writeHeadingPrefix(
+                                headingPrefix,
+                                emittedHeading: &emittedHeading
+                            ),
+                                output.writeBytes(linePrefix),
+                                output.write(literalBase, count: literal.count),
+                                output.writeByte(newline) else {
+                                return nil
+                            }
+                            matchedLineCount += 1
+                        }
+                    }
+                    return matchedLineCount
                 }
             }
-            searchStart = matchRange.upperBound
         }
 
-        if matchedLineCount < limit,
-           data.last != newline,
-           data.count >= needle.count {
-            let suffixStart = data.index(data.endIndex, offsetBy: -needle.count)
-            if (suffixStart == data.startIndex || data[data.index(before: suffixStart)] == newline),
-               data[suffixStart..<data.endIndex].elementsEqual(needle) {
-                appendHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading, to: &output)
-                appendLinePrefix(linePrefix, to: &output)
-                output.append(needle)
-                output.append(newline)
-                matchedLineCount += 1
-            }
-        }
-
-        if !output.isEmpty {
-            FileHandle.standardOutput.write(output)
+        guard let matchedLineCount,
+              output.flush() else {
+            return nil
         }
         return matchedLineCount > 0 ? 0 : 1
     }
@@ -3678,7 +3711,7 @@ public enum SwiftDarwinLiteralPreflight {
         guard let data = mappedPreflightData(path: path) else {
             return false
         }
-        return data.allSatisfy { $0 < 0x80 }
+        return !containsNonASCIIByte(data)
     }
 
     private static func literalLineMatchCount(

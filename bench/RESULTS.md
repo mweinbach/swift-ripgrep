@@ -248,7 +248,9 @@ exact-line output while preserving Unicode case-folding/word-boundary fallback
 for non-ASCII files. A same-turn probe left `--encoding=utf-8 -w needle` on the
 fallback path after it measured neutral-to-slower with the existing word writer.
 Direct byte/status checks covered `-i`, `-o`, and `-x` outputs plus `-w`,
-Unicode case-fold, and non-ASCII word fallback controls.
+Unicode case-fold, and non-ASCII word fallback controls. A later follow-up
+made the ASCII eligibility probe use the existing SIMD high-bit scanner and
+moved single-literal unnumbered exact-line output onto the stdout buffer.
 
 10 timed runs on `/tmp/swift-rg-candidates/trim.txt` with 3 warmups, except
 `-x` which used `/tmp/swift-rg-candidates/exact-needle.txt`:
@@ -257,7 +259,11 @@ Unicode case-fold, and non-ASCII word fallback controls.
 | --- | ---: | ---: | ---: |
 | `--encoding=utf-8 -i NEEDLE` | 4.863 s | 42.2 ms | 21.1 ms |
 | `--encoding=utf-8 -o needle` | 1.726 s | 37.3 ms | 25.4 ms |
-| `--encoding=utf-8 -x needle` | 2.445 s | 155.3 ms | 27.2 ms |
+| `--encoding=utf-8 -x needle` | 2.445 s | 9.2 ms | 22.1 ms |
+
+The same buffered exact-line writer measured plain `-x needle` at 9.0 ms and
+raw `--encoding=none -x needle` at 8.6 ms on the exact-line fixture, versus
+Rust at 21.9 ms and 21.6 ms.
 
 Explicit UTF-8 compatible files now also keep literal vimgrep line output on
 the Swift executable preflight, while non-ASCII ignore-case files continue to
@@ -1283,7 +1289,7 @@ utf8`, and a non-ASCII UTF-8 fallback control.
 | Command | Preflight bypassed | Current Swift | Rust `rg` |
 | --- | ---: | ---: | ---: |
 | `--encoding=none -b -x needle` | 1.935 s | 28.1 ms | 10.0 ms |
-| `--encoding=utf-8 -b -x needle` | 1.338 s | 76.8 ms | 10.3 ms |
+| `--encoding=utf-8 -b -x needle` | 1.338 s | 28.0 ms | 10.3 ms |
 
 Single-literal numbered exact-line output now also uses the line-by-line
 scanner instead of the candidate-substring line-number path. Direct release
@@ -3839,7 +3845,7 @@ control.
 
 | Command | Preflight bypassed | Current Swift | Rust `rg` |
 | --- | ---: | ---: | ---: |
-| `--encoding=utf-8 --vimgrep -x needle` | 1.317 s | 74.6 ms | 10.0 ms |
+| `--encoding=utf-8 --vimgrep -x needle` | 1.317 s | 28.0 ms | 9.9 ms |
 | `--encoding=none --vimgrep -x needle` | 1.899 s | 27.1 ms | 9.8 ms |
 
 `--heading` is now output-neutral for executable vimgrep preflights. Rust does
