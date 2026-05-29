@@ -3672,7 +3672,8 @@ metadata and glob values before `--no-config`: separated/inline
 and `--iglob` forms matched Rust byte-for-byte in direct checks. Numeric,
 separator, path-separator, size-limit, max-filesize, and encoding value flags
 now share that treatment too, with direct checks covering separated, inline,
-short, and visible separator/path representatives.
+short, and visible separator/path representatives. A final metadata follow-up
+adds separated and inline `--hostname-bin` values while preserving byte parity.
 
 The before column is the same command measured before the relevant parser
 change, where the outer config guard forced the generic Swift path.
@@ -3688,6 +3689,7 @@ change, where the outer config guard forced the generic Swift path.
 | `--pre= --vimgrep --heading --no-config -e needle -e quiet` | 5.117 s | 48.0 ms | 96.6 ms |
 | `--field-match-separator='|' --vimgrep --heading --no-config -e needle -e quiet` | 5.178 s | 48.4 ms | 96.4 ms |
 | `--encoding=auto --vimgrep --heading --no-config -e needle -e quiet` | 5.225 s | 48.5 ms | 97.4 ms |
+| `--hostname-bin=hostname --vimgrep --heading --no-config -e needle -e quiet` | 5.165 s | 47.8 ms | 95.7 ms |
 
 Plain multi-literal only-matching field output now uses the same field-prefix
 preflight for `-b`, `--column`, and `--vimgrep -o` forms. The route covers

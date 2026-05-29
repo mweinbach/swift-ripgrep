@@ -4266,7 +4266,10 @@ struct RipgrepCommand {
              "--max-depth",
              "--maxdepth":
             return leadingNoConfigNonNegativeInteger(value)
-        case "--field-match-separator", "--field-context-separator", "--context-separator":
+        case "--field-match-separator",
+             "--field-context-separator",
+             "--context-separator",
+             "--hostname-bin":
             return true
         case "--path-separator":
             return preflightPathSeparator(value) != nil
@@ -4309,7 +4312,8 @@ struct RipgrepCommand {
         }
         if leadingNoConfigInlineValue(argument, prefix: "--field-match-separator=") != nil
             || leadingNoConfigInlineValue(argument, prefix: "--field-context-separator=") != nil
-            || leadingNoConfigInlineValue(argument, prefix: "--context-separator=") != nil {
+            || leadingNoConfigInlineValue(argument, prefix: "--context-separator=") != nil
+            || leadingNoConfigInlineValue(argument, prefix: "--hostname-bin=") != nil {
             return true
         }
         if let pathSeparator = leadingNoConfigInlineValue(argument, prefix: "--path-separator=") {

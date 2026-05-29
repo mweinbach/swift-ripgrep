@@ -6378,6 +6378,37 @@ struct MiscTests {
         ], fixture: {})
         #expect(deferredInlineFieldSeparatorNoConfigVimgrepOutput == leadingFieldSeparatorNoConfigVimgrepOutput)
 
+        let deferredHostnameNoConfigVimgrepOutput = try runExecutableData([
+            "--hostname-bin",
+            "hostname",
+            "--vimgrep",
+            "--heading",
+            "--no-config",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredHostnameNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
+
+        let deferredInlineHostnameNoConfigVimgrepOutput = try runExecutableData([
+            "--hostname-bin=hostname",
+            "--vimgrep",
+            "--heading",
+            "--no-config",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredInlineHostnameNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
+
         let deferredMaxFilesizeNoConfigVimgrepOutput = try runExecutableData([
             "--max-filesize",
             "1K",
