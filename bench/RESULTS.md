@@ -3586,6 +3586,19 @@ forms.
 | `-w -b -o -e needle -e quiet` | 4.217 s | 36.9 ms | 96.1 ms |
 | `-w --column -o -e needle -e quiet` | 4.286 s | 46.0 ms | 108.9 ms |
 
+Word only-matching vimgrep output now also uses the field-prefix preflight for
+the visible `--vimgrep -o` shape. This remains scoped to only-matching output;
+full-line vimgrep output still falls back to the existing formatter because it
+prints the full source line once per match. Direct release comparisons were
+byte-identical for repeated `-e`, byte-offset, `--no-filename`, ignore-case,
+alternation, single-literal, and Unicode-adjacent fallback forms.
+
+10 timed runs on the same dense literal fixture:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--vimgrep -w -o -e needle -e quiet` | 5.679 s | 49.9 ms | 126.6 ms |
+
 Bounded fixed-lookaround PCRE count-matches now also stays on the executable
 preflight for ASCII fixed lookbehind, fixed lookahead, and reset-start
 `prefix\Kliteral` forms. Direct release comparisons were byte-identical for

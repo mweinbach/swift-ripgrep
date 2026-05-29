@@ -2525,6 +2525,20 @@ struct FeatureTests {
             root.path("multi-word-only.txt"),
         ]) {}
         #expect(fieldedMultiWordOnlyMatchingOutput == Data("1:10:9:foo\n1:14:13:bar\n".utf8))
+        let vimgrepMultiWordOnlyMatchingOutput = try runExecutableData([
+            "--vimgrep",
+            "-w",
+            "-o",
+            "-m1",
+            "-e",
+            "foo",
+            "-e",
+            "bar",
+            root.path("multi-word-only.txt"),
+        ]) {}
+        #expect(vimgrepMultiWordOnlyMatchingOutput == Data(
+            "\(root.path("multi-word-only.txt")):1:10:foo\n\(root.path("multi-word-only.txt")):1:14:bar\n".utf8
+        ))
         let prefixedMultiWordOnlyMatchingOutput = try runExecutableData([
             "--with-filename",
             "-w",
