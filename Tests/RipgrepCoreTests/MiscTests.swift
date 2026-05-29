@@ -4839,6 +4839,8 @@ struct MiscTests {
             (["-b", "-x", "-e", "needle", "-e", "last", root.path("exact.txt")], Data("0:needle\n18:needle\n37:last\n".utf8)),
             (["--encoding=none", "-b", "-x", "needle", root.path("exact.txt")], Data("0:needle\n18:needle\n".utf8)),
             (["--encoding=utf-8", "--column", "-x", "needle", root.path("exact.txt")], Data("1:1:needle\n3:1:needle\n".utf8)),
+            (["--encoding=none", "-o", "-x", "needle", root.path("exact.txt")], Data("needle\nneedle\n".utf8)),
+            (["--encoding=none", "-n", "-o", "-x", "needle", root.path("exact.txt")], Data("1:needle\n3:needle\n".utf8)),
             (["--heading", "--with-filename", "-x", "-f", root.path("exact-patterns.txt"), root.path("exact.txt")], Data("\(root.path("exact.txt"))\nneedle\nneedle\nlast\n".utf8)),
             (["--vimgrep", "-x", "needle", root.path("exact.txt")], Data("\(root.path("exact.txt")):1:1:needle\n\(root.path("exact.txt")):3:1:needle\n".utf8)),
             (["--vimgrep", "--no-column", "-x", "needle", root.path("exact.txt")], Data("\(root.path("exact.txt")):1:needle\n\(root.path("exact.txt")):3:needle\n".utf8)),

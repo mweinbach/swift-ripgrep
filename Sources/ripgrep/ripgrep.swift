@@ -2492,6 +2492,16 @@ struct RipgrepCommand {
             && (parsedEncodingSupportsLinePreflight
                 || (parsedEncodingSupportsUTF8LinePreflight
                     && SwiftDarwinLiteralPreflight.fileCanUseASCIILinePreflight(path: path)))
+        let parsedEncodingExactLineOnlyMatchingOutputCanUsePreflight =
+            parsedEncodingVisibleLineOutput
+            && !parsedVimgrep
+            && parsedOnlyMatching
+            && parsedLineRegexp
+            && !wordRegexp
+            && !asciiCaseInsensitive
+            && (parsedEncodingSupportsLinePreflight
+                || (parsedEncodingSupportsUTF8LinePreflight
+                    && SwiftDarwinLiteralPreflight.fileCanUseASCIILinePreflight(path: path)))
         let parsedOnlyMatchingFieldsCanUsePreflight = parsedOnlyMatching
             && !parsedQuiet
             && parsedPathOnlyMode == nil
@@ -2638,7 +2648,8 @@ struct RipgrepCommand {
                 || (parsedEncodingVisibleLineOutput
                     && !parsedEncodingVisibleLineOutputCanUsePreflight
                     && !parsedEncodingExactLineVimgrepOutputCanUsePreflight
-                    && !parsedEncodingExactLineFieldOutputCanUsePreflight))
+                    && !parsedEncodingExactLineFieldOutputCanUsePreflight
+                    && !parsedEncodingExactLineOnlyMatchingOutputCanUsePreflight))
         let parsedSearchZipAffectsPreflight = parsedSearchZip && pathMayUseSearchZip(path)
         guard !(parsedLineRegexp && wordRegexp) else {
             return nil
@@ -4090,7 +4101,7 @@ struct RipgrepCommand {
                     headingPrefix: parsedHeadingPrefix
                 )
             }
-            if parsedByteOffset || parsedColumn {
+            if lineNumber || parsedByteOffset || parsedColumn {
                 return SwiftDarwinLiteralPreflight.multiLiteralExactLineExitCode(
                     path: path,
                     literals: [literal],

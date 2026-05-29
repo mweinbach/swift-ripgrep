@@ -1283,6 +1283,17 @@ utf8`, and a non-ASCII UTF-8 fallback control.
 | `--encoding=none -b -x needle` | 1.935 s | 28.1 ms | 10.0 ms |
 | `--encoding=utf-8 -b -x needle` | 1.338 s | 76.8 ms | 10.3 ms |
 
+Single-literal numbered exact-line output now also uses the line-by-line
+scanner instead of the candidate-substring line-number path. Direct release
+byte/status checks matched Rust for numbered output, exact only-matching with
+line numbers, headings, max-count, and encoded raw only-matching.
+
+10 timed runs on the same dense literal fixture:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `-n -x needle` | 1.305 s | 27.1 ms | 9.4 ms |
+
 Exact-line only-matching output now shares that same literal alternation,
 repeated `-e`, and pattern-file route. The executable preflight parses
 `-o`/`--only-matching` and short clusters such as `-nox`, but keeps `-o` on the
@@ -1294,6 +1305,19 @@ CRLF fallback, binary fallback, non-exact fallback, and count-only fallback
 forms. On the 4.8 MiB dense fixture, `-o -x 'needle needle...|missing'`
 improved from 2.128 s to 38.9 ms, versus 26.5 ms for Rust, and `-n -o -x ...`
 improved from 2.149 s to 54.8 ms, versus 31.7 ms for Rust.
+
+Raw `--encoding=none` exact-line only-matching now stays on the same exact-line
+output preflight too. The raw unnumbered form can use the fast no-line-number
+exact scanner, while numbered output shares the line-by-line scanner above.
+Direct release byte/status checks matched Rust for unnumbered, numbered,
+repeated `-e`, max-count, UTF-8 ASCII, and non-ASCII UTF-8 fallback forms.
+
+10 timed runs on `/tmp/swift-rg-candidates/countm-big.txt`:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--encoding=none -o -x needle` | 1.888 s | 7.7 ms | 9.4 ms |
+| `--encoding=none -n -o -x needle` | 1.891 s | 26.9 ms | 9.8 ms |
 
 Case-insensitive exact-line quiet and path-only searches now have a conservative
 match-only Swift preflight. It probes exact, lowercase, and uppercase ASCII
