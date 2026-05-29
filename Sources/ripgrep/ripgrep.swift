@@ -1051,6 +1051,8 @@ struct RipgrepCommand {
                     fixedStrings = true
                 case UInt8(ascii: "L"):
                     continue
+                case UInt8(ascii: "."):
+                    continue
                 case UInt8(ascii: "P"):
                     allowPCREQuotedLiterals = true
                 case UInt8(ascii: "a"):

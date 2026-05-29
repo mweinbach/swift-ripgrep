@@ -5689,6 +5689,53 @@ struct MiscTests {
         ], fixture: {})
         #expect(shortHiddenExplicitFileOutput == noHiddenExplicitFileOutput)
 
+        let clusteredHiddenLineNumberOutput = try runExecutableData([
+            "-.n",
+            "needle",
+            root.path(".hidden.txt"),
+        ], fixture: {})
+        #expect(clusteredHiddenLineNumberOutput == Data("1:needle\n".utf8))
+
+        let clusteredHiddenCountOutput = try runExecutableData([
+            "-.c",
+            "needle",
+            root.path(".hidden.txt"),
+        ], fixture: {})
+        #expect(clusteredHiddenCountOutput == Data("1\n".utf8))
+
+        let clusteredHiddenPathOnlyOutput = try runExecutableData([
+            "-.l",
+            "needle",
+            root.path(".hidden.txt"),
+        ], fixture: {})
+        #expect(clusteredHiddenPathOnlyOutput == Data("\(root.path(".hidden.txt"))\n".utf8))
+
+        let clusteredHiddenPrefixedCountOutput = try runExecutableData([
+            "-.Hc",
+            "needle",
+            root.path(".hidden.txt"),
+        ], fixture: {})
+        #expect(clusteredHiddenPrefixedCountOutput == Data("\(root.path(".hidden.txt")):1\n".utf8))
+
+        let clusteredHiddenQuietResult = try runExecutableResult([
+            "-.q",
+            "needle",
+            root.path(".hidden.txt"),
+        ])
+        #expect(clusteredHiddenQuietResult.status == 0)
+        #expect(clusteredHiddenQuietResult.stdout.isEmpty)
+        #expect(clusteredHiddenQuietResult.stderr.isEmpty)
+
+        let clusteredHiddenBinaryFallbackOutput = try runExecutableData([
+            "-.n",
+            "needle",
+            root.path("binary-mode.dat"),
+        ], fixture: {})
+        #expect(clusteredHiddenBinaryFallbackOutput == Data("""
+        binary file matches (found "\\0" byte around offset 3)
+
+        """.utf8))
+
         let ignoreExplicitFileOutput = try runExecutableData([
             "--ignore",
             "needle",

@@ -1493,7 +1493,7 @@ public enum RipgrepArgumentParser {
             return false
         }
         let flags = argument.dropFirst()
-        let standaloneFlags = Set("iSsFPwxUvonbpNHILzaqclhVu0")
+        let standaloneFlags = Set("iSsFPwxUvonbpNHILzaqclhVu0.")
         for (offset, flag) in flags.enumerated() {
             if flag == "f" {
                 return offset == flags.count - 1
@@ -1516,7 +1516,7 @@ public enum RipgrepArgumentParser {
         guard let first = flags.first, !Set("efgEdABCmMjTt").contains(first) else {
             return nil
         }
-        let standaloneFlags = Set("iSsFPwxUvonbpNHILzaqclhVu0")
+        let standaloneFlags = Set("iSsFPwxUvonbpNHILzaqclhVu0.")
         for flag in flags {
             if flag == "f" || flag == "r" {
                 return nil
@@ -1608,6 +1608,8 @@ public enum RipgrepArgumentParser {
                 options.withFilename = false
             case "L":
                 options.followSymlinks = true
+            case ".":
+                options.hidden = true
             case "z":
                 options.searchZip = true
             case "a":

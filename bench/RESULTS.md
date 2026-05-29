@@ -1753,6 +1753,21 @@ fix, with the fallback column forcing the generic Swift path through
 | `-0l needle` | 64.3 ms | 4.5 ms | 3.8 ms |
 | `-0q needle` | 99.2 ms | 4.3 ms | 3.8 ms |
 
+Clustered hidden flags now share that parser treatment. The executable
+preflight accepts `.` inside short clusters for explicit-file forms where
+hidden matching is output-neutral, while the main Swift parser applies the
+same hidden toggle for fallback-only cases. Direct release byte/status checks
+matched Rust for `-.n`, `-n.`, `-.q`, `-.c`, `-.l`, `-.Hc`, a visible file
+control, and a binary fallback control. The same generated 300,000-line fixture
+measured:
+
+| Flags | Swift fallback | Swift preflight | rg |
+|---|---:|---:|---:|
+| `-.n needle` | 40.8 ms | 12.1 ms | 11.7 ms |
+| `-.c needle` | 25.9 ms | 6.6 ms | 7.2 ms |
+| `-.l needle` | 30.5 ms | 3.9 ms | 3.8 ms |
+| `-.q needle` | 32.9 ms | 4.4 ms | 4.0 ms |
+
 CRLF path-only and counted executable preflight output now uses Rust-compatible
 `\r\n` terminators, while `--null` path terminators still take precedence. The
 parser also tracks ordered `--null-data`/`--crlf` state so Rust-equivalent
