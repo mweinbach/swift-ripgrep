@@ -446,6 +446,24 @@ struct FeatureTests {
         #expect(output.isEmpty)
         #expect(errors.isEmpty)
 
+        for arguments in [
+            ["-m0", "-q", "needle", root.path("many.txt")],
+            ["-m0", "-l", "needle", root.path("many.txt")],
+            ["-m0", "-c", "--include-zero", "needle", root.path("many.txt")],
+            ["-m0", "needle", root.path("missing.txt")],
+        ] {
+            output = []
+            errors = []
+            exitCode = RipgrepCLI.run(
+                arguments: arguments,
+                stdout: { output.append($0) },
+                stderr: { errors.append($0) }
+            )
+            #expect(exitCode == 1)
+            #expect(output.isEmpty)
+            #expect(errors.isEmpty)
+        }
+
         output = []
         errors = []
         exitCode = RipgrepCLI.run(

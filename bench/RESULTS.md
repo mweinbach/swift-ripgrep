@@ -811,20 +811,33 @@ measured 6.0 ms versus 35.3 ms before and 2.7 ms for Rust, while
 Positive `-m`/`--max-count` now stays on the executable multi-literal preflight
 for safe alternations, repeated explicit regexps, and literal-only pattern
 files. The public Swift preflight wrapper now passes the existing bounded
-`maxCount` through to the mapped multi-literal writer; `-m0` and unsupported
-semantic modes still fall back. Dense-fixture byte checks matched Rust for
+`maxCount` through to the mapped multi-literal writer; unsupported semantic
+modes still fall back. A follow-up handles `-m0`/`--max-count=0` before search
+work begins, matching Rust's empty-output status-1 behavior for normal, quiet,
+path-only, counted include-zero, missing-root, and invalid-regex forms while
+still preserving parser/type diagnostics. Dense-fixture byte checks matched Rust for
 plain, line-numbered, filename-prefixed, heading-prefixed, pattern-file, and
 single-pattern alternation forms. On the 50 KiB dense fixture,
 `-m2 -e needle -e quiet` measured 4.1 ms versus 32.0 ms before and 2.6 ms for
 Rust, while `-n -m2 -f patterns.txt` measured 4.8 ms versus 36.7 ms before and
 2.5 ms for Rust.
 
+Nine-run checks on a generated 300,000-line fixture measured the `-m0`
+early-exit path:
+
+| Flags | Swift current | rg |
+|---|---:|---:|
+| `-m0 needle` | 3.93 ms | 2.60 ms |
+| `-m0 -q needle` | 3.69 ms | 2.65 ms |
+| `-m0 -l needle` | 3.68 ms | 2.70 ms |
+| `-m0 -c --include-zero needle` | 3.71 ms | 2.71 ms |
+
 Multi-literal count output now reuses that same mapped writer without emitting
 matched lines, then prints only the matched-line count summary. This covers
 unbounded `-c` and bounded `-c -mN`/`--count --max-count N` for safe
 alternations, repeated explicit regexps, and literal-only pattern files, while
-`-m0`, quiet precedence, ASCII ignore-case fallback, and unsupported semantic
-modes stay on prior behavior. Dense-fixture byte checks matched Rust for
+quiet precedence, ASCII ignore-case fallback, and unsupported semantic modes
+stay on prior behavior. Dense-fixture byte checks matched Rust for
 repeated-regexp, pattern-file, single-pattern alternation, include-zero
 no-match, CRLF summary, quiet-count, filename-prefixed, heading-prefixed,
 NUL-prefixed, path-separated, ASCII ignore-case fallback, and zero-count forms.

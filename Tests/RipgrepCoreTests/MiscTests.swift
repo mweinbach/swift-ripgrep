@@ -3416,6 +3416,18 @@ struct MiscTests {
         #expect(maxCountNoMatch.stderr.isEmpty)
         #expect(maxCountNoMatch.status == 1)
 
+        for maxCountZeroArguments in [
+            ["-m0", "-q", "needle", root.path("dense.txt")],
+            ["-m0", "-l", "needle", root.path("dense.txt")],
+            ["-m0", "-c", "--include-zero", "needle", root.path("dense.txt")],
+            ["-m0", "needle", root.path("missing.txt")],
+        ] {
+            let maxCountZeroResult = try runExecutableResult(maxCountZeroArguments)
+            #expect(maxCountZeroResult.stdout.isEmpty)
+            #expect(maxCountZeroResult.stderr.isEmpty)
+            #expect(maxCountZeroResult.status == 1)
+        }
+
         let exactLineOnlyMatchingOutput = try runExecutableData([
             "-o",
             "-x",

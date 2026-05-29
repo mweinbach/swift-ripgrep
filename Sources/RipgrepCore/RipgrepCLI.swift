@@ -65,6 +65,9 @@ public enum RipgrepCLI {
                     stderr("rg: \(diagnostic)")
                 }
                 try validateTypeChanges(options.typeChanges)
+                if options.mode == .search, options.maxCount == 0 {
+                    return 1
+                }
                 if shouldSearchImplicitStdin(
                     options: options,
                     stdinProvided: stdin != nil,
