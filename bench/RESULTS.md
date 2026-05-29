@@ -3666,7 +3666,10 @@ the same guard to explicit pattern-source and replacement flags before
 vimgrep forms. Color mode and color spec value flags are now included too:
 `--color never`/`--color=never` and separated/inline `--colors` forms can reach
 the fast path when color is unobservable, while visible color output still falls
-through and matched Rust in direct checks.
+through and matched Rust in direct checks. The guard also recognizes neutral
+metadata and glob values before `--no-config`: separated/inline
+`--hyperlink-format`, empty `--pre`, `--pre-glob`, `--glob`, short inline `-g`,
+and `--iglob` forms matched Rust byte-for-byte in direct checks.
 
 The before column is the same command measured before the relevant parser
 change, where the outer config guard forced the generic Swift path.
@@ -3678,6 +3681,8 @@ change, where the outer config guard forced the generic Swift path.
 | `--sort path --vimgrep --heading --no-config -e needle -e quiet` | 5.246 s | 48.9 ms | 96.2 ms |
 | `-e needle --no-config --vimgrep --heading -e quiet` | 5.116 s | 47.9 ms | 93.5 ms |
 | `--color never --vimgrep --heading --no-config -e needle -e quiet` | 5.170 s | 48.1 ms | 97.7 ms |
+| `--hyperlink-format=grep+ --vimgrep --heading --no-config -e needle -e quiet` | 5.116 s | 48.2 ms | 96.9 ms |
+| `--pre= --vimgrep --heading --no-config -e needle -e quiet` | 5.117 s | 48.0 ms | 96.6 ms |
 
 Plain multi-literal only-matching field output now uses the same field-prefix
 preflight for `-b`, `--column`, and `--vimgrep -o` forms. The route covers

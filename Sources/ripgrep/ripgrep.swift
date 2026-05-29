@@ -4248,6 +4248,12 @@ struct RipgrepCommand {
             return leadingNoConfigColorValue(value)
         case "--colors":
             return RipgrepArgumentParser.isValidColorChange(value)
+        case "--hyperlink-format":
+            return leadingNoConfigHyperlinkFormat(value)
+        case "--pre":
+            return value.isEmpty
+        case "--pre-glob", "-g", "--glob", "--iglob":
+            return leadingNoConfigStrictGlob(value)
         case "-e", "--regexp", "-f", "--file", "-r", "--replace":
             return true
         default:
@@ -4265,6 +4271,18 @@ struct RipgrepCommand {
         }
         if let colorChange = leadingNoConfigInlineValue(argument, prefix: "--colors=") {
             return RipgrepArgumentParser.isValidColorChange(colorChange)
+        }
+        if let hyperlinkFormat = leadingNoConfigInlineValue(argument, prefix: "--hyperlink-format=") {
+            return leadingNoConfigHyperlinkFormat(hyperlinkFormat)
+        }
+        if let preprocessor = leadingNoConfigInlineValue(argument, prefix: "--pre=") {
+            return preprocessor.isEmpty
+        }
+        if let glob = leadingNoConfigInlineValue(argument, prefix: "--pre-glob=")
+            ?? leadingNoConfigInlineValue(argument, prefix: "--glob=")
+            ?? leadingNoConfigInlineShortValue(argument, prefix: "-g")
+            ?? leadingNoConfigInlineValue(argument, prefix: "--iglob=") {
+            return leadingNoConfigStrictGlob(glob)
         }
         if let sortValue = leadingNoConfigInlineValue(argument, prefix: "--sort=")
             ?? leadingNoConfigInlineValue(argument, prefix: "--sortr=") {
@@ -4303,6 +4321,59 @@ struct RipgrepCommand {
 
     private static func leadingNoConfigNonNegativeInteger(_ value: String) -> Bool {
         !value.hasPrefix("-") && Int(value) != nil
+    }
+
+    private static func leadingNoConfigHyperlinkFormat(_ value: String) -> Bool {
+        switch value {
+        case "",
+             "default",
+             "none",
+             "cursor",
+             "file",
+             "grep+",
+             "kitty",
+             "macvim",
+             "textmate",
+             "vscode",
+             "vscode-insiders",
+             "vscodium":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func leadingNoConfigStrictGlob(_ value: String) -> Bool {
+        !leadingNoConfigHasUnclosedCharacterClass(in: value)
+    }
+
+    private static func leadingNoConfigHasUnclosedCharacterClass(in pattern: String) -> Bool {
+        var escaped = false
+        var index = pattern.startIndex
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                escaped = false
+            } else if character == "\\" {
+                escaped = true
+            } else if character == "[" {
+                var cursor = pattern.index(after: index)
+                var foundClose = false
+                while cursor < pattern.endIndex {
+                    if pattern[cursor] == "]" {
+                        foundClose = true
+                        break
+                    }
+                    cursor = pattern.index(after: cursor)
+                }
+                if !foundClose {
+                    return true
+                }
+                index = cursor
+            }
+            index = pattern.index(after: index)
+        }
+        return false
     }
 
     private static func leadingNoConfigColorValue(_ value: String) -> Bool {

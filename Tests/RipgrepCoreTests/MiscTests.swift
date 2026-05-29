@@ -6209,6 +6209,99 @@ struct MiscTests {
         ], fixture: {})
         #expect(deferredColorsNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
 
+        let deferredHyperlinkNoConfigVimgrepOutput = try runExecutableData([
+            "--hyperlink-format",
+            "grep+",
+            "--vimgrep",
+            "--heading",
+            "--no-config",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredHyperlinkNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
+
+        let deferredInlineHyperlinkNoConfigVimgrepOutput = try runExecutableData([
+            "--hyperlink-format=grep+",
+            "--vimgrep",
+            "--heading",
+            "--no-config",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredInlineHyperlinkNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
+
+        let deferredPreNoConfigVimgrepOutput = try runExecutableData([
+            "--pre",
+            "",
+            "--vimgrep",
+            "--heading",
+            "--no-config",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredPreNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
+
+        let deferredInlinePreNoConfigVimgrepOutput = try runExecutableData([
+            "--pre=",
+            "--vimgrep",
+            "--heading",
+            "--no-config",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredInlinePreNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
+
+        let deferredGlobNoConfigVimgrepOutput = try runExecutableData([
+            "--glob",
+            "*.pdf",
+            "--vimgrep",
+            "--heading",
+            "--no-config",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredGlobNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
+
+        let deferredInlineGlobNoConfigVimgrepOutput = try runExecutableData([
+            "--glob=*.pdf",
+            "--vimgrep",
+            "--heading",
+            "--no-config",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredInlineGlobNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
+
         let deferredInlineMaxCountNoConfigOutput = try runExecutableData([
             "-m1",
             "--no-config",
