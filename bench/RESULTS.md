@@ -3774,6 +3774,15 @@ UTF-8 ignore-case, and Unicode fallback forms. Five-run probes on
 `--encoding=utf-8 -i --vimgrep -w -o -e NEEDLE -e QUIET` from 11.139 s to
 49.7 ms, versus 138.3 ms for Rust.
 
+The same encoded word only-matching eligibility now covers non-vimgrep `-w -o`
+output. Direct release byte/status checks matched Rust for raw, UTF-8
+ignore-case, and Unicode fallback forms. Five-run probes on
+`/tmp/swift-rg-candidates/countm-big.txt` measured
+`--encoding=none -w -o -e needle -e quiet` improving from 6.194 s to
+27.9 ms, versus 78.2 ms for Rust; and
+`--encoding=utf-8 -i -w -o -e NEEDLE -e QUIET` at 26.6 ms, versus 90.1 ms for
+Rust.
+
 Exact line-regexp vimgrep output now uses a Swift mapped-line writer for
 case-sensitive literal `-x`/`--line-regexp` searches. It preserves vimgrep
 line, column, byte-offset, max-count, filename-prefix, and repeated-pattern

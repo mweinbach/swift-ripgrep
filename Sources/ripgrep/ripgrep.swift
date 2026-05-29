@@ -2567,7 +2567,7 @@ struct RipgrepCommand {
             && !parsedTrim
             && !parsedCrlf
         let parsedEncodingWordVimgrepOutputCanUsePreflight = parsedEncodingVisibleLineOutput
-            && parsedVimgrep
+            && (parsedVimgrep || parsedOnlyMatching)
             && wordRegexp
             && !parsedLineRegexp
             && (parsedEncodingSupportsLinePreflight || parsedEncodingSupportsUTF8LinePreflight)
