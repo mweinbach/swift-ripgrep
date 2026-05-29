@@ -2650,6 +2650,17 @@ struct RipgrepCommand {
                             crlfTerminated: parsedCrlf
                         )
                     }
+                    if parsedOnlyMatchingAffectsPreflightOutput {
+                        return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveMultiLiteralWordOnlyMatchingExitCode(
+                            path: path,
+                            literals: literals,
+                            lineNumber: lineNumber,
+                            maxCount: parsedMaxCount,
+                            lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                            linePrefix: parsedLinePrefix,
+                            headingPrefix: parsedHeadingPrefix
+                        )
+                    }
                     return nil
                 }
                 if parsedPrintMode == .countMatches {
@@ -2673,6 +2684,17 @@ struct RipgrepCommand {
                         maxCount: parsedMaxCount,
                         countPrefix: parsedCountPrefix,
                         crlfTerminated: parsedCrlf
+                    )
+                }
+                if parsedOnlyMatchingAffectsPreflightOutput {
+                    return SwiftDarwinLiteralPreflight.multiLiteralWordOnlyMatchingExitCode(
+                        path: path,
+                        literals: literals,
+                        lineNumber: lineNumber,
+                        maxCount: parsedMaxCount,
+                        lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                        linePrefix: parsedLinePrefix,
+                        headingPrefix: parsedHeadingPrefix
                     )
                 }
                 return nil
@@ -3191,6 +3213,17 @@ struct RipgrepCommand {
                             crlfTerminated: parsedCrlf
                         )
                     }
+                    if parsedOnlyMatchingAffectsPreflightOutput {
+                        return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveMultiLiteralWordOnlyMatchingExitCode(
+                            path: path,
+                            literals: literals,
+                            lineNumber: lineNumber,
+                            maxCount: parsedMaxCount,
+                            lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                            linePrefix: parsedLinePrefix,
+                            headingPrefix: parsedHeadingPrefix
+                        )
+                    }
                     return nil
                 }
                 if parsedPrintMode == .countMatches {
@@ -3214,6 +3247,17 @@ struct RipgrepCommand {
                         maxCount: parsedMaxCount,
                         countPrefix: parsedCountPrefix,
                         crlfTerminated: parsedCrlf
+                    )
+                }
+                if parsedOnlyMatchingAffectsPreflightOutput {
+                    return SwiftDarwinLiteralPreflight.multiLiteralWordOnlyMatchingExitCode(
+                        path: path,
+                        literals: literals,
+                        lineNumber: lineNumber,
+                        maxCount: parsedMaxCount,
+                        lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                        linePrefix: parsedLinePrefix,
+                        headingPrefix: parsedHeadingPrefix
                     )
                 }
                 return nil

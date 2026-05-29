@@ -3554,6 +3554,22 @@ fallback forms.
 | --- | ---: | ---: | ---: |
 | `-w -o needle` | 2.995 s | 18.1 ms | 58.6 ms |
 
+Multi-literal word only-matching output now uses the same conservative
+ASCII-boundary executable preflight for repeated `-e` and top-level
+alternation forms, including ASCII ignore-case. It emits original haystack bytes
+for matched text, preserves line numbers and filename prefixes, respects
+`-mN` as matching-line bounded output, and falls back for non-ASCII haystacks.
+Direct release comparisons against Rust were byte-identical for repeated `-e`,
+line-numbered, filename-prefixed, ignore-case, alternation, no-match, and
+Unicode-adjacent fallback forms.
+
+10 timed runs on the same dense literal fixture:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `-w -o -e needle -e quiet` | 4.093 s | 26.7 ms | 79.7 ms |
+| `-w -i -o -e NEEDLE -e QUIET` | 9.236 s | 27.1 ms | 89.2 ms |
+
 Bounded fixed-lookaround PCRE count-matches now also stays on the executable
 preflight for ASCII fixed lookbehind, fixed lookahead, and reset-start
 `prefix\Kliteral` forms. Direct release comparisons were byte-identical for

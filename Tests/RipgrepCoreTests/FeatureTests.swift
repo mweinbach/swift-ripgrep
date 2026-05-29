@@ -2498,6 +2498,46 @@ struct FeatureTests {
             root.path("unicode-word-only.txt"),
         ]) {}
         #expect(unicodeAdjacentWordOnlyMatchingOutput == Data("foo\n".utf8))
+        try root.write("foo_food foo bar food\nquiet foo bar\n", to: "multi-word-only.txt")
+        let boundedMultiWordOnlyMatchingOutput = try runExecutableData([
+            "-w",
+            "-n",
+            "-o",
+            "-m1",
+            "-e",
+            "foo",
+            "-e",
+            "bar",
+            root.path("multi-word-only.txt"),
+        ]) {}
+        #expect(boundedMultiWordOnlyMatchingOutput == Data("1:foo\n1:bar\n".utf8))
+        let prefixedMultiWordOnlyMatchingOutput = try runExecutableData([
+            "--with-filename",
+            "-w",
+            "-o",
+            "-m1",
+            "-e",
+            "foo",
+            "-e",
+            "bar",
+            root.path("multi-word-only.txt"),
+        ]) {}
+        #expect(prefixedMultiWordOnlyMatchingOutput == Data(
+            "\(root.path("multi-word-only.txt")):foo\n\(root.path("multi-word-only.txt")):bar\n".utf8
+        ))
+        try root.write("FOO_food Foo bar BAR\nquiet FOO\n", to: "multi-word-ignore-only.txt")
+        let boundedIgnoreCaseMultiWordOnlyMatchingOutput = try runExecutableData([
+            "-w",
+            "-i",
+            "-o",
+            "-m1",
+            "-e",
+            "FOO",
+            "-e",
+            "BAR",
+            root.path("multi-word-ignore-only.txt"),
+        ]) {}
+        #expect(boundedIgnoreCaseMultiWordOnlyMatchingOutput == Data("Foo\nbar\nBAR\n".utf8))
         try root.write("delta bravo delta\nbravo\n", to: "bounded-alternation-only.txt")
         let boundedAlternationOnlyMatchingOutput = try runExecutableData([
             "-n",
@@ -2507,6 +2547,26 @@ struct FeatureTests {
             root.path("bounded-alternation-only.txt"),
         ]) {}
         #expect(boundedAlternationOnlyMatchingOutput == Data("1:delta\n1:bravo\n1:delta\n".utf8))
+        let boundedWordAlternationOnlyMatchingOutput = try runExecutableData([
+            "-w",
+            "-n",
+            "-o",
+            "-m1",
+            "foo|bar",
+            root.path("multi-word-only.txt"),
+        ]) {}
+        #expect(boundedWordAlternationOnlyMatchingOutput == Data("1:foo\n1:bar\n".utf8))
+        try root.write("éfoo\nbaré\nfoo bar\n", to: "multi-unicode-word-only.txt")
+        let unicodeAdjacentMultiWordOnlyMatchingOutput = try runExecutableData([
+            "-w",
+            "-o",
+            "-e",
+            "foo",
+            "-e",
+            "bar",
+            root.path("multi-unicode-word-only.txt"),
+        ]) {}
+        #expect(unicodeAdjacentMultiWordOnlyMatchingOutput == Data("foo\nbar\n".utf8))
         try root.write("Watson Sherlock\nSherlock Watson\n", to: "multi-literal-replace.txt")
         #expect(try run(["--replace", "X", "Sherlock|Watson", root.path("multi-literal-replace.txt")]) == [
             "X X",
