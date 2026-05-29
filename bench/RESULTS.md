@@ -1384,6 +1384,17 @@ On `/tmp/swift-rg-candidates/countm-big.txt`, 10 timed runs of
 `-i --vimgrep -x 'NEEDLE NEEDLE QUIET TAIL'` improved from 5.123 s to
 145.6 ms, versus 65.2 ms for Rust.
 
+Explicit `--encoding=none` and ASCII-safe UTF-8 case-insensitive exact-line
+vimgrep now share that folded writer instead of falling back. The raw mode can
+emit original bytes after the existing ASCII guard, while UTF-8 first proves the
+haystack is ASCII so Unicode case-folding remains on the full searcher. Direct
+byte/status checks matched Rust for raw, byte-offset raw, UTF-8, `-E utf8`,
+Unicode fallback, and invalid raw-byte fallback forms. On the same fixture,
+5 timed runs of `--encoding=none -i --vimgrep -x 'NEEDLE NEEDLE QUIET TAIL'`
+improved from 6.225 s to 149.4 ms, versus 71.6 ms for Rust; the
+`--encoding=utf-8` form improved from 5.171 s to 203.5 ms, versus 64.4 ms for
+Rust.
+
 The same ASCII exact-line scanner now counts case-insensitive `-c -i -x` and
 `--count-matches -i -x` matches without emitting lines. Byte/status checks
 matched Rust for line counts, count-matches, bounded counts, include-zero,

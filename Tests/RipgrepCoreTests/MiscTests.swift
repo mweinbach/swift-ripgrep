@@ -4860,6 +4860,10 @@ struct MiscTests {
             (["--vimgrep", "-m1", "-x", "needle", root.path("exact.txt")], Data("\(root.path("exact.txt")):1:1:needle\n".utf8)),
             (["--encoding=utf-8", "--vimgrep", "-x", "needle", root.path("exact.txt")], Data("\(root.path("exact.txt")):1:1:needle\n\(root.path("exact.txt")):3:1:needle\n".utf8)),
             (["--encoding=none", "--vimgrep", "-x", "needle", root.path("exact.txt")], Data("\(root.path("exact.txt")):1:1:needle\n\(root.path("exact.txt")):3:1:needle\n".utf8)),
+            (["--encoding=none", "--vimgrep", "-i", "-x", "NEEDLE|LAST", root.path("exact.txt")], Data("\(root.path("exact.txt")):1:1:needle\n\(root.path("exact.txt")):3:1:needle\n\(root.path("exact.txt")):5:1:last\n".utf8)),
+            (["--encoding=none", "--vimgrep", "-b", "-i", "-x", "NEEDLE|LAST", root.path("exact.txt")], Data("\(root.path("exact.txt")):1:1:0:needle\n\(root.path("exact.txt")):3:1:18:needle\n\(root.path("exact.txt")):5:1:37:last\n".utf8)),
+            (["--encoding=utf-8", "--vimgrep", "-i", "-x", "NEEDLE|LAST", root.path("exact.txt")], Data("\(root.path("exact.txt")):1:1:needle\n\(root.path("exact.txt")):3:1:needle\n\(root.path("exact.txt")):5:1:last\n".utf8)),
+            (["-E", "utf8", "--vimgrep", "-i", "-x", "NEEDLE|LAST", root.path("exact.txt")], Data("\(root.path("exact.txt")):1:1:needle\n\(root.path("exact.txt")):3:1:needle\n\(root.path("exact.txt")):5:1:last\n".utf8)),
             (["--vimgrep", "-x", "-e", "needle", "-e", "last", root.path("exact.txt")], Data("\(root.path("exact.txt")):1:1:needle\n\(root.path("exact.txt")):3:1:needle\n\(root.path("exact.txt")):5:1:last\n".utf8)),
             (["--vimgrep", "-i", "-x", "-e", "NEEDLE", "-e", "LAST", root.path("exact.txt")], Data("\(root.path("exact.txt")):1:1:needle\n\(root.path("exact.txt")):3:1:needle\n\(root.path("exact.txt")):5:1:last\n".utf8)),
             (["--crlf", "-x", "needle", root.path("crlf.txt")], Data("needle\r\n".utf8)),
@@ -4867,6 +4871,17 @@ struct MiscTests {
             let exactLineOutput = try runExecutableData(exactLineArguments, fixture: {})
             #expect(exactLineOutput == expectedOutput)
         }
+        let utf8EncodingExactLineVimgrepUnicodeFallback = try runExecutableData([
+            "--encoding=utf-8",
+            "--vimgrep",
+            "-i",
+            "-x",
+            "k",
+            root.path("utf8-casefold.txt"),
+        ], fixture: {})
+        #expect(utf8EncodingExactLineVimgrepUnicodeFallback == Data(
+            "\(root.path("utf8-casefold.txt")):1:1:K\n\(root.path("utf8-casefold.txt")):2:1:K\n".utf8
+        ))
         let exactLineNoMatch = try runExecutableResult([
             "-x",
             "missing",
