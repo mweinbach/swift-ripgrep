@@ -174,6 +174,19 @@ and sorted Rust parity unless noted, but did not improve the checkpoint:
   listing modes and raised user CPU. A 40-run A/B measured default `--files` at
   104.9 ms baseline versus 120.1 ms probe, and hidden at 102.1 ms baseline
   versus 118.8 ms probe. The unconditional lookup shape stayed.
+- Fusing `IgnoreStack.allows` with its own reversed matcher walk preserved exact
+  Swift output for default, hidden, and `--no-ignore-vcs` file listing plus
+  sorted Rust parity, but did not improve the hot controls. A 40-run A/B measured
+  default `--files` at 101.8 ms baseline versus 104.1 ms probe, hidden at
+  101.5 ms baseline versus 102.3 ms probe, and `--no-ignore-vcs --files` at
+  73.9 ms baseline versus 74.6 ms probe. The shared `decision` call stayed.
+- Reusing the full-pattern glob meta scan to classify `**/literal` fast matchers
+  preserved exact Swift output and sorted Rust parity, but the order-flipped
+  confirmation was mixed. The first 40-run A/B measured default `--files` at
+  104.8 ms baseline versus 102.0 ms probe and hidden at 102.0 ms baseline versus
+  101.6 ms probe; the 80-run flipped run measured default at 102.7 ms probe
+  versus 103.6 ms baseline, but hidden regressed to 105.2 ms probe versus
+  102.7 ms baseline. The explicit suffix meta scan stayed.
 
 ## Swift-only word/case checkpoint — 2026-05-28
 
