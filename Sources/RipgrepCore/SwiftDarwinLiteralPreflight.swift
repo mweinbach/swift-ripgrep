@@ -9914,10 +9914,6 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
         || base[0] == 0xFE && base[1] == 0xFF) {
         return nil
     }
-    if memchr(base, 0, haystackLength) != nil {
-        return nil
-    }
-
     guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
         return nil
     }
@@ -10068,7 +10064,13 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
     }
 
     func boundedPrefixLineMatches() -> [Int]? {
-        guard maxCount <= 1024, literals.count >= 4 else {
+        guard emitLines,
+              maxCount <= 1024,
+              literals.count >= 4 else {
+            return nil
+        }
+        let binaryPrefixLength = min(haystackLength, 64 * 1024)
+        guard memchr(base, 0, binaryPrefixLength) == nil else {
             return nil
         }
         var matches: [Int] = []
@@ -10091,6 +10093,9 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
             } else {
                 lineEnd = haystackLength
                 outputEnd = haystackLength
+            }
+            guard memchr(base.advanced(by: lineStart), 0, outputEnd - lineStart) == nil else {
+                return nil
             }
             if let matchStart = firstLiteralMatch(inLineStart: lineStart, lineEnd: lineEnd) {
                 matches.append(matchStart)
@@ -10138,52 +10143,57 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
                 break
             }
         }
-    } else if prefixLength >= 4 {
-        var searchOffset = 0
-        while matchedLineCount < maxCount, searchOffset < haystackLength {
-            let foundPointer = literals[0].withUnsafeBufferPointer { literalBuffer in
-                rg_memmem_simple(
-                    base.advanced(by: searchOffset),
-                    haystackLength - searchOffset,
-                    literalBuffer.baseAddress,
-                    prefixLength
-                )
+    } else {
+        if memchr(base, 0, haystackLength) != nil {
+            return nil
+        }
+        if prefixLength >= 4 {
+            var searchOffset = 0
+            while matchedLineCount < maxCount, searchOffset < haystackLength {
+                let foundPointer = literals[0].withUnsafeBufferPointer { literalBuffer in
+                    rg_memmem_simple(
+                        base.advanced(by: searchOffset),
+                        haystackLength - searchOffset,
+                        literalBuffer.baseAddress,
+                        prefixLength
+                    )
+                }
+                guard let foundPointer else {
+                    break
+                }
+                let matchStart = base.distance(to: foundPointer)
+                if literals.contains(where: { literal($0, matchesAt: matchStart) }) {
+                    guard emitLine(containing: matchStart) else {
+                        writeFailed = true
+                        break
+                    }
+                    searchOffset = bytesSearched
+                } else {
+                    searchOffset = matchStart + 1
+                }
             }
-            guard let foundPointer else {
-                break
+        } else {
+            var candidates = literals.indices.map {
+                nextCandidate(literalIndex: $0, from: 0)
             }
-            let matchStart = base.distance(to: foundPointer)
-            if literals.contains(where: { literal($0, matchesAt: matchStart) }) {
+
+            while matchedLineCount < maxCount,
+                  let candidateIndex = earliestCandidateIndex(in: candidates) {
+                let matchStart = candidates[candidateIndex].start
+                guard matchStart < haystackLength else {
+                    break
+                }
+
                 guard emitLine(containing: matchStart) else {
                     writeFailed = true
                     break
                 }
-                searchOffset = bytesSearched
-            } else {
-                searchOffset = matchStart + 1
-            }
-        }
-    } else {
-        var candidates = literals.indices.map {
-            nextCandidate(literalIndex: $0, from: 0)
-        }
-
-        while matchedLineCount < maxCount,
-              let candidateIndex = earliestCandidateIndex(in: candidates) {
-            let matchStart = candidates[candidateIndex].start
-            guard matchStart < haystackLength else {
-                break
-            }
-
-            guard emitLine(containing: matchStart) else {
-                writeFailed = true
-                break
-            }
-            for index in candidates.indices where candidates[index].start < bytesSearched {
-                candidates[index] = nextCandidate(
-                    literalIndex: candidates[index].literalIndex,
-                    from: bytesSearched
-                )
+                for index in candidates.indices where candidates[index].start < bytesSearched {
+                    candidates[index] = nextCandidate(
+                        literalIndex: candidates[index].literalIndex,
+                        from: bytesSearched
+                    )
+                }
             }
         }
     }

@@ -999,6 +999,27 @@ struct MiscTests {
             String(decoding: fortyLiteralBoundedOutput, as: UTF8.self)
                 == expectedFortyLiteralBoundedLines
         )
+        let fortyLiteralLateNUL = Data((1...8).map { index in
+            "\(fortyLiteralNames[(index - 1) % fortyLiteralNames.count]) \(index)"
+        }.joined(separator: "\n").utf8)
+            + Data("\n".utf8)
+            + Data(String(repeating: "x", count: 70_000).utf8)
+            + Data([0])
+            + Data("binary\n\(fortyLiteralNames[0]) late\n".utf8)
+        try root.write(fortyLiteralLateNUL, to: "forty-literal-late-nul.dat")
+        let fortyLiteralLateNULBoundedOutput = try runExecutableData([
+            "-n",
+            "-m4",
+            fortyLiteralNames.joined(separator: "|"),
+            root.path("forty-literal-late-nul.dat"),
+        ], fixture: {})
+        let expectedFortyLiteralLateNULBoundedLines = (1...4).map { index in
+            "\(index):\(fortyLiteralNames[(index - 1) % fortyLiteralNames.count]) \(index)"
+        }.joined(separator: "\n") + "\n"
+        #expect(
+            String(decoding: fortyLiteralLateNULBoundedOutput, as: UTF8.self)
+                == expectedFortyLiteralLateNULBoundedLines
+        )
 
         let commonPrefixNoMatchNames = (1...20).map { "PM_NOPE_\($0)" }
         let commonPrefixNoMatchOutput = try runExecutableData([

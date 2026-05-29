@@ -2645,6 +2645,18 @@ name alternation matched sibling Rust `rg`; five-run checks measured plain
 214.0 ms versus 162.5 ms for Rust, with empty output and exit status still
 matching.
 
+A follow-up keeps that dry line-scan path Swift-first but avoids the earlier
+full-file NUL probe when the prefix scan itself proves the requested bounded
+lines. The fast route still rejects NUL bytes in the first 64 KiB or in any
+scanned output line before writing, leaving the slower retained routes
+conservative. Direct byte/status checks matched sibling Rust `rg` for `-m128`,
+`-n -m128`, `-m1024`, `-n -m1024`, an early-NUL fallback, and a late-NUL
+after-bound case. On `/tmp/swift-rg-bench/multi-literal-synth.txt`, a 252 MiB
+synthetic dense 40-literal fixture, 20-run checks measured Swift `-m128` at
+4.2 ms versus 4.6 ms for Rust and Swift `-n -m128` at 3.7 ms versus 4.6 ms for
+Rust. The same local reproduction measured the pre-follow-up Swift build at
+23.3 ms for plain `-m128` and 25.2 ms for `-n -m128`.
+
 Plain `--no-mmap` single-literal streaming now has a Swift-only complete-line
 chunk path for the common case-sensitive, non-line-numbered form. It processes
 complete lines directly from each `FileHandle` chunk and keeps only the
