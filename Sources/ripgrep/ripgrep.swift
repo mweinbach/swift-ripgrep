@@ -4277,6 +4277,8 @@ struct RipgrepCommand {
             return leadingNoConfigHumanReadableSize(value)
         case "-E", "--encoding":
             return leadingNoConfigKnownEncoding(value)
+        case "--ignore-file":
+            return leadingNoConfigReadableRegularFile(value)
         case "-e", "--regexp", "-f", "--file", "-r", "--replace":
             return true
         default:
@@ -4325,6 +4327,9 @@ struct RipgrepCommand {
         if let encoding = leadingNoConfigInlineValue(argument, prefix: "--encoding=")
             ?? leadingNoConfigInlineShortValue(argument, prefix: "-E") {
             return leadingNoConfigKnownEncoding(encoding)
+        }
+        if let ignoreFile = leadingNoConfigInlineValue(argument, prefix: "--ignore-file=") {
+            return leadingNoConfigReadableRegularFile(ignoreFile)
         }
         if let sortValue = leadingNoConfigInlineValue(argument, prefix: "--sort=")
             ?? leadingNoConfigInlineValue(argument, prefix: "--sortr=") {
@@ -4490,6 +4495,14 @@ struct RipgrepCommand {
         default:
             return TextEncoding.isKnownLabel(raw)
         }
+    }
+
+    private static func leadingNoConfigReadableRegularFile(_ path: String) -> Bool {
+        guard let type = try? FileManager.default.attributesOfItem(atPath: path)[.type] as? FileAttributeType,
+              type == .typeRegular else {
+            return false
+        }
+        return FileManager.default.isReadableFile(atPath: path)
     }
 
     private static func leadingNoConfigNormalizedEncoding(_ raw: String) -> String {

@@ -3674,6 +3674,8 @@ separator, path-separator, size-limit, max-filesize, and encoding value flags
 now share that treatment too, with direct checks covering separated, inline,
 short, and visible separator/path representatives. A final metadata follow-up
 adds separated and inline `--hostname-bin` values while preserving byte parity.
+Existing readable `--ignore-file` paths are now admitted before `--no-config`
+too, while missing enabled ignore-file paths stay on the normal parser path.
 
 The before column is the same command measured before the relevant parser
 change, where the outer config guard forced the generic Swift path.
@@ -3690,6 +3692,7 @@ change, where the outer config guard forced the generic Swift path.
 | `--field-match-separator='|' --vimgrep --heading --no-config -e needle -e quiet` | 5.178 s | 48.4 ms | 96.4 ms |
 | `--encoding=auto --vimgrep --heading --no-config -e needle -e quiet` | 5.225 s | 48.5 ms | 97.4 ms |
 | `--hostname-bin=hostname --vimgrep --heading --no-config -e needle -e quiet` | 5.165 s | 47.8 ms | 95.7 ms |
+| `--ignore-file <existing> --vimgrep --heading --no-config -e needle -e quiet` | 5.050 s | 49.5 ms | 93.3 ms |
 
 Plain multi-literal only-matching field output now uses the same field-prefix
 preflight for `-b`, `--column`, and `--vimgrep -o` forms. The route covers
