@@ -4100,6 +4100,13 @@ struct MiscTests {
         ], fixture: {})
         #expect(searchZipLineOutput == output)
 
+        let shortSearchZipLineOutput = try runExecutableData([
+            "-z",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(shortSearchZipLineOutput == output)
+
         let searchZipQuietResult = try runExecutableResult([
             "--search-zip",
             "-q",
@@ -6101,6 +6108,36 @@ struct MiscTests {
             "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
         ], fixture: {})
         #expect(deferredNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
+
+        let deferredSearchZipNoConfigVimgrepOutput = try runExecutableData([
+            "--search-zip",
+            "--vimgrep",
+            "--heading",
+            "--no-config",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredSearchZipNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
+
+        let deferredShortSearchZipNoConfigVimgrepOutput = try runExecutableData([
+            "-z",
+            "--vimgrep",
+            "--heading",
+            "--no-config",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredShortSearchZipNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
 
         let deferredShortFollowNoConfigVimgrepOutput = try runExecutableData([
             "-L",

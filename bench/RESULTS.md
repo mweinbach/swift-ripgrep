@@ -272,6 +272,12 @@ count, and count-matches modes, plus bad `.gz` and real gzip fallback controls.
 | `--search-zip -c needle` | 111.0 ms | 10.1 ms | 12.7 ms |
 | `--search-zip --count-matches needle` | 108.1 ms | 6.1 ms | 18.6 ms |
 
+The same non-archive search-zip neutrality now applies to vimgrep line output,
+including short `-z` and deferred `--no-config` ordering. On
+`/tmp/swift-rg-candidates/countm-big.txt`, `--search-zip --vimgrep --heading -e needle -e quiet`
+improved from 5.059 s to 47.3 ms, `-z --vimgrep --heading -e needle -e quiet`
+measured 50.5 ms, and Rust measured 90.9 ms.
+
 Leading `--no-config` now keeps the Swift executable preflight available even
 when `RIPGREP_CONFIG_PATH` is set. The preflight still falls back for configured
 invocations without a leading `--no-config`, and a `--no-config` pattern passed

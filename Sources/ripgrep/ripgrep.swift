@@ -2478,7 +2478,7 @@ struct RipgrepCommand {
             && !parsedNullData
             && !parsedPassthru
             && !parsedReplacement
-            && !parsedSearchZip
+            && (!parsedSearchZip || !pathMayUseSearchZip(path))
             && !parsedStats
             && !parsedStopOnNonmatch
             && !parsedTrim
@@ -2501,7 +2501,7 @@ struct RipgrepCommand {
             && !parsedNullData
             && !parsedPassthru
             && !parsedReplacement
-            && !parsedSearchZip
+            && (!parsedSearchZip || !pathMayUseSearchZip(path))
             && !parsedStats
             && !parsedStopOnNonmatch
             && !parsedTrim
