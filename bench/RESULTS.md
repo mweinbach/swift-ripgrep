@@ -1036,6 +1036,10 @@ clusters, with symlink operand parity checked against Rust. On the same
 fixture, `--follow needle` improved from 6.177 s to 38.6 ms,
 `--no-follow needle` improved from 87.9 ms to 36.9 ms, and `-Ln needle`
 improved from 1.762 s to 54.1 ms, versus 48.3 ms for Rust `--follow`.
+A later short-flag cleanup fixed the unclustered `-L` gap for the dense
+vimgrep multi-literal preflight, including deferred `--no-config` ordering.
+On `/tmp/swift-rg-candidates/countm-big.txt`, `-L --vimgrep --heading -e needle -e quiet`
+improved from 5.112 s to 48.5 ms, versus 94.8 ms for Rust.
 
 Output-neutral metadata flags now stay preflight-eligible when their values
 cannot affect the matching-line stream. This covers known
