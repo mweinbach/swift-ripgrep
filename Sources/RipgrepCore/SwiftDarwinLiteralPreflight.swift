@@ -7194,74 +7194,113 @@ private func writeASCIIWordMatchedLines(
         var lineCountOffset = 0
         var emittedHeading = false
 
+        func matchAtSearchOffset(_ literal: [UInt8]) -> Bool? {
+            guard literal.count <= data.count - searchOffset else {
+                return false
+            }
+            if asciiCaseInsensitive {
+                for index in literal.indices
+                    where rgSwiftASCIILower(base[searchOffset + index]) != literal[index] {
+                    return false
+                }
+            } else {
+                for index in literal.indices where base[searchOffset + index] != literal[index] {
+                    return false
+                }
+            }
+            return isASCIIWordBoundaryMatch(
+                base: base,
+                dataCount: data.count,
+                matchStart: searchOffset,
+                matchEnd: searchOffset + literal.count
+            )
+        }
+
         while searchOffset < data.count,
               matchedLineCount < limit {
             var bestStart = Int.max
             var bestEnd = Int.max
             var needsFallback = false
 
-            for literalIndex in searchLiterals.indices {
-                let literal = searchLiterals[literalIndex]
-                literal.withUnsafeBufferPointer { needle in
-                    guard !needsFallback,
-                          let needleBase = needle.baseAddress else {
-                        return
-                    }
-                    var literalSearchOffset = searchOffset
-                    while literalSearchOffset < data.count {
-                        let found: UnsafePointer<UInt8>?
-                        if asciiCaseInsensitive {
-                            found = caseInsensitiveShifts[literalIndex].withUnsafeBufferPointer { shifts in
-                                rg_memcasemem_ascii_prepared(
+            for literal in searchLiterals {
+                guard let bounded = matchAtSearchOffset(literal) else {
+                    needsFallback = true
+                    break
+                }
+                if bounded {
+                    bestStart = searchOffset
+                    bestEnd = searchOffset + literal.count
+                    break
+                }
+            }
+
+            if bestStart == Int.max, !needsFallback {
+                for literalIndex in searchLiterals.indices {
+                    let literal = searchLiterals[literalIndex]
+                    literal.withUnsafeBufferPointer { needle in
+                        guard !needsFallback,
+                              let needleBase = needle.baseAddress else {
+                            return
+                        }
+                        var literalSearchOffset = searchOffset
+                        while literalSearchOffset < data.count {
+                            let found: UnsafePointer<UInt8>?
+                            if asciiCaseInsensitive {
+                                found = caseInsensitiveShifts[literalIndex].withUnsafeBufferPointer { shifts in
+                                    rg_memcasemem_ascii_prepared(
+                                        base.advanced(by: literalSearchOffset),
+                                        data.count - literalSearchOffset,
+                                        needleBase,
+                                        literal.count,
+                                        shifts.baseAddress
+                                    )
+                                }
+                            } else {
+                                found = rg_memmem_simple(
                                     base.advanced(by: literalSearchOffset),
                                     data.count - literalSearchOffset,
                                     needleBase,
-                                    literal.count,
-                                    shifts.baseAddress
+                                    literal.count
                                 )
                             }
-                        } else {
-                            found = rg_memmem_simple(
-                                base.advanced(by: literalSearchOffset),
-                                data.count - literalSearchOffset,
-                                needleBase,
-                                literal.count
-                            )
-                        }
-                        guard let found else {
-                            break
-                        }
-
-                        let matchStart = base.distance(to: found)
-                        let matchEnd = matchStart + literal.count
-                        guard let bounded = isASCIIWordBoundaryMatch(
-                            base: base,
-                            dataCount: data.count,
-                            matchStart: matchStart,
-                            matchEnd: matchEnd
-                        ) else {
-                            needsFallback = true
-                            return
-                        }
-                        if bounded {
-                            if matchStart < bestStart {
-                                bestStart = matchStart
-                                bestEnd = matchEnd
+                            guard let found else {
+                                break
                             }
-                            break
-                        }
 
-                        rejectedBoundaryCandidates += 1
-                        guard rejectedBoundaryCandidates <= maxRejectedBoundaryCandidates else {
-                            needsFallback = true
-                            return
+                            let matchStart = base.distance(to: found)
+                            let matchEnd = matchStart + literal.count
+                            guard let bounded = isASCIIWordBoundaryMatch(
+                                base: base,
+                                dataCount: data.count,
+                                matchStart: matchStart,
+                                matchEnd: matchEnd
+                            ) else {
+                                needsFallback = true
+                                return
+                            }
+                            if bounded {
+                                if matchStart < bestStart {
+                                    bestStart = matchStart
+                                    bestEnd = matchEnd
+                                }
+                                break
+                            }
+
+                            rejectedBoundaryCandidates += 1
+                            guard rejectedBoundaryCandidates <= maxRejectedBoundaryCandidates else {
+                                needsFallback = true
+                                return
+                            }
+                            literalSearchOffset = matchStart + 1
                         }
-                        literalSearchOffset = matchStart + 1
+                    }
+                    if needsFallback {
+                        return nil
                     }
                 }
-                if needsFallback {
-                    return nil
-                }
+            }
+            if needsFallback {
+                return nil
             }
 
             guard bestStart != Int.max else {

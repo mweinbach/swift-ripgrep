@@ -3847,9 +3847,18 @@ forms.
 
 | Command | Preflight bypassed | Current Swift | Rust `rg` |
 | --- | ---: | ---: | ---: |
-| `--encoding=none -w -e needle -e quiet` | 5.286 s | 37.8 ms | 23.0 ms |
-| `--encoding=utf-8 -w -e needle -e quiet` | 3.800 s | 38.1 ms | 23.4 ms |
-| `--encoding=utf-8 -i -w -e NEEDLE -e QUIET` | n/a | 38.6 ms | 29.8 ms |
+| `--encoding=none -w -e needle -e quiet` | 5.286 s | 31.3 ms | 22.6 ms |
+| `--encoding=utf-8 -w -e needle -e quiet` | 3.800 s | 32.0 ms | 23.6 ms |
+| `--encoding=utf-8 -i -w -e NEEDLE -e QUIET` | n/a | 32.3 ms | 30.9 ms |
+
+Dense multi-literal word line output now checks for a word-literal match at the
+current line start before probing every literal through the rest of the file.
+That shortcut preserves file-order output and helps repeated dense lines where
+the earliest selected match is at the line boundary. Direct checks matched Rust
+for raw, UTF-8, UTF-8 ignore-case, line-numbered, bounded max-count,
+alternation, and Unicode fallback forms. The tiny encoded
+`--encoding=none -m2 -w -e needle -e quiet` control remains a gap at 28.5 ms
+versus 2.5 ms for Rust.
 
 Exact line-regexp vimgrep output now uses the single-literal stdout-buffer field
 writer for case-sensitive literal `-x`/`--line-regexp` searches. It preserves
