@@ -158,6 +158,17 @@ and sorted Rust parity unless noted, but did not improve the checkpoint:
   103.5 ms baseline versus 108.0 ms probe); the flipped run measured default
   102.5 ms baseline versus 102.7 ms probe and hidden 104.7 ms baseline versus
   102.8 ms probe. The direct String loader stayed.
+- Splitting ordinary ASCII ignore files with a Swift UTF-8 byte loop instead of
+  `components(separatedBy: .newlines)` preserved exact Swift output and sorted
+  Rust parity for default and hidden file listing, but the 40-run A/B was flat:
+  default `--files` measured 103.8 ms baseline versus 102.4 ms probe, while
+  `--hidden --files` measured 101.9 ms baseline versus 102.1 ms probe. The
+  Foundation splitter stayed.
+- Guarding `GlobMatcher.Rule` escaped-slash normalization and checking rule slash
+  markers through UTF-8 bytes preserved exact Swift output and sorted Rust parity,
+  but also measured neutral-to-worse: a 40-run A/B measured default `--files` at
+  105.2 ms baseline versus 105.1 ms probe, and hidden at 102.4 ms baseline
+  versus 103.8 ms probe. The simpler String operations stayed.
 
 ## Swift-only word/case checkpoint — 2026-05-28
 
