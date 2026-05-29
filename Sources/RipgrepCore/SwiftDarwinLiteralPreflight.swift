@@ -3888,7 +3888,7 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         guard !data.isEmpty else {
-            return asciiCaseVariants(for: literal).count == 1 ? false : nil
+            return containsASCIIFoldableByte(literal) ? nil : false
         }
         return containsASCIICaseInsensitiveLiteral(data: data, literal: literal)
     }
@@ -4153,11 +4153,11 @@ public enum SwiftDarwinLiteralPreflight {
     }
 
     private static func containsASCIICaseInsensitiveLiteral(data: Data, literal: [UInt8]) -> Bool? {
-        let variants = asciiCaseVariants(for: literal)
-        for variant in variants where data.range(of: Data(variant)) != nil {
+        let foldedLiteral = literal.map(rgSwiftASCIILower)
+        if dataContainsASCIICaseInsensitiveLiteral(data, foldedLiteral: foldedLiteral) {
             return true
         }
-        return variants.count == 1 ? false : nil
+        return containsASCIIFoldableByte(literal) ? nil : false
     }
 
     private static func containsASCIICaseInsensitiveExactLine(path: String, literal: [UInt8]) -> Bool? {
@@ -4188,17 +4188,11 @@ public enum SwiftDarwinLiteralPreflight {
         return containsNonASCIIByte(data) ? nil : false
     }
 
-    private static func asciiCaseVariants(for literal: [UInt8]) -> [[UInt8]] {
-        var variants = [literal]
-        let lowercase = literal.map(rgSwiftASCIILower)
-        if lowercase != literal {
-            variants.append(lowercase)
+    private static func containsASCIIFoldableByte(_ literal: [UInt8]) -> Bool {
+        literal.contains {
+            ($0 >= UInt8(ascii: "A") && $0 <= UInt8(ascii: "Z"))
+                || ($0 >= UInt8(ascii: "a") && $0 <= UInt8(ascii: "z"))
         }
-        let uppercase = literal.map(rgSwiftASCIIUpper)
-        if uppercase != literal && uppercase != lowercase {
-            variants.append(uppercase)
-        }
-        return variants
     }
 
     private static func containsAnyLiteral(path: String, literals: [[UInt8]]) -> Bool? {
@@ -7972,13 +7966,6 @@ private func rgSwiftDarwinContainsASCIICaseInsensitiveWord(
 private func rgSwiftASCIILower(_ byte: UInt8) -> UInt8 {
     byte >= UInt8(ascii: "A") && byte <= UInt8(ascii: "Z")
         ? byte + (UInt8(ascii: "a") - UInt8(ascii: "A"))
-        : byte
-}
-
-@inline(__always)
-private func rgSwiftASCIIUpper(_ byte: UInt8) -> UInt8 {
-    byte >= UInt8(ascii: "a") && byte <= UInt8(ascii: "z")
-        ? byte - (UInt8(ascii: "a") - UInt8(ascii: "A"))
         : byte
 }
 

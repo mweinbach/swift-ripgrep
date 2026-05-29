@@ -66,6 +66,16 @@ to 1.938 s, versus 2.775 s for Rust. The neighboring single-literal
 `spin_lock` control stayed in the same band at 1.790 s versus 1.738 s before
 and 2.716 s for Rust.
 
+The executable ASCII case-insensitive containment proof now uses the existing
+folded byte scanner instead of building exact/lower/upper `Data` variants. It
+still only proves no-match for literals without ASCII letters; lettered
+no-matches fall back as before. Direct status/stdout/stderr checks matched the
+previous Swift binary and Rust for explicit-file quiet, path-only, without-match,
+and digit no-match controls. A 30-run A/B on the 23 MiB Linux register header
+measured `-q -i ReG_MaSk` at 3.2 ms versus 23.6 ms before and 3.3 ms for Rust;
+`-l -i ReG_MaSk` measured 3.1 ms versus 23.6 ms before and 3.3 ms for Rust. A
+digit no-match control improved from 9.8 ms to 5.6 ms.
+
 Files-mode controls on `/tmp/swift-rg-bench/linux` isolated the cost to VCS
 ignore handling. A 30-run slice measured Swift `--files` at 101.3 ms ± 2.9 ms,
 Swift `--hidden --files` at 101.6 ms ± 2.7 ms, Swift
