@@ -3570,6 +3570,22 @@ Unicode-adjacent fallback forms.
 | `-w -o -e needle -e quiet` | 4.093 s | 26.7 ms | 79.7 ms |
 | `-w -i -o -e NEEDLE -e QUIET` | 9.236 s | 27.1 ms | 89.2 ms |
 
+Visible field prefixes for word only-matching output now stay on that same
+preflight. The writer emits fields in Rust order (`line`, `column`,
+`byte-offset`) after any path prefix, treats `--column` as line-numbered
+output, and keeps the ASCII haystack guard so column math is byte-column
+compatible. Direct release comparisons were byte-identical for byte-offset,
+column, combined fields, filename-prefixed fields, ignore-case fields,
+alternation fields, a single-literal control, and Unicode-adjacent fallback
+forms.
+
+10 timed runs on the same dense literal fixture:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `-w -b -o -e needle -e quiet` | 4.217 s | 36.9 ms | 96.1 ms |
+| `-w --column -o -e needle -e quiet` | 4.286 s | 46.0 ms | 108.9 ms |
+
 Bounded fixed-lookaround PCRE count-matches now also stays on the executable
 preflight for ASCII fixed lookbehind, fixed lookahead, and reset-start
 `prefix\Kliteral` forms. Direct release comparisons were byte-identical for

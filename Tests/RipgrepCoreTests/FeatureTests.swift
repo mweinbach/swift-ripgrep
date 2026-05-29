@@ -2511,6 +2511,20 @@ struct FeatureTests {
             root.path("multi-word-only.txt"),
         ]) {}
         #expect(boundedMultiWordOnlyMatchingOutput == Data("1:foo\n1:bar\n".utf8))
+        let fieldedMultiWordOnlyMatchingOutput = try runExecutableData([
+            "-w",
+            "-n",
+            "--column",
+            "-b",
+            "-o",
+            "-m1",
+            "-e",
+            "foo",
+            "-e",
+            "bar",
+            root.path("multi-word-only.txt"),
+        ]) {}
+        #expect(fieldedMultiWordOnlyMatchingOutput == Data("1:10:9:foo\n1:14:13:bar\n".utf8))
         let prefixedMultiWordOnlyMatchingOutput = try runExecutableData([
             "--with-filename",
             "-w",

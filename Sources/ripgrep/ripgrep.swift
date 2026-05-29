@@ -2436,16 +2436,24 @@ struct RipgrepCommand {
             && parsedPathOnlyMode == nil
             && !parsedCount
             && parsedPrintMode != .countMatches
+        let parsedWordOnlyMatchingFieldsCanUsePreflight = parsedOnlyMatching
+            && wordRegexp
+            && !parsedQuiet
+            && parsedPathOnlyMode == nil
+            && parsedPrintMode == .matchingLines
+            && !parsedCrlf
         let parsedByteOffsetAffectsPreflightOutput = parsedByteOffset
             && !parsedQuiet
             && parsedPathOnlyMode == nil
             && !parsedCount
             && parsedPrintMode != .countMatches
+            && !parsedWordOnlyMatchingFieldsCanUsePreflight
         let parsedColumnAffectsPreflightOutput = parsedColumn
             && !parsedQuiet
             && parsedPathOnlyMode == nil
             && !parsedCount
             && parsedPrintMode != .countMatches
+            && !parsedWordOnlyMatchingFieldsCanUsePreflight
         let parsedColorAffectsPreflightOutput = parsedColorMayEmit
             && !parsedQuiet
             && (!parsedCountStyleOutput
@@ -2654,7 +2662,9 @@ struct RipgrepCommand {
                         return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveMultiLiteralWordOnlyMatchingExitCode(
                             path: path,
                             literals: literals,
-                            lineNumber: lineNumber,
+                            lineNumber: lineNumber || parsedColumn,
+                            byteOffset: parsedByteOffset,
+                            column: parsedColumn,
                             maxCount: parsedMaxCount,
                             lineNumberFieldSeparator: parsedFieldMatchSeparator,
                             linePrefix: parsedLinePrefix,
@@ -2690,7 +2700,9 @@ struct RipgrepCommand {
                     return SwiftDarwinLiteralPreflight.multiLiteralWordOnlyMatchingExitCode(
                         path: path,
                         literals: literals,
-                        lineNumber: lineNumber,
+                        lineNumber: lineNumber || parsedColumn,
+                        byteOffset: parsedByteOffset,
+                        column: parsedColumn,
                         maxCount: parsedMaxCount,
                         lineNumberFieldSeparator: parsedFieldMatchSeparator,
                         linePrefix: parsedLinePrefix,
@@ -3217,7 +3229,9 @@ struct RipgrepCommand {
                         return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveMultiLiteralWordOnlyMatchingExitCode(
                             path: path,
                             literals: literals,
-                            lineNumber: lineNumber,
+                            lineNumber: lineNumber || parsedColumn,
+                            byteOffset: parsedByteOffset,
+                            column: parsedColumn,
                             maxCount: parsedMaxCount,
                             lineNumberFieldSeparator: parsedFieldMatchSeparator,
                             linePrefix: parsedLinePrefix,
@@ -3253,7 +3267,9 @@ struct RipgrepCommand {
                     return SwiftDarwinLiteralPreflight.multiLiteralWordOnlyMatchingExitCode(
                         path: path,
                         literals: literals,
-                        lineNumber: lineNumber,
+                        lineNumber: lineNumber || parsedColumn,
+                        byteOffset: parsedByteOffset,
+                        column: parsedColumn,
                         maxCount: parsedMaxCount,
                         lineNumberFieldSeparator: parsedFieldMatchSeparator,
                         linePrefix: parsedLinePrefix,
@@ -3396,7 +3412,9 @@ struct RipgrepCommand {
                     return SwiftDarwinLiteralPreflight.wordOnlyMatchingExitCode(
                         path: path,
                         literal: literal,
-                        lineNumber: lineNumber,
+                        lineNumber: lineNumber || parsedColumn,
+                        byteOffset: parsedByteOffset,
+                        column: parsedColumn,
                         maxCount: parsedMaxCount,
                         lineNumberFieldSeparator: parsedFieldMatchSeparator,
                         linePrefix: parsedLinePrefix,
@@ -3430,7 +3448,9 @@ struct RipgrepCommand {
             return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveWordOnlyMatchingExitCode(
                 path: path,
                 literal: literal,
-                lineNumber: lineNumber,
+                lineNumber: lineNumber || parsedColumn,
+                byteOffset: parsedByteOffset,
+                column: parsedColumn,
                 maxCount: parsedMaxCount,
                 lineNumberFieldSeparator: parsedFieldMatchSeparator,
                 linePrefix: parsedLinePrefix,
