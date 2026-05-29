@@ -3651,14 +3651,15 @@ Unicode fallback fixtures.
 | `--heading --vimgrep -o -e needle -e quiet` | 4.994 s | 47.0 ms | 92.4 ms |
 | `--heading --vimgrep -w -e needle -e quiet` | 5.741 s | 50.0 ms | 128.7 ms |
 
-When `RIPGREP_CONFIG_PATH` is set, supported no-value and unambiguous inline
-value preflight flags may now precede `--no-config` without disabling the Swift
-executable preflight. The outer config guard stays conservative around separated
-value-consuming flags and pattern sources, while the full parser still owns
-final output eligibility. Direct release comparisons matched Rust stdout,
+When `RIPGREP_CONFIG_PATH` is set, supported no-value plus validated inline and
+separated value preflight flags may now precede `--no-config` without disabling
+the Swift executable preflight. The outer config guard stays conservative around
+pattern sources and unknown value-consuming flags, while the full parser still
+owns final output eligibility. Direct release comparisons matched Rust stdout,
 stderr, and status for deferred `--no-config` vimgrep, quiet, prefixed count,
-word-vimgrep, only-matching vimgrep, inline sort, inline reverse sort, inline
-thread count, and inline max-count forms under an active config environment.
+word-vimgrep, only-matching vimgrep, inline and separated sort/reverse-sort,
+inline and separated thread count, inline and separated max-count, and separated
+engine selector forms under an active config environment.
 
 The before column is the same command measured before the relevant parser
 change, where the outer config guard forced the generic Swift path.
@@ -3667,6 +3668,7 @@ change, where the outer config guard forced the generic Swift path.
 | --- | ---: | ---: | ---: |
 | `--vimgrep --heading --no-config -e needle -e quiet` | 5.067 s | 50.9 ms | 89.2 ms |
 | `--sort=path --vimgrep --heading --no-config -e needle -e quiet` | 5.074 s | 47.6 ms | 93.1 ms |
+| `--sort path --vimgrep --heading --no-config -e needle -e quiet` | 5.246 s | 48.9 ms | 96.2 ms |
 
 Plain multi-literal only-matching field output now uses the same field-prefix
 preflight for `-b`, `--column`, and `--vimgrep -o` forms. The route covers

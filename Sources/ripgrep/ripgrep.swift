@@ -4077,12 +4077,23 @@ struct RipgrepCommand {
     }
 
     private static func leadingArgumentsDisableConfigForPreflight(_ arguments: [String]) -> Bool {
-        for argument in arguments {
+        var argumentIndex = 0
+        while argumentIndex < arguments.count {
+            let argument = arguments[argumentIndex]
             if argument == "--no-config" {
                 return true
             }
             if leadingNoConfigPreflightFlag(argument)
                 || leadingNoConfigInlinePreflightFlag(argument) {
+                argumentIndex += 1
+                continue
+            }
+            if argumentIndex + 1 < arguments.count,
+               leadingNoConfigSeparatedPreflightFlag(
+                argument,
+                value: arguments[argumentIndex + 1]
+               ) {
+                argumentIndex += 2
                 continue
             }
             return false
@@ -4220,6 +4231,19 @@ struct RipgrepCommand {
              "--with-filename",
              "--word-regexp":
             return true
+        default:
+            return false
+        }
+    }
+
+    private static func leadingNoConfigSeparatedPreflightFlag(_ argument: String, value: String) -> Bool {
+        switch argument {
+        case "--sort", "--sortr":
+            return leadingNoConfigSortValue(value)
+        case "-j", "--threads", "-m", "--max-count":
+            return leadingNoConfigNonNegativeInteger(value)
+        case "--engine":
+            return isEngineSelectorValue(value)
         default:
             return false
         }

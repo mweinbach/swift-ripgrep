@@ -6117,6 +6117,22 @@ struct MiscTests {
         ], fixture: {})
         #expect(deferredInlineNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
 
+        let deferredSeparatedNoConfigVimgrepOutput = try runExecutableData([
+            "--sort",
+            "path",
+            "--vimgrep",
+            "--heading",
+            "--no-config",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredSeparatedNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
+
         let deferredInlineMaxCountNoConfigOutput = try runExecutableData([
             "-m1",
             "--no-config",
@@ -6134,6 +6150,17 @@ struct MiscTests {
             "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
         ], fixture: {})
         #expect(deferredInlineMaxCountNoConfigOutput == leadingInlineMaxCountNoConfigOutput)
+
+        let deferredSeparatedMaxCountNoConfigOutput = try runExecutableData([
+            "-m",
+            "1",
+            "--no-config",
+            "needle",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredSeparatedMaxCountNoConfigOutput == leadingInlineMaxCountNoConfigOutput)
 
         let regexpLineNumberOutput = try runExecutableData([
             "-e",
