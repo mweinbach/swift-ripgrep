@@ -1255,6 +1255,20 @@ versus 16.9 ms for Rust. On the 48 MiB dense fixture, current plain output
 measured 351.4 ms versus 114.9 ms for Rust, and numbered output measured
 499.2 ms versus 144.9 ms for Rust.
 
+Exact-line matching output now also covers byte-offset and column field
+prefixes. The line scanner emits fields in Rust order (`line`, `column`,
+`byte-offset`) when requested, treats `--column` as line-numbered output, and
+preserves custom field separators, repeated `-e`, heading/prefixed output,
+max-count, and no-match status. Direct release byte/status checks matched Rust
+for those forms.
+
+10 timed runs on `/tmp/swift-rg-candidates/countm-big.txt`:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `-b -x needle` | 1.306 s | 27.2 ms | 9.3 ms |
+| `--column -x needle` | 1.306 s | 27.2 ms | 9.6 ms |
+
 Exact-line only-matching output now shares that same literal alternation,
 repeated `-e`, and pattern-file route. The executable preflight parses
 `-o`/`--only-matching` and short clusters such as `-nox`, but keeps `-o` on the

@@ -2561,6 +2561,31 @@ struct RipgrepCommand {
         let parsedVimgrepLineOutputCanUsePreflight = parsedLiteralVimgrepLineCanUsePreflight
             || parsedWordVimgrepLineCanUsePreflight
             || parsedExactLineVimgrepLineCanUsePreflight
+        let parsedExactLineFieldOutputCanUsePreflight = !parsedVimgrep
+            && (parsedByteOffset || parsedColumn)
+            && parsedLineRegexp
+            && !wordRegexp
+            && !asciiCaseInsensitive
+            && !parsedOnlyMatching
+            && !parsedQuiet
+            && parsedPathOnlyMode == nil
+            && !parsedCount
+            && parsedPrintMode == .matchingLines
+            && !parsedColorMayEmit
+            && parsedEncodingIsAutomatic
+            && parsedAfterContext == 0
+            && parsedBeforeContext == 0
+            && !parsedInvertMatch
+            && !parsedJson
+            && parsedMaxColumns == 0
+            && !parsedNullData
+            && !parsedPassthru
+            && !parsedReplacement
+            && (!parsedSearchZip || !pathMayUseSearchZip(path))
+            && !parsedStats
+            && !parsedStopOnNonmatch
+            && !parsedTrim
+            && !parsedCrlf
         let parsedByteOffsetAffectsPreflightOutput = parsedByteOffset
             && !parsedQuiet
             && parsedPathOnlyMode == nil
@@ -2568,6 +2593,7 @@ struct RipgrepCommand {
             && parsedPrintMode != .countMatches
             && !parsedOnlyMatchingFieldsCanUsePreflight
             && !parsedVimgrepLineOutputCanUsePreflight
+            && !parsedExactLineFieldOutputCanUsePreflight
         let parsedColumnAffectsPreflightOutput = parsedColumn
             && !parsedQuiet
             && parsedPathOnlyMode == nil
@@ -2575,6 +2601,7 @@ struct RipgrepCommand {
             && parsedPrintMode != .countMatches
             && !parsedOnlyMatchingFieldsCanUsePreflight
             && !parsedVimgrepLineOutputCanUsePreflight
+            && !parsedExactLineFieldOutputCanUsePreflight
         let parsedColorAffectsPreflightOutput = parsedColorMayEmit
             && !parsedQuiet
             && (!parsedCountStyleOutput
@@ -2745,7 +2772,9 @@ struct RipgrepCommand {
                     path: path,
                     literals: literals,
                     maxCount: parsedMaxCount,
-                    lineNumber: lineNumber,
+                    lineNumber: lineNumber || parsedColumn,
+                    column: parsedColumn,
+                    byteOffset: parsedByteOffset,
                     lineNumberFieldSeparator: parsedFieldMatchSeparator,
                     linePrefix: parsedLinePrefix,
                     headingPrefix: parsedHeadingPrefix
@@ -3368,7 +3397,9 @@ struct RipgrepCommand {
                     path: path,
                     literals: literals,
                     maxCount: parsedMaxCount,
-                    lineNumber: lineNumber,
+                    lineNumber: lineNumber || parsedColumn,
+                    column: parsedColumn,
+                    byteOffset: parsedByteOffset,
                     lineNumberFieldSeparator: parsedFieldMatchSeparator,
                     linePrefix: parsedLinePrefix,
                     headingPrefix: parsedHeadingPrefix
@@ -4042,6 +4073,19 @@ struct RipgrepCommand {
                     literals: [literal],
                     maxCount: parsedMaxCount,
                     lineNumber: lineNumber,
+                    lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                    linePrefix: parsedLinePrefix,
+                    headingPrefix: parsedHeadingPrefix
+                )
+            }
+            if parsedByteOffset || parsedColumn {
+                return SwiftDarwinLiteralPreflight.multiLiteralExactLineExitCode(
+                    path: path,
+                    literals: [literal],
+                    maxCount: parsedMaxCount,
+                    lineNumber: lineNumber || parsedColumn,
+                    column: parsedColumn,
+                    byteOffset: parsedByteOffset,
                     lineNumberFieldSeparator: parsedFieldMatchSeparator,
                     linePrefix: parsedLinePrefix,
                     headingPrefix: parsedHeadingPrefix

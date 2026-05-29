@@ -1857,6 +1857,8 @@ public enum SwiftDarwinLiteralPreflight {
         literals: [[UInt8]],
         maxCount: Int? = nil,
         lineNumber: Bool = false,
+        column: Bool = false,
+        byteOffset: Bool = false,
         lineNumberFieldSeparator: [UInt8] = [58],
         linePrefix: [UInt8] = [],
         headingPrefix: [UInt8] = []
@@ -1893,6 +1895,20 @@ public enum SwiftDarwinLiteralPreflight {
                 if lineNumber {
                     appendLineNumberPrefix(
                         lineNumberValue,
+                        to: &output,
+                        fieldSeparator: lineNumberFieldSeparator
+                    )
+                }
+                if column {
+                    appendLineNumberPrefix(
+                        1,
+                        to: &output,
+                        fieldSeparator: lineNumberFieldSeparator
+                    )
+                }
+                if byteOffset {
+                    appendLineNumberPrefix(
+                        data.distance(from: data.startIndex, to: lineStart),
                         to: &output,
                         fieldSeparator: lineNumberFieldSeparator
                     )
