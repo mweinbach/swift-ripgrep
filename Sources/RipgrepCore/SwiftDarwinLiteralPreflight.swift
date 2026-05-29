@@ -5097,35 +5097,121 @@ public enum SwiftDarwinLiteralPreflight {
         literals: [[UInt8]],
         maxCount: Int
     ) -> Int {
-        let needles = literals.map { Data($0) }
-        let newline = UInt8(ascii: "\n")
-        var lineStart = data.startIndex
-        var matchedLineCount = 0
-        var selectedPrefixEnd = data.startIndex
-
-        while matchedLineCount < maxCount,
-              lineStart < data.endIndex {
-            let lineEnd = data[lineStart..<data.endIndex].firstIndex(of: newline) ?? data.endIndex
-            let lineRange = lineStart..<lineEnd
-            if !lineRange.isEmpty,
-               needles.contains(where: { data.range(of: $0, in: lineRange) != nil }) {
-                matchedLineCount += 1
-                selectedPrefixEnd = lineEnd
-            }
-            if lineEnd < data.endIndex {
-                lineStart = data.index(after: lineEnd)
-            } else {
-                lineStart = data.endIndex
-            }
-        }
-
-        guard matchedLineCount > 0 else {
+        guard maxCount > 0,
+              !literals.isEmpty,
+              !data.isEmpty else {
             return 0
         }
-        return countNonOverlappingMultiLiteralMatches(
-            in: Data(data[..<selectedPrefixEnd]),
-            literals: literals
-        )
+        return data.withUnsafeBytes { rawData -> Int in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
+            }
+            let base = rawBase.assumingMemoryBound(to: UInt8.self)
+
+            func nextCandidate(literalIndex: Int, from offset: Int) -> (start: Int, literalIndex: Int) {
+                let literal = literals[literalIndex]
+                let safeOffset = min(offset, data.count)
+                guard !literal.isEmpty,
+                      literal.count <= data.count - safeOffset else {
+                    return (Int.max, literalIndex)
+                }
+                let found = literal.withUnsafeBufferPointer { literalBuffer in
+                    rg_memmem_simple(
+                        base.advanced(by: safeOffset),
+                        data.count - safeOffset,
+                        literalBuffer.baseAddress,
+                        literal.count
+                    )
+                }
+                guard let found else {
+                    return (Int.max, literalIndex)
+                }
+                return (base.distance(to: found), literalIndex)
+            }
+
+            func earliestCandidateIndex(in candidates: [(start: Int, literalIndex: Int)]) -> Int? {
+                var selectedIndex: Int?
+                var selectedStart = Int.max
+                for index in candidates.indices where candidates[index].start < selectedStart {
+                    selectedStart = candidates[index].start
+                    selectedIndex = index
+                }
+                return selectedStart == Int.max ? nil : selectedIndex
+            }
+
+            func countMatches(inPrefixLength prefixLength: Int, literal: [UInt8]) -> Int {
+                guard !literal.isEmpty,
+                      prefixLength >= literal.count else {
+                    return 0
+                }
+                return literal.withUnsafeBufferPointer { literalBuffer -> Int in
+                    guard let literalBase = literalBuffer.baseAddress else {
+                        return 0
+                    }
+                    var searchOffset = 0
+                    var matchCount = 0
+                    while searchOffset <= prefixLength - literal.count,
+                          let found = rg_memmem_simple(
+                            base.advanced(by: searchOffset),
+                            prefixLength - searchOffset,
+                            literalBase,
+                            literal.count
+                          ) {
+                        let matchStart = base.distance(to: found)
+                        matchCount += 1
+                        searchOffset = matchStart + literal.count
+                    }
+                    return matchCount
+                }
+            }
+
+            var candidates = literals.indices.map {
+                nextCandidate(literalIndex: $0, from: 0)
+            }
+            var matchedLineCount = 0
+            var selectedLineEnd = -1
+            var selectedPrefixEnd = 0
+
+            while let candidateIndex = earliestCandidateIndex(in: candidates) {
+                let matchStart = candidates[candidateIndex].start
+                guard matchStart < data.count else {
+                    break
+                }
+                if matchStart >= selectedLineEnd {
+                    guard matchedLineCount < maxCount else {
+                        break
+                    }
+                    matchedLineCount += 1
+                    selectedLineEnd = rgSwiftDarwinNextLineStart(
+                        base: base,
+                        haystackLength: data.count,
+                        from: matchStart
+                    )
+                    selectedPrefixEnd = if selectedLineEnd > 0,
+                                           base[selectedLineEnd - 1] == UInt8(ascii: "\n") {
+                        selectedLineEnd - 1
+                    } else {
+                        selectedLineEnd
+                    }
+                }
+
+                for index in candidates.indices where candidates[index].start < selectedLineEnd {
+                    candidates[index] = nextCandidate(
+                        literalIndex: candidates[index].literalIndex,
+                        from: selectedLineEnd
+                    )
+                }
+            }
+
+            guard matchedLineCount > 0 else {
+                return 0
+            }
+            var matchCount = 0
+            for literal in literals {
+                matchCount += countMatches(inPrefixLength: selectedPrefixEnd, literal: literal)
+            }
+            return matchCount
+        }
     }
 
     private static func countNonOverlappingMultiLiteralMatches(

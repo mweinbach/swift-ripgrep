@@ -3653,7 +3653,9 @@ Unicode-boundary fallback forms.
 
 Bounded non-overlapping multi-literal count-matches now uses the executable
 preflight for repeated `-e`, pattern-file, and top-level alternation forms with
-`--count-matches -mN`. Direct release comparisons were byte-identical for
+`--count-matches -mN`. A follow-up made the bounded multi-literal counter
+select matching lines with per-literal candidates and then count the selected
+prefix without copying it. Direct release comparisons were byte-identical for
 unprefixed, `-H` prefixed, `--include-zero`, only-matching count, pattern-file,
 and alternation forms.
 
@@ -3661,7 +3663,10 @@ and alternation forms.
 
 | Command | Preflight bypassed | Current Swift | Rust `rg` |
 | --- | ---: | ---: | ---: |
-| `--count-matches -m100000 -e needle -e quiet` | 2.233 s | 39.8 ms | 14.6 ms |
+| `--count-matches -m100000 -e needle -e quiet` | 2.233 s | 9.3 ms | 13.3 ms |
+
+The tiny bound control `--count-matches -m2 -e needle -e quiet` measured
+2.8 ms versus 2.4 ms for Rust.
 
 Bounded multi-literal word count-matches now also uses the executable preflight
 for repeated `-e`, pattern-file, and top-level alternation forms with
