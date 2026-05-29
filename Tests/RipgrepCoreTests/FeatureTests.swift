@@ -2974,6 +2974,8 @@ struct FeatureTests {
         try root.write("alpha needle beta\nno\n", to: "a.txt")
         try root.write("needle again\n", to: "b.txt")
         try root.write("\n\ntest\n", to: "empty.txt")
+        let multilineRoot = try TemporaryDirectory()
+        try multilineRoot.write("alpha needle beta\nquiet\nneedle again\n", to: "multi-color.txt")
 
         let reset = "\u{1B}[0m"
         let blue = "\u{1B}[34m"
@@ -3012,6 +3014,18 @@ struct FeatureTests {
         ])
         #expect(try run(["--pretty", "--vimgrep", "needle", root.path("a.txt")]) == [
             "\(reset)\(magenta)\(root.path("a.txt"))\(reset):\(reset)\(green)1\(reset):\(reset)7\(reset):alpha \(reset)\(redBold)needle\(reset) beta",
+        ])
+        #expect(try run(["--color=always", "-U", "needle", multilineRoot.path("multi-color.txt")]) == [
+            "alpha \(reset)\(redBold)needle\(reset) beta",
+            "\(reset)\(redBold)needle\(reset) again",
+        ])
+        #expect(try run(["-Up", "needle", multilineRoot.path("multi-color.txt")]) == [
+            "\(reset)\(green)1\(reset):alpha \(reset)\(redBold)needle\(reset) beta",
+            "\(reset)\(green)3\(reset):\(reset)\(redBold)needle\(reset) again",
+        ])
+        #expect(try run(["-pU", "needle", multilineRoot.path("multi-color.txt")]) == [
+            "\(reset)\(green)1\(reset):alpha \(reset)\(redBold)needle\(reset) beta",
+            "\(reset)\(green)3\(reset):\(reset)\(redBold)needle\(reset) again",
         ])
         #expect(try run(["-Np", "needle", root.path("a.txt")]) == [
             "\(reset)\(green)1\(reset):alpha \(reset)\(redBold)needle\(reset) beta",

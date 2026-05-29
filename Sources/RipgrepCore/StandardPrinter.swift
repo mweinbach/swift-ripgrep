@@ -240,7 +240,7 @@ public struct StandardPrinter {
             if options.wantsLineNumber {
                 fields.append(OutputField("\(match.lineNumber + offset)", colorTarget: .line))
             }
-            let rendered = limitedMatchedLine(line, match: match, lineStartByte: lineStartByte) ?? renderedLine(line)
+            let rendered = renderedMultilineSearchLine(line, match: match, lineStartByte: lineStartByte)
             lineStartByte += line.utf8.count + renderedLineTerminatorByteCount()
             return "\(prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator))\(rendered)"
         }
@@ -1461,9 +1461,16 @@ public struct StandardPrinter {
 
         let text = displayLine(for: line)
         let lineStartByte = match.map { max(0, line.absoluteOffset - $0.absoluteOffset) } ?? 0
-        let rendered = match.flatMap {
-            limitedMatchedLine(text, match: $0, lineStartByte: lineStartByte)
-        } ?? renderedLine(text)
+        let rendered: String
+        if let match {
+            rendered = limitedMatchedLine(text, match: match, lineStartByte: lineStartByte)
+                ?? renderedLine(
+                    text,
+                    spans: multilineSpans(for: text, in: match, lineStartByte: lineStartByte)
+                )
+        } else {
+            rendered = renderedLine(text)
+        }
         let prefixText = prefix(path: path, fields: fields, fieldSeparator: options.fieldMatchSeparator)
         let output = "\(rendered)\(outputTerminator(line.lineTerminator, line: text, forceCRLF: isColumnLimitedLine(text)))"
         if shouldEmitRawLineBytes(for: line) {
@@ -1521,6 +1528,42 @@ public struct StandardPrinter {
             )
         }
         return nil
+    }
+
+    private func renderedMultilineSearchLine(_ line: String, match: SearchMatch, lineStartByte: Int) -> String {
+        if let limited = limitedMatchedLine(line, match: match, lineStartByte: lineStartByte) {
+            return limited
+        }
+        guard options.replacement == nil else {
+            return renderedLine(line)
+        }
+        return renderedLine(
+            line,
+            spans: multilineSpans(for: line, in: match, lineStartByte: lineStartByte)
+        )
+    }
+
+    private func multilineSpans(for line: String, in match: SearchMatch, lineStartByte: Int) -> [MatchSpan] {
+        let lineEndByte = lineStartByte + line.utf8.count
+        return match.spans.compactMap { span in
+            guard span.endByte > lineStartByte,
+                  span.startByte < lineEndByte else {
+                return nil
+            }
+            let startByte = max(span.startByte, lineStartByte) - lineStartByte
+            let endByte = max(startByte, min(span.endByte, lineEndByte) - lineStartByte)
+            guard endByte > startByte else {
+                return nil
+            }
+            return MatchSpan(
+                startColumn: startByte + 1,
+                endColumn: endByte + 1,
+                startByte: startByte,
+                endByte: endByte,
+                text: span.text,
+                replacement: span.replacement
+            )
+        }
     }
 
     private func limitedColumnMatchedLine(_ line: String, match: SearchMatch) -> String? {
