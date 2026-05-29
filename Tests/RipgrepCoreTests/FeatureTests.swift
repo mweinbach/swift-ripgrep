@@ -4193,6 +4193,9 @@ struct FeatureTests {
         try reinclude.createDirectory("tools/perf/include/perf")
         try reinclude.write("perf\n!include/perf/\n", to: "tools/perf/.gitignore")
         try reinclude.write("needle\n", to: "tools/perf/include/perf/perf_dlfilter.h")
+        #expect(Set(try run(["--files", reinclude.url.path])) == Set([
+            reinclude.path("tools/perf/include/perf/perf_dlfilter.h"),
+        ]))
         #expect(try run(["--sort", "path", "--files", reinclude.path("tools/perf")]) == [
             reinclude.path("tools/perf/include/perf/perf_dlfilter.h"),
         ])

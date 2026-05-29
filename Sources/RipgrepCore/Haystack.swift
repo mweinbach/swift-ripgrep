@@ -646,7 +646,6 @@ public struct FileWalker: @unchecked Sendable {
         ) {
             appendIgnoreFiles(
                 in: rootURL,
-                logicalDirectory: rootURL,
                 to: &directoryIgnoreStack,
                 warnings: &rootWarnings,
                 diagnostics: &rootDiagnostics,
@@ -654,6 +653,7 @@ public struct FileWalker: @unchecked Sendable {
                 rootDebugDisplayPath: rootDebugDisplayPath,
                 rootArgumentIsAbsolute: true,
                 vcsContext: directoryVCSContext,
+                scope: directoryIgnoreScope(relativePath: ""),
                 directoryContents: DirectoryContents(
                     children: [],
                     hasGitMarker: contents.hasGitMarker,
@@ -844,7 +844,9 @@ public struct FileWalker: @unchecked Sendable {
             options: options
         ) {
             let directoryURL = URL(fileURLWithPath: directoryPath, isDirectory: true)
-            let logicalDirectoryURL = URL(fileURLWithPath: logicalDirectoryPath, isDirectory: true)
+            let logicalDirectoryURL = options.loggingMode == nil
+                ? nil
+                : URL(fileURLWithPath: logicalDirectoryPath, isDirectory: true)
             appendIgnoreFiles(
                 in: directoryURL,
                 logicalDirectory: logicalDirectoryURL,
@@ -855,6 +857,7 @@ public struct FileWalker: @unchecked Sendable {
                 rootDebugDisplayPath: rootDebugDisplayPath,
                 rootArgumentIsAbsolute: rootArgumentIsAbsolute,
                 vcsContext: directoryVCSContext,
+                scope: directoryIgnoreScope(relativePath: relativePath),
                 directoryContents: DirectoryContents(
                     children: [],
                     hasGitMarker: contents.hasGitMarker,
@@ -1574,7 +1577,9 @@ public struct FileWalker: @unchecked Sendable {
             options: options
         ) {
             let directoryURL = URL(fileURLWithPath: directoryPath, isDirectory: true)
-            let logicalDirectoryURL = URL(fileURLWithPath: logicalDirectoryPath, isDirectory: true)
+            let logicalDirectoryURL = options.loggingMode == nil
+                ? nil
+                : URL(fileURLWithPath: logicalDirectoryPath, isDirectory: true)
             appendIgnoreFiles(
                 in: directoryURL,
                 logicalDirectory: logicalDirectoryURL,
@@ -1585,6 +1590,7 @@ public struct FileWalker: @unchecked Sendable {
                 rootDebugDisplayPath: rootDebugDisplayPath,
                 rootArgumentIsAbsolute: rootArgumentIsAbsolute,
                 vcsContext: directoryVCSContext,
+                scope: directoryIgnoreScope(relativePath: relativePath),
                 directoryContents: DirectoryContents(
                     children: [],
                     hasGitMarker: contents.hasGitMarker,
@@ -2808,6 +2814,7 @@ public struct FileWalker: @unchecked Sendable {
         diagnostics: inout [String],
         rootBase: URL?,
         scopeDirectory: URL? = nil,
+        scope: (stripBasePath: String?, pathPrefix: String)? = nil,
         pathPrefix: String? = nil,
         slashPatternsMatchAnywhere: Bool? = nil,
         reportLoadErrors: Bool = false,
@@ -2822,6 +2829,7 @@ public struct FileWalker: @unchecked Sendable {
             from: fileURL,
             rootBase: rootBase,
             scopeDirectory: scopeDirectory,
+            scope: scope,
             pathPrefix: pathPrefix,
             slashPatternsMatchAnywhere: slashPatternsMatchAnywhere,
             reportLoadErrors: reportLoadErrors,
@@ -2844,6 +2852,7 @@ public struct FileWalker: @unchecked Sendable {
         from fileURL: URL,
         rootBase: URL?,
         scopeDirectory: URL? = nil,
+        scope precomputedScope: (stripBasePath: String?, pathPrefix: String)? = nil,
         pathPrefix: String? = nil,
         slashPatternsMatchAnywhere: Bool? = nil,
         reportLoadErrors: Bool = false,
@@ -2870,6 +2879,7 @@ public struct FileWalker: @unchecked Sendable {
         }
         let parsed = parseIgnorePatterns(contents, fileURL: fileURL)
         let scope = pathPrefix.map { (stripBasePath: String?.none, pathPrefix: $0) }
+            ?? precomputedScope
             ?? ignoreScope(for: scopeDirectory ?? fileURL.deletingLastPathComponent(), rootBase: rootBase)
         let matchSlashPatternsAnywhere = slashPatternsMatchAnywhere ?? false
         let patterns = ignoreExplicitRootMatch
@@ -3113,6 +3123,7 @@ public struct FileWalker: @unchecked Sendable {
         rootDebugDisplayPath: String,
         rootArgumentIsAbsolute: Bool,
         vcsContext: Bool,
+        scope: (stripBasePath: String?, pathPrefix: String)? = nil,
         directoryContents: DirectoryContents? = nil,
         options: RipgrepOptions
     ) {
@@ -3129,6 +3140,7 @@ public struct FileWalker: @unchecked Sendable {
                     diagnostics: &diagnostics,
                     rootBase: rootBase,
                     scopeDirectory: scopeDirectory,
+                    scope: scope,
                     displayPath: shouldRenderIgnoreDiagnostics
                         ? ignoreFileDebugDisplayPath(
                             for: scopeDirectory.appendingPathComponent(".ignore"),
@@ -3150,6 +3162,7 @@ public struct FileWalker: @unchecked Sendable {
                     diagnostics: &diagnostics,
                     rootBase: rootBase,
                     scopeDirectory: scopeDirectory,
+                    scope: scope,
                     displayPath: shouldRenderIgnoreDiagnostics
                         ? ignoreFileDebugDisplayPath(
                             for: scopeDirectory.appendingPathComponent(".rgignore"),
@@ -3173,6 +3186,7 @@ public struct FileWalker: @unchecked Sendable {
                 diagnostics: &diagnostics,
                 rootBase: rootBase,
                 scopeDirectory: scopeDirectory,
+                scope: scope,
                 displayPath: shouldRenderIgnoreDiagnostics
                     ? ignoreFileDebugDisplayPath(
                         for: scopeDirectory.appendingPathComponent(".gitignore"),
@@ -3196,6 +3210,7 @@ public struct FileWalker: @unchecked Sendable {
                 diagnostics: &diagnostics,
                 rootBase: rootBase,
                 scopeDirectory: scopeDirectory,
+                scope: scope,
                 displayPath: shouldRenderIgnoreDiagnostics
                     ? ignoreFileDebugDisplayPath(
                         for: scopeDirectory.appendingPathComponent(".git/info/exclude"),
@@ -3207,6 +3222,10 @@ public struct FileWalker: @unchecked Sendable {
                 options: options
             )
         }
+    }
+
+    private func directoryIgnoreScope(relativePath: String) -> (stripBasePath: String?, pathPrefix: String) {
+        (relativePath, "")
     }
 
     private func ignoreFileDebugDisplayPath(

@@ -69,6 +69,16 @@ near the default path. The fresh Time Profiler export
 default file-type registry initialization and is stale for current files-mode
 work.
 
+The Darwin fast walker now passes the known root-relative directory scope
+directly into local ignore matcher loading, avoiding repeated `URL.path`
+containment checks for directory-local `.gitignore`/`.ignore` files when debug
+logging is off. Sorted default and hidden `--files` output matched Rust exactly.
+A 30-run same-machine A/B measured default `--files` at 100.7 ms for the probe
+versus 101.9 ms baseline; an order-flipped 80-run confirmation measured
+101.4 ms probe versus 101.8 ms baseline. Hidden `--files` measured 101.4 ms
+versus 101.7 ms in the 30-run A/B and 101.1 ms versus 102.7 ms in the
+order-flipped confirmation.
+
 Rejected Swift-only probes from this continuation preserved exact Swift output
 and sorted Rust parity unless noted, but did not improve the checkpoint:
 
