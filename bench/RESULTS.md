@@ -8,6 +8,32 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Swift-first files-mode checkpoint — 2026-05-29
+
+`--files` startup/traversal now avoids building the default file-type registry
+when no type changes were requested, reads ignore/config inputs through
+path-based `String` initializers, and skips scoped-path allocation for
+unanchored basename-only ignore matchers. Anchored basename-looking patterns
+still use scoped paths. These are Swift/Foundation-only changes; no C shims or
+custom low-level code were added.
+
+Validation:
+
+- Current Swift `--files /tmp/swift-rg-bench/linux` output matched the saved
+  pre-change Swift output byte-for-byte:
+  `d6298ab34199c0f992b7280b2b16c4763a1981169477cb82765df33b502dc9f9`.
+- Sorted current Swift `--files` output matched Rust `rg --files` on the same
+  Linux corpus.
+- `SWIFT_RIPGREP_PARITY=1 xcrun swift test --filter ParityHarnessTests`
+  passed after each committed slice.
+
+20 timed runs with 5 warmups on `/tmp/swift-rg-bench/linux`:
+
+| Command | Current Swift | Rust `rg` |
+| --- | ---: | ---: |
+| `--files` | 102.9 ms ± 8.1 ms | 75.8 ms ± 2.8 ms |
+| `--no-ignore --files` | 65.3 ms ± 1.8 ms | 64.7 ms ± 2.8 ms |
+
 ## Swift-only word/case checkpoint — 2026-05-28
 
 Single-literal `-w -i` now has an ASCII-only Darwin preflight that reuses the
