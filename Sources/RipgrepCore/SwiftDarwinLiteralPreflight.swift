@@ -4752,36 +4752,52 @@ public enum SwiftDarwinLiteralPreflight {
         literal: [UInt8],
         maxCount: Int
     ) -> Int {
-        let needle = Data(literal)
-        let newline = UInt8(ascii: "\n")
-        var searchStart = data.startIndex
-        var matchedLineCount = 0
-        var selectedPrefixEnd = data.startIndex
-
-        while matchedLineCount < maxCount,
-              searchStart < data.endIndex,
-              let matchRange = data.range(of: needle, in: searchStart..<data.endIndex) {
-            guard !matchRange.isEmpty else {
-                return 0
-            }
-
-            matchedLineCount += 1
-            if let newlineIndex = data[matchRange.upperBound...].firstIndex(of: newline) {
-                selectedPrefixEnd = newlineIndex
-                searchStart = data.index(after: newlineIndex)
-            } else {
-                selectedPrefixEnd = data.endIndex
-                searchStart = data.endIndex
-            }
-        }
-
-        guard matchedLineCount > 0 else {
+        guard maxCount > 0,
+              !literal.isEmpty,
+              data.count >= literal.count else {
             return 0
         }
-        return countNonOverlappingMatches(
-            in: Data(data[..<selectedPrefixEnd]),
-            literal: literal
-        )
+        return data.withUnsafeBytes { rawData -> Int in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
+            }
+            let base = rawBase.assumingMemoryBound(to: UInt8.self)
+            return literal.withUnsafeBufferPointer { literalBuffer -> Int in
+                guard let literalBase = literalBuffer.baseAddress else {
+                    return 0
+                }
+
+                var searchOffset = 0
+                var matchedLineCount = 0
+                var matchCount = 0
+                var selectedLineEnd = -1
+
+                while searchOffset <= data.count - literal.count,
+                      let found = rg_memmem_simple(
+                        base.advanced(by: searchOffset),
+                        data.count - searchOffset,
+                        literalBase,
+                        literal.count
+                      ) {
+                    let matchStart = base.distance(to: found)
+                    if matchStart >= selectedLineEnd {
+                        guard matchedLineCount < maxCount else {
+                            break
+                        }
+                        matchedLineCount += 1
+                        selectedLineEnd = rgSwiftDarwinNextLineStart(
+                            base: base,
+                            haystackLength: data.count,
+                            from: matchStart + literal.count
+                        )
+                    }
+                    matchCount += 1
+                    searchOffset = matchStart + literal.count
+                }
+
+                return matchCount
+            }
+        }
     }
 
     private static func countASCIIWordMatchesWithinFirstMatchingLines(
