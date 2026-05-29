@@ -4088,6 +4088,10 @@ struct RipgrepCommand {
                 argumentIndex += 1
                 continue
             }
+            if leadingNoConfigPositionalArgument(argument) {
+                argumentIndex += 1
+                continue
+            }
             if argumentIndex + 1 < arguments.count,
                leadingNoConfigSeparatedPreflightFlag(
                 argument,
@@ -4099,6 +4103,10 @@ struct RipgrepCommand {
             return false
         }
         return false
+    }
+
+    private static func leadingNoConfigPositionalArgument(_ argument: String) -> Bool {
+        !argument.hasPrefix("-")
     }
 
     private static func leadingNoConfigPreflightFlag(_ argument: String) -> Bool {

@@ -3680,6 +3680,8 @@ Type definition and filter values may also precede `--no-config`; invalid
 types continue through the normal diagnostic path. Valid short-flag clusters
 that the full executable preflight parser already understands are now scanned
 before `--no-config`; invalid clusters still use the normal parser diagnostics.
+Plain positional pattern/path arguments may also precede `--no-config`, while
+dash-prefixed unknowns still fall through to normal parsing.
 
 The before column is the same command measured before the relevant parser
 change, where the outer config guard forced the generic Swift path.
@@ -3699,6 +3701,7 @@ change, where the outer config guard forced the generic Swift path.
 | `--ignore-file <existing> --vimgrep --heading --no-config -e needle -e quiet` | 5.050 s | 49.5 ms | 93.3 ms |
 | `-t rust --vimgrep --heading --no-config -e needle -e quiet` | 5.036 s | 47.6 ms | 93.3 ms |
 | `-iw --vimgrep --heading --no-config -e NEEDLE -e QUIET` | 13.667 s | 49.1 ms | 136.3 ms |
+| `needle --no-config --vimgrep --heading` | 3.478 s | 32.1 ms | 62.1 ms |
 
 Plain multi-literal only-matching field output now uses the same field-prefix
 preflight for `-b`, `--column`, and `--vimgrep -o` forms. The route covers

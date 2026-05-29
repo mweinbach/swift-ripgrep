@@ -6216,6 +6216,37 @@ struct MiscTests {
         ], fixture: {})
         #expect(deferredUnrestrictedClusterNoConfigVimgrepOutput == leadingUnrestrictedClusterNoConfigVimgrepOutput)
 
+        let deferredPatternPositionalNoConfigVimgrepOutput = try runExecutableData([
+            "needle",
+            "--no-config",
+            "--vimgrep",
+            "--heading",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        let leadingPatternPositionalNoConfigVimgrepOutput = try runExecutableData([
+            "--no-config",
+            "needle",
+            "--vimgrep",
+            "--heading",
+            root.path("dense.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredPatternPositionalNoConfigVimgrepOutput == leadingPatternPositionalNoConfigVimgrepOutput)
+
+        let deferredPatternAndPathNoConfigVimgrepOutput = try runExecutableData([
+            "needle",
+            root.path("dense.txt"),
+            "--no-config",
+            "--vimgrep",
+            "--heading",
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredPatternAndPathNoConfigVimgrepOutput == leadingPatternPositionalNoConfigVimgrepOutput)
+
         let deferredColorNoConfigVimgrepOutput = try runExecutableData([
             "--color",
             "never",
