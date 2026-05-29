@@ -3879,10 +3879,60 @@ public enum SwiftDarwinLiteralPreflight {
         )
     }
 
+    private static func countASCIIWordMatchesWithinFirstMatchingLines(
+        data: Data,
+        literal: [UInt8],
+        maxCount: Int
+    ) -> Int? {
+        let needle = Data(literal)
+        let newline = UInt8(ascii: "\n")
+        var searchStart = data.startIndex
+        var matchedLineCount = 0
+        var selectedPrefixEnd = data.startIndex
+        var rejectedBoundaryCandidates = 0
+        let maxRejectedBoundaryCandidates = 128
+
+        while matchedLineCount < maxCount,
+              searchStart < data.endIndex,
+              let matchRange = data.range(of: needle, in: searchStart..<data.endIndex) {
+            guard !matchRange.isEmpty else {
+                return nil
+            }
+            guard let bounded = isASCIIWordBoundaryMatch(data: data, matchRange: matchRange) else {
+                return nil
+            }
+            if bounded {
+                matchedLineCount += 1
+                if let newlineIndex = data[matchRange.upperBound...].firstIndex(of: newline) {
+                    selectedPrefixEnd = newlineIndex
+                    searchStart = data.index(after: newlineIndex)
+                } else {
+                    selectedPrefixEnd = data.endIndex
+                    searchStart = data.endIndex
+                }
+            } else {
+                rejectedBoundaryCandidates += 1
+                guard rejectedBoundaryCandidates <= maxRejectedBoundaryCandidates else {
+                    return nil
+                }
+                searchStart = data.index(after: matchRange.lowerBound)
+            }
+        }
+
+        guard matchedLineCount > 0 else {
+            return 0
+        }
+        return countASCIIWordMatches(
+            in: Data(data[..<selectedPrefixEnd]),
+            literal: literal
+        )
+    }
+
     public static func wordCountMatchesExitCode(
         path: String,
         literal: [UInt8],
         includeZero: Bool,
+        maxCount: Int? = nil,
         countPrefix: [UInt8] = [],
         crlfTerminated: Bool = false
     ) -> Int32? {
@@ -3891,12 +3941,28 @@ public enum SwiftDarwinLiteralPreflight {
               let first = literal.first,
               let last = literal.last,
               rgSwiftIsASCIIRegexWordByte(first),
-              rgSwiftIsASCIIRegexWordByte(last) else {
+              rgSwiftIsASCIIRegexWordByte(last),
+              maxCount.map({ $0 > 0 }) ?? true else {
             return nil
         }
-        guard let data = mappedPreflightData(path: path),
-              let matchCount = countASCIIWordMatches(in: data, literal: literal) else {
+        guard let data = mappedPreflightData(path: path) else {
             return nil
+        }
+        let matchCount: Int
+        if let maxCount {
+            guard let boundedMatchCount = countASCIIWordMatchesWithinFirstMatchingLines(
+                data: data,
+                literal: literal,
+                maxCount: maxCount
+            ) else {
+                return nil
+            }
+            matchCount = boundedMatchCount
+        } else {
+            guard let totalMatchCount = countASCIIWordMatches(in: data, literal: literal) else {
+                return nil
+            }
+            matchCount = totalMatchCount
         }
 
         if matchCount > 0 || includeZero {

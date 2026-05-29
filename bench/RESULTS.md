@@ -3477,6 +3477,18 @@ count, and Unicode fallback forms.
 | --- | ---: | ---: | ---: |
 | `--count-matches -i -m100000 NEEDLE` | 3.312 s | 18.4 ms | 21.1 ms |
 
+Bounded ASCII word count-matches now stays on the executable preflight for
+`-w --count-matches -mN`, while Unicode-adjacent word-boundary cases still
+fall back. Direct release comparisons were byte-identical for unprefixed, `-H`
+prefixed, `--include-zero`, only-matching count, and Unicode-boundary fallback
+forms.
+
+10 timed runs on the same 7.5 MiB dense literal fixture:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--count-matches -w -m100000 needle` | 1.958 s | 38.2 ms | 20.0 ms |
+
 ### Rejected A/B checks — 2026-05-25
 
 The following plausible Darwin optimizations were measured against checkpoint
