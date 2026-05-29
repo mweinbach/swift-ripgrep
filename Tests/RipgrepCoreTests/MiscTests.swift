@@ -4652,6 +4652,27 @@ struct MiscTests {
         ], fixture: {})
         #expect(prefixedBoundedWordCountMatchesOutput == Data("\(root.path("dense.txt")):3\n".utf8))
 
+        let boundedCaseInsensitiveWordCountMatchesOutput = try runExecutableData([
+            "--count-matches",
+            "-w",
+            "-i",
+            "-m2",
+            "NEEDLE",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(boundedCaseInsensitiveWordCountMatchesOutput == Data("6\n".utf8))
+
+        let boundedCaseInsensitiveWordOnlyMatchingCountOutput = try runExecutableData([
+            "-o",
+            "-c",
+            "-w",
+            "-i",
+            "-m1",
+            "NEEDLE",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(boundedCaseInsensitiveWordOnlyMatchingCountOutput == Data("3\n".utf8))
+
         let includeZeroCountMatchesResult = try runExecutableResult([
             "--include-zero",
             "--count-matches",

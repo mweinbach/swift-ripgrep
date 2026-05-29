@@ -3460,13 +3460,11 @@ struct RipgrepCommand {
             }
             if wordRegexp {
                 if asciiCaseInsensitive {
-                    guard parsedMaxCount == nil else {
-                        return nil
-                    }
                     return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveWordCountMatchesExitCode(
                         path: path,
                         literal: literal,
                         includeZero: parsedIncludeZero,
+                        maxCount: parsedMaxCount,
                         countPrefix: parsedCountPrefix,
                         crlfTerminated: parsedCrlf
                     )

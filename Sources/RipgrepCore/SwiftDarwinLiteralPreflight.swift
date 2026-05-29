@@ -3187,19 +3187,36 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literal: [UInt8],
         includeZero: Bool,
+        maxCount: Int? = nil,
         countPrefix: [UInt8] = [],
         crlfTerminated: Bool = false
     ) -> Int32? {
         guard isSafeASCIIWordLiteral(literal),
+              maxCount.map({ $0 > 0 }) ?? true,
               let data = mappedPreflightData(path: path),
               !hasBinaryDetectionPrefix(data),
-              !containsNonASCIIByte(data),
-              let matchCount = countASCIIWordMatches(
+              !containsNonASCIIByte(data) else {
+            return nil
+        }
+        let matchCount: Int
+        if let maxCount {
+            guard let boundedMatchCount = countASCIICaseInsensitiveWordMatchesWithinFirstMatchingLines(
+                data: data,
+                literal: literal,
+                maxCount: maxCount
+            ) else {
+                return nil
+            }
+            matchCount = boundedMatchCount
+        } else {
+            guard let totalMatchCount = countASCIIWordMatches(
                 in: data,
                 literal: literal,
                 asciiCaseInsensitive: true
-              ) else {
-            return nil
+            ) else {
+                return nil
+            }
+            matchCount = totalMatchCount
         }
 
         if matchCount > 0 || includeZero {
@@ -3212,6 +3229,39 @@ public enum SwiftDarwinLiteralPreflight {
             }
         }
         return matchCount > 0 ? 0 : 1
+    }
+
+    private static func countASCIICaseInsensitiveWordMatchesWithinFirstMatchingLines(
+        data: Data,
+        literal: [UInt8],
+        maxCount: Int
+    ) -> Int? {
+        let newline = UInt8(ascii: "\n")
+        var lineStart = data.startIndex
+        var matchedLineCount = 0
+        var matchCount = 0
+
+        while matchedLineCount < maxCount,
+              lineStart < data.endIndex {
+            let lineEnd = data[lineStart..<data.endIndex].firstIndex(of: newline) ?? data.endIndex
+            guard let lineMatchCount = countASCIIWordMatches(
+                in: Data(data[lineStart..<lineEnd]),
+                literal: literal,
+                asciiCaseInsensitive: true
+            ) else {
+                return nil
+            }
+            if lineMatchCount > 0 {
+                matchedLineCount += 1
+                matchCount += lineMatchCount
+            }
+            if lineEnd < data.endIndex {
+                lineStart = data.index(after: lineEnd)
+            } else {
+                lineStart = data.endIndex
+            }
+        }
+        return matchCount
     }
 
     public static func asciiCaseInsensitiveWordLineExitCode(
