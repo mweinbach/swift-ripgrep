@@ -34,6 +34,47 @@ Validation:
 | `--files` | 102.9 ms ± 8.1 ms | 75.8 ms ± 2.8 ms |
 | `--no-ignore --files` | 65.3 ms ± 1.8 ms | 64.7 ms ± 2.8 ms |
 
+### Continuation probes — 2026-05-29
+
+A fresh curated Linux search scan showed the current Swift search path is
+already faster than Rust on the measured cases, so the remaining active gap is
+ignore-aware `--files`, not literal search:
+
+- `linux_literal_default`: Swift 1.633 s vs Rust 2.797 s.
+- `linux_literal_casei`: Swift 1.718 s vs Rust 2.740 s.
+- `linux_no_literal`: Swift 2.343 s vs Rust 2.867 s.
+
+Files-mode controls on `/tmp/swift-rg-bench/linux` isolated the cost to VCS
+ignore handling. A 30-run slice measured Swift `--files` at 101.3 ms ± 2.9 ms,
+Swift `--hidden --files` at 101.6 ms ± 2.7 ms, Swift
+`--no-ignore --files` at 65.5 ms ± 1.5 ms, and Rust `--files` at
+75.1 ms ± 1.1 ms. `--no-ignore-vcs --files` measured 74.5 ms ± 2.2 ms,
+while `--no-ignore-dot`, `--no-ignore-parent`, and `--no-ignore-global` were
+near the default path. The fresh Time Profiler export
+`/tmp/swift-rg-current-timesample.xml` now points at directory traversal,
+`fastDirectoryContents`, relative-path construction, and `IgnoreStack` /
+`GlobMatcher` decisions; the old `/tmp/swift-rg-timesample.xml` still showed
+default file-type registry initialization and is stale for current files-mode
+work.
+
+Rejected Swift-only probes from this continuation preserved exact Swift output
+and sorted Rust parity unless noted, but did not improve the checkpoint:
+
+- Reusing one root Git-context check for global-ignore setup measured
+  103.5 ms ± 6.4 ms, essentially flat.
+- Threading known ASCII path state into ignore decisions regressed to
+  114.5 ms ± 3.2 ms and raised user CPU.
+- Expanding simple character-class globs into indexed exact/prefix/suffix sets
+  regressed to 116.8 ms ± 6.1 ms.
+- Scoped basename-only matcher dispatch was neutral at 102.3 ms ± 5.3 ms.
+- Raising `fastDirectoryContents` child reserve from 64 to 128 was neutral for
+  default and slightly worse for no-ignore.
+- Recursive and top-wide nested parallel walkers preserved output but
+  over-scheduled heavily, regressing default files mode to 311.8 ms ± 16.2 ms
+  and 266.3 ms ± 12.3 ms respectively.
+- Forcing inline on `FastDirectoryEntryKind` predicates was noisy/worse at
+  104.5 ms ± 4.9 ms.
+
 ## Swift-only word/case checkpoint — 2026-05-28
 
 Single-literal `-w -i` now has an ASCII-only Darwin preflight that reuses the
