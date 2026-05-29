@@ -3501,6 +3501,18 @@ Unicode-boundary fallback forms.
 | --- | ---: | ---: | ---: |
 | `--count-matches -w -i -m100000 NEEDLE` | 4.951 s | 40.0 ms | 27.3 ms |
 
+Bounded non-overlapping multi-literal count-matches now uses the executable
+preflight for repeated `-e`, pattern-file, and top-level alternation forms with
+`--count-matches -mN`. Direct release comparisons were byte-identical for
+unprefixed, `-H` prefixed, `--include-zero`, only-matching count, pattern-file,
+and alternation forms.
+
+10 timed runs on the same 7.5 MiB dense literal fixture:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--count-matches -m100000 -e needle -e quiet` | 2.233 s | 39.8 ms | 14.6 ms |
+
 ### Rejected A/B checks — 2026-05-25
 
 The following plausible Darwin optimizations were measured against checkpoint

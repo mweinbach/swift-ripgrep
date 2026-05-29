@@ -4547,6 +4547,17 @@ struct MiscTests {
         ], fixture: {})
         #expect(repeatedRegexpCountMatchesOutput == Data("6\n".utf8))
 
+        let boundedRepeatedRegexpCountMatchesOutput = try runExecutableData([
+            "--count-matches",
+            "-m2",
+            "-e",
+            "needle",
+            "-e",
+            "quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(boundedRepeatedRegexpCountMatchesOutput == Data("4\n".utf8))
+
         let patternFileCountMatchesOutput = try runExecutableData([
             "--count-matches",
             "-f",
@@ -4554,6 +4565,15 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(patternFileCountMatchesOutput == repeatedRegexpCountMatchesOutput)
+
+        let boundedPatternFileCountMatchesOutput = try runExecutableData([
+            "--count-matches",
+            "-m2",
+            "-f",
+            root.path("patterns.txt"),
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(boundedPatternFileCountMatchesOutput == boundedRepeatedRegexpCountMatchesOutput)
 
         let alternationCountMatchesOutput = try runExecutableData([
             "--count-matches",

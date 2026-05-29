@@ -2704,13 +2704,14 @@ struct RipgrepCommand {
             }
             if parsedPrintMode == .countMatches {
                 guard !asciiCaseInsensitive,
-                      parsedMaxCount == nil else {
+                      parsedMaxCount != 0 else {
                     return nil
                 }
                 return SwiftDarwinLiteralPreflight.multiLiteralCountMatchesExitCode(
                     path: path,
                     literals: literals,
                     includeZero: parsedIncludeZero,
+                    maxCount: parsedMaxCount,
                     countPrefix: parsedCountPrefix,
                     crlfTerminated: parsedCrlf
                 )
@@ -3240,13 +3241,14 @@ struct RipgrepCommand {
             }
             if parsedPrintMode == .countMatches {
                 guard !asciiCaseInsensitive,
-                      parsedMaxCount == nil else {
+                      parsedMaxCount != 0 else {
                     return nil
                 }
                 return SwiftDarwinLiteralPreflight.multiLiteralCountMatchesExitCode(
                     path: path,
                     literals: literals,
                     includeZero: parsedIncludeZero,
+                    maxCount: parsedMaxCount,
                     countPrefix: parsedCountPrefix,
                     crlfTerminated: parsedCrlf
                 )

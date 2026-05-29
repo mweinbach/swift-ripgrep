@@ -4106,20 +4106,28 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literals: [[UInt8]],
         includeZero: Bool,
+        maxCount: Int? = nil,
         countPrefix: [UInt8] = [],
         crlfTerminated: Bool = false
     ) -> Int32? {
         guard let literals = nonOverlappingDistinctLiterals(literals),
-              !literals.isEmpty else {
+              !literals.isEmpty,
+              maxCount.map({ $0 > 0 }) ?? true else {
             return nil
         }
         guard let data = mappedPreflightData(path: path) else {
             return nil
         }
 
-        var matchCount = 0
-        for literal in literals {
-            matchCount += countNonOverlappingMatches(in: data, literal: literal)
+        let matchCount: Int
+        if let maxCount {
+            matchCount = countMultiLiteralMatchesWithinFirstMatchingLines(
+                data: data,
+                literals: literals,
+                maxCount: maxCount
+            )
+        } else {
+            matchCount = countNonOverlappingMultiLiteralMatches(in: data, literals: literals)
         }
 
         if matchCount > 0 || includeZero {
@@ -4132,6 +4140,53 @@ public enum SwiftDarwinLiteralPreflight {
             }
         }
         return matchCount > 0 ? 0 : 1
+    }
+
+    private static func countMultiLiteralMatchesWithinFirstMatchingLines(
+        data: Data,
+        literals: [[UInt8]],
+        maxCount: Int
+    ) -> Int {
+        let needles = literals.map { Data($0) }
+        let newline = UInt8(ascii: "\n")
+        var lineStart = data.startIndex
+        var matchedLineCount = 0
+        var selectedPrefixEnd = data.startIndex
+
+        while matchedLineCount < maxCount,
+              lineStart < data.endIndex {
+            let lineEnd = data[lineStart..<data.endIndex].firstIndex(of: newline) ?? data.endIndex
+            let lineRange = lineStart..<lineEnd
+            if !lineRange.isEmpty,
+               needles.contains(where: { data.range(of: $0, in: lineRange) != nil }) {
+                matchedLineCount += 1
+                selectedPrefixEnd = lineEnd
+            }
+            if lineEnd < data.endIndex {
+                lineStart = data.index(after: lineEnd)
+            } else {
+                lineStart = data.endIndex
+            }
+        }
+
+        guard matchedLineCount > 0 else {
+            return 0
+        }
+        return countNonOverlappingMultiLiteralMatches(
+            in: Data(data[..<selectedPrefixEnd]),
+            literals: literals
+        )
+    }
+
+    private static func countNonOverlappingMultiLiteralMatches(
+        in data: Data,
+        literals: [[UInt8]]
+    ) -> Int {
+        var matchCount = 0
+        for literal in literals {
+            matchCount += countNonOverlappingMatches(in: data, literal: literal)
+        }
+        return matchCount
     }
 
     static func multiLiteralResult(
