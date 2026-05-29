@@ -169,6 +169,11 @@ and sorted Rust parity unless noted, but did not improve the checkpoint:
   but also measured neutral-to-worse: a 40-run A/B measured default `--files` at
   105.2 ms baseline versus 105.1 ms probe, and hidden at 102.4 ms baseline
   versus 103.8 ms probe. The simpler String operations stayed.
+- Adding empty-bucket guards around `GlobMatcher.fastDecision` dictionary lookups
+  preserved exact Swift output and sorted Rust parity, but regressed both file
+  listing modes and raised user CPU. A 40-run A/B measured default `--files` at
+  104.9 ms baseline versus 120.1 ms probe, and hidden at 102.1 ms baseline
+  versus 118.8 ms probe. The unconditional lookup shape stayed.
 
 ## Swift-only word/case checkpoint — 2026-05-28
 
