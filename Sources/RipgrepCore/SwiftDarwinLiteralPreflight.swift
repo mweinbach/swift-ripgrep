@@ -1372,6 +1372,82 @@ public enum SwiftDarwinLiteralPreflight {
         return matchCount > 0 ? 0 : 1
     }
 
+    public static func multiLiteralExactLineVimgrepLineExitCode(
+        path: String,
+        literals: [[UInt8]],
+        lineNumber: Bool = true,
+        column: Bool = true,
+        byteOffset: Bool = false,
+        maxCount: Int? = nil,
+        lineNumberFieldSeparator: [UInt8] = [58],
+        linePrefix: [UInt8] = []
+    ) -> Int32? {
+        guard maxCount.map({ $0 > 0 }) ?? true,
+              let literals = distinctExactLineLiterals(literals),
+              !literals.isEmpty,
+              let data = mappedPreflightData(path: path),
+              !hasBinaryDetectionPrefix(data) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return 1
+        }
+
+        let limit = maxCount ?? Int.max
+        let newline = UInt8(ascii: "\n")
+        var lineStart = data.startIndex
+        var lineNumberValue = 1
+        var matchedLineCount = 0
+        var output = Data()
+        output.reserveCapacity(64 * 1024)
+
+        while lineStart < data.endIndex, matchedLineCount < limit {
+            let lineEnd = data[lineStart..<data.endIndex].firstIndex(of: newline) ?? data.endIndex
+            if exactLineRangeMatches(data: data, lineStart: lineStart, lineEnd: lineEnd, literals: literals) {
+                appendLinePrefix(linePrefix, to: &output)
+                if lineNumber {
+                    appendLineNumberPrefix(
+                        lineNumberValue,
+                        to: &output,
+                        fieldSeparator: lineNumberFieldSeparator
+                    )
+                }
+                if column {
+                    appendLineNumberPrefix(
+                        1,
+                        to: &output,
+                        fieldSeparator: lineNumberFieldSeparator
+                    )
+                }
+                if byteOffset {
+                    appendLineNumberPrefix(
+                        data.distance(from: data.startIndex, to: lineStart),
+                        to: &output,
+                        fieldSeparator: lineNumberFieldSeparator
+                    )
+                }
+                output.append(contentsOf: data[lineStart..<lineEnd])
+                output.append(newline)
+                matchedLineCount += 1
+                if output.count >= 64 * 1024 {
+                    FileHandle.standardOutput.write(output)
+                    output.removeAll(keepingCapacity: true)
+                }
+            }
+            if lineEnd < data.endIndex {
+                lineStart = data.index(after: lineEnd)
+                lineNumberValue += 1
+            } else {
+                lineStart = data.endIndex
+            }
+        }
+
+        if !output.isEmpty {
+            FileHandle.standardOutput.write(output)
+        }
+        return matchedLineCount > 0 ? 0 : 1
+    }
+
     public static func limitedLineExitCode(
         path: String,
         literal: [UInt8],

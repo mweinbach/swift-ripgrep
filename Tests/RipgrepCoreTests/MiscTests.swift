@@ -4834,6 +4834,14 @@ struct MiscTests {
             (["-m2", "-x", "needle|last", root.path("exact.txt")], Data("needle\nneedle\n".utf8)),
             (["--with-filename", "-x", "-e", "needle", "-e", "last", root.path("exact.txt")], Data("\(root.path("exact.txt")):needle\n\(root.path("exact.txt")):needle\n\(root.path("exact.txt")):last\n".utf8)),
             (["--heading", "--with-filename", "-x", "-f", root.path("exact-patterns.txt"), root.path("exact.txt")], Data("\(root.path("exact.txt"))\nneedle\nneedle\nlast\n".utf8)),
+            (["--vimgrep", "-x", "needle", root.path("exact.txt")], Data("\(root.path("exact.txt")):1:1:needle\n\(root.path("exact.txt")):3:1:needle\n".utf8)),
+            (["--vimgrep", "--no-column", "-x", "needle", root.path("exact.txt")], Data("\(root.path("exact.txt")):1:needle\n\(root.path("exact.txt")):3:needle\n".utf8)),
+            (["--vimgrep", "-N", "--no-column", "-x", "needle", root.path("exact.txt")], Data("\(root.path("exact.txt")):needle\n\(root.path("exact.txt")):needle\n".utf8)),
+            (["--vimgrep", "--no-filename", "-x", "needle", root.path("exact.txt")], Data("1:1:needle\n3:1:needle\n".utf8)),
+            (["--vimgrep", "--field-match-separator=|", "-x", "needle", root.path("exact.txt")], Data("\(root.path("exact.txt"))|1|1|needle\n\(root.path("exact.txt"))|3|1|needle\n".utf8)),
+            (["--vimgrep", "-b", "-x", "needle", root.path("exact.txt")], Data("\(root.path("exact.txt")):1:1:0:needle\n\(root.path("exact.txt")):3:1:18:needle\n".utf8)),
+            (["--vimgrep", "-m1", "-x", "needle", root.path("exact.txt")], Data("\(root.path("exact.txt")):1:1:needle\n".utf8)),
+            (["--vimgrep", "-x", "-e", "needle", "-e", "last", root.path("exact.txt")], Data("\(root.path("exact.txt")):1:1:needle\n\(root.path("exact.txt")):3:1:needle\n\(root.path("exact.txt")):5:1:last\n".utf8)),
             (["--crlf", "-x", "needle", root.path("crlf.txt")], Data("needle\r\n".utf8)),
         ] {
             let exactLineOutput = try runExecutableData(exactLineArguments, fixture: {})
@@ -6129,6 +6137,28 @@ struct MiscTests {
             "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
         ], fixture: {})
         #expect(deferredNoConfigVimgrepOutput == leadingNoConfigVimgrepOutput)
+
+        let deferredExactLineNoConfigVimgrepOutput = try runExecutableData([
+            "-x",
+            "--vimgrep",
+            "--heading",
+            "--no-config",
+            "needle",
+            root.path("exact.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        let leadingExactLineNoConfigVimgrepOutput = try runExecutableData([
+            "--no-config",
+            "-x",
+            "--vimgrep",
+            "--heading",
+            "needle",
+            root.path("exact.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(deferredExactLineNoConfigVimgrepOutput == leadingExactLineNoConfigVimgrepOutput)
 
         let deferredSearchZipNoConfigVimgrepOutput = try runExecutableData([
             "--search-zip",

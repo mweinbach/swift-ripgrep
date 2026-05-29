@@ -3652,6 +3652,20 @@ and Unicode fallback fixtures.
 | `--vimgrep -w -i -e NEEDLE -e QUIET` | 10.668 s | 50.8 ms | 136.9 ms |
 | `--vimgrep -w -m100000 -e needle -e quiet` | 3.146 s | 20.7 ms | 44.7 ms |
 
+Exact line-regexp vimgrep output now uses a Swift mapped-line writer for
+case-sensitive literal `-x`/`--line-regexp` searches. It preserves vimgrep
+line, column, byte-offset, max-count, filename-prefix, and repeated-pattern
+layouts while keeping ignore-case, CRLF, null-data, color, trim, stats, and
+other observable modes on the fallback path. Direct release byte/status checks
+matched Rust for matching, repeated `-e`, byte-offset, no-match, and deferred
+`--no-config` forms.
+
+10 timed runs on the same dense literal fixture:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--vimgrep -x needle` | 1.303 s | 27.2 ms | 9.5 ms |
+
 `--heading` is now output-neutral for executable vimgrep preflights. Rust does
 not emit separate heading records for vimgrep output, so the parser keeps
 full-line, only-matching, and word-boundary vimgrep shapes on their existing
