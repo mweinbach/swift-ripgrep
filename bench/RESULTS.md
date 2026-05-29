@@ -1627,6 +1627,18 @@ and 66.3 ms for Rust; `--encoding=none` at 17.0 ms versus 142.6 ms before and
 67.2 ms for Rust; and the no-match form at 4.6 ms versus 28.5 ms before and
 4.7 ms for Rust.
 
+Multi-literal case-insensitive exact-line vimgrep now uses the same buffered
+mapped-byte writer after the one-literal fast branch. Direct byte/status checks
+matched the previous Swift binary and Rust for plain, raw, UTF-8, byte-offset,
+no-column, no-line-number, custom field separators, no-filename output, bounded,
+repeated `-e`, pattern-file, no-match, and final-line-without-newline forms. On
+the same fixture, 25-run checks measured
+`-i --vimgrep -x 'NEEDLE NEEDLE QUIET TAIL|MISSING LINE'` at 17.4 ms versus
+141.9 ms before and 66.8 ms for Rust; `--encoding=none` at 17.3 ms versus
+142.3 ms before and 66.0 ms for Rust; `--encoding=utf-8` at 18.3 ms versus
+143.3 ms before and 66.8 ms for Rust; and the no-match alternation at 6.1 ms
+versus 29.2 ms before and 4.9 ms for Rust.
+
 The same ASCII exact-line scanner now counts case-insensitive `-c -i -x` and
 `--count-matches -i -x` matches without emitting lines. Byte/status checks
 matched Rust for line counts, count-matches, bounded counts, include-zero,
