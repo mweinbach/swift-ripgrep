@@ -1615,6 +1615,20 @@ public enum SwiftDarwinLiteralPreflight {
             return 1
         }
 
+        if literals.count == 1 {
+            return asciiCaseInsensitiveExactLineFieldOutput(
+                data: data,
+                foldedLiteral: literals[0],
+                maxCount: maxCount,
+                lineNumber: lineNumber,
+                column: column,
+                byteOffset: byteOffset,
+                lineNumberFieldSeparator: lineNumberFieldSeparator,
+                linePrefix: linePrefix,
+                headingPrefix: []
+            )
+        }
+
         let limit = maxCount ?? Int.max
         let newline = UInt8(ascii: "\n")
         var lineStart = data.startIndex
