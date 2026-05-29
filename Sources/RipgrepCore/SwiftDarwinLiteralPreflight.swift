@@ -1456,6 +1456,20 @@ public enum SwiftDarwinLiteralPreflight {
             return 1
         }
 
+        if literals.count == 1 {
+            return asciiCaseInsensitiveExactLineFieldOutput(
+                data: data,
+                foldedLiteral: literals[0],
+                maxCount: maxCount,
+                lineNumber: lineNumber,
+                column: column,
+                byteOffset: byteOffset,
+                lineNumberFieldSeparator: lineNumberFieldSeparator,
+                linePrefix: linePrefix,
+                headingPrefix: []
+            )
+        }
+
         let limit = maxCount ?? Int.max
         let newline = UInt8(ascii: "\n")
         var lineStart = data.startIndex
@@ -2288,6 +2302,20 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
 
+        if literals.count == 1 {
+            return asciiCaseInsensitiveExactLineFieldOutput(
+                data: data,
+                foldedLiteral: literals[0],
+                maxCount: maxCount,
+                lineNumber: lineNumber,
+                column: false,
+                byteOffset: false,
+                lineNumberFieldSeparator: lineNumberFieldSeparator,
+                linePrefix: linePrefix,
+                headingPrefix: headingPrefix
+            )
+        }
+
         let limit = maxCount ?? Int.max
         let newline = UInt8(ascii: "\n")
         var matchedLineCount = 0
@@ -2360,6 +2388,177 @@ public enum SwiftDarwinLiteralPreflight {
         }
 
         guard wroteOutput,
+              output.flush() else {
+            return nil
+        }
+        return matchedLineCount > 0 ? 0 : 1
+    }
+
+    private static func asciiCaseInsensitiveExactLineFieldOutput(
+        data: Data,
+        foldedLiteral: [UInt8],
+        maxCount: Int?,
+        lineNumber: Bool,
+        column: Bool,
+        byteOffset: Bool,
+        lineNumberFieldSeparator: [UInt8],
+        linePrefix: [UInt8],
+        headingPrefix: [UInt8]
+    ) -> Int32? {
+        guard !foldedLiteral.isEmpty else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return 1
+        }
+
+        let newline = UInt8(ascii: "\n")
+        let limit = maxCount ?? Int.max
+        var lineNeedle = foldedLiteral
+        lineNeedle.append(newline)
+        guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+            return nil
+        }
+        defer {
+            output.deallocate()
+        }
+
+        let matchedLineCount = data.withUnsafeBytes { rawData -> Int? in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
+            }
+            let base = rawBase.assumingMemoryBound(to: UInt8.self)
+            return lineNeedle.withUnsafeBufferPointer { lineNeedleBuffer -> Int? in
+                guard let lineNeedleBase = lineNeedleBuffer.baseAddress else {
+                    return 0
+                }
+
+                var searchOffset = 0
+                var lineCountOffset = 0
+                var currentLineNumber = 1
+                var matchedLineCount = 0
+                var emittedHeading = false
+
+                while matchedLineCount < limit,
+                      searchOffset < data.count,
+                      let found = rg_memcasemem_ascii_prepared(
+                        base.advanced(by: searchOffset),
+                        data.count - searchOffset,
+                        lineNeedleBase,
+                        lineNeedle.count,
+                        nil
+                      ) {
+                    let matchStart = base.distance(to: found)
+                    if matchStart == 0 || base[matchStart - 1] == newline {
+                        if lineNumber {
+                            currentLineNumber += rg_memcount_byte(
+                                base.advanced(by: lineCountOffset),
+                                matchStart - lineCountOffset,
+                                newline
+                            )
+                            lineCountOffset = matchStart
+                        }
+                        guard output.writeHeadingPrefix(
+                            headingPrefix,
+                            emittedHeading: &emittedHeading
+                        ),
+                            output.writeBytes(linePrefix) else {
+                            return nil
+                        }
+                        if lineNumber,
+                           !output.writeLineNumberPrefix(
+                            currentLineNumber,
+                            fieldSeparator: lineNumberFieldSeparator
+                           ) {
+                            return nil
+                        }
+                        if column,
+                           !output.writeLineNumberPrefix(
+                            1,
+                            fieldSeparator: lineNumberFieldSeparator
+                           ) {
+                            return nil
+                        }
+                        if byteOffset,
+                           !output.writeLineNumberPrefix(
+                            matchStart,
+                            fieldSeparator: lineNumberFieldSeparator
+                           ) {
+                            return nil
+                        }
+                        guard output.write(base.advanced(by: matchStart), count: lineNeedle.count) else {
+                            return nil
+                        }
+                        matchedLineCount += 1
+                    }
+                    searchOffset = matchStart + lineNeedle.count
+                }
+
+                if matchedLineCount < limit,
+                   data.count >= foldedLiteral.count,
+                   base[data.count - 1] != newline {
+                    let suffixStart = data.count - foldedLiteral.count
+                    if suffixStart >= 0,
+                       (suffixStart == 0 || base[suffixStart - 1] == newline) {
+                        var matched = true
+                        for index in 0..<foldedLiteral.count
+                        where rgSwiftASCIILower(base[suffixStart + index]) != foldedLiteral[index] {
+                            matched = false
+                            break
+                        }
+                        if matched {
+                            if lineNumber {
+                                currentLineNumber += rg_memcount_byte(
+                                    base.advanced(by: lineCountOffset),
+                                    suffixStart - lineCountOffset,
+                                    newline
+                                )
+                            }
+                            guard output.writeHeadingPrefix(
+                                headingPrefix,
+                                emittedHeading: &emittedHeading
+                            ),
+                                output.writeBytes(linePrefix) else {
+                                return nil
+                            }
+                            if lineNumber,
+                               !output.writeLineNumberPrefix(
+                                currentLineNumber,
+                                fieldSeparator: lineNumberFieldSeparator
+                               ) {
+                                return nil
+                            }
+                            if column,
+                               !output.writeLineNumberPrefix(
+                                1,
+                                fieldSeparator: lineNumberFieldSeparator
+                               ) {
+                                return nil
+                            }
+                            if byteOffset,
+                               !output.writeLineNumberPrefix(
+                                suffixStart,
+                                fieldSeparator: lineNumberFieldSeparator
+                               ) {
+                                return nil
+                            }
+                            guard output.write(
+                                base.advanced(by: suffixStart),
+                                count: foldedLiteral.count
+                            ),
+                                output.writeByte(newline) else {
+                                return nil
+                            }
+                            matchedLineCount += 1
+                        }
+                    }
+                }
+
+                return matchedLineCount
+            }
+        }
+
+        guard let matchedLineCount,
               output.flush() else {
             return nil
         }

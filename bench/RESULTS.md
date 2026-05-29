@@ -1355,8 +1355,8 @@ Direct release byte/status checks matched Rust for those forms.
 
 | Command | Preflight bypassed | Current Swift | Rust `rg` |
 | --- | ---: | ---: | ---: |
-| `--encoding=none -i -x "NEEDLE NEEDLE QUIET TAIL"` | 5.972 s | 10.0 ms | 24.0 ms |
-| `--encoding=none -n -i -x "NEEDLE NEEDLE QUIET TAIL"` | 6.234 s | 13.4 ms | 31.0 ms |
+| `--encoding=none -i -x "NEEDLE NEEDLE QUIET TAIL"` | 5.972 s | 8.7 ms | 23.5 ms |
+| `--encoding=none -n -i -x "NEEDLE NEEDLE QUIET TAIL"` | 6.234 s | 13.8 ms | 34.4 ms |
 
 Case-insensitive exact-line quiet and path-only searches now have a conservative
 match-only Swift preflight. It probes exact, lowercase, and uppercase ASCII
@@ -1374,18 +1374,16 @@ versus 4.879 s for the forced fallback and 7.4 ms for Rust; the matching
 5.044 s for the forced fallback and 8.5 ms for Rust.
 
 Case-insensitive exact-line matching output now has a conservative Swift
-line scanner for ASCII-only data and patterns. It emits the original line
-bytes while comparing folded bytes, covers literal alternations, repeated
-`-e`, pattern files, line numbers, headings, `-o`, and max-count, and falls
-back for CRLF, binary, non-ASCII, quiet/path-only, and count forms. Direct
-byte/status checks matched Rust for plain, numbered, only-matching, bounded,
-prefixed, heading, repeated `-e`, pattern-file, CRLF fallback, binary fallback,
-and Unicode fallback forms. On the 4.8 MiB dense fixture,
-`-i -x 'NEEDLE NEEDLE NEEDLE QUIET TAIL NEEDLE'` improved from 3.900 s to
-62.3 ms, versus 16.4 ms for Rust, while `-n -i -x ...` improved from 3.909 s
-to 80.2 ms, versus 20.0 ms for Rust. The neighboring alternation
-`-i -x 'NEEDLE NEEDLE...|MISSING'` measured 57.3 ms, and numbered alternation
-measured 72.3 ms.
+folded byte-search writer for single literals on ASCII-only data. It emits the
+original line bytes while comparing folded bytes, covers line numbers, headings,
+`-o`, max-count, explicit raw/UTF-8 encoding, and final no-newline matches, and
+falls back for CRLF, binary, non-ASCII, multi-literal, quiet/path-only, and
+count forms. Direct byte/status checks matched Rust for plain, numbered,
+only-matching, bounded, prefixed, heading, repeated `-e`, pattern-file, CRLF
+fallback, binary fallback, and Unicode fallback forms. On the 7.5 MiB dense
+fixture, `-i -x 'NEEDLE NEEDLE QUIET TAIL'` measured 8.6 ms, versus 23.7 ms for
+Rust, while `-n -i -x ...` measured 13.9 ms, versus 35.9 ms for Rust.
+Multi-literal alternation remains on the folded line scanner.
 
 Case-insensitive exact-line vimgrep output now has the same folded exact-line
 scanner for ASCII haystacks. It preserves line, column, byte-offset, max-count,
@@ -1393,7 +1391,7 @@ and repeated `-e` field layouts while keeping Unicode fallback behavior on the
 full searcher. Direct release byte/status checks matched Rust for those forms.
 On `/tmp/swift-rg-candidates/countm-big.txt`, 10 timed runs of
 `-i --vimgrep -x 'NEEDLE NEEDLE QUIET TAIL'` improved from 5.123 s to
-145.6 ms, versus 65.2 ms for Rust.
+142.2 ms, versus 64.7 ms for Rust.
 
 Explicit `--encoding=none` and ASCII-safe UTF-8 case-insensitive exact-line
 vimgrep now share that folded writer instead of falling back. The raw mode can
@@ -1401,9 +1399,9 @@ emit original bytes after the existing ASCII guard, while UTF-8 first proves the
 haystack is ASCII so Unicode case-folding remains on the full searcher. Direct
 byte/status checks matched Rust for raw, byte-offset raw, UTF-8, `-E utf8`,
 Unicode fallback, and invalid raw-byte fallback forms. On the same fixture,
-5 timed runs of `--encoding=none -i --vimgrep -x 'NEEDLE NEEDLE QUIET TAIL'`
-improved from 6.225 s to 149.4 ms, versus 71.6 ms for Rust; the
-`--encoding=utf-8` form improved from 5.171 s to 203.5 ms, versus 64.4 ms for
+10 timed runs of `--encoding=none -i --vimgrep -x 'NEEDLE NEEDLE QUIET TAIL'`
+improved from 6.225 s to 141.4 ms, versus 70.3 ms for Rust; the
+`--encoding=utf-8` form improved from 5.171 s to 143.7 ms, versus 65.6 ms for
 Rust.
 
 The same ASCII exact-line scanner now counts case-insensitive `-c -i -x` and
