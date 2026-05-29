@@ -3783,6 +3783,19 @@ ignore-case, and Unicode fallback forms. Five-run probes on
 `--encoding=utf-8 -i -w -o -e NEEDLE -e QUIET` at 26.6 ms, versus 90.1 ms for
 Rust.
 
+ASCII word line output now tries the existing streaming literal-line writer with
+ASCII word-boundary checks before falling back to the conservative Unicode-aware
+word writer. This removes the dense-output buffering cliff for plain and encoded
+single-literal word line output while keeping non-ASCII haystacks on fallback.
+Direct release byte/status checks matched Rust for raw, UTF-8 ignore-case, and
+invalid UTF-8 fallback forms. Five-run probes on
+`/tmp/swift-rg-candidates/countm-big.txt` measured `-w needle` improving from
+1.337 s to 16.9 ms, versus 18.6 ms for Rust;
+`--encoding=none -w needle` improving from 4.150 s to 14.6 ms; and
+`--encoding=utf-8 -w needle` improving from 2.691 s to 15.5 ms. The
+case-insensitive encoded forms measured 14.1 ms for raw and 15.5 ms for UTF-8,
+versus 29.3 ms for Rust.
+
 Exact line-regexp vimgrep output now uses a Swift mapped-line writer for
 case-sensitive literal `-x`/`--line-regexp` searches. It preserves vimgrep
 line, column, byte-offset, max-count, filename-prefix, and repeated-pattern

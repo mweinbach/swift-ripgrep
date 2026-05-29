@@ -2566,11 +2566,16 @@ struct RipgrepCommand {
             && !parsedStopOnNonmatch
             && !parsedTrim
             && !parsedCrlf
-        let parsedEncodingWordVimgrepOutputCanUsePreflight = parsedEncodingVisibleLineOutput
-            && (parsedVimgrep || parsedOnlyMatching)
+        let parsedEncodingWordOutputCanUsePreflight = parsedEncodingVisibleLineOutput
             && wordRegexp
             && !parsedLineRegexp
-            && (parsedEncodingSupportsLinePreflight || parsedEncodingSupportsUTF8LinePreflight)
+            && (((parsedVimgrep || parsedOnlyMatching)
+                    && (parsedEncodingSupportsLinePreflight || parsedEncodingSupportsUTF8LinePreflight))
+                || (!parsedVimgrep
+                    && !parsedOnlyMatching
+                    && (parsedEncodingSupportsLinePreflight
+                        || (parsedEncodingSupportsUTF8LinePreflight
+                            && SwiftDarwinLiteralPreflight.fileCanUseUTF8LinePreflight(path: path)))))
         let parsedWordVimgrepLineCanUsePreflight = parsedVimgrep
             && wordRegexp
             && !parsedLineRegexp
@@ -2580,7 +2585,7 @@ struct RipgrepCommand {
             && !parsedCount
             && parsedPrintMode == .matchingLines
             && !parsedColorMayEmit
-            && (parsedEncodingIsAutomatic || parsedEncodingWordVimgrepOutputCanUsePreflight)
+            && (parsedEncodingIsAutomatic || parsedEncodingWordOutputCanUsePreflight)
             && parsedAfterContext == 0
             && parsedBeforeContext == 0
             && !parsedInvertMatch
@@ -2711,7 +2716,7 @@ struct RipgrepCommand {
             && (!parsedEncodingSupportsSummaryPreflight
                 || (parsedEncodingVisibleLineOutput
                     && !parsedEncodingVisibleLineOutputCanUsePreflight
-                    && !parsedEncodingWordVimgrepOutputCanUsePreflight
+                    && !parsedEncodingWordOutputCanUsePreflight
                     && !parsedEncodingExactLineVimgrepOutputCanUsePreflight
                     && !parsedEncodingASCIIExactLineVimgrepOutputCanUsePreflight
                     && !parsedEncodingExactLineFieldOutputCanUsePreflight

@@ -4117,6 +4117,20 @@ public enum SwiftDarwinLiteralPreflight {
               rgSwiftIsASCIIRegexWordByte(last) else {
             return nil
         }
+        if let matchedLineCount = literalLineMatchCount(
+            path: path,
+            literal: literal,
+            asciiCaseInsensitive: false,
+            lineNumber: lineNumber,
+            asciiBoundary: true,
+            lineNumberFieldSeparator: lineNumberFieldSeparator,
+            linePrefix: linePrefix,
+            headingPrefix: headingPrefix,
+            emitLines: true,
+            requireASCIIHaystack: true
+        ) {
+            return matchedLineCount > 0 ? 0 : 1
+        }
 
         let fd = path.withCString { Darwin.open($0, O_RDONLY) }
         guard fd >= 0 else {
