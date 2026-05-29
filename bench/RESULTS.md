@@ -3666,6 +3666,20 @@ matched Rust for matching, repeated `-e`, byte-offset, no-match, and deferred
 | --- | ---: | ---: | ---: |
 | `--vimgrep -x needle` | 1.303 s | 27.2 ms | 9.5 ms |
 
+Explicit `--encoding=none` and ASCII-safe UTF-8 exact-line vimgrep now share
+that route. `none` can write raw bytes directly, while UTF-8 first proves the
+haystack is ASCII so line bytes and vimgrep column `1` remain byte-compatible.
+Direct release byte/status checks matched Rust for `--encoding=utf-8`,
+`-E utf8`, `--encoding=none`, repeated `-e`, and a non-ASCII UTF-8 fallback
+control.
+
+10 timed runs on the same dense literal fixture:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--encoding=utf-8 --vimgrep -x needle` | 1.317 s | 74.6 ms | 10.0 ms |
+| `--encoding=none --vimgrep -x needle` | 1.899 s | 27.1 ms | 9.8 ms |
+
 `--heading` is now output-neutral for executable vimgrep preflights. Rust does
 not emit separate heading records for vimgrep output, so the parser keeps
 full-line, only-matching, and word-boundary vimgrep shapes on their existing
