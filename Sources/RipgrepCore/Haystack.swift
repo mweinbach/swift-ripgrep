@@ -965,7 +965,7 @@ public struct FileWalker: @unchecked Sendable {
         }
 
         let directoryPathPrefix = rootURL.path + "/"
-        let logicalDirectoryPathPrefix = rootURL.path + "/"
+        let rootLogicalPathBytes = Array(rootURL.path.utf8)
         let rootPathIsASCII = rootURL.path.utf8.allSatisfy { $0 < 0x80 }
         var orderedChildren: [FastDirectoryChild] = []
         orderedChildren.reserveCapacity(contents.children.count)
@@ -1014,14 +1014,14 @@ public struct FileWalker: @unchecked Sendable {
         for (index, child) in orderedChildren.enumerated() {
             if child.kind.isFile {
                 var output = Data()
-                output.reserveCapacity(logicalDirectoryPathPrefix.utf8.count + child.name.utf8.count + 1)
-                let line = outputPath(
-                    logicalDirectoryPathPrefix: logicalDirectoryPathPrefix,
-                    logicalDirectoryPathIsASCII: rootPathIsASCII,
-                    child: child
+                output.reserveCapacity(rootLogicalPathBytes.count + child.name.utf8.count + 2)
+                appendDarwinFilePathLine(
+                    logicalPathBytes: rootLogicalPathBytes,
+                    logicalPathIsASCII: rootPathIsASCII,
+                    childName: child.name,
+                    childNameIsASCII: child.isASCII,
+                    outputBuffer: &output
                 )
-                appendUTF8(line, to: &output)
-                output.append(UInt8(ascii: "\n"))
                 store.store(
                     .success(DarwinFilePathDataChunk(
                         data: output,
@@ -1038,6 +1038,12 @@ public struct FileWalker: @unchecked Sendable {
 
             let childName = child.name
             let childIsASCII = child.isASCII
+            let childLogicalPathBytes: [UInt8] = {
+                var bytes = rootLogicalPathBytes
+                bytes.append(UInt8(ascii: "/"))
+                appendUTF8(child.name, to: &bytes)
+                return bytes
+            }()
             group.enter()
             queue.async {
                 defer {
@@ -1050,11 +1056,10 @@ public struct FileWalker: @unchecked Sendable {
                 var warnings: [String] = []
                 var diagnostics: [String] = []
                 var filtered = false
-                var didStop = false
                 do {
-                    try walkFilePathsInOutputOrder(
+                    try walkFilePathsInOutputOrderData(
                         directoryPath: directoryPathPrefix + childName,
-                        logicalDirectoryPath: logicalDirectoryPathPrefix + childName,
+                        logicalPathBytes: childLogicalPathBytes,
                         logicalDirectoryPathIsASCII: rootPathIsASCII && childIsASCII,
                         relativePath: childName,
                         rootBase: rootBase,
@@ -1067,13 +1072,9 @@ public struct FileWalker: @unchecked Sendable {
                         filtered: &filtered,
                         ignoreStack: parallelIgnoreStack,
                         options: options,
-                        stopAfterFirst: false,
-                        didStop: &didStop
-                    ) { line in
-                        emittedCount += 1
-                        appendUTF8(line, to: &output)
-                        output.append(UInt8(ascii: "\n"))
-                    }
+                        emittedCount: &emittedCount,
+                        outputBuffer: &output
+                    )
                     store.store(
                         .success(DarwinFilePathDataChunk(
                             data: output,
@@ -1118,6 +1119,115 @@ public struct FileWalker: @unchecked Sendable {
             diagnostics: diagnostics,
             filtered: filtered
         )
+    }
+
+    private func walkFilePathsInOutputOrderData(
+        directoryPath: String,
+        logicalPathBytes: [UInt8],
+        logicalDirectoryPathIsASCII: Bool,
+        relativePath: String,
+        rootBase: URL,
+        rootDebugDisplayPath: String,
+        rootArgumentIsAbsolute: Bool,
+        vcsContext: Bool,
+        messages: inout [String],
+        warnings: inout [String],
+        diagnostics: inout [String],
+        filtered: inout Bool,
+        ignoreStack: IgnoreStack,
+        options: RipgrepOptions,
+        emittedCount: inout Int,
+        outputBuffer: inout Data
+    ) throws {
+        let contents = try fastDirectoryContents(atPath: directoryPath)
+        let directoryVCSContext = vcsContext || (!options.noIgnoreVCS && contents.hasGitMarker)
+        var directoryIgnoreStack = ignoreStack
+        if hasLoadableIgnoreFiles(
+            hasGitMarker: contents.hasGitMarker,
+            hasGitignore: contents.hasGitignore,
+            hasIgnore: contents.hasIgnore,
+            hasRgignore: contents.hasRgignore,
+            vcsContext: directoryVCSContext,
+            options: options
+        ) {
+            let directoryURL = URL(fileURLWithPath: directoryPath, isDirectory: true)
+            appendIgnoreFiles(
+                in: directoryURL,
+                logicalDirectory: nil,
+                to: &directoryIgnoreStack,
+                warnings: &warnings,
+                diagnostics: &diagnostics,
+                rootBase: rootBase,
+                rootDebugDisplayPath: rootDebugDisplayPath,
+                rootArgumentIsAbsolute: rootArgumentIsAbsolute,
+                vcsContext: directoryVCSContext,
+                scope: directoryIgnoreScope(relativePath: relativePath),
+                directoryContents: DirectoryContents(
+                    children: [],
+                    hasGitMarker: contents.hasGitMarker,
+                    hasGitignore: contents.hasGitignore,
+                    hasIgnore: contents.hasIgnore,
+                    hasRgignore: contents.hasRgignore
+                ),
+                options: options
+            )
+        }
+
+        let directoryPathPrefix = directoryPath + "/"
+        let relativePathPrefix = relativePath.isEmpty ? "" : relativePath + "/"
+        for child in contents.children.reversed() {
+            if child.kind == .symbolicLink {
+                continue
+            }
+            let childRelativePath = relativePathPrefix + child.name
+            let isDirectory = child.kind.isDirectory
+            if !options.hidden,
+               child.isHidden,
+               !isIncludedByIgnore(
+                   relativePath: childRelativePath,
+                   basename: child.name,
+                   isDirectory: isDirectory,
+                   ignoreStack: directoryIgnoreStack
+               ) {
+                continue
+            }
+            if !directoryIgnoreStack.allows(relativePath: childRelativePath, basename: child.name, isDirectory: isDirectory) {
+                filtered = true
+                continue
+            }
+            if child.kind.isDirectory {
+                var childLogicalPathBytes = logicalPathBytes
+                childLogicalPathBytes.append(UInt8(ascii: "/"))
+                appendUTF8(child.name, to: &childLogicalPathBytes)
+                try walkFilePathsInOutputOrderData(
+                    directoryPath: directoryPathPrefix + child.name,
+                    logicalPathBytes: childLogicalPathBytes,
+                    logicalDirectoryPathIsASCII: logicalDirectoryPathIsASCII && child.isASCII,
+                    relativePath: childRelativePath,
+                    rootBase: rootBase,
+                    rootDebugDisplayPath: rootDebugDisplayPath,
+                    rootArgumentIsAbsolute: rootArgumentIsAbsolute,
+                    vcsContext: directoryVCSContext,
+                    messages: &messages,
+                    warnings: &warnings,
+                    diagnostics: &diagnostics,
+                    filtered: &filtered,
+                    ignoreStack: directoryIgnoreStack,
+                    options: options,
+                    emittedCount: &emittedCount,
+                    outputBuffer: &outputBuffer
+                )
+            } else if child.kind.isFile {
+                emittedCount += 1
+                appendDarwinFilePathLine(
+                    logicalPathBytes: logicalPathBytes,
+                    logicalPathIsASCII: logicalDirectoryPathIsASCII,
+                    childName: child.name,
+                    childNameIsASCII: child.isASCII,
+                    outputBuffer: &outputBuffer
+                )
+            }
+        }
     }
 
     private func walkFilePathsInOutputOrder(
@@ -1616,6 +1726,29 @@ public struct FileWalker: @unchecked Sendable {
     private func appendDarwinFilePathLine(
         logicalPathBytes: [UInt8],
         logicalPathIsASCII: Bool,
+        childName: String,
+        childNameIsASCII: Bool,
+        outputBuffer: inout Data
+    ) {
+        if logicalPathIsASCII && childNameIsASCII {
+            appendBytes(logicalPathBytes, to: &outputBuffer)
+            outputBuffer.append(UInt8(ascii: "/"))
+            appendUTF8(childName, to: &outputBuffer)
+            outputBuffer.append(UInt8(ascii: "\n"))
+            return
+        }
+
+        var pathBytes = logicalPathBytes
+        pathBytes.append(UInt8(ascii: "/"))
+        appendUTF8(childName, to: &pathBytes)
+        let path = String(decoding: pathBytes, as: UTF8.self).precomposedStringWithCanonicalMapping
+        appendUTF8(path, to: &outputBuffer)
+        outputBuffer.append(UInt8(ascii: "\n"))
+    }
+
+    private func appendDarwinFilePathLine(
+        logicalPathBytes: [UInt8],
+        logicalPathIsASCII: Bool,
         childNameBytes: [UInt8],
         childNameIsASCII: Bool,
         outputBuffer: inout Data
@@ -1974,7 +2107,9 @@ public struct FileWalker: @unchecked Sendable {
         return logicalDirectoryPathIsASCII && child.isASCII ? path : normalizedOutputPath(path)
     }
 
-    private func fastDirectoryEntryNameAndFlags(_ entry: dirent) -> (name: String, isASCII: Bool, isHidden: Bool)? {
+    private func fastDirectoryEntryNameAndFlags(
+        _ entry: dirent
+    ) -> (name: String, isASCII: Bool, isHidden: Bool)? {
         return withUnsafePointer(to: entry.d_name) { pointer in
             let nameLength = Int(entry.d_namlen)
             return pointer.withMemoryRebound(to: UInt8.self, capacity: nameLength + 1) { bytes in

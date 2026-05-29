@@ -133,9 +133,32 @@ at 97.6 ms probe versus 102.2 ms baseline, hidden at 97.6 ms versus 104.4 ms,
 and `--no-ignore-vcs` at 71.5 ms versus 74.5 ms with one first-run probe
 outlier; Rust default measured 75.5 ms in that same run.
 
+The ignore-aware data chunk writer now also emits recursive file paths into the
+chunk buffer from existing Swift `String.UTF8View` storage instead of building a
+fresh output `String` for every path. Ignore matching still uses the established
+String path flow, and directory entries do not store extra byte-array copies.
+Exact Swift output matched the pre-change binary for default, hidden,
+`--no-ignore-vcs`, and `--no-ignore`; sorted output matched Rust. The first
+40-run A/B measured default `--files` at 96.2 ms for the probe versus 100.6 ms
+baseline, hidden at 100.4 ms versus 97.9 ms with a noisy probe tail, and
+`--no-ignore-vcs --files` at 68.8 ms versus 69.2 ms. The order-flipped 80-run
+confirmation measured default at 98.8 ms probe versus 99.8 ms baseline, hidden
+at 96.3 ms versus 99.8 ms, and `--no-ignore-vcs` at 68.5 ms versus 78.6 ms
+with a noisy baseline tail. A fresh 40-run Swift/Rust snapshot measured current
+Swift default `--files` at 96.9 ms versus Rust at 74.8 ms, hidden at 95.0 ms
+versus 74.8 ms, and `--no-ignore-vcs` at 71.8 ms versus 70.9 ms.
+
 Rejected Swift-only probes from this continuation preserved exact Swift output
 and sorted Rust parity unless noted, but did not improve the checkpoint:
 
+- Storing each ignore-aware directory entry name as a separate `[UInt8]` so
+  recursive chunks could append cached bytes preserved exact Swift output and
+  sorted Rust parity, but the extra allocation did not survive confirmation. The
+  first 40-run A/B improved default and hidden but regressed
+  `--no-ignore-vcs`; the order-flipped 80-run confirmation measured default
+  `--files` at 99.0 ms probe versus 98.3 ms baseline, hidden at 98.8 ms versus
+  99.3 ms, and `--no-ignore-vcs` at 72.6 ms versus 70.3 ms. The lighter
+  `String.UTF8View` writer landed instead.
 - Raising the CLI file-path output buffer from 64 KiB to 256 KiB preserved exact
   Swift output and sorted Rust parity for default, hidden, and no-ignore file
   listing, but was flat to slightly worse. A 40-run A/B measured default
