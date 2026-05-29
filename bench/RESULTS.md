@@ -919,6 +919,19 @@ still fall back. On the 45 MiB fixture,
 `--count --files-with-matches needle` improved from 28.5 ms to 6.4 ms, versus
 3.6 ms for Rust, and `--count-matches --files-with-matches needle` improved
 from 32.2 ms to 4.2 ms, versus 3.3 ms for Rust.
+The follow-up keeps ordered print modes inside short clusters too, so Rust
+forms such as `-cl`, `-lc`, `-Hcl`, and `-Hlc` reuse the existing path-only or
+count preflights instead of falling back. Direct release byte/status checks
+matched Rust for final path-only, final count, line-number-adjacent clusters,
+prefixed output, no-match output, and quiet controls. On a generated
+300,000-line fixture:
+
+| Flags | Swift fallback | Swift preflight | rg |
+|---|---:|---:|---:|
+| `-cl needle` | 28.5 ms | 3.7 ms | 3.9 ms |
+| `-lc needle` | 44.5 ms | 6.6 ms | 7.1 ms |
+| `-Hcl needle` | 64.4 ms | 3.7 ms | 3.4 ms |
+| `-Hlc needle` | 41.1 ms | 6.5 ms | 6.8 ms |
 
 Executable preflight now handles final `--count-matches` for single
 case-sensitive literal searches with a mapped Swift counter, including final

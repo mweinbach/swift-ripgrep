@@ -1363,6 +1363,34 @@ struct MiscTests {
         ], fixture: {})
         #expect(caseInsensitiveCountOutput == Data("3\n".utf8))
 
+        let clusteredCountThenPathOutput = try runExecutableData([
+            "-cl",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(clusteredCountThenPathOutput == Data("\(root.path("dense.txt"))\n".utf8))
+
+        let clusteredPathThenCountOutput = try runExecutableData([
+            "-lc",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(clusteredPathThenCountOutput == Data("3\n".utf8))
+
+        let clusteredPrefixedCountThenPathOutput = try runExecutableData([
+            "-Hcl",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(clusteredPrefixedCountThenPathOutput == Data("\(root.path("dense.txt"))\n".utf8))
+
+        let clusteredPrefixedPathThenCountOutput = try runExecutableData([
+            "-Hlc",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(clusteredPrefixedPathThenCountOutput == Data("\(root.path("dense.txt")):3\n".utf8))
+
         let caseInsensitiveCountMatchesOutput = try runExecutableData([
             "--count-matches",
             "-i",
