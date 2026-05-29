@@ -2566,6 +2566,12 @@ struct RipgrepCommand {
             && !parsedStopOnNonmatch
             && !parsedTrim
             && !parsedCrlf
+        let parsedEncodingWordVimgrepOutputCanUsePreflight = parsedEncodingVisibleLineOutput
+            && parsedVimgrep
+            && wordRegexp
+            && !parsedLineRegexp
+            && !parsedOnlyMatching
+            && (parsedEncodingSupportsLinePreflight || parsedEncodingSupportsUTF8LinePreflight)
         let parsedWordVimgrepLineCanUsePreflight = parsedVimgrep
             && wordRegexp
             && !parsedLineRegexp
@@ -2575,7 +2581,7 @@ struct RipgrepCommand {
             && !parsedCount
             && parsedPrintMode == .matchingLines
             && !parsedColorMayEmit
-            && parsedEncodingIsAutomatic
+            && (parsedEncodingIsAutomatic || parsedEncodingWordVimgrepOutputCanUsePreflight)
             && parsedAfterContext == 0
             && parsedBeforeContext == 0
             && !parsedInvertMatch
@@ -2706,6 +2712,7 @@ struct RipgrepCommand {
             && (!parsedEncodingSupportsSummaryPreflight
                 || (parsedEncodingVisibleLineOutput
                     && !parsedEncodingVisibleLineOutputCanUsePreflight
+                    && !parsedEncodingWordVimgrepOutputCanUsePreflight
                     && !parsedEncodingExactLineVimgrepOutputCanUsePreflight
                     && !parsedEncodingASCIIExactLineVimgrepOutputCanUsePreflight
                     && !parsedEncodingExactLineFieldOutputCanUsePreflight

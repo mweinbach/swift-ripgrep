@@ -3751,6 +3751,18 @@ and Unicode fallback fixtures.
 | `--vimgrep -w -i -e NEEDLE -e QUIET` | 10.668 s | 50.8 ms | 136.9 ms |
 | `--vimgrep -w -m100000 -e needle -e quiet` | 3.146 s | 20.7 ms | 44.7 ms |
 
+Explicit `--encoding=none` and ASCII-safe UTF-8 word vimgrep now keep that
+same full-line word writer instead of falling back. The writer still rejects
+non-ASCII haystacks, so Unicode word-boundary behavior remains on the full
+searcher. Direct byte/status checks matched Rust for raw, raw ignore-case,
+UTF-8, UTF-8 ignore-case, and Unicode fallback forms. Three-run probes on
+`/tmp/swift-rg-candidates/countm-big.txt` measured
+`--encoding=none --vimgrep -w -e needle -e quiet` improving from 8.548 s to
+55.1 ms, versus 141.6 ms for Rust;
+`--encoding=none -i --vimgrep -w -e NEEDLE -e QUIET` from 13.470 s to
+53.1 ms, versus 150.3 ms for Rust; and the matching `--encoding=utf-8 -i`
+form from 11.448 s to 54.4 ms, versus 152.9 ms for Rust.
+
 Exact line-regexp vimgrep output now uses a Swift mapped-line writer for
 case-sensitive literal `-x`/`--line-regexp` searches. It preserves vimgrep
 line, column, byte-offset, max-count, filename-prefix, and repeated-pattern
