@@ -1319,6 +1319,21 @@ repeated `-e`, max-count, UTF-8 ASCII, and non-ASCII UTF-8 fallback forms.
 | `--encoding=none -o -x needle` | 1.888 s | 7.7 ms | 9.4 ms |
 | `--encoding=none -n -o -x needle` | 1.891 s | 26.9 ms | 9.8 ms |
 
+Raw `--encoding=none` exact-line matching output now also keeps the normal
+line-output forms on the exact-line preflight. The unnumbered and bounded forms
+can use the fast no-line-number scanner, while numbered output shares the
+line-by-line scanner. Direct release byte/status checks matched Rust for plain,
+numbered, max-count, repeated `-e`, ASCII UTF-8, and non-ASCII UTF-8 fallback
+forms.
+
+10 timed runs on the same dense literal fixture:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--encoding=none -x needle` | 1.897 s | 7.5 ms | 9.3 ms |
+| `--encoding=none -n -x needle` | 1.920 s | 28.4 ms | 9.9 ms |
+| `--encoding=none -m1 -x needle` | 1.903 s | 7.6 ms | 9.3 ms |
+
 Case-insensitive exact-line quiet and path-only searches now have a conservative
 match-only Swift preflight. It probes exact, lowercase, and uppercase ASCII
 whole-line variants and falls back whenever it cannot prove a match, preserving
