@@ -434,7 +434,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     return
                 }
             }
-            if lineData.contains(0) || String(data: streamedLine.data, encoding: .utf8) == nil {
+            if firstNulByteOffset(in: lineData) != nil || String(data: streamedLine.data, encoding: .utf8) == nil {
                 canStream = false
                 terminate = true
             }
@@ -6002,7 +6002,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 }
                 if !options.disablesBinaryDetection,
                    shouldCheckBinary(lineData, options: options),
-                   lineData.contains(0) {
+                   firstNulByteOffset(in: lineData) != nil {
                     fellBackToBufferedSearch = true
                     terminate = true
                     return
@@ -9541,7 +9541,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         )
         guard !options.disablesBinaryDetection,
               shouldCheckBinary(data, options: options),
-              let binaryByteOffset = data.firstIndex(of: 0) else {
+              let binaryByteOffset = firstNulByteOffset(in: data) else {
             return result
         }
         let visibleMatches = binaryVisibleMatches(
@@ -9880,7 +9880,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             return FileSearchOutcome(result: binaryAdjustedPreprocessedResult(
                 searchedResult,
                 data: data,
-                originalBinaryByteOffset: originalData.firstIndex(of: 0),
+                originalBinaryByteOffset: firstNulByteOffset(in: originalData),
                 options: options,
                 isExplicit: haystack.isExplicit
             ))
@@ -9901,7 +9901,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
     ) -> SearchFileResult {
         guard !options.disablesBinaryDetection,
               shouldCheckBinary(data, options: options),
-              let binaryByteOffset = data.firstIndex(of: 0) else {
+              let binaryByteOffset = firstNulByteOffset(in: data) else {
             return result
         }
         let binaryDetectedBeforeSearch = binaryByteOffset < Self.binaryDetectionBufferSize
@@ -10029,7 +10029,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
     ) -> SearchFileResult {
         guard !options.disablesBinaryDetection,
               shouldCheckBinary(data, options: options),
-              let binaryByteOffset = data.firstIndex(of: 0) else {
+              let binaryByteOffset = firstNulByteOffset(in: data) else {
             return result
         }
         let binaryDetectedBeforeSearch = binaryByteOffset < Self.binaryDetectionBufferSize

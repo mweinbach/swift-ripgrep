@@ -59,6 +59,9 @@ path-only existence probes on the Foundation search path.
 Count preflights now use the same raw stdout buffer for prefix, decimal count,
 and LF/CRLF output instead of allocating a tiny `Data` buffer for the count
 line.
+Generic binary-adjustment NUL probes now use the existing memchr-backed scanner
+instead of `Data.firstIndex(of:)`; a direct 50-scan check on the 7.5 MiB dense
+fixture measured 943.3 ms for `firstIndex` versus 8.2 ms for the scanner.
 Direct searcher path-only output now goes through `OutputPathFormatter` before
 writing, matching Rust's composed Unicode path bytes for explicit path-only
 PCRE fast paths. The writer emits normal path-length lines through one Swift
