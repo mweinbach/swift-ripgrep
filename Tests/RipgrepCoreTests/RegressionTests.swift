@@ -192,6 +192,18 @@ struct RegressionTests {
         #expect(errors == ["rg: error parsing flag --threads: value is not a valid number: invalid digit found in string"])
     }
 
+    @Test("preserves multi-literal no-match search output")
+    func preservesMultiLiteralNoMatchSearchOutput() throws {
+        let root = try TemporaryDirectory()
+        try root.write(String(repeating: "zzzzzzzz\n", count: 600), to: "nomatch.txt")
+        try root.write("prefix beta suffix\n", to: "match.txt")
+
+        #expect(try run(["--sort=path", "-n", "alpha|beta", root.url.path]) == [
+            "\(root.path("match.txt")):1:prefix beta suffix",
+        ])
+        #expect(try runAllowingNoMatch(["-n", "alpha|beta", root.path("nomatch.txt")]) == [])
+    }
+
     @Test("accepts regex size limit")
     func acceptsRegexSizeLimit() throws {
         let root = try TemporaryDirectory()

@@ -44,6 +44,18 @@ ignore-aware `--files`, not literal search:
 - `linux_literal_casei`: Swift 1.718 s vs Rust 2.740 s.
 - `linux_no_literal`: Swift 2.343 s vs Rust 2.867 s.
 
+Case-sensitive recursive alternations now use a Swift/Foundation no-match
+preflight for larger multi-literal file buffers before falling back to the
+existing byte-line scanner. The preflight preserves match semantics because it
+only returns early when none of the literal byte strings are present in the
+file. Sorted output for the Linux kernel
+`ERR_SYS|PME_TURN_OFF|LINK_REQ_RST|CFG_BME_EVT` workload matched Rust exactly
+(140 lines). A direct seven-run A/B measured the retained 4 KiB-gated preflight
+at 2.287 s median versus the previous 2.690 s median on the same binary pair,
+about a 1.19x speedup. A focused harness recheck measured Swift at 2.276 s for
+`linux_alternates`; neighboring `linux_alternates_casei` and `linux_literal`
+remained in the Swift-win band.
+
 Files-mode controls on `/tmp/swift-rg-bench/linux` isolated the cost to VCS
 ignore handling. A 30-run slice measured Swift `--files` at 101.3 ms ± 2.9 ms,
 Swift `--hidden --files` at 101.6 ms ± 2.7 ms, Swift
@@ -74,6 +86,17 @@ and sorted Rust parity unless noted, but did not improve the checkpoint:
   and 266.3 ms ± 12.3 ms respectively.
 - Forcing inline on `FastDirectoryEntryKind` predicates was noisy/worse at
   104.5 ms ± 4.9 ms.
+- Filtering empty/comment ignore lines before `GlobMatcher` construction in
+  normal non-debug mode preserved the exact Swift `--files` output hash and
+  sorted Rust parity, but measured 103.6 ms ± 3.0 ms versus the 103.0 ms
+  baseline, so the parser shape stayed unchanged.
+- A single-matcher fast path in `IgnoreStack` preserved the exact Swift
+  `--files` output hash and sorted Rust parity, but the same-machine A/B was
+  flat at 101.3 ms versus 101.5 ms, so the simpler stack iteration stayed.
+- Removing the 4 KiB size gate from the retained multi-literal no-match
+  preflight was noisier against the Linux alternation corpus; the ungated probe
+  measured 2.298 s ± 0.058 s mean versus the gated probe at 2.286 s ± 0.010 s,
+  so tiny files continue to use the existing line scanner.
 
 ## Swift-only word/case checkpoint — 2026-05-28
 

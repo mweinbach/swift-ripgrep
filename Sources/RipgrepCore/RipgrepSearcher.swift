@@ -7174,6 +7174,25 @@ public struct RipgrepSearcher: @unchecked Sendable {
             if options.printMode == .matchingLines,
                canOmitMatchSpans(options: options),
                !fastPath.caseInsensitiveASCII {
+                if !fastPath.wordASCII,
+                   fastPath.literals.count > 1,
+                   dataCount >= 4 * 1024 {
+                    var hasAnyLiteral = false
+                    for literal in fastPath.literals where !literal.isEmpty {
+                        if data.range(of: Data(literal)) != nil {
+                            hasAnyLiteral = true
+                            break
+                        }
+                    }
+                    if !hasAnyLiteral {
+                        return SearchFileResult(
+                            fileURL: fileURL,
+                            matches: [],
+                            bytesSearched: data.count,
+                            searched: true
+                        )
+                    }
+                }
                 let wholeFileMatch = byteLiteralWholeFileMatch(
                     fastPath: fastPath,
                     bytes: bytes,
