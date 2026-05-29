@@ -512,6 +512,11 @@ struct RipgrepCommand {
                 ? String(argument.dropFirst("--colors=".count))
                 : nil
         }
+        func colorChangeTargetsPath(_ raw: String) -> Bool {
+            raw.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+                .first?
+                .lowercased() == "path"
+        }
         func isPreflightNeutralHyperlinkFormat(_ value: String) -> Bool {
             switch value {
             case "",
@@ -1378,13 +1383,15 @@ struct RipgrepCommand {
                       RipgrepArgumentParser.isValidColorChange(arguments[argumentIndex]) else {
                     return nil
                 }
-                parsedColorSpecMayChangePath = true
+                parsedColorSpecMayChangePath = parsedColorSpecMayChangePath
+                    || colorChangeTargetsPath(arguments[argumentIndex])
                 argumentIndex += 1
             } else if let colorChange = inlineColorsValue(argument) {
                 guard RipgrepArgumentParser.isValidColorChange(colorChange) else {
                     return nil
                 }
-                parsedColorSpecMayChangePath = true
+                parsedColorSpecMayChangePath = parsedColorSpecMayChangePath
+                    || colorChangeTargetsPath(colorChange)
             } else if argument == "--hyperlink-format" {
                 guard argumentIndex < arguments.count,
                       isPreflightNeutralHyperlinkFormat(arguments[argumentIndex]) else {

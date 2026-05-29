@@ -302,8 +302,10 @@ pretty mode when quiet or unprefixed count output makes color formatting
 unobservable, while prefixed colored counts still fall back so ANSI path
 coloring remains byte-identical to Rust.
 The next slice writes Rust's default ANSI path coloring directly for forced
-colored count prefixes, keeping `--color=auto` and custom `--colors` path
-styles on the fallback path where terminal/custom styling is observable.
+colored count prefixes. Non-path `--colors` overrides can use the same prefix
+writer because count output does not expose line, column, match, or highlight
+styles; `--color=auto` and custom path-color styles stay on the fallback path
+where terminal/custom styling is observable.
 
 7 timed runs on `/tmp/swift-rg-candidates/cluster-dense.txt`, a 600,000-line
 literal fixture:
@@ -326,6 +328,8 @@ column forcing the generic Swift path through `RIPGREP_CONFIG_PATH=`:
 | `-pHc needle` | 129.8 ms | 8.7 ms | 8.2 ms |
 | `--color=always --count-matches -H needle` | 136.6 ms | 7.5 ms | 13.4 ms |
 | `--color=always --null -H -c needle` | 134.4 ms | 8.1 ms | 7.7 ms |
+| `--colors match:fg:red --color=always -H -c needle` | 134.0 ms | 8.6 ms | 7.6 ms |
+| `--colors line:fg:green --color=always --count-matches -H needle` | 134.2 ms | 7.2 ms | 13.2 ms |
 
 Case-sensitive repeated `-e`/`-f` and top-level literal alternation `--trim`
 forms now use the same mapped trim writer.

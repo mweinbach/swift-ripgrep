@@ -2989,6 +2989,17 @@ struct MiscTests {
             "\u{1B}[0m\u{1B}[35m\(root.path("dense.txt"))\u{1B}[0m:5\n".utf8
         ))
 
+        let customMatchColorPrefixedCountOutput = try runExecutableData([
+            "--colors",
+            "match:fg:red",
+            "--color=always",
+            "-H",
+            "-c",
+            "needle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(customMatchColorPrefixedCountOutput == clusteredPrettyPrefixedCountOutput)
+
         let withFilenameNullOutput = try runExecutableData([
             "--with-filename",
             "--null",
