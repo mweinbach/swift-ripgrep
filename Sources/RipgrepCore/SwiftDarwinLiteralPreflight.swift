@@ -967,10 +967,12 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literal: [UInt8],
         includeZero: Bool,
+        maxCount: Int? = nil,
         countPrefix: [UInt8] = [],
         crlfTerminated: Bool = false
     ) -> Int32? {
-        guard let literals = distinctASCIICaseInsensitiveLiterals([literal]),
+        guard maxCount.map({ $0 > 0 }) ?? true,
+              let literals = distinctASCIICaseInsensitiveLiterals([literal]),
               let foldedLiteral = literals.first else {
             return nil
         }
@@ -982,7 +984,15 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
 
-        let matchCount = countASCIICaseInsensitiveMatches(in: data, foldedLiteral: foldedLiteral)
+        let matchCount = if let maxCount {
+            countASCIICaseInsensitiveMatchesWithinFirstMatchingLines(
+                data: data,
+                foldedLiteral: foldedLiteral,
+                maxCount: maxCount
+            )
+        } else {
+            countASCIICaseInsensitiveMatches(in: data, foldedLiteral: foldedLiteral)
+        }
 
         if matchCount > 0 || includeZero {
             guard writeCountOutput(
@@ -2606,6 +2616,44 @@ public enum SwiftDarwinLiteralPreflight {
             }
             return matchCount
         }
+    }
+
+    private static func countASCIICaseInsensitiveMatchesWithinFirstMatchingLines(
+        data: Data,
+        foldedLiteral: [UInt8],
+        maxCount: Int
+    ) -> Int {
+        let newline = UInt8(ascii: "\n")
+        var lineStart = data.startIndex
+        var matchedLineCount = 0
+        var selectedPrefixEnd = data.startIndex
+
+        while matchedLineCount < maxCount,
+              lineStart < data.endIndex {
+            let lineEnd = data[lineStart..<data.endIndex].firstIndex(of: newline) ?? data.endIndex
+            if asciiCaseInsensitiveLineRangeContains(
+                data: data,
+                lineStart: lineStart,
+                lineEnd: lineEnd,
+                foldedLiteral: foldedLiteral
+            ) {
+                matchedLineCount += 1
+                selectedPrefixEnd = lineEnd
+            }
+            if lineEnd < data.endIndex {
+                lineStart = data.index(after: lineEnd)
+            } else {
+                lineStart = data.endIndex
+            }
+        }
+
+        guard matchedLineCount > 0 else {
+            return 0
+        }
+        return countASCIICaseInsensitiveMatches(
+            in: Data(data[..<selectedPrefixEnd]),
+            foldedLiteral: foldedLiteral
+        )
     }
 
     private static func asciiCaseInsensitiveLineRangeContains(

@@ -3465,6 +3465,18 @@ literal fixture with 300,000 lines:
 | --- | ---: | ---: | ---: |
 | `--count-matches -m100000 needle` | 1.56 s | 36.6 ms | 10.8 ms |
 
+Bounded ASCII ignore-case count-matches now uses the same executable preflight
+shape for `-i --count-matches -mN`, while keeping non-ASCII haystacks and
+literals on the existing fallback. Direct release comparisons were
+byte-identical for unprefixed, `-H` prefixed, `--include-zero`, only-matching
+count, and Unicode fallback forms.
+
+10 timed runs on the same 7.5 MiB dense literal fixture:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--count-matches -i -m100000 NEEDLE` | 3.312 s | 18.4 ms | 21.1 ms |
+
 ### Rejected A/B checks — 2026-05-25
 
 The following plausible Darwin optimizations were measured against checkpoint
