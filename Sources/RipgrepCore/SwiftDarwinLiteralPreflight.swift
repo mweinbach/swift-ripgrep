@@ -4259,6 +4259,32 @@ public enum SwiftDarwinLiteralPreflight {
         return matchedLineCount > 0 ? 0 : 1
     }
 
+    public static func asciiCaseInsensitiveUTF8LineExitCode(
+        path: String,
+        literal: [UInt8],
+        lineNumber: Bool = false,
+        lineNumberFieldSeparator: [UInt8] = [58],
+        linePrefix: [UInt8] = [],
+        headingPrefix: [UInt8] = []
+    ) -> Int32? {
+        guard !literal.isEmpty,
+              literal.allSatisfy({ $0 < 0x80 }),
+              let matchedLineCount = literalLineMatchCount(
+                path: path,
+                literal: literal,
+                asciiCaseInsensitive: true,
+                lineNumber: lineNumber,
+                lineNumberFieldSeparator: lineNumberFieldSeparator,
+                linePrefix: linePrefix,
+                headingPrefix: headingPrefix,
+                emitLines: true,
+                requireASCIIHaystack: true
+              ) else {
+            return nil
+        }
+        return matchedLineCount > 0 ? 0 : 1
+    }
+
     public static func streamingExitCode(
         path: String,
         literal: [UInt8],
@@ -7568,10 +7594,9 @@ private func rgSwiftDarwinWriteLiteralBytes(
     if memchr(base, 0, haystackLength) != nil {
         return nil
     }
-    if requireASCIIHaystack {
-        for offset in 0..<haystackLength where base[offset] >= 0x80 {
-            return nil
-        }
+    if requireASCIIHaystack,
+       rgSwiftContainsNonASCIIByte(base, count: haystackLength) {
+        return nil
     }
 
     var output = emitLines ? rgSwiftStdoutBuffer(capacity: 1024 * 1024) : nil

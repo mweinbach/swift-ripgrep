@@ -2460,12 +2460,19 @@ struct RipgrepCommand {
         let parsedEncodingVisibleLineShapeCanUsePreflight = !wordRegexp
             && !parsedLineRegexp
             && !parsedOnlyMatching
+        let parsedUTF8ASCIICaseInsensitivePlainLineCanUsePreflight =
+            parsedEncodingVisibleLineOutput
+            && parsedEncodingSupportsUTF8LinePreflight
+            && asciiCaseInsensitive
+            && !parsedVimgrep
+            && parsedEncodingVisibleLineShapeCanUsePreflight
         let parsedUTF8EncodingVisibleLineOutputCanUsePreflight =
             parsedEncodingVisibleLineOutput
             && parsedEncodingSupportsUTF8LinePreflight
             && ((!asciiCaseInsensitive
                     && parsedEncodingVisibleLineShapeCanUsePreflight
                     && SwiftDarwinLiteralPreflight.fileCanUseUTF8LinePreflight(path: path))
+                || parsedUTF8ASCIICaseInsensitivePlainLineCanUsePreflight
                 || (!wordRegexp && SwiftDarwinLiteralPreflight.fileCanUseASCIILinePreflight(path: path)))
         let parsedEncodingVisibleLineOutputCanUsePreflight =
             parsedEncodingVisibleLineOutput
@@ -4317,6 +4324,16 @@ struct RipgrepCommand {
                 )
             }
             return SwiftDarwinLiteralPreflight.wordLineExitCode(
+                path: path,
+                literal: literal,
+                lineNumber: lineNumber,
+                lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                linePrefix: parsedLinePrefix,
+                headingPrefix: parsedHeadingPrefix
+            )
+        }
+        if parsedUTF8ASCIICaseInsensitivePlainLineCanUsePreflight {
+            return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveUTF8LineExitCode(
                 path: path,
                 literal: literal,
                 lineNumber: lineNumber,

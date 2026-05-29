@@ -1433,6 +1433,36 @@ struct MiscTests {
 
         """.utf8))
 
+        let utf8IgnoreCaseOutput = try runExecutableData([
+            "--encoding=utf-8",
+            "-i",
+            "NEEDLE",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(utf8IgnoreCaseOutput == ignoreCaseOutput)
+
+        let utf8IgnoreCaseLineNumberOutput = try runExecutableData([
+            "--encoding=utf-8",
+            "-n",
+            "-i",
+            "NEEDLE",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(utf8IgnoreCaseLineNumberOutput == Data("""
+        1:needle needle needle
+        3:NEEDLE needle Needle
+        4:tail needle
+
+        """.utf8))
+
+        let utf8CasefoldFallbackOutput = try runExecutableData([
+            "--encoding=utf-8",
+            "-i",
+            "k",
+            root.path("utf8-casefold.txt"),
+        ], fixture: {})
+        #expect(utf8CasefoldFallbackOutput == Data([0xE2, 0x84, 0xAA, 0x0A, 0x4B, 0x0A]))
+
         let caseInsensitiveWordOutput = try runExecutableData([
             "-w",
             "-i",
