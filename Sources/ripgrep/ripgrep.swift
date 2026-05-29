@@ -3345,9 +3345,19 @@ struct RipgrepCommand {
                 return nil
             }
             if !asciiCaseInsensitive {
-                guard !wordRegexp,
-                      !asciiBoundary else {
+                guard !asciiBoundary else {
                     return nil
+                }
+                if wordRegexp {
+                    return SwiftDarwinLiteralPreflight.wordOnlyMatchingExitCode(
+                        path: path,
+                        literal: literal,
+                        lineNumber: lineNumber,
+                        maxCount: parsedMaxCount,
+                        lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                        linePrefix: parsedLinePrefix,
+                        headingPrefix: parsedHeadingPrefix
+                    )
                 }
                 return SwiftDarwinLiteralPreflight.multiLiteralOnlyMatchingExitCode(
                     path: path,

@@ -3541,6 +3541,19 @@ word ignore-case, alternation, no-match, and `-m0` forms.
 | --- | ---: | ---: | ---: |
 | `-o -m100000 needle` | 1.656 s | 10.4 ms | 14.5 ms |
 
+Case-sensitive word only-matching output now has the same executable Swift
+preflight shape as ASCII ignore-case word output. It remains conservative and
+falls back for non-ASCII haystacks so Unicode word-boundary semantics stay on
+the existing matcher. Direct release comparisons were byte-identical for plain,
+bounded line-numbered, filename-prefixed, no-match, and Unicode-adjacent
+fallback forms.
+
+10 timed runs on the same dense literal fixture:
+
+| Command | Preflight bypassed | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `-w -o needle` | 2.995 s | 18.1 ms | 58.6 ms |
+
 Bounded fixed-lookaround PCRE count-matches now also stays on the executable
 preflight for ASCII fixed lookbehind, fixed lookahead, and reset-start
 `prefix\Kliteral` forms. Direct release comparisons were byte-identical for

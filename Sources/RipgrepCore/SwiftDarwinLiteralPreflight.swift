@@ -3498,6 +3498,49 @@ public enum SwiftDarwinLiteralPreflight {
         linePrefix: [UInt8] = [],
         headingPrefix: [UInt8] = []
     ) -> Int32? {
+        asciiWordOnlyMatchingExitCode(
+            path: path,
+            literal: literal,
+            lineNumber: lineNumber,
+            maxCount: maxCount,
+            asciiCaseInsensitive: true,
+            lineNumberFieldSeparator: lineNumberFieldSeparator,
+            linePrefix: linePrefix,
+            headingPrefix: headingPrefix
+        )
+    }
+
+    public static func wordOnlyMatchingExitCode(
+        path: String,
+        literal: [UInt8],
+        lineNumber: Bool,
+        maxCount: Int? = nil,
+        lineNumberFieldSeparator: [UInt8] = [58],
+        linePrefix: [UInt8] = [],
+        headingPrefix: [UInt8] = []
+    ) -> Int32? {
+        asciiWordOnlyMatchingExitCode(
+            path: path,
+            literal: literal,
+            lineNumber: lineNumber,
+            maxCount: maxCount,
+            asciiCaseInsensitive: false,
+            lineNumberFieldSeparator: lineNumberFieldSeparator,
+            linePrefix: linePrefix,
+            headingPrefix: headingPrefix
+        )
+    }
+
+    private static func asciiWordOnlyMatchingExitCode(
+        path: String,
+        literal: [UInt8],
+        lineNumber: Bool,
+        maxCount: Int?,
+        asciiCaseInsensitive: Bool,
+        lineNumberFieldSeparator: [UInt8],
+        linePrefix: [UInt8],
+        headingPrefix: [UInt8]
+    ) -> Int32? {
         guard isSafeASCIIWordLiteral(literal),
               maxCount.map({ $0 > 0 }) ?? true else {
             return nil
@@ -3539,6 +3582,7 @@ public enum SwiftDarwinLiteralPreflight {
                 UnsafeRawPointer(mapped).assumingMemoryBound(to: UInt8.self),
                 haystackLength: haystackLength,
                 literal: literalBuffer,
+                asciiCaseInsensitive: asciiCaseInsensitive,
                 lineNumber: lineNumber,
                 maxCount: maxCount ?? Int.max,
                 lineNumberFieldSeparator: lineNumberFieldSeparator,
@@ -6692,6 +6736,7 @@ private func rgSwiftDarwinWriteASCIICaseInsensitiveWordOnlyMatches(
     _ base: UnsafePointer<UInt8>,
     haystackLength: Int,
     literal: UnsafeBufferPointer<UInt8>,
+    asciiCaseInsensitive: Bool,
     lineNumber: Bool,
     maxCount: Int,
     lineNumberFieldSeparator: [UInt8],
@@ -6748,28 +6793,50 @@ private func rgSwiftDarwinWriteASCIICaseInsensitiveWordOnlyMatches(
     while searchOffset < haystackLength {
         var found: UnsafePointer<UInt8>?
         var newlinesBeforeMatch = 0
-        foldedLiteral.withUnsafeBufferPointer { foldedNeedle in
-            caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
-                if lineNumber {
-                    let result = rg_memcasemem_ascii_count_byte_before(
-                        base.advanced(by: searchOffset),
-                        haystackLength - searchOffset,
-                        foldedNeedle.baseAddress,
-                        foldedNeedle.count,
-                        UInt8(ascii: "\n")
-                    )
-                    found = result.match
-                    newlinesBeforeMatch = result.count
-                } else {
-                    found = rg_memcasemem_ascii_prepared(
-                        base.advanced(by: searchOffset),
-                        haystackLength - searchOffset,
-                        foldedNeedle.baseAddress,
-                        foldedNeedle.count,
-                        shifts.baseAddress
-                    )
-                    newlinesBeforeMatch = 0
+        if asciiCaseInsensitive {
+            foldedLiteral.withUnsafeBufferPointer { foldedNeedle in
+                caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
+                    if lineNumber {
+                        let result = rg_memcasemem_ascii_count_byte_before(
+                            base.advanced(by: searchOffset),
+                            haystackLength - searchOffset,
+                            foldedNeedle.baseAddress,
+                            foldedNeedle.count,
+                            UInt8(ascii: "\n")
+                        )
+                        found = result.match
+                        newlinesBeforeMatch = result.count
+                    } else {
+                        found = rg_memcasemem_ascii_prepared(
+                            base.advanced(by: searchOffset),
+                            haystackLength - searchOffset,
+                            foldedNeedle.baseAddress,
+                            foldedNeedle.count,
+                            shifts.baseAddress
+                        )
+                        newlinesBeforeMatch = 0
+                    }
                 }
+            }
+        } else {
+            if lineNumber {
+                let result = rg_memmem_count_byte_before(
+                    base.advanced(by: searchOffset),
+                    haystackLength - searchOffset,
+                    literalBase,
+                    literal.count,
+                    UInt8(ascii: "\n")
+                )
+                found = result.match
+                newlinesBeforeMatch = result.count
+            } else {
+                found = rg_memmem_simple(
+                    base.advanced(by: searchOffset),
+                    haystackLength - searchOffset,
+                    literalBase,
+                    literal.count
+                )
+                newlinesBeforeMatch = 0
             }
         }
         guard let found else {

@@ -2465,6 +2465,22 @@ struct FeatureTests {
         ]) {}
         #expect(boundedIgnoreCaseOnlyMatchingOutput == Data("foo\nfoo\n".utf8))
         try root.write("foo food FOO\nbar foo\n", to: "bounded-word-only.txt")
+        let wordOnlyMatchingOutput = try runExecutableData([
+            "-w",
+            "-o",
+            "foo",
+            root.path("bounded-word-only.txt"),
+        ]) {}
+        #expect(wordOnlyMatchingOutput == Data("foo\nfoo\n".utf8))
+        let boundedWordOnlyMatchingOutput = try runExecutableData([
+            "-w",
+            "-n",
+            "-o",
+            "-m1",
+            "foo",
+            root.path("bounded-word-only.txt"),
+        ]) {}
+        #expect(boundedWordOnlyMatchingOutput == Data("1:foo\n".utf8))
         let boundedIgnoreCaseWordOnlyMatchingOutput = try runExecutableData([
             "-w",
             "-i",
@@ -2474,6 +2490,14 @@ struct FeatureTests {
             root.path("bounded-word-only.txt"),
         ]) {}
         #expect(boundedIgnoreCaseWordOnlyMatchingOutput == Data("foo\nFOO\n".utf8))
+        try root.write("éfoo\nfooé\nfoo\n", to: "unicode-word-only.txt")
+        let unicodeAdjacentWordOnlyMatchingOutput = try runExecutableData([
+            "-w",
+            "-o",
+            "foo",
+            root.path("unicode-word-only.txt"),
+        ]) {}
+        #expect(unicodeAdjacentWordOnlyMatchingOutput == Data("foo\n".utf8))
         try root.write("delta bravo delta\nbravo\n", to: "bounded-alternation-only.txt")
         let boundedAlternationOnlyMatchingOutput = try runExecutableData([
             "-n",
