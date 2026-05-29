@@ -2600,9 +2600,34 @@ struct RipgrepCommand {
             && !parsedStopOnNonmatch
             && !parsedTrim
             && !parsedCrlf
+        let parsedASCIIExactLineVimgrepLineCanUsePreflight = parsedVimgrep
+            && parsedLineRegexp
+            && !wordRegexp
+            && asciiCaseInsensitive
+            && !parsedOnlyMatching
+            && !parsedQuiet
+            && parsedPathOnlyMode == nil
+            && !parsedCount
+            && parsedPrintMode == .matchingLines
+            && !parsedColorMayEmit
+            && parsedEncodingIsAutomatic
+            && parsedAfterContext == 0
+            && parsedBeforeContext == 0
+            && !parsedInvertMatch
+            && !parsedJson
+            && parsedMaxColumns == 0
+            && !parsedNullData
+            && !parsedPassthru
+            && !parsedReplacement
+            && (!parsedSearchZip || !pathMayUseSearchZip(path))
+            && !parsedStats
+            && !parsedStopOnNonmatch
+            && !parsedTrim
+            && !parsedCrlf
         let parsedVimgrepLineOutputCanUsePreflight = parsedLiteralVimgrepLineCanUsePreflight
             || parsedWordVimgrepLineCanUsePreflight
             || parsedExactLineVimgrepLineCanUsePreflight
+            || parsedASCIIExactLineVimgrepLineCanUsePreflight
         let parsedExactLineFieldOutputCanUsePreflight = !parsedVimgrep
             && (parsedByteOffset || parsedColumn)
             && parsedLineRegexp
@@ -2739,6 +2764,18 @@ struct RipgrepCommand {
                     )
                 }
                 if asciiCaseInsensitive {
+                    if parsedASCIIExactLineVimgrepLineCanUsePreflight {
+                        return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveExactLineVimgrepLineExitCode(
+                            path: path,
+                            literals: literals,
+                            lineNumber: parsedVimgrepLineNumber,
+                            column: parsedVimgrepColumn,
+                            byteOffset: parsedByteOffset,
+                            maxCount: parsedMaxCount,
+                            lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                            linePrefix: parsedVimgrepLinePrefix
+                        )
+                    }
                     if parsedQuiet {
                         return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveExactLineQuietExitCode(
                             path: path,
@@ -3364,6 +3401,18 @@ struct RipgrepCommand {
                     return nil
                 }
                 if asciiCaseInsensitive {
+                    if parsedASCIIExactLineVimgrepLineCanUsePreflight {
+                        return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveExactLineVimgrepLineExitCode(
+                            path: path,
+                            literals: literals,
+                            lineNumber: parsedVimgrepLineNumber,
+                            column: parsedVimgrepColumn,
+                            byteOffset: parsedByteOffset,
+                            maxCount: parsedMaxCount,
+                            lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                            linePrefix: parsedVimgrepLinePrefix
+                        )
+                    }
                     if parsedQuiet {
                         return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveExactLineQuietExitCode(
                             path: path,
@@ -4114,6 +4163,18 @@ struct RipgrepCommand {
                 )
             }
             if asciiCaseInsensitive {
+                if parsedASCIIExactLineVimgrepLineCanUsePreflight {
+                    return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveExactLineVimgrepLineExitCode(
+                        path: path,
+                        literals: [literal],
+                        lineNumber: parsedVimgrepLineNumber,
+                        column: parsedVimgrepColumn,
+                        byteOffset: parsedByteOffset,
+                        maxCount: parsedMaxCount,
+                        lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                        linePrefix: parsedVimgrepLinePrefix
+                    )
+                }
                 return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveExactLineExitCode(
                     path: path,
                     literals: [literal],

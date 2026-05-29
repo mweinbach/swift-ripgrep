@@ -1376,6 +1376,14 @@ to 80.2 ms, versus 20.0 ms for Rust. The neighboring alternation
 `-i -x 'NEEDLE NEEDLE...|MISSING'` measured 57.3 ms, and numbered alternation
 measured 72.3 ms.
 
+Case-insensitive exact-line vimgrep output now has the same folded exact-line
+scanner for ASCII haystacks. It preserves line, column, byte-offset, max-count,
+and repeated `-e` field layouts while keeping Unicode fallback behavior on the
+full searcher. Direct release byte/status checks matched Rust for those forms.
+On `/tmp/swift-rg-candidates/countm-big.txt`, 10 timed runs of
+`-i --vimgrep -x 'NEEDLE NEEDLE QUIET TAIL'` improved from 5.123 s to
+145.6 ms, versus 65.2 ms for Rust.
+
 The same ASCII exact-line scanner now counts case-insensitive `-c -i -x` and
 `--count-matches -i -x` matches without emitting lines. Byte/status checks
 matched Rust for line counts, count-matches, bounded counts, include-zero,

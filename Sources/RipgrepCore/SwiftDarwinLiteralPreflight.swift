@@ -1448,6 +1448,88 @@ public enum SwiftDarwinLiteralPreflight {
         return matchedLineCount > 0 ? 0 : 1
     }
 
+    public static func asciiCaseInsensitiveExactLineVimgrepLineExitCode(
+        path: String,
+        literals: [[UInt8]],
+        lineNumber: Bool = true,
+        column: Bool = true,
+        byteOffset: Bool = false,
+        maxCount: Int? = nil,
+        lineNumberFieldSeparator: [UInt8] = [58],
+        linePrefix: [UInt8] = []
+    ) -> Int32? {
+        guard maxCount.map({ $0 > 0 }) ?? true,
+              let literals = distinctASCIICaseInsensitiveExactLineLiterals(literals),
+              !literals.isEmpty,
+              let data = mappedPreflightData(path: path),
+              !hasBinaryDetectionPrefix(data),
+              !containsNonASCIIByte(data) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return 1
+        }
+
+        let limit = maxCount ?? Int.max
+        let newline = UInt8(ascii: "\n")
+        var lineStart = data.startIndex
+        var lineNumberValue = 1
+        var matchedLineCount = 0
+        var output = Data()
+        output.reserveCapacity(64 * 1024)
+
+        while lineStart < data.endIndex, matchedLineCount < limit {
+            let lineEnd = data[lineStart..<data.endIndex].firstIndex(of: newline) ?? data.endIndex
+            if asciiCaseInsensitiveExactLineRangeMatches(
+                data: data,
+                lineStart: lineStart,
+                lineEnd: lineEnd,
+                foldedLiterals: literals
+            ) {
+                appendLinePrefix(linePrefix, to: &output)
+                if lineNumber {
+                    appendLineNumberPrefix(
+                        lineNumberValue,
+                        to: &output,
+                        fieldSeparator: lineNumberFieldSeparator
+                    )
+                }
+                if column {
+                    appendLineNumberPrefix(
+                        1,
+                        to: &output,
+                        fieldSeparator: lineNumberFieldSeparator
+                    )
+                }
+                if byteOffset {
+                    appendLineNumberPrefix(
+                        data.distance(from: data.startIndex, to: lineStart),
+                        to: &output,
+                        fieldSeparator: lineNumberFieldSeparator
+                    )
+                }
+                output.append(contentsOf: data[lineStart..<lineEnd])
+                output.append(newline)
+                matchedLineCount += 1
+                if output.count >= 64 * 1024 {
+                    FileHandle.standardOutput.write(output)
+                    output.removeAll(keepingCapacity: true)
+                }
+            }
+            if lineEnd < data.endIndex {
+                lineStart = data.index(after: lineEnd)
+                lineNumberValue += 1
+            } else {
+                lineStart = data.endIndex
+            }
+        }
+
+        if !output.isEmpty {
+            FileHandle.standardOutput.write(output)
+        }
+        return matchedLineCount > 0 ? 0 : 1
+    }
+
     public static func limitedLineExitCode(
         path: String,
         literal: [UInt8],
@@ -2232,6 +2314,40 @@ public enum SwiftDarwinLiteralPreflight {
             var matched = true
             for byte in literal {
                 if data[cursor] != byte {
+                    matched = false
+                    break
+                }
+                cursor = data.index(after: cursor)
+            }
+            if matched {
+                return true
+            }
+        }
+        return false
+    }
+
+    private static func asciiCaseInsensitiveExactLineRangeMatches(
+        data: Data,
+        lineStart: Data.Index,
+        lineEnd: Data.Index,
+        foldedLiterals: [[UInt8]]
+    ) -> Bool {
+        let lineLength = data.distance(from: lineStart, to: lineEnd)
+        guard lineLength > 0 else {
+            return false
+        }
+        for literal in foldedLiterals where literal.count == lineLength {
+            guard rgSwiftASCIILower(data[lineStart]) == literal[0] else {
+                continue
+            }
+            if literal.count > 1,
+               rgSwiftASCIILower(data[data.index(before: lineEnd)]) != literal[literal.count - 1] {
+                continue
+            }
+            var cursor = lineStart
+            var matched = true
+            for byte in literal {
+                if rgSwiftASCIILower(data[cursor]) != byte {
                     matched = false
                     break
                 }
