@@ -26,8 +26,10 @@ enum PathSort {
         path.split(separator: "/", omittingEmptySubsequences: false)
     }
 
-    static func key(forPath path: String) -> String {
-        path.replacingOccurrences(of: "/", with: "\0")
+    static func byteKey(forPath path: String) -> [UInt8] {
+        path.utf8.map { byte in
+            byte == UInt8(ascii: "/") ? 0 : byte
+        }
     }
 
     static func compare(_ lhsComponents: [Substring], _ rhsComponents: [Substring]) -> ComparisonResult {

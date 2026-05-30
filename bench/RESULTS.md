@@ -103,6 +103,14 @@ search path stayed on component arrays after a string-key probe regressed the
 `spin_lock` row; the final check kept sorted search neutral at 1802.5 ms versus
 1799.9 ms before.
 
+Sorted file-listing keys now store the same component-boundary transform as
+safe Swift UTF-8 byte arrays, avoiding per-key replacement strings while keeping
+the optimized path Swift-only. Exact output matched Rust for forward and
+reverse sorted file listing plus the sorted recursive `spin_lock` control. A
+20-run A/B against checkpoint `d10a347` measured `--sort path --files` at
+158.8 ms median versus 201.8 ms for the prior string-key build, with Rust at
+225.4 ms on the same run.
+
 Several plausible Swift-only probes were rejected after exact Swift-output and
 sorted Rust-output checks:
 
