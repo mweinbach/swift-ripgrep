@@ -196,6 +196,59 @@ struct MiscTests {
         ], fixture: {})
         let jsonText = String(decoding: jsonOutput, as: UTF8.self)
         #expect(jsonText.contains(#""submatches":[{"match":{"text":"Abcdefghi123"},"start":7,"end":19},{"match":{"text":"Zbcdefghi999"},"start":27,"end":39}]"#))
+        let onlyMatchingOutput = try runExecutableData([
+            "-o",
+            pattern,
+            root.path("src/match.txt"),
+        ], fixture: {})
+        #expect(String(decoding: onlyMatchingOutput, as: UTF8.self) == """
+        Abcdefghi123
+        Zbcdefghi999
+
+        """)
+        let lineNumberOnlyMatchingOutput = try runExecutableData([
+            "-n",
+            "-o",
+            pattern,
+            root.path("src/match.txt"),
+        ], fixture: {})
+        #expect(String(decoding: lineNumberOnlyMatchingOutput, as: UTF8.self) == """
+        1:Abcdefghi123
+        1:Zbcdefghi999
+
+        """)
+        let byteOffsetOnlyMatchingOutput = try runExecutableData([
+            "-b",
+            "-o",
+            pattern,
+            root.path("src/match.txt"),
+        ], fixture: {})
+        #expect(String(decoding: byteOffsetOnlyMatchingOutput, as: UTF8.self) == """
+        7:Abcdefghi123
+        27:Zbcdefghi999
+
+        """)
+        let columnOnlyMatchingOutput = try runExecutableData([
+            "--column",
+            "-o",
+            pattern,
+            root.path("src/match.txt"),
+        ], fixture: {})
+        #expect(String(decoding: columnOnlyMatchingOutput, as: UTF8.self) == """
+        1:8:Abcdefghi123
+        1:28:Zbcdefghi999
+
+        """)
+        let vimgrepOutput = try runExecutableData([
+            "--vimgrep",
+            pattern,
+            root.path("src/match.txt"),
+        ], fixture: {})
+        #expect(String(decoding: vimgrepOutput, as: UTF8.self) == """
+        \(root.path("src/match.txt")):1:8:prefix Abcdefghi123 middle Zbcdefghi999 suffix
+        \(root.path("src/match.txt")):1:28:prefix Abcdefghi123 middle Zbcdefghi999 suffix
+
+        """)
         let countOutput = try runExecutableData([
             "-c",
             pattern,

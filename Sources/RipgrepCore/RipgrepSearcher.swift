@@ -7205,10 +7205,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !options.invertMatch,
               !options.nullData,
               options.maxCount == nil,
-              !options.onlyMatching,
-              !options.column,
-              !options.byteOffset,
-              !options.vimgrep,
               !options.crlf,
               options.maxColumns == nil,
               !options.trim else {
@@ -7257,7 +7253,11 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
 
         if lineOutput {
-            let includeSpans = options.json || !canOmitMatchSpans(options: options)
+            let includeSpans = options.json
+                || options.onlyMatching
+                || options.vimgrep
+                || options.column
+                || !canOmitMatchSpans(options: options)
             let matches = data.withUnsafeBytes { rawBuffer -> [SearchMatch]? in
                 let bytes = rawBuffer.bindMemory(to: UInt8.self)
                 guard let baseAddress = bytes.baseAddress else {
@@ -7459,7 +7459,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             matches.append(SearchMatch(
                 fileURL: fileURL,
                 lineNumber: lineNumber,
-                column: nil,
+                column: spans.first?.startColumn,
                 line: line,
                 lineTerminator: terminator,
                 absoluteOffset: lineStart,
