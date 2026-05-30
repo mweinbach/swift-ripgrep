@@ -7232,7 +7232,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let quietOutput = options.quiet
             && !options.stats
             && options.printMode == .matchingLines
-        let firstMatchOutput = quietOutput || pathOnlyOutput
+        let jsonQuietSummaryOutput = options.json && quietOutput
+        let firstMatchOutput = (quietOutput && !options.json) || pathOnlyOutput
         guard quietOutput
             || countOutput
             || pathOnlyOutput
@@ -7247,7 +7248,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: data.count, searched: true)
         }
 
-        if countOutput || pathStatsOutput {
+        if countOutput || pathStatsOutput || jsonQuietSummaryOutput {
             let counts = data.withUnsafeBytes { rawBuffer -> ASCIIFixedClassCounts in
                 let bytes = rawBuffer.bindMemory(to: UInt8.self)
                 guard let baseAddress = bytes.baseAddress else {
