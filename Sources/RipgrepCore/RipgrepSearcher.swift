@@ -7213,13 +7213,18 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let countOnly = options.printMode == .count
         let countMatchesOnly = options.printMode == .countMatches
         let countOutput = !options.json && (countOnly || countMatchesOnly)
+        let filesWithMatches = !options.json && !options.stats && options.printMode == .filesWithMatches
+        let filesWithoutMatch = !options.json && !options.stats && options.printMode == .filesWithoutMatch
         let lineOutput = !options.quiet
             && options.printMode == .matchingLines
         let quietOutput = options.quiet
             && !options.stats
             && options.printMode == .matchingLines
+        let firstMatchOutput = quietOutput || filesWithMatches || filesWithoutMatch
         guard quietOutput
             || countOutput
+            || filesWithMatches
+            || filesWithoutMatch
             || lineOutput else {
             return nil
         }
@@ -7282,7 +7287,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             )
         }
 
-        guard quietOutput else {
+        guard firstMatchOutput else {
             return nil
         }
         let matchOffset = data.withUnsafeBytes { rawBuffer -> Int? in

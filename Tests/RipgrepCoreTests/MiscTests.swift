@@ -239,6 +239,24 @@ struct MiscTests {
         1:28:Zbcdefghi999
 
         """)
+        let filesWithMatchesOutput = try runExecutableData([
+            "-l",
+            pattern,
+            root.url.path,
+        ], fixture: {})
+        #expect(String(decoding: filesWithMatchesOutput, as: UTF8.self) == """
+        \(root.path("src/match.txt"))
+
+        """)
+        let filesWithoutMatchOutput = try runExecutableData([
+            "--files-without-match",
+            pattern,
+            root.url.path,
+        ], fixture: {})
+        #expect(String(decoding: filesWithoutMatchOutput, as: UTF8.self) == """
+        \(root.path("src/miss.txt"))
+
+        """)
         let vimgrepOutput = try runExecutableData([
             "--vimgrep",
             pattern,

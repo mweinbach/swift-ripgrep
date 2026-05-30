@@ -549,6 +549,8 @@ private func miscParityCases() -> [ParityCase] {
         ParityCase(name: "misc::byte_offset_only_matching_ascii_fixed_class", fixture: asciiFixedClassFixture, arguments: ["-b", "-o", "[A-Z][a-z]{8}[0-9]{3}", "match.txt"]),
         ParityCase(name: "misc::column_only_matching_ascii_fixed_class", fixture: asciiFixedClassFixture, arguments: ["--column", "-o", "[A-Z][a-z]{8}[0-9]{3}", "match.txt"]),
         ParityCase(name: "misc::vimgrep_ascii_fixed_class", fixture: asciiFixedClassFixture, arguments: ["--vimgrep", "[A-Z][a-z]{8}[0-9]{3}", "match.txt"]),
+        ParityCase(name: "misc::files_with_matches_ascii_fixed_class", fixture: asciiFixedClassFixture, arguments: ["-l", "[A-Z][a-z]{8}[0-9]{3}", "."]),
+        ParityCase(name: "misc::files_without_match_ascii_fixed_class", fixture: asciiFixedClassFixture, arguments: ["--files-without-match", "[A-Z][a-z]{8}[0-9]{3}", "."]),
         ParityCase(name: "misc::quiet_ascii_fixed_class", fixture: asciiFixedClassFixture, arguments: ["-q", "[A-Z][a-z]{8}[0-9]{3}", "."]),
         ParityCase(name: "misc::quiet_ascii_fixed_class_no_match", fixture: asciiFixedClassFixture, arguments: ["-q", "[A-Z][a-z]{8}[0-9]{3}", "miss.txt"]),
         ParityCase(name: "misc::count_ascii_fixed_class", fixture: asciiFixedClassFixture, arguments: ["-c", "[A-Z][a-z]{8}[0-9]{3}", "."]),
