@@ -238,6 +238,12 @@ sorted Rust-output checks:
   81.8 ms versus 79.4 ms before, with user CPU up to 115.1 ms from 105.0 ms.
   Default was only noise-level better at 77.8 ms versus 78.5 ms, so the
   four-rule threshold stayed.
+- A narrower variant that indexed only tiny slash-path exact matchers also
+  regressed hidden mode. It preserved exact Swift output and sorted Rust parity,
+  but an 80-run pass measured hidden at 82.1 ms versus 80.5 ms before, with
+  user CPU up to 112.6 ms from 104.6 ms; the hidden no-global control was also
+  slower at 78.6 ms versus 77.4 ms. The reverse matcher loop stayed faster for
+  these tiny global-ignore shapes.
 
 ### Continuation probes — 2026-05-29
 
