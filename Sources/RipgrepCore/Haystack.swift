@@ -398,7 +398,7 @@ public struct FileWalker: @unchecked Sendable {
               !stopAfterFirst else {
             return nil
         }
-        if !options.noIgnore {
+        if !canUseNoIgnoreDarwinFilePathWalker(options: options) {
             return try writeDarwinIgnoreFilePathsWithMessages(for: options, writeBytes: writeBytes)
         }
         var messages: [String] = []
@@ -468,6 +468,19 @@ public struct FileWalker: @unchecked Sendable {
     }
 
     #if canImport(Darwin)
+    private func canUseNoIgnoreDarwinFilePathWalker(options: RipgrepOptions) -> Bool {
+        if options.noIgnore {
+            return true
+        }
+        guard options.noIgnoreDot,
+              options.noIgnoreGlobal,
+              options.noIgnoreParent,
+              options.noIgnoreVCS else {
+            return false
+        }
+        return options.noIgnoreFiles || options.ignoreFiles.isEmpty
+    }
+
     private func writeDarwinIgnoreFilePathsWithMessages(
         for options: RipgrepOptions,
         writeBytes: (UnsafeRawBufferPointer) -> Void

@@ -89,6 +89,16 @@ warm-cache `/usr/bin/time -p` recheck measured Swift at 1.99/2.01 s plain and
 1.96/1.98 s ignore-case, with Rust at 2.68/2.74 s plain and 2.86/2.91 s
 ignore-case.
 
+The direct Darwin `--files` byte writer now also handles option combinations
+where the individual ignore toggles disable every ignore source. This preserves
+explicit `--ignore-file` handling unless `--no-ignore-files` is also set. Sorted
+Linux corpus output for
+`--no-ignore-dot --no-ignore-global --no-ignore-parent --no-ignore-vcs --no-ignore-files --files`
+matched both Swift `--no-ignore --files` and Rust with the same flags exactly
+(79,046 lines). A 12-run hyperfine sample measured Swift at 72.6 ms ± 7.8 ms
+for the expanded toggles, Swift `--no-ignore --files` at 66.8 ms ± 1.8 ms, and
+Rust at 61.7 ms ± 1.1 ms.
+
 The executable ASCII case-insensitive containment proof now uses the existing
 folded byte scanner instead of building exact/lower/upper `Data` variants. It
 initially only proved no-match for literals without ASCII letters; lettered

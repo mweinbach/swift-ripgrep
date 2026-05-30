@@ -3644,6 +3644,64 @@ struct FeatureTests {
         #expect(directResults?.count == streamedResults?.count)
         #expect(directLines == streamedLines)
 
+        let equivalentNoIgnoreRoot = try TemporaryDirectory()
+        try equivalentNoIgnoreRoot.createDirectory(".git")
+        try equivalentNoIgnoreRoot.write("root\n", to: "visible.txt")
+        try equivalentNoIgnoreRoot.write("dot\n", to: "skip-dot.txt")
+        try equivalentNoIgnoreRoot.write("vcs\n", to: "skip-vcs.txt")
+        try equivalentNoIgnoreRoot.write("explicit\n", to: "skip-explicit.txt")
+        try equivalentNoIgnoreRoot.write("skip-dot.txt\n", to: ".ignore")
+        try equivalentNoIgnoreRoot.write("skip-vcs.txt\n", to: ".gitignore")
+        try equivalentNoIgnoreRoot.write("skip-explicit.txt\n", to: "custom.ignore")
+        guard case .run(let equivalentNoIgnoreOptions) = RipgrepArgumentParser.parse([
+            "--no-ignore-dot",
+            "--no-ignore-global",
+            "--no-ignore-parent",
+            "--no-ignore-vcs",
+            "--no-ignore-files",
+            "--files",
+            equivalentNoIgnoreRoot.url.path,
+        ]) else {
+            Issue.record("expected equivalent no-ignore file-list arguments to parse")
+            return
+        }
+        var equivalentNoIgnoreBytes = Data()
+        let equivalentNoIgnoreResults = try FileWalker().writeDarwinFilePathsWithMessages(
+            for: equivalentNoIgnoreOptions,
+            writeBytes: { bytes in
+                equivalentNoIgnoreBytes.append(bytes.bindMemory(to: UInt8.self))
+            }
+        )
+        let equivalentNoIgnoreBasenames = Set(
+            String(decoding: equivalentNoIgnoreBytes, as: UTF8.self)
+                .split(separator: "\n", omittingEmptySubsequences: true)
+                .map { URL(fileURLWithPath: String($0)).lastPathComponent }
+        )
+        #expect(equivalentNoIgnoreResults?.count == 5)
+        #expect(equivalentNoIgnoreBasenames == Set([
+            "custom.ignore",
+            "skip-dot.txt",
+            "skip-explicit.txt",
+            "skip-vcs.txt",
+            "visible.txt",
+        ]))
+
+        #expect(Set(pathBasenames(try run([
+            "--no-ignore-dot",
+            "--no-ignore-global",
+            "--no-ignore-parent",
+            "--no-ignore-vcs",
+            "--ignore-file",
+            equivalentNoIgnoreRoot.path("custom.ignore"),
+            "--files",
+            equivalentNoIgnoreRoot.url.path,
+        ]))) == Set([
+            "custom.ignore",
+            "skip-dot.txt",
+            "skip-vcs.txt",
+            "visible.txt",
+        ]))
+
         let ignoreParallelRoot = try TemporaryDirectory()
         try ignoreParallelRoot.write("a\n", to: "a/keep.txt")
         try ignoreParallelRoot.write("skip\n", to: "a/skip.txt")
