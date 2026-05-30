@@ -490,6 +490,13 @@ private func miscParityCases() -> [ParityCase] {
         three Ybcdefghi555
         """, to: "max.txt", in: dir)
     }
+    let asciiFixedClassCRLFFixture: (URL) throws -> Void = { dir in
+        try write(
+            Data("crlf Abcdefghi123 more Zbcdefghi999\r\ntail Ybcdefghi555\r\n".utf8),
+            to: "crlf.txt",
+            in: dir
+        )
+    }
     let caseInsensitiveUnicodeFallbackFixture: (URL) throws -> Void = { dir in
         try write("alpha\nstraße\nCAFÉ\nİstanbul\n", to: "unicode", in: dir)
     }
@@ -569,6 +576,11 @@ private func miscParityCases() -> [ParityCase] {
         ParityCase(name: "misc::max_count_only_matching_ascii_fixed_class", fixture: asciiFixedClassMaxCountFixture, arguments: ["-o", "-m1", "[A-Z][a-z]{8}[0-9]{3}", "max.txt"]),
         ParityCase(name: "misc::stats_max_count_ascii_fixed_class", fixture: asciiFixedClassMaxCountFixture, arguments: ["--stats", "-m1", "[A-Z][a-z]{8}[0-9]{3}", "max.txt"]),
         ParityCase(name: "misc::json_max_count_ascii_fixed_class", fixture: asciiFixedClassMaxCountFixture, arguments: ["--json", "-m1", "[A-Z][a-z]{8}[0-9]{3}", "max.txt"]),
+        ParityCase(name: "misc::crlf_ascii_fixed_class", fixture: asciiFixedClassCRLFFixture, arguments: ["--crlf", "[A-Z][a-z]{8}[0-9]{3}", "crlf.txt"]),
+        ParityCase(name: "misc::crlf_only_matching_ascii_fixed_class", fixture: asciiFixedClassCRLFFixture, arguments: ["--crlf", "-o", "[A-Z][a-z]{8}[0-9]{3}", "crlf.txt"]),
+        ParityCase(name: "misc::crlf_count_ascii_fixed_class", fixture: asciiFixedClassCRLFFixture, arguments: ["--crlf", "-c", "[A-Z][a-z]{8}[0-9]{3}", "crlf.txt"]),
+        ParityCase(name: "misc::crlf_max_count_ascii_fixed_class", fixture: asciiFixedClassCRLFFixture, arguments: ["--crlf", "-m1", "[A-Z][a-z]{8}[0-9]{3}", "crlf.txt"]),
+        ParityCase(name: "misc::json_crlf_ascii_fixed_class", fixture: asciiFixedClassCRLFFixture, arguments: ["--json", "--crlf", "[A-Z][a-z]{8}[0-9]{3}", "crlf.txt"]),
         ParityCase(name: "misc::literal", fixture: { dir in try write(SHERLOCK, to: "sherlock", in: dir); try write("blib\n()\nblab\n", to: "file", in: dir) }, arguments: ["-F", "()", "file"]),
         ParityCase(name: "misc::quiet", fixture: sherlockFixture, arguments: ["-q", "Sherlock", "sherlock"]),
         ParityCase(name: "misc::replace", fixture: sherlockFixture, arguments: ["-r", "FooBar", "Sherlock", "sherlock"]),

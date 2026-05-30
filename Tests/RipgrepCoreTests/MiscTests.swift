@@ -374,6 +374,28 @@ struct MiscTests {
         34 bytes searched
         """))
 
+        try root.write(Data("crlf Abcdefghi123 more Zbcdefghi999\r\n".utf8), to: "src/crlf.txt")
+        let crlfLineOutput = try runExecutableData([
+            "--crlf",
+            pattern,
+            root.path("src/crlf.txt"),
+        ], fixture: {})
+        #expect(crlfLineOutput == Data("crlf Abcdefghi123 more Zbcdefghi999\r\n".utf8))
+        let crlfOnlyMatchingOutput = try runExecutableData([
+            "--crlf",
+            "-o",
+            pattern,
+            root.path("src/crlf.txt"),
+        ], fixture: {})
+        #expect(crlfOnlyMatchingOutput == Data("Abcdefghi123\r\nZbcdefghi999\r\n".utf8))
+        let crlfCountOutput = try runExecutableData([
+            "--crlf",
+            "-c",
+            pattern,
+            root.path("src/crlf.txt"),
+        ], fixture: {})
+        #expect(crlfCountOutput == Data("1\r\n".utf8))
+
         func runQuiet(_ arguments: [String]) -> (stdout: [String], stderr: [String], status: Int32) {
             var stdout: [String] = []
             var stderr: [String] = []

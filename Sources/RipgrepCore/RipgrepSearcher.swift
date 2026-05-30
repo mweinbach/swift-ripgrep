@@ -7210,7 +7210,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !options.invertMatch,
               !options.nullData,
               canUseMaxCount,
-              !options.crlf,
               options.maxColumns == nil,
               !options.trim else {
             return nil

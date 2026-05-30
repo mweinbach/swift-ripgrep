@@ -722,7 +722,6 @@ public struct PatternMatcher {
               !options.effectiveIgnoreCase,
               !options.multiline,
               !options.nullData,
-              !options.crlf,
               !options.wordRegexp,
               !options.lineRegexp,
               !options.invertMatch,
