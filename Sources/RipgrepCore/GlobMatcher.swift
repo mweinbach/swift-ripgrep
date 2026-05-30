@@ -195,7 +195,6 @@ public struct GlobMatcher: Equatable {
     private let hasBasenameOnlyRules: Bool
     private let allRulesUnanchoredBasenameOnly: Bool
     private let hasIncludeRules: Bool
-    private let allRulesExcludeHiddenPaths: Bool
     private let slashPatternsMatchAnywhere: Bool
     private let stripBasePath: String?
     private let stripBasePathPrefix: String?
@@ -240,7 +239,6 @@ public struct GlobMatcher: Equatable {
         var lastCaseInsensitive: Bool?
         var hasIncludeRules = false
         var hasBasenameOnlyRules = false
-        var allRulesExcludeHiddenPaths = true
         var allRulesUnanchoredBasenameOnly = true
         for entry in patternEntries {
             let raw = entry.pattern
@@ -263,9 +261,6 @@ public struct GlobMatcher: Equatable {
                entry.caseInsensitive == lastCaseInsensitive {
                 continue
             }
-            allRulesExcludeHiddenPaths = allRulesExcludeHiddenPaths
-                && decision == .exclude
-                && Self.patternMatchesOnlyHiddenPaths(pattern)
             let rule = Rule(
                 pattern: pattern,
                 decision: decision,
@@ -287,7 +282,6 @@ public struct GlobMatcher: Equatable {
         self.hasBasenameOnlyRules = hasBasenameOnlyRules
         self.allRulesUnanchoredBasenameOnly = !rules.isEmpty && allRulesUnanchoredBasenameOnly
         self.hasIncludeRules = hasIncludeRules
-        self.allRulesExcludeHiddenPaths = !rules.isEmpty && allRulesExcludeHiddenPaths
         self.overrideSemantics = overrideSemantics
         self.slashPatternsMatchAnywhere = resolvedSlashPatternsMatchAnywhere
         self.stripBasePath = stripBasePath?.isEmpty == true ? nil : stripBasePath
@@ -319,7 +313,12 @@ public struct GlobMatcher: Equatable {
     }
 
     public var excludesOnlyHiddenPaths: Bool {
-        allRulesExcludeHiddenPaths
+        guard !rules.isEmpty else {
+            return false
+        }
+        return rules.allSatisfy { rule in
+            rule.decision == .exclude && Self.patternMatchesOnlyHiddenPaths(rule.originalPattern)
+        }
     }
 
     private static func unescapeLeadingCommentOrNegation(_ pattern: String) -> (pattern: String, wasEscaped: Bool) {

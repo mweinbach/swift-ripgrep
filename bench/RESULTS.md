@@ -128,9 +128,24 @@ harness and the full Swift test suite passed after the retained slices. A
 | `--hidden --files` | 81.1 ms ± 2.3 ms | not rerun in this slice |
 | `--no-ignore-vcs --files` | 71.1 ms ± 12.9 ms | not rerun in this slice |
 
+`GlobMatcher.excludesOnlyHiddenPaths` is now computed only when the global-ignore
+setup asks for it, instead of classifying every rule in every directory-local
+ignore matcher during construction. Exact Swift output matched the previous
+binary for default, hidden, and `--no-ignore-vcs` file listing, and sorted output
+matched Rust on the Linux corpus. A 60-run same-machine A/B measured default
+`--files` at 79.1 ms for the probe versus 80.7 ms for the previous checkpoint,
+and hidden `--files` at 80.7 ms versus 81.8 ms. The `--no-ignore-vcs` control
+was noise-dominated at 70.2 ms versus 68.3 ms and does not exercise the moved
+global-ignore property.
+
 Several plausible Swift-only probes were rejected after exact Swift-output and
 sorted Rust-output checks:
 
+- Replacing the array-backed `IgnoreStack` with a linked stack preserved exact
+  Swift output and sorted Rust parity, but raised default/hidden user CPU and
+  measured neutral-to-worse: a 30-run check put default `--files` at 83.7 ms and
+  hidden at 84.1 ms, with `--no-ignore-vcs` flat at 66.0 ms. The array-backed
+  stack stayed.
 - Hidden-entry include checks that reused the ignore decision for hidden files
   were parity-clean but flat-to-slower: an 80-run order-flipped check measured
   default `--files` at 90.1 ms versus 89.2 ms before.
