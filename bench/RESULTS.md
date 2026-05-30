@@ -34,6 +34,41 @@ Validation:
 | `--files` | 102.9 ms ± 8.1 ms | 75.8 ms ± 2.8 ms |
 | `--no-ignore --files` | 65.3 ms ± 1.8 ms | 64.7 ms ± 2.8 ms |
 
+### Continuation probes — 2026-05-30
+
+Fresh release checks on the same Linux corpus kept the default no-C-shim Swift
+build ahead of Rust on most recursive search rows. A one-run curated scan
+measured Swift faster on literal, word, Greek, and case-sensitive alternation
+rows; the only tied/slower row was the ASCII no-literal word/space regex at
+2.137 s versus Rust at 2.100 s. Full-output file listing remains the clearer
+remaining gap: a direct 30-run check measured Swift `--files` at 92.7 ms versus
+Rust at 73.6 ms, while `--no-ignore-vcs --files` was much closer at 66.6 ms
+versus Rust at 64.0 ms.
+
+Several plausible Swift-only probes were rejected after exact Swift-output and
+sorted Rust-output checks:
+
+- Hidden-entry include checks that reused the ignore decision for hidden files
+  were parity-clean but flat-to-slower: an 80-run order-flipped check measured
+  default `--files` at 90.1 ms versus 89.2 ms before.
+- Parsing ignore files into already-trimmed active lines preserved output but
+  regressed the Linux tree: a 40-run A/B measured default `--files` at 91.2 ms
+  versus 90.0 ms and `--hidden --files` at 89.5 ms versus 88.1 ms.
+- Single-matcher and empty-bucket shortcuts in `IgnoreStack`/`GlobMatcher`
+  were neutral or worse under order-flipped checks, so the existing generic
+  matcher loop remains faster for this workload.
+- Replacing the root-child async group with `DispatchQueue.concurrentPerform`
+  preserved file-list order but did not improve scheduling cost: an 80-run
+  A/B measured default `--files` at 89.3 ms versus 89.8 ms and hidden output at
+  90.9 ms versus 89.0 ms.
+- Storing path-suffix rule bytes and indexing small simple-glob basename rules
+  both preserved output but regressed the optimizer-sensitive file-list path,
+  raising default `--files` to about 102 ms in 80-run checks.
+- Enabling the existing short-line prefilter for all no-literal Linux files,
+  instead of only large mapped files, preserved the Unicode and ASCII
+  no-literal output but was neutral-to-slower: the ASCII row measured 2.182 s
+  versus 2.162 s before in a seven-run A/B.
+
 ### Continuation probes — 2026-05-29
 
 A fresh curated Linux search scan showed the current Swift search path is
