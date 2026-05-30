@@ -7926,11 +7926,12 @@ public struct RipgrepSearcher: @unchecked Sendable {
                   options.afterContext == 0,
                   !options.passthru,
                   options.replacement == nil,
-                  !options.onlyMatching else {
+                  (!options.onlyMatching || options.printMode == .matchingLines) else {
                 return nil
             }
             if options.printMode == .matchingLines,
                canOmitMatchSpans(options: options),
+               !options.onlyMatching,
                fastPath.caseInsensitiveASCII,
                !fastPath.wordASCII,
                fastPath.literals.count == 1,
@@ -7950,6 +7951,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             }
             if options.printMode == .matchingLines,
                canOmitMatchSpans(options: options),
+               !options.onlyMatching,
                fastPath.caseInsensitiveASCII,
                !fastPath.wordASCII,
                fastPath.literals.count > 1 {
@@ -7965,6 +7967,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             }
             if options.printMode == .matchingLines,
                canOmitMatchSpans(options: options),
+               !options.onlyMatching,
                !fastPath.caseInsensitiveASCII,
                fastPath.literals.count == 1,
                let literal = fastPath.literals.first,
@@ -8028,7 +8031,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
 
             func scanLine(end lineEnd: Int, terminator: String) -> Bool {
                 if options.printMode == .matchingLines,
-                   canOmitMatchSpans(options: options) {
+                   canOmitMatchSpans(options: options),
+                   !options.onlyMatching {
                     let scan = byteLiteralLineMatch(
                         fastPath: fastPath,
                         bytes: bytes,

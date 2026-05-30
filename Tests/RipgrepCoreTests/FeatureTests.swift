@@ -62,6 +62,23 @@ struct FeatureTests {
         ])
     }
 
+    @Test("only matching literal output preserves every span")
+    func onlyMatchingLiteralOutputPreservesEverySpan() throws {
+        let root = try TemporaryDirectory()
+        try root.write("needle needle\nplain needle\n", to: "matches.txt")
+
+        #expect(try run(["-o", "needle", root.path("matches.txt")]) == [
+            "needle",
+            "needle",
+            "needle",
+        ])
+        #expect(try run(["-on", "needle", root.path("matches.txt")]) == [
+            "1:needle",
+            "1:needle",
+            "2:needle",
+        ])
+    }
+
     @Test("honors no unicode regex and literal semantics")
     func honorsNoUnicodeSemantics() throws {
         let root = try TemporaryDirectory()
