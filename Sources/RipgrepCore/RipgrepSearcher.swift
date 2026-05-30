@@ -7212,19 +7212,25 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
         let countOnly = options.printMode == .count
         let countMatchesOnly = options.printMode == .countMatches
+        let filesWithMatchesMode = options.printMode == .filesWithMatches
+        let filesWithoutMatchMode = options.printMode == .filesWithoutMatch
         let countOutput = !options.json && (countOnly || countMatchesOnly)
-        let filesWithMatches = !options.json && !options.stats && options.printMode == .filesWithMatches
-        let filesWithoutMatch = !options.json && !options.stats && options.printMode == .filesWithoutMatch
+        let pathOnlyOutput = !options.json
+            && !options.stats
+            && (filesWithMatchesMode || filesWithoutMatchMode)
+        let pathStatsOutput = !options.json
+            && options.stats
+            && (filesWithMatchesMode || filesWithoutMatchMode)
         let lineOutput = !options.quiet
             && options.printMode == .matchingLines
         let quietOutput = options.quiet
             && !options.stats
             && options.printMode == .matchingLines
-        let firstMatchOutput = quietOutput || filesWithMatches || filesWithoutMatch
+        let firstMatchOutput = quietOutput || pathOnlyOutput
         guard quietOutput
             || countOutput
-            || filesWithMatches
-            || filesWithoutMatch
+            || pathOnlyOutput
+            || pathStatsOutput
             || lineOutput else {
             return nil
         }
@@ -7235,7 +7241,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: data.count, searched: true)
         }
 
-        if countOutput {
+        if countOutput || pathStatsOutput {
             let counts = data.withUnsafeBytes { rawBuffer -> ASCIIFixedClassCounts in
                 let bytes = rawBuffer.bindMemory(to: UInt8.self)
                 guard let baseAddress = bytes.baseAddress else {

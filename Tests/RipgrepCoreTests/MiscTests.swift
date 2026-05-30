@@ -257,6 +257,36 @@ struct MiscTests {
         \(root.path("src/miss.txt"))
 
         """)
+        let statsFilesWithMatchesOutput = try runExecutableData([
+            "--stats",
+            "-l",
+            pattern,
+            root.url.path,
+        ], fixture: {})
+        let statsFilesWithMatchesText = String(decoding: statsFilesWithMatchesOutput, as: UTF8.self)
+        #expect(statsFilesWithMatchesText.contains("""
+        \(root.path("src/match.txt"))
+
+        2 matches
+        1 matched lines
+        1 files contained matches
+        2 files searched
+        """))
+        let statsFilesWithoutMatchOutput = try runExecutableData([
+            "--stats",
+            "--files-without-match",
+            pattern,
+            root.url.path,
+        ], fixture: {})
+        let statsFilesWithoutMatchText = String(decoding: statsFilesWithoutMatchOutput, as: UTF8.self)
+        #expect(statsFilesWithoutMatchText.contains("""
+        \(root.path("src/miss.txt"))
+
+        2 matches
+        1 matched lines
+        1 files contained matches
+        2 files searched
+        """))
         let vimgrepOutput = try runExecutableData([
             "--vimgrep",
             pattern,

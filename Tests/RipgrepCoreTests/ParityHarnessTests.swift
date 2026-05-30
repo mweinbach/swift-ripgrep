@@ -551,6 +551,8 @@ private func miscParityCases() -> [ParityCase] {
         ParityCase(name: "misc::vimgrep_ascii_fixed_class", fixture: asciiFixedClassFixture, arguments: ["--vimgrep", "[A-Z][a-z]{8}[0-9]{3}", "match.txt"]),
         ParityCase(name: "misc::files_with_matches_ascii_fixed_class", fixture: asciiFixedClassFixture, arguments: ["-l", "[A-Z][a-z]{8}[0-9]{3}", "."]),
         ParityCase(name: "misc::files_without_match_ascii_fixed_class", fixture: asciiFixedClassFixture, arguments: ["--files-without-match", "[A-Z][a-z]{8}[0-9]{3}", "."]),
+        ParityCase(name: "misc::stats_files_with_matches_ascii_fixed_class", fixture: asciiFixedClassFixture, arguments: ["--stats", "-l", "[A-Z][a-z]{8}[0-9]{3}", "."]),
+        ParityCase(name: "misc::stats_files_without_match_ascii_fixed_class", fixture: asciiFixedClassFixture, arguments: ["--stats", "--files-without-match", "[A-Z][a-z]{8}[0-9]{3}", "."]),
         ParityCase(name: "misc::quiet_ascii_fixed_class", fixture: asciiFixedClassFixture, arguments: ["-q", "[A-Z][a-z]{8}[0-9]{3}", "."]),
         ParityCase(name: "misc::quiet_ascii_fixed_class_no_match", fixture: asciiFixedClassFixture, arguments: ["-q", "[A-Z][a-z]{8}[0-9]{3}", "miss.txt"]),
         ParityCase(name: "misc::count_ascii_fixed_class", fixture: asciiFixedClassFixture, arguments: ["-c", "[A-Z][a-z]{8}[0-9]{3}", "."]),
@@ -591,20 +593,40 @@ private func miscParityCases() -> [ParityCase] {
     ]
 }
 
-// MARK: - JSON timing normalization
+// MARK: - Timing normalization
 //
 // Rust `rg` emits real elapsed timings in JSON output (`elapsed` and
 // `elapsed_total` fields). Swift `ripgrep` keeps those fields at zero for
 // deterministic test output. To allow byte-comparing the rest of the JSON
 // payload, both outputs are normalized through `normalize(_:for:)` which
 // strips the inner key/value pairs of any `elapsed` / `elapsed_total`
-// object before comparison.
+// object before comparison. Text `--stats` output gets the same treatment for
+// the two human-readable timing lines.
 
 private func normalize(_ data: Data, for parityCase: ParityCase) -> Data {
-    guard parityCase.arguments.contains("--json") else { return data }
     guard var text = String(data: data, encoding: .utf8) else { return data }
-    text = stripJSONTimingFields(in: text)
+    if parityCase.arguments.contains("--json") {
+        text = stripJSONTimingFields(in: text)
+    }
+    if parityCase.arguments.contains("--stats") {
+        text = stripTextStatsTimingLines(in: text)
+    }
     return Data(text.utf8)
+}
+
+private func stripTextStatsTimingLines(in text: String) -> String {
+    text
+        .split(separator: "\n", omittingEmptySubsequences: false)
+        .map { line -> String in
+            if line.hasSuffix(" seconds spent searching") {
+                return "<elapsed> seconds spent searching"
+            }
+            if line.hasSuffix(" seconds total") {
+                return "<elapsed> seconds total"
+            }
+            return String(line)
+        }
+        .joined(separator: "\n")
 }
 
 private func stripJSONTimingFields(in text: String) -> String {
