@@ -111,6 +111,23 @@ reverse sorted file listing plus the sorted recursive `spin_lock` control. A
 158.8 ms median versus 201.8 ms for the prior string-key build, with Rust at
 225.4 ms on the same run.
 
+The no-C-shim Swift-first file-listing pass on 2026-05-30 removed the
+non-ASCII regex fallback from simple ignore globs, boxed the private Darwin
+fast rule index to avoid copying dictionary-heavy matcher state, lowered the
+boxed index activation threshold from eight rules to four, and reused a single
+ignore decision in the fast file-path traversal. The simple-glob change also
+matches Rust's UTF-8 byte behavior for `?` against non-ASCII filenames. Sorted
+Swift output matched Rust for default `--files`, `--hidden --files`, and
+`--no-ignore-vcs --files` on `/tmp/swift-rg-bench/linux`; the Rust parity
+harness and the full Swift test suite passed after the retained slices. A
+20-run no-shell hyperfine check with five warmups measured:
+
+| Command | Swift | Rust `rg` |
+| --- | ---: | ---: |
+| `--files` | 80.0 ms ± 4.2 ms | 72.8 ms ± 1.0 ms |
+| `--hidden --files` | 81.1 ms ± 2.3 ms | not rerun in this slice |
+| `--no-ignore-vcs --files` | 71.1 ms ± 12.9 ms | not rerun in this slice |
+
 Several plausible Swift-only probes were rejected after exact Swift-output and
 sorted Rust-output checks:
 
