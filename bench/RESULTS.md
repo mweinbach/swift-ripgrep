@@ -424,6 +424,13 @@ measured `--json -c` at 15.2 ms versus the prior same-run route at 34.0 ms and
 Rust at 22.2 ms; `--json --count-matches` remained 12.2 ms. A follow-up
 30-run prefixed check measured `--json -H -c` at 15.3 ms versus the previous
 route at 33.7 ms and Rust at 22.0 ms, with unprefixed `--json -c` at 14.8 ms.
+The plain non-JSON single-literal count route now uses that same direct helper
+instead of detouring through the one-literal multi-literal walker. Direct
+stdout/stderr/status comparisons matched Rust for plain `-c`, prefixed `-H -c`,
+bounded `-m2 -c`, prefixed bounded counts, `--include-zero`, CRLF summaries, and
+a binary-file prefixed count case. A 30-run release check on the 46 MiB matching
+ASCII file measured plain `-c` at 15.1 ms versus Rust at 22.5 ms, `-H -c` at
+14.9 ms versus Rust at 22.2 ms, and `--json -c` still at 15.1 ms.
 
 Line-shaping flags that do not affect a proven zero-match summary now share the
 summary preflight as well: `--crlf`, `--trim`, and `--stop-on-nonmatch`. Direct

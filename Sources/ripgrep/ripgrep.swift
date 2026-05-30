@@ -4564,24 +4564,12 @@ struct RipgrepCommand {
                     crlfTerminated: parsedCrlf
                 )
             }
-            if parsedMaxCount == nil || parsedWithFilename {
-                return SwiftDarwinLiteralPreflight.multiLiteralCountLineExitCode(
-                    path: path,
-                    literals: [literal],
-                    includeZero: parsedIncludeZero,
-                    maxCount: parsedMaxCount,
-                    countPrefix: parsedCountPrefix,
-                    crlfTerminated: parsedCrlf
-                )
-            }
-            guard let parsedMaxCount else {
-                return nil
-            }
             return SwiftDarwinLiteralPreflight.countLineExitCode(
                 path: path,
                 literal: literal,
                 includeZero: parsedIncludeZero,
                 maxCount: parsedMaxCount,
+                countPrefix: parsedCountPrefix,
                 crlfTerminated: parsedCrlf
             )
         }
