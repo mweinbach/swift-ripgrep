@@ -6416,6 +6416,14 @@ public struct RipgrepSearcher: @unchecked Sendable {
         ) {
             return FileSearchOutcome(result: fastResult)
         }
+        if let fastResult = searchRawGreekScriptContents(
+            data,
+            fileURL: fileURL,
+            matcher: matcher,
+            options: options
+        ) {
+            return FileSearchOutcome(result: fastResult)
+        }
         if let fastResult = searchRawLiteralContents(
             data,
             fileURL: fileURL,
@@ -7418,6 +7426,138 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 searched: true,
                 supplementalMatchedLines: supplementalMatchedLines,
                 supplementalMatches: supplementalMatches
+            )
+        }
+        return result
+        #endif
+    }
+
+    private func searchRawGreekScriptContents(
+        _ data: Data,
+        fileURL: URL,
+        matcher: PatternMatcher,
+        options: RipgrepOptions
+    ) -> SearchFileResult? {
+        #if !canImport(Darwin)
+        return nil
+        #else
+        guard matcher.greekScriptFastPath() != nil,
+              case .automatic = options.encodingMode,
+              !data.starts(with: [0xEF, 0xBB, 0xBF]),
+              !data.starts(with: [0xFF, 0xFE]),
+              !data.starts(with: [0xFE, 0xFF]),
+              !options.json,
+              !options.stats,
+              options.beforeContext == 0,
+              options.afterContext == 0,
+              !options.passthru,
+              options.replacement == nil,
+              !options.stopOnNonmatch,
+              !options.invertMatch,
+              !options.wordRegexp,
+              !options.lineRegexp,
+              options.maxCount != 0,
+              !options.onlyMatching,
+              !options.column,
+              !options.byteOffset,
+              !options.vimgrep,
+              !options.crlf,
+              options.maxColumns == nil,
+              !options.trim,
+              options.printMode == .matchingLines,
+              canOmitMatchSpans(options: options) else {
+            return nil
+        }
+
+        var matches: [SearchMatch] = []
+        var lineStart = 0
+        var lineNumber = 1
+        var bytesSearchedThroughMaxCount: Int?
+        var failedDecode = false
+        let maxCount = options.maxCount ?? Int.max
+        let dataCount = data.count
+
+        let result = data.withUnsafeBytes { rawBytes -> SearchFileResult? in
+            let bytes = rawBytes.bindMemory(to: UInt8.self)
+            guard let baseAddress = bytes.baseAddress else {
+                return SearchFileResult(
+                    fileURL: fileURL,
+                    matches: [],
+                    bytesSearched: data.count,
+                    searched: true
+                )
+            }
+
+            func lineHasNonASCII(start: Int, end: Int) -> Bool {
+                var offset = start
+                while offset < end {
+                    if bytes[offset] >= 0x80 {
+                        return true
+                    }
+                    offset += 1
+                }
+                return false
+            }
+
+            func scanLine(end lineEnd: Int, outputEnd: Int, terminator: String) -> Bool {
+                guard matches.count < maxCount,
+                      lineHasNonASCII(start: lineStart, end: lineEnd) else {
+                    return false
+                }
+                let lineData = Data(
+                    bytes: baseAddress.advanced(by: lineStart),
+                    count: lineEnd - lineStart
+                )
+                guard let line = String(data: lineData, encoding: .utf8) else {
+                    failedDecode = true
+                    return true
+                }
+                let spans = matcher.spans(in: line)
+                guard !spans.isEmpty else {
+                    return false
+                }
+                matches.append(SearchMatch(
+                    fileURL: fileURL,
+                    lineNumber: lineNumber,
+                    column: nil,
+                    line: line,
+                    lineTerminator: terminator,
+                    absoluteOffset: lineStart,
+                    matchCount: spans.count,
+                    spans: []
+                ))
+                if matches.count == maxCount {
+                    bytesSearchedThroughMaxCount = outputEnd
+                    return true
+                }
+                return false
+            }
+
+            var index = 0
+            while index < dataCount {
+                if bytes[index] == UInt8(ascii: "\n") {
+                    if scanLine(end: index, outputEnd: index + 1, terminator: "\n") {
+                        break
+                    }
+                    index += 1
+                    lineStart = index
+                    lineNumber += 1
+                    continue
+                }
+                index += 1
+            }
+            if lineStart < dataCount || data.last != UInt8(ascii: "\n") {
+                _ = scanLine(end: dataCount, outputEnd: dataCount, terminator: "")
+            }
+            if failedDecode {
+                return nil
+            }
+
+            return SearchFileResult(
+                fileURL: fileURL,
+                matches: matches,
+                bytesSearched: bytesSearchedThroughMaxCount ?? data.count,
+                searched: true
             )
         }
         return result

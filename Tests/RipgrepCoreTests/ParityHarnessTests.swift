@@ -394,6 +394,11 @@ private func featureParityCases() -> [ParityCase] {
         try write("\nfoo\nbar\nfoobar\n\nbaz\n", to: "file", in: dir)
         try write("foo\nbar\n", to: "patterns", in: dir)
     }
+    let greekScriptFixture: (URL) throws -> Void = { dir in
+        try write("latin\nπ alpha\n", to: "a.txt", in: dir)
+        try write("micro µ\nomega Ω\n", to: "nested/b.txt", in: dir)
+        try write("plain\n", to: "nested/c.txt", in: dir)
+    }
     let trimSherlock = """
 zzz
     For the Doctor Watsons of this world, as opposed to the Sherlock
@@ -419,6 +424,8 @@ but Doctor Watson has to have it taken out for him and dusted,
         ParityCase(name: "feature::f20_no_filename", fixture: sherlockFixture, arguments: ["--no-filename", "Sherlock"]),
         ParityCase(name: "feature::f34_only_matching", fixture: sherlockFixture, arguments: ["-o", "Sherlock"]),
         ParityCase(name: "feature::f34_only_matching_line_column", fixture: sherlockFixture, arguments: ["-o", "--column", "-n", "Sherlock"]),
+        ParityCase(name: "feature::greek_script_recursive_lines", fixture: greekScriptFixture, arguments: ["--sort", "path", "-n", #"\p{Greek}"#, "."]),
+        ParityCase(name: "feature::greek_script_recursive_ignore_case_lines", fixture: greekScriptFixture, arguments: ["--sort", "path", "-n", "-i", #"\p{Greek}"#, "."]),
         ParityCase(name: "feature::f45_precedence_with_others", fixture: { dir in try write("*.log", to: ".not-an-ignore", in: dir); try write("!imp.log", to: ".ignore", in: dir); try write("test", to: "imp.log", in: dir); try write("test", to: "wat.log", in: dir) }, arguments: ["--ignore-file", ".not-an-ignore", "test"]),
         ParityCase(name: "feature::f45_precedence_internal", fixture: { dir in try write("*.log", to: ".not-an-ignore1", in: dir); try write("!imp.log", to: ".not-an-ignore2", in: dir); try write("test", to: "imp.log", in: dir); try write("test", to: "wat.log", in: dir) }, arguments: ["--ignore-file", ".not-an-ignore1", "--ignore-file", ".not-an-ignore2", "test"]),
         ParityCase(name: "feature::f68_no_ignore_vcs", fixture: { dir in try createDirectory(".git", in: dir); try write("foo", to: ".gitignore", in: dir); try write("bar", to: ".ignore", in: dir); try write("test", to: "foo", in: dir); try write("test", to: "bar", in: dir) }, arguments: ["--no-ignore-vcs", "test"]),

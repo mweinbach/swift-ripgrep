@@ -14,6 +14,7 @@ struct FeatureTests {
         try root.write("abc ABC 123 _ é π\nword-word\nfoo bar\n", to: "posix-alpha.txt")
         try root.write("abc ABC\nbar\nfoo bar\néx xé\n123_\n", to: "inline-word-boundary.txt")
         try root.write("π δ Δ µ Ω\n", to: "greek-script.txt")
+        try root.write("ascii\nπ line\ncafe\nµ line\nΩ line\n", to: "greek-lines.txt")
         try root.write("abc ABC café π δ Δ xyz_123 éx xé\n", to: "scoped-modes.txt")
         try root.write("\n##\n", to: "empty-word.txt")
 
@@ -84,6 +85,8 @@ struct FeatureTests {
         #expect(try run(["-o", #"\pL+"#, root.path("posix-alpha.txt")]) == ["abc", "ABC", "é", "π", "word", "word", "foo", "bar"])
         #expect(try run(["-o", #"\p{Greek}+"#, root.path("greek-script.txt")]) == ["π", "δ", "Δ", "Ω"])
         #expect(try run(["-io", #"\p{Greek}+"#, root.path("greek-script.txt")]) == ["π", "δ", "Δ", "µ", "Ω"])
+        #expect(try run(["-n", #"\p{Greek}"#, root.path("greek-lines.txt")]) == ["2:π line", "5:Ω line"])
+        #expect(try run(["-in", #"\p{Greek}"#, root.path("greek-lines.txt")]) == ["2:π line", "4:µ line", "5:Ω line"])
         #expect(try run(["-o", #"\PL+"#, root.path("posix-alpha.txt")]) == [" ", " 123 _ ", " ", "-", " "])
         var output: [String] = []
         var errors: [String] = []
@@ -131,6 +134,24 @@ struct FeatureTests {
         #expect(try runAllowingNoMatch(["--no-unicode", "-i", "Δ", root.path("ascii-case.txt")]) == [])
         #expect(try run(["--no-unicode", "--unicode", "-o", #"\w+"#, root.path("classes.txt")]) == ["café", "π", "_"])
         #expect(try run(["--no-pcre2-unicode", "--pcre2-unicode", "-o", #"\w+"#, root.path("classes.txt")]) == ["café", "π", "_"])
+    }
+
+    @Test("matches Greek script property recursively")
+    func matchesGreekScriptPropertyRecursively() throws {
+        let root = try TemporaryDirectory()
+        try root.write("latin\nπ alpha\n", to: "a.txt")
+        try root.write("micro µ\nomega Ω\n", to: "nested/b.txt")
+        try root.write("plain\n", to: "nested/c.txt")
+
+        #expect(try run(["--sort", "path", "-n", #"\p{Greek}"#, root.url.path]) == [
+            "\(root.path("a.txt")):2:π alpha",
+            "\(root.path("nested/b.txt")):2:omega Ω",
+        ])
+        #expect(try run(["--sort", "path", "-n", "-i", #"\p{Greek}"#, root.url.path]) == [
+            "\(root.path("a.txt")):2:π alpha",
+            "\(root.path("nested/b.txt")):1:micro µ",
+            "\(root.path("nested/b.txt")):2:omega Ω",
+        ])
     }
 
     @Test("supports smart case and inverted matches")

@@ -77,6 +77,15 @@ about 30.9 s for plain `\p{Greek}` before the native matcher; the retained
 Swift matcher measured 21.5 s plain and 21.6 s ignore-case by `/usr/bin/time`,
 versus Rust at about 2.76 s in a five-run hyperfine sample.
 
+The recursive matching-lines path now keeps that exact Greek-script matcher on
+raw UTF-8 bytes until a line must be emitted, avoiding per-line `String` matcher
+calls for non-matching high-bit lines. It still falls back for encodings, spans,
+context, JSON/stats, replacements, word/line boundaries, inverted searches, and
+other formatted modes. Sorted Linux corpus output for both `-n '\p{Greek}'` and
+`-n -i '\p{Greek}'` continued to match Rust exactly (105 and 245 lines). A
+five-run hyperfine sample measured Swift at 1.973 s plain and 2.016 s
+ignore-case, versus Rust plain at 2.804 s on the same corpus.
+
 The executable ASCII case-insensitive containment proof now uses the existing
 folded byte scanner instead of building exact/lower/upper `Data` variants. It
 initially only proved no-match for literals without ASCII letters; lettered

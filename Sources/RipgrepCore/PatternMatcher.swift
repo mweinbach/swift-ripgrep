@@ -537,6 +537,14 @@ public struct PatternMatcher {
         return wordWhitespaceSequenceFastPathCache
     }
 
+    func greekScriptFastPath() -> GreekScriptFastPath? {
+        guard patterns.count == 1,
+              case .greekScript(let caseInsensitive, _) = patterns[0] else {
+            return nil
+        }
+        return GreekScriptFastPath(caseInsensitive: caseInsensitive)
+    }
+
     func fixedPositiveLookbehindFastPath() -> (prefix: [UInt8], literal: [UInt8], caseInsensitiveASCII: Bool)? {
         guard patterns.count == 1,
               case .pcre2(let regex) = patterns[0] else {
@@ -3911,6 +3919,10 @@ struct ByteLiteralFastPath {
 struct WordWhitespaceSequenceFastPath {
     let asciiOnly: Bool
     let groupCount: Int
+}
+
+struct GreekScriptFastPath {
+    let caseInsensitive: Bool
 }
 
 private extension UInt8 {
