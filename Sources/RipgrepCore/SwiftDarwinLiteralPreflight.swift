@@ -2389,25 +2389,11 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
 
-        let needle = Data(literal)
-        let newline = UInt8(ascii: "\n")
-        let limit = maxCount ?? Int.max
-        var searchStart = data.startIndex
-        var matchedLineCount = 0
-
-        while matchedLineCount < limit,
-              searchStart < data.endIndex,
-              let matchRange = data.range(of: needle, in: searchStart..<data.endIndex) {
-            guard !matchRange.isEmpty else {
-                return nil
-            }
-            matchedLineCount += 1
-            let lineEnd = data[matchRange.upperBound...]
-                .firstIndex(of: newline) ?? data.endIndex
-            searchStart = lineEnd < data.endIndex
-                ? data.index(after: lineEnd)
-                : data.endIndex
-        }
+        let matchedLineCount = countLiteralMatchedLines(
+            in: data,
+            literal: literal,
+            maxCount: maxCount
+        )
 
         if matchedLineCount > 0 || includeZero {
             guard writeCountOutput(matchedLineCount, crlfTerminated: crlfTerminated) else {
@@ -7374,6 +7360,51 @@ private func countNonOverlappingMatches(in data: Data, literal: [UInt8]) -> Int 
                 searchOffset = base.distance(to: found) + literal.count
             }
             return matchCount
+        }
+    }
+}
+
+private func countLiteralMatchedLines(
+    in data: Data,
+    literal: [UInt8],
+    maxCount: Int?
+) -> Int {
+    guard !literal.isEmpty,
+          data.count >= literal.count else {
+        return 0
+    }
+    let limit = maxCount ?? Int.max
+    return data.withUnsafeBytes { rawData in
+        guard let rawBase = rawData.baseAddress else {
+            return 0
+        }
+        let base = rawBase.assumingMemoryBound(to: UInt8.self)
+        return literal.withUnsafeBufferPointer { needle in
+            guard let needleBase = needle.baseAddress else {
+                return 0
+            }
+
+            var searchOffset = 0
+            var matchedLineCount = 0
+            while matchedLineCount < limit,
+                  searchOffset <= data.count - literal.count {
+                guard let found = rg_memmem_simple(
+                    base.advanced(by: searchOffset),
+                    data.count - searchOffset,
+                    needleBase,
+                    literal.count
+                ) else {
+                    break
+                }
+                let matchStart = base.distance(to: found)
+                matchedLineCount += 1
+                searchOffset = rgSwiftDarwinNextLineStart(
+                    base: base,
+                    haystackLength: data.count,
+                    from: matchStart + literal.count
+                )
+            }
+            return matchedLineCount
         }
     }
 }

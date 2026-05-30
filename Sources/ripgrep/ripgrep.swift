@@ -3078,7 +3078,7 @@ struct RipgrepCommand {
                             countPrefix: parsedCountPrefix,
                             crlfTerminated: parsedCrlf
                         )
-                    } else if parsedMaxCount == nil || parsedWithFilename {
+                    } else if !parsedCountPrefix.isEmpty {
                         exitCode = SwiftDarwinLiteralPreflight.multiLiteralCountLineExitCode(
                             path: path,
                             literals: [countOutputLiteral],
