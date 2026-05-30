@@ -196,6 +196,19 @@ and 6.6 ms for Rust; `--json -i -c` at 9.6 ms versus 29.2 ms and 9.9 ms for
 Rust; `--json -w -c` at 7.4 ms versus 108.9 ms and 6.6 ms for Rust; and
 `--json -i -w -c` at 10.6 ms versus 117.5 ms and 9.9 ms for Rust.
 
+Count and count-matches `--include-zero` no-match outputs now use a dedicated
+count-line preflight. The preflight writes the required `0` line, honors CRLF
+count termination, and appends the existing deterministic stats summary when
+`--stats` is active; stats timing fields were normalized for Rust comparisons.
+Direct status/stdout/stderr checks matched the previous Swift binary exactly
+and matched Rust for JSON, stats, CRLF, and combined `-i -w` controls after
+normalizing stats timing text. On the 46 MiB ASCII file, eight-run A/Bs measured
+`--json -c --include-zero` at 7.3 ms for the probe versus 25.6 ms baseline and
+6.2 ms for Rust; `--stats -c --include-zero` at 8.1 ms versus 2.193 s and
+6.3 ms for Rust. Six-run A/Bs measured `--stats --count-matches --include-zero`
+at 8.5 ms versus 2.180 s and 6.5 ms for Rust; `--stats -i -w -c --include-zero`
+at 11.7 ms versus 4.959 s and 10.0 ms for Rust.
+
 Line-shaping flags that do not affect a proven zero-match summary now share the
 summary preflight as well: `--crlf`, `--trim`, and `--stop-on-nonmatch`. Direct
 status/stdout/stderr checks matched the previous Swift binary and Rust for JSON

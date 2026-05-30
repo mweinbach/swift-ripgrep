@@ -1435,6 +1435,23 @@ struct MiscTests {
             "missingliteral",
             root.path("summary.txt"),
         ])
+        let jsonCountMatchesIncludeZeroNoMatch = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "--count-matches",
+            "--include-zero",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let jsonStatsCountIncludeZeroNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "--stats",
+            "-c",
+            "--include-zero",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
         let statsNoMatchSummary = try runExecutableResult([
             "--no-config",
             "--stats",
@@ -1481,6 +1498,31 @@ struct MiscTests {
             "--no-config",
             "--stats",
             "--count-matches",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let statsCountIncludeZeroNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "-c",
+            "--include-zero",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let statsCountMatchesIncludeZeroNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "--count-matches",
+            "--include-zero",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let statsCrlfCountIncludeZeroNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "--crlf",
+            "-c",
+            "--include-zero",
             "missingliteral",
             root.path("summary.txt"),
         ])
@@ -1557,6 +1599,8 @@ struct MiscTests {
         0.000000 seconds total
 
         """.utf8)
+        let expectedZeroCountStatsNoMatchSummary = Data("0\n".utf8) + expectedStatsNoMatchSummary
+        let expectedCrlfZeroCountStatsNoMatchSummary = Data("0\r\n".utf8) + expectedStatsNoMatchSummary
 
         for result in [
             jsonNoMatchSummary,
@@ -1599,6 +1643,18 @@ struct MiscTests {
             #expect(result.stdout == expectedStatsNoMatchSummary)
         }
         for result in [
+            jsonStatsCountIncludeZeroNoMatchSummary,
+            statsCountIncludeZeroNoMatchSummary,
+            statsCountMatchesIncludeZeroNoMatchSummary,
+        ] {
+            #expect(result.status == 1)
+            #expect(result.stderr.isEmpty)
+            #expect(result.stdout == expectedZeroCountStatsNoMatchSummary)
+        }
+        #expect(statsCrlfCountIncludeZeroNoMatchSummary.status == 1)
+        #expect(statsCrlfCountIncludeZeroNoMatchSummary.stderr.isEmpty)
+        #expect(statsCrlfCountIncludeZeroNoMatchSummary.stdout == expectedCrlfZeroCountStatsNoMatchSummary)
+        for result in [
             jsonFilesWithMatchesNoMatch,
             jsonCountNoMatch,
             jsonCountMatchesNoMatch,
@@ -1610,6 +1666,9 @@ struct MiscTests {
         #expect(jsonCountIncludeZeroNoMatch.status == 1)
         #expect(jsonCountIncludeZeroNoMatch.stderr.isEmpty)
         #expect(jsonCountIncludeZeroNoMatch.stdout == Data("0\n".utf8))
+        #expect(jsonCountMatchesIncludeZeroNoMatch.status == 1)
+        #expect(jsonCountMatchesIncludeZeroNoMatch.stderr.isEmpty)
+        #expect(jsonCountMatchesIncludeZeroNoMatch.stdout == Data("0\n".utf8))
 
         let output = try runExecutableData([
             "needle",

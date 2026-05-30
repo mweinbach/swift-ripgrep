@@ -2749,6 +2749,9 @@ struct RipgrepCommand {
             && !parsedStats
             && (parsedPrintMode == .filesWithMatches
                 || ((parsedPrintMode == .count || parsedPrintMode == .countMatches) && !parsedIncludeZero))
+        let parsedCountIncludeZeroPrintModeCanUseNoMatchPreflight = parsedIncludeZero
+            && !parsedQuiet
+            && (parsedPrintMode == .count || parsedPrintMode == .countMatches)
         if parsedJson || parsedStats,
            parsedSummaryPrintModeCanUseNoMatchPreflight,
            !parsedInvertMatch,
@@ -2801,6 +2804,39 @@ struct RipgrepCommand {
                     if let exitCode {
                         return exitCode
                     }
+                }
+            }
+        }
+        if parsedCountIncludeZeroPrintModeCanUseNoMatchPreflight,
+           !parsedInvertMatch,
+           parsedMaxCount != 0,
+           !parsedNullData,
+           !parsedPassthru,
+           !parsedSearchZipAffectsPreflight,
+           !parsedEncodingAffectsPreflightOutput,
+           !parsedColorAffectsPreflightOutput,
+           (patternCanStartWithDash || !pattern.hasPrefix("-")),
+           path != "-" {
+            let countLiteralPattern = fixedStrings
+                ? pattern
+                : RegexLiteralParser.literal(
+                    fromPlainRegexPattern: pattern,
+                    allowPCREQuotedLiterals: allowPCREQuotedLiterals
+                )
+            if let countLiteralPattern {
+                let countLiteral = Array(countLiteralPattern.utf8)
+                if !countLiteral.isEmpty,
+                   !countLiteral.contains(UInt8(ascii: "\n")),
+                   let exitCode = SwiftDarwinLiteralPreflight.noMatchCountOutputExitCode(
+                        path: path,
+                        literal: countLiteral,
+                        asciiCaseInsensitive: asciiCaseInsensitive,
+                        wordRegexp: wordRegexp,
+                        countPrefix: parsedCountPrefix,
+                        crlfTerminated: parsedCrlf,
+                        stats: parsedStats
+                   ) {
+                    return exitCode
                 }
             }
         }

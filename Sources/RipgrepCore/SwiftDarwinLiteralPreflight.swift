@@ -126,6 +126,35 @@ public enum SwiftDarwinLiteralPreflight {
         return 1
     }
 
+    public static func noMatchCountOutputExitCode(
+        path: String,
+        literal: [UInt8],
+        asciiCaseInsensitive: Bool,
+        wordRegexp: Bool,
+        countPrefix: [UInt8],
+        crlfTerminated: Bool,
+        stats: Bool
+    ) -> Int32? {
+        guard let bytesSearched = noMatchByteCount(
+            path: path,
+            literal: literal,
+            asciiCaseInsensitive: asciiCaseInsensitive,
+            wordRegexp: wordRegexp
+        ) else {
+            return nil
+        }
+        guard writeCountOutput(0, countPrefix: countPrefix, crlfTerminated: crlfTerminated) else {
+            return nil
+        }
+        if stats {
+            guard fflush(Darwin.stdout) == 0 else {
+                return nil
+            }
+            return writeNoMatchSummary(bytesSearched: bytesSearched, json: false)
+        }
+        return 1
+    }
+
     public static func literalNoMatchSummaryExitCode(
         path: String,
         literal: [UInt8],
