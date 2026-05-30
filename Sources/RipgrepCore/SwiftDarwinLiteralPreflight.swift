@@ -212,6 +212,103 @@ public enum SwiftDarwinLiteralPreflight {
         return 1
     }
 
+    public static func matchedFilesWithoutMatchStatsExitCode(
+        path: String,
+        literal: [UInt8],
+        asciiCaseInsensitive: Bool,
+        wordRegexp: Bool
+    ) -> Int32? {
+        guard let stats = matchedSummaryStats(
+            path: path,
+            literal: literal,
+            asciiCaseInsensitive: asciiCaseInsensitive,
+            wordRegexp: wordRegexp
+        ), stats.matchedLines > 0 else {
+            return nil
+        }
+        return writeStatsSummary(
+            totalMatches: stats.totalMatches,
+            matchedLines: stats.matchedLines,
+            filesWithMatches: 1,
+            filesSearched: 1,
+            bytesSearched: stats.bytesSearched,
+            exitCode: 1
+        )
+    }
+
+    public static func matchedPathOutputExitCode(
+        path: String,
+        literal: [UInt8],
+        asciiCaseInsensitive: Bool,
+        wordRegexp: Bool,
+        lineRegexp: Bool,
+        nullTerminated: Bool,
+        crlfTerminated: Bool,
+        outputPath: [UInt8]?
+    ) -> Int32? {
+        guard !(lineRegexp && wordRegexp) else {
+            return nil
+        }
+        if asciiCaseInsensitive {
+            if wordRegexp {
+                return asciiCaseInsensitiveWordPathOnlyExitCode(
+                    path: path,
+                    literal: literal,
+                    printWhenMatched: true,
+                    nullTerminated: nullTerminated,
+                    crlfTerminated: crlfTerminated,
+                    outputPath: outputPath
+                )
+            }
+            if lineRegexp {
+                return asciiCaseInsensitiveExactLinePathOnlyExitCode(
+                    path: path,
+                    literal: literal,
+                    printWhenMatched: true,
+                    nullTerminated: nullTerminated,
+                    crlfTerminated: crlfTerminated,
+                    outputPath: outputPath
+                )
+            }
+            return asciiCaseInsensitivePathOnlyExitCode(
+                path: path,
+                literal: literal,
+                printWhenMatched: true,
+                nullTerminated: nullTerminated,
+                crlfTerminated: crlfTerminated,
+                outputPath: outputPath
+            )
+        }
+        if wordRegexp {
+            return wordPathOnlyExitCode(
+                path: path,
+                literal: literal,
+                printWhenMatched: true,
+                nullTerminated: nullTerminated,
+                crlfTerminated: crlfTerminated,
+                outputPath: outputPath
+            )
+        }
+        if lineRegexp {
+            return exactLinePathOnlyExitCode(
+                path: path,
+                literal: literal,
+                printWhenMatched: true,
+                nullTerminated: nullTerminated,
+                crlfTerminated: crlfTerminated,
+                outputPath: outputPath
+            )
+        }
+        return pathOnlyExitCode(
+            path: path,
+            literal: literal,
+            printWhenMatched: true,
+            nullTerminated: nullTerminated,
+            crlfTerminated: crlfTerminated,
+            outputPath: outputPath
+        )
+    }
+
     public static func literalNoMatchSummaryExitCode(
         path: String,
         literal: [UInt8],
@@ -264,25 +361,133 @@ public enum SwiftDarwinLiteralPreflight {
         return writeNoMatchSummary(bytesSearched: bytesSearched, json: json)
     }
 
+    private struct MatchedSummaryStats {
+        let totalMatches: Int
+        let matchedLines: Int
+        let bytesSearched: Int
+    }
+
+    private static func matchedSummaryStats(
+        path: String,
+        literal: [UInt8],
+        asciiCaseInsensitive: Bool,
+        wordRegexp: Bool
+    ) -> MatchedSummaryStats? {
+        guard !literal.isEmpty,
+              !literal.contains(UInt8(ascii: "\n")) else {
+            return nil
+        }
+        if wordRegexp, !isSafeASCIIWordLiteral(literal) {
+            return nil
+        }
+        if asciiCaseInsensitive,
+           !literal.allSatisfy({ $0 < 0x80 }) {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !hasBinaryDetectionPrefix(data),
+              !containsNULByte(data) else {
+            return nil
+        }
+        if (asciiCaseInsensitive || wordRegexp),
+           containsNonASCIIByte(data) {
+            return nil
+        }
+
+        let matchedLineCount: Int?
+        let totalMatchCount: Int?
+        if wordRegexp {
+            matchedLineCount = countASCIIWordMatchedLines(
+                in: data,
+                literals: [literal],
+                maxCount: nil,
+                asciiCaseInsensitive: asciiCaseInsensitive
+            )
+            totalMatchCount = countASCIIWordMatches(
+                in: data,
+                literal: literal,
+                asciiCaseInsensitive: asciiCaseInsensitive
+            )
+        } else if asciiCaseInsensitive {
+            guard let literals = distinctASCIICaseInsensitiveLiterals([literal]),
+                  let foldedLiteral = literals.first else {
+                return nil
+            }
+            matchedLineCount = countASCIICaseInsensitiveMatchedLines(
+                data: data,
+                foldedLiterals: [foldedLiteral],
+                maxCount: nil
+            )
+            totalMatchCount = countASCIICaseInsensitiveMatches(
+                in: data,
+                foldedLiteral: foldedLiteral
+            )
+        } else {
+            guard let result = multiLiteralResult(
+                path: path,
+                literals: [literal],
+                maxCount: nil,
+                emitLines: false
+            ),
+                  result.status >= 0 else {
+                return nil
+            }
+            matchedLineCount = Int(result.matched_line_count)
+            totalMatchCount = countNonOverlappingMatches(in: data, literal: literal)
+        }
+        guard let matchedLineCount,
+              matchedLineCount > 0,
+              let totalMatchCount,
+              totalMatchCount > 0 else {
+            return nil
+        }
+        return MatchedSummaryStats(
+            totalMatches: totalMatchCount,
+            matchedLines: matchedLineCount,
+            bytesSearched: data.count
+        )
+    }
+
     private static func writeNoMatchSummary(bytesSearched: Int, json: Bool, exitCode: Int32 = 1) -> Int32 {
         if json {
             let line = #"{"data":{"elapsed_total":{"human":"0.000000s","nanos":0,"secs":0},"stats":{"bytes_printed":0,"bytes_searched":\#(bytesSearched),"elapsed":{"human":"0.000000s","nanos":0,"secs":0},"matched_lines":0,"matches":0,"searches":1,"searches_with_match":0}},"type":"summary"}"#
             FileHandle.standardOutput.write(Data((line + "\n").utf8))
         } else {
-            let output = """
-
-            0 matches
-            0 matched lines
-            0 files contained matches
-            1 files searched
-            0 bytes printed
-            \(bytesSearched) bytes searched
-            0.000000 seconds spent searching
-            0.000000 seconds total
-
-            """
-            FileHandle.standardOutput.write(Data(output.utf8))
+            return writeStatsSummary(
+                totalMatches: 0,
+                matchedLines: 0,
+                filesWithMatches: 0,
+                filesSearched: 1,
+                bytesSearched: bytesSearched,
+                exitCode: exitCode
+            )
         }
+        return exitCode
+    }
+
+    private static func writeStatsSummary(
+        totalMatches: Int,
+        matchedLines: Int,
+        filesWithMatches: Int,
+        filesSearched: Int,
+        bytesSearched: Int,
+        exitCode: Int32
+    ) -> Int32 {
+        let output = """
+
+        \(totalMatches) matches
+        \(matchedLines) matched lines
+        \(filesWithMatches) files contained matches
+        \(filesSearched) files searched
+        0 bytes printed
+        \(bytesSearched) bytes searched
+        0.000000 seconds spent searching
+        0.000000 seconds total
+
+        """
+        FileHandle.standardOutput.write(Data(output.utf8))
         return exitCode
     }
 

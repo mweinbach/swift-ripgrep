@@ -2749,6 +2749,10 @@ struct RipgrepCommand {
             && !parsedStats
             && (parsedPrintMode == .filesWithMatches
                 || ((parsedPrintMode == .count || parsedPrintMode == .countMatches) && !parsedIncludeZero))
+        let parsedJSONFilesWithMatchesPrintModeCanUseMatchedPathPreflight = parsedJson
+            && !parsedStats
+            && !parsedQuiet
+            && parsedPrintMode == .filesWithMatches
         let parsedCountIncludeZeroPrintModeCanUseNoMatchPreflight = parsedIncludeZero
             && !parsedQuiet
             && (parsedPrintMode == .count || parsedPrintMode == .countMatches)
@@ -2842,6 +2846,24 @@ struct RipgrepCommand {
                    ) {
                     return exitCode
                 }
+                if parsedStats,
+                   parsedMaxCount == nil,
+                   !parsedLineRegexp,
+                   !parsedOnlyMatching,
+                   !parsedVimgrep,
+                   parsedAfterContext == 0,
+                   parsedBeforeContext == 0,
+                   !parsedReplacement,
+                   !parsedStopOnNonmatch,
+                   !parsedTrim,
+                   let exitCode = SwiftDarwinLiteralPreflight.matchedFilesWithoutMatchStatsExitCode(
+                        path: path,
+                        literal: pathOutputLiteral,
+                        asciiCaseInsensitive: asciiCaseInsensitive,
+                        wordRegexp: wordRegexp
+                   ) {
+                    return exitCode
+                }
                 if parsedJson,
                    !parsedStats,
                    let exitCode = SwiftDarwinLiteralPreflight.matchedPathSuppressedExitCode(
@@ -2913,6 +2935,48 @@ struct RipgrepCommand {
                         wordRegexp: wordRegexp
                    ) {
                     return exitCode
+                }
+            }
+        }
+        if parsedJSONFilesWithMatchesPrintModeCanUseMatchedPathPreflight,
+           !parsedInvertMatch,
+           parsedMaxCount != 0,
+           !parsedNullData,
+           !parsedPassthru,
+           !parsedSearchZipAffectsPreflight,
+           parsedEncodingIsAutomatic,
+           !parsedColorAffectsPreflightOutput,
+           !(parsedLineRegexp && (wordRegexp || parsedCrlf)),
+           (patternCanStartWithDash || !pattern.hasPrefix("-")),
+           path != "-" {
+            let matchedPathLiteralPattern: String?
+            if fixedStrings {
+                matchedPathLiteralPattern = pattern
+            } else if asciiBoundaryLiteral(pattern, allowPCREQuotedLiterals: allowPCREQuotedLiterals) != nil {
+                matchedPathLiteralPattern = nil
+            } else {
+                matchedPathLiteralPattern = RegexLiteralParser.literal(
+                    fromPlainRegexPattern: pattern,
+                    allowPCREQuotedLiterals: allowPCREQuotedLiterals
+                )
+            }
+            if let matchedPathLiteralPattern {
+                let matchedPathLiteral = Array(matchedPathLiteralPattern.utf8)
+                if !matchedPathLiteral.isEmpty,
+                   !matchedPathLiteral.contains(UInt8(ascii: "\n")) {
+                    let exitCode = SwiftDarwinLiteralPreflight.matchedPathOutputExitCode(
+                        path: path,
+                        literal: matchedPathLiteral,
+                        asciiCaseInsensitive: asciiCaseInsensitive,
+                        wordRegexp: wordRegexp,
+                        lineRegexp: parsedLineRegexp,
+                        nullTerminated: parsedNullPathTerminator,
+                        crlfTerminated: parsedCrlf,
+                        outputPath: parsedPathOnlyOutputPath
+                    )
+                    if let exitCode {
+                        return exitCode
+                    }
                 }
             }
         }

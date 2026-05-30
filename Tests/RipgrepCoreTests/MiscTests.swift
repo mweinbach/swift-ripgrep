@@ -1295,6 +1295,7 @@ struct MiscTests {
         needle four
         """, to: "stop-run.txt")
         try root.write("alpha\nquiet\n", to: "summary.txt")
+        try root.write("alpha alpha\nquiet\nALPHA\nwordalpha alpha\n", to: "summary-match.txt")
 
         func runExecutableResult(_ arguments: [String]) throws -> (stdout: Data, stderr: Data, status: Int32) {
             let executable = ripgrepPackageRootURL().appendingPathComponent(".build/debug/ripgrep")
@@ -1411,6 +1412,30 @@ struct MiscTests {
             "--json",
             "-l",
             "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let jsonFilesWithMatchesMatch = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "-l",
+            "alpha",
+            root.path("summary.txt"),
+        ])
+        let jsonFilesWithMatchesIgnoreCaseWordMatch = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "-i",
+            "-w",
+            "-l",
+            "ALPHA",
+            root.path("summary.txt"),
+        ])
+        let jsonFilesWithMatchesExactLineMismatch = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "-x",
+            "-l",
+            "alph",
             root.path("summary.txt"),
         ])
         let jsonFilesWithoutMatchNoMatch = try runExecutableResult([
@@ -1623,6 +1648,38 @@ struct MiscTests {
             "missingliteral",
             root.path("summary.txt"),
         ])
+        let statsFilesWithoutMatchMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "--files-without-match",
+            "alpha",
+            root.path("summary-match.txt"),
+        ])
+        let statsIgnoreCaseFilesWithoutMatchMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "-i",
+            "--files-without-match",
+            "ALPHA",
+            root.path("summary-match.txt"),
+        ])
+        let statsWordFilesWithoutMatchMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "-w",
+            "--files-without-match",
+            "alpha",
+            root.path("summary-match.txt"),
+        ])
+        let statsIgnoreCaseWordFilesWithoutMatchMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "-i",
+            "-w",
+            "--files-without-match",
+            "ALPHA",
+            root.path("summary-match.txt"),
+        ])
 
         let expectedJsonNoMatchSummary = Data((#"{"data":{"elapsed_total":{"human":"0.000000s","nanos":0,"secs":0},"stats":{"bytes_printed":0,"bytes_searched":12,"elapsed":{"human":"0.000000s","nanos":0,"secs":0},"matched_lines":0,"matches":0,"searches":1,"searches_with_match":0}},"type":"summary"}"# + "\n").utf8)
         let expectedStatsNoMatchSummary = Data("""
@@ -1643,6 +1700,20 @@ struct MiscTests {
         let expectedPathStatsNoMatchSummary = expectedPathNoMatch + expectedStatsNoMatchSummary
         let expectedCrlfPathStatsNoMatchSummary = Data((root.path("summary.txt") + "\r\n").utf8)
             + expectedStatsNoMatchSummary
+        func expectedStatsMatchSummary(matches: Int, matchedLines: Int) -> Data {
+            Data("""
+
+            \(matches) matches
+            \(matchedLines) matched lines
+            1 files contained matches
+            1 files searched
+            0 bytes printed
+            40 bytes searched
+            0.000000 seconds spent searching
+            0.000000 seconds total
+
+            """.utf8)
+        }
 
         for result in [
             jsonNoMatchSummary,
@@ -1700,6 +1771,14 @@ struct MiscTests {
         #expect(jsonFilesWithoutMatchNoMatch.stderr.isEmpty)
         #expect(jsonFilesWithoutMatchNoMatch.stdout == expectedPathNoMatch)
         for result in [
+            jsonFilesWithMatchesMatch,
+            jsonFilesWithMatchesIgnoreCaseWordMatch,
+        ] {
+            #expect(result.status == 0)
+            #expect(result.stderr.isEmpty)
+            #expect(result.stdout == expectedPathNoMatch)
+        }
+        for result in [
             jsonFilesWithoutMatchMatch,
             jsonFilesWithoutMatchIgnoreCaseWordMatch,
         ] {
@@ -1713,8 +1792,21 @@ struct MiscTests {
         #expect(statsCrlfFilesWithoutMatchNoMatchSummary.status == 0)
         #expect(statsCrlfFilesWithoutMatchNoMatchSummary.stderr.isEmpty)
         #expect(statsCrlfFilesWithoutMatchNoMatchSummary.stdout == expectedCrlfPathStatsNoMatchSummary)
+        #expect(statsFilesWithoutMatchMatchSummary.status == 1)
+        #expect(statsFilesWithoutMatchMatchSummary.stderr.isEmpty)
+        #expect(statsFilesWithoutMatchMatchSummary.stdout == expectedStatsMatchSummary(matches: 4, matchedLines: 2))
+        #expect(statsIgnoreCaseFilesWithoutMatchMatchSummary.status == 1)
+        #expect(statsIgnoreCaseFilesWithoutMatchMatchSummary.stderr.isEmpty)
+        #expect(statsIgnoreCaseFilesWithoutMatchMatchSummary.stdout == expectedStatsMatchSummary(matches: 5, matchedLines: 3))
+        #expect(statsWordFilesWithoutMatchMatchSummary.status == 1)
+        #expect(statsWordFilesWithoutMatchMatchSummary.stderr.isEmpty)
+        #expect(statsWordFilesWithoutMatchMatchSummary.stdout == expectedStatsMatchSummary(matches: 3, matchedLines: 2))
+        #expect(statsIgnoreCaseWordFilesWithoutMatchMatchSummary.status == 1)
+        #expect(statsIgnoreCaseWordFilesWithoutMatchMatchSummary.stderr.isEmpty)
+        #expect(statsIgnoreCaseWordFilesWithoutMatchMatchSummary.stdout == expectedStatsMatchSummary(matches: 4, matchedLines: 3))
         for result in [
             jsonFilesWithMatchesNoMatch,
+            jsonFilesWithMatchesExactLineMismatch,
             jsonCountNoMatch,
             jsonCountMatchesNoMatch,
         ] {
