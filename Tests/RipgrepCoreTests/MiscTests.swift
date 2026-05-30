@@ -356,6 +356,27 @@ struct MiscTests {
         Zbcdefghi999
 
         """)
+        let maxCountCountOutput = try runExecutableData([
+            "-c",
+            "-m1",
+            pattern,
+            root.path("src/max.txt"),
+        ], fixture: {})
+        #expect(maxCountCountOutput == Data("1\n".utf8))
+        let maxCountCountMatchesOutput = try runExecutableData([
+            "--count-matches",
+            "-m1",
+            pattern,
+            root.path("src/max.txt"),
+        ], fixture: {})
+        #expect(maxCountCountMatchesOutput == Data("2\n".utf8))
+        let maxCountFilesWithMatchesOutput = try runExecutableData([
+            "-l",
+            "-m1",
+            pattern,
+            root.path("src/max.txt"),
+        ], fixture: {})
+        #expect(maxCountFilesWithMatchesOutput == Data("\(root.path("src/max.txt"))\n".utf8))
         let statsMaxCountOutput = try runExecutableData([
             "--stats",
             "-m1",
@@ -371,6 +392,24 @@ struct MiscTests {
         1 files contained matches
         1 files searched
         34 bytes printed
+        34 bytes searched
+        """))
+        let statsMaxCountCountOutput = try runExecutableData([
+            "--stats",
+            "-c",
+            "-m1",
+            pattern,
+            root.path("src/max.txt"),
+        ], fixture: {})
+        let statsMaxCountCountText = String(decoding: statsMaxCountCountOutput, as: UTF8.self)
+        #expect(statsMaxCountCountText.contains("""
+        1
+
+        2 matches
+        1 matched lines
+        1 files contained matches
+        1 files searched
+        0 bytes printed
         34 bytes searched
         """))
 
@@ -406,6 +445,11 @@ struct MiscTests {
             )
             return (stdout, stderr, status)
         }
+
+        let quietMaxCountMatch = runQuiet(["-q", "-m1", pattern, root.path("src/max.txt")])
+        #expect(quietMaxCountMatch.stdout.isEmpty)
+        #expect(quietMaxCountMatch.stderr.isEmpty)
+        #expect(quietMaxCountMatch.status == 0)
 
         let quietMatch = runQuiet(["-q", pattern, root.url.path])
         #expect(quietMatch.stdout.isEmpty)

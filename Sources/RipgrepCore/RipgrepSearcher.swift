@@ -7195,8 +7195,12 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let maxCount = options.maxCount
         let canUseMaxCount = maxCount == nil
             || ((maxCount ?? 0) > 0
-                && !options.quiet
-                && options.printMode == .matchingLines)
+                && (options.quiet
+                    || options.printMode == .matchingLines
+                    || options.printMode == .count
+                    || options.printMode == .countMatches
+                    || options.printMode == .filesWithMatches
+                    || options.printMode == .filesWithoutMatch))
         guard let fastPath = matcher.asciiFixedClassSequenceFastPath(),
               case .automatic = options.encodingMode,
               !data.starts(with: [0xEF, 0xBB, 0xBF]),
@@ -7249,18 +7253,19 @@ public struct RipgrepSearcher: @unchecked Sendable {
             let counts = data.withUnsafeBytes { rawBuffer -> ASCIIFixedClassCounts in
                 let bytes = rawBuffer.bindMemory(to: UInt8.self)
                 guard let baseAddress = bytes.baseAddress else {
-                    return ASCIIFixedClassCounts(matchedLines: 0, matches: 0)
+                    return ASCIIFixedClassCounts(matchedLines: 0, matches: 0, bytesSearched: 0)
                 }
                 return asciiFixedClassCounts(
                     baseAddress: baseAddress,
                     dataCount: data.count,
-                    classes: classes
+                    classes: classes,
+                    maxMatchedLines: maxCount
                 )
             }
             return SearchFileResult(
                 fileURL: fileURL,
                 matches: [],
-                bytesSearched: data.count,
+                bytesSearched: counts.bytesSearched,
                 searched: true,
                 supplementalMatchedLines: counts.matchedLines,
                 supplementalMatches: counts.matches
@@ -7354,6 +7359,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
     private struct ASCIIFixedClassCounts {
         var matchedLines: Int
         var matches: Int
+        var bytesSearched: Int
     }
 
     private struct ASCIIFixedClassLineScan {
@@ -7364,16 +7370,26 @@ public struct RipgrepSearcher: @unchecked Sendable {
     private func asciiFixedClassCounts(
         baseAddress: UnsafePointer<UInt8>,
         dataCount: Int,
-        classes: [ASCIIFixedClassSequenceFastPath.ByteClass]
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass],
+        maxMatchedLines: Int? = nil
     ) -> ASCIIFixedClassCounts {
+        if let maxMatchedLines {
+            return asciiFixedClassLimitedCounts(
+                baseAddress: baseAddress,
+                dataCount: dataCount,
+                classes: classes,
+                maxMatchedLines: maxMatchedLines
+            )
+        }
+
         let width = classes.count
         guard width > 0, dataCount >= width else {
-            return ASCIIFixedClassCounts(matchedLines: 0, matches: 0)
+            return ASCIIFixedClassCounts(matchedLines: 0, matches: 0, bytesSearched: dataCount)
         }
 
         let newline = UInt8(ascii: "\n")
         let lastStart = dataCount - width
-        var counts = ASCIIFixedClassCounts(matchedLines: 0, matches: 0)
+        var counts = ASCIIFixedClassCounts(matchedLines: 0, matches: 0, bytesSearched: dataCount)
         var lineHasMatch = false
         var offset = 0
         while offset <= lastStart {
@@ -7402,6 +7418,82 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 continue
             }
             offset += 1
+        }
+        return counts
+    }
+
+    private func asciiFixedClassLimitedCounts(
+        baseAddress: UnsafePointer<UInt8>,
+        dataCount: Int,
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass],
+        maxMatchedLines: Int
+    ) -> ASCIIFixedClassCounts {
+        let width = classes.count
+        guard width > 0, dataCount >= width else {
+            return ASCIIFixedClassCounts(matchedLines: 0, matches: 0, bytesSearched: dataCount)
+        }
+        guard maxMatchedLines > 0 else {
+            return ASCIIFixedClassCounts(matchedLines: 0, matches: 0, bytesSearched: 0)
+        }
+
+        let newline = UInt8(ascii: "\n")
+        var counts = ASCIIFixedClassCounts(matchedLines: 0, matches: 0, bytesSearched: dataCount)
+        var lineStart = 0
+        var offset = 0
+
+        func scanLine(lineEnd: Int, terminatorBytes: Int) -> Bool {
+            guard lineEnd - lineStart >= width else {
+                return true
+            }
+
+            let lastStart = lineEnd - width
+            var lineMatchCount = 0
+            var candidateOffset = lineStart
+            while candidateOffset <= lastStart {
+                guard byte(baseAddress[candidateOffset], matches: classes[0]) else {
+                    candidateOffset += 1
+                    continue
+                }
+
+                var classIndex = 1
+                while classIndex < width,
+                      byte(baseAddress[candidateOffset + classIndex], matches: classes[classIndex]) {
+                    classIndex += 1
+                }
+                if classIndex == width {
+                    lineMatchCount += 1
+                    candidateOffset += width
+                    continue
+                }
+                candidateOffset += 1
+            }
+
+            guard lineMatchCount > 0 else {
+                return true
+            }
+            counts.matches += lineMatchCount
+            counts.matchedLines += 1
+            if counts.matchedLines == maxMatchedLines {
+                counts.bytesSearched = lineEnd + terminatorBytes
+                return false
+            }
+            return true
+        }
+
+        while offset < dataCount {
+            if baseAddress[offset] == newline {
+                guard scanLine(lineEnd: offset, terminatorBytes: 1) else {
+                    return counts
+                }
+                offset += 1
+                lineStart = offset
+                continue
+            }
+            offset += 1
+        }
+
+        if lineStart < dataCount || dataCount == 0 || baseAddress[dataCount - 1] != newline {
+            _ = scanLine(lineEnd: dataCount, terminatorBytes: 0)
         }
         return counts
     }
