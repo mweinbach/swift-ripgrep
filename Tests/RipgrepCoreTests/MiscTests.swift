@@ -1475,6 +1475,38 @@ struct MiscTests {
             "missingliteral",
             root.path("summary.txt"),
         ])
+        let jsonCountMatch = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "-c",
+            "alpha",
+            root.path("summary-match.txt"),
+        ])
+        let jsonCountMatchesMatch = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "--count-matches",
+            "alpha",
+            root.path("summary-match.txt"),
+        ])
+        let jsonIgnoreCaseWordCountMatch = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "-i",
+            "-w",
+            "-c",
+            "ALPHA",
+            root.path("summary-match.txt"),
+        ])
+        let jsonIgnoreCaseWordCountMatchesMatch = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "-i",
+            "-w",
+            "--count-matches",
+            "ALPHA",
+            root.path("summary-match.txt"),
+        ])
         let jsonCountIncludeZeroNoMatch = try runExecutableResult([
             "--no-config",
             "--json",
@@ -1820,6 +1852,18 @@ struct MiscTests {
         #expect(jsonCountMatchesIncludeZeroNoMatch.status == 1)
         #expect(jsonCountMatchesIncludeZeroNoMatch.stderr.isEmpty)
         #expect(jsonCountMatchesIncludeZeroNoMatch.stdout == Data("0\n".utf8))
+        #expect(jsonCountMatch.status == 0)
+        #expect(jsonCountMatch.stderr.isEmpty)
+        #expect(jsonCountMatch.stdout == Data("2\n".utf8))
+        #expect(jsonCountMatchesMatch.status == 0)
+        #expect(jsonCountMatchesMatch.stderr.isEmpty)
+        #expect(jsonCountMatchesMatch.stdout == Data("4\n".utf8))
+        #expect(jsonIgnoreCaseWordCountMatch.status == 0)
+        #expect(jsonIgnoreCaseWordCountMatch.stderr.isEmpty)
+        #expect(jsonIgnoreCaseWordCountMatch.stdout == Data("3\n".utf8))
+        #expect(jsonIgnoreCaseWordCountMatchesMatch.status == 0)
+        #expect(jsonIgnoreCaseWordCountMatchesMatch.stderr.isEmpty)
+        #expect(jsonIgnoreCaseWordCountMatchesMatch.stdout == Data("4\n".utf8))
 
         let output = try runExecutableData([
             "needle",

@@ -2749,6 +2749,10 @@ struct RipgrepCommand {
             && !parsedStats
             && (parsedPrintMode == .filesWithMatches
                 || ((parsedPrintMode == .count || parsedPrintMode == .countMatches) && !parsedIncludeZero))
+        let parsedJSONCountPrintModeCanUseCountPreflight = parsedJson
+            && !parsedStats
+            && !parsedQuiet
+            && (parsedPrintMode == .count || parsedPrintMode == .countMatches)
         let parsedJSONFilesWithMatchesPrintModeCanUseMatchedPathPreflight = parsedJson
             && !parsedStats
             && !parsedQuiet
@@ -2935,6 +2939,166 @@ struct RipgrepCommand {
                         wordRegexp: wordRegexp
                    ) {
                     return exitCode
+                }
+            }
+        }
+        if parsedJSONCountPrintModeCanUseCountPreflight,
+           !parsedInvertMatch,
+           parsedMaxCount != 0,
+           !parsedNullData,
+           !parsedPassthru,
+           !parsedSearchZipAffectsPreflight,
+           parsedEncodingIsAutomatic,
+           !parsedColorAffectsPreflightOutput,
+           !(parsedLineRegexp && (wordRegexp || parsedCrlf)),
+           (patternCanStartWithDash || !pattern.hasPrefix("-")),
+           path != "-" {
+            let countOutputLiteralPattern: String?
+            if fixedStrings {
+                countOutputLiteralPattern = pattern
+            } else if asciiBoundaryLiteral(pattern, allowPCREQuotedLiterals: allowPCREQuotedLiterals) != nil {
+                countOutputLiteralPattern = nil
+            } else {
+                countOutputLiteralPattern = RegexLiteralParser.literal(
+                    fromPlainRegexPattern: pattern,
+                    allowPCREQuotedLiterals: allowPCREQuotedLiterals
+                )
+            }
+            if let countOutputLiteralPattern {
+                let countOutputLiteral = Array(countOutputLiteralPattern.utf8)
+                if !countOutputLiteral.isEmpty,
+                   !countOutputLiteral.contains(UInt8(ascii: "\n")) {
+                    let exitCode: Int32?
+                    if parsedPrintMode == .countMatches {
+                        if parsedLineRegexp {
+                            if asciiCaseInsensitive {
+                                exitCode = SwiftDarwinLiteralPreflight.asciiCaseInsensitiveExactLineCountExitCode(
+                                    path: path,
+                                    literal: countOutputLiteral,
+                                    includeZero: parsedIncludeZero,
+                                    maxCount: parsedMaxCount,
+                                    countPrefix: parsedCountPrefix,
+                                    crlfTerminated: parsedCrlf
+                                )
+                            } else {
+                                exitCode = SwiftDarwinLiteralPreflight.exactLineCountExitCode(
+                                    path: path,
+                                    literal: countOutputLiteral,
+                                    includeZero: parsedIncludeZero,
+                                    maxCount: parsedMaxCount,
+                                    countPrefix: parsedCountPrefix,
+                                    crlfTerminated: parsedCrlf
+                                )
+                            }
+                        } else if wordRegexp {
+                            if asciiCaseInsensitive {
+                                exitCode = SwiftDarwinLiteralPreflight.asciiCaseInsensitiveWordCountMatchesExitCode(
+                                    path: path,
+                                    literal: countOutputLiteral,
+                                    includeZero: parsedIncludeZero,
+                                    maxCount: parsedMaxCount,
+                                    countPrefix: parsedCountPrefix,
+                                    crlfTerminated: parsedCrlf
+                                )
+                            } else {
+                                exitCode = SwiftDarwinLiteralPreflight.wordCountMatchesExitCode(
+                                    path: path,
+                                    literal: countOutputLiteral,
+                                    includeZero: parsedIncludeZero,
+                                    maxCount: parsedMaxCount,
+                                    countPrefix: parsedCountPrefix,
+                                    crlfTerminated: parsedCrlf
+                                )
+                            }
+                        } else if asciiCaseInsensitive {
+                            exitCode = SwiftDarwinLiteralPreflight.asciiCaseInsensitiveCountMatchesExitCode(
+                                path: path,
+                                literal: countOutputLiteral,
+                                includeZero: parsedIncludeZero,
+                                maxCount: parsedMaxCount,
+                                countPrefix: parsedCountPrefix,
+                                crlfTerminated: parsedCrlf
+                            )
+                        } else {
+                            exitCode = SwiftDarwinLiteralPreflight.countMatchesExitCode(
+                                path: path,
+                                literal: countOutputLiteral,
+                                includeZero: parsedIncludeZero,
+                                maxCount: parsedMaxCount,
+                                countPrefix: parsedCountPrefix,
+                                crlfTerminated: parsedCrlf
+                            )
+                        }
+                    } else if wordRegexp {
+                        if asciiCaseInsensitive {
+                            exitCode = SwiftDarwinLiteralPreflight.asciiCaseInsensitiveWordCountLineExitCode(
+                                path: path,
+                                literal: countOutputLiteral,
+                                includeZero: parsedIncludeZero,
+                                maxCount: parsedMaxCount,
+                                countPrefix: parsedCountPrefix,
+                                crlfTerminated: parsedCrlf
+                            )
+                        } else {
+                            exitCode = SwiftDarwinLiteralPreflight.wordCountLineExitCode(
+                                path: path,
+                                literal: countOutputLiteral,
+                                includeZero: parsedIncludeZero,
+                                maxCount: parsedMaxCount,
+                                countPrefix: parsedCountPrefix,
+                                crlfTerminated: parsedCrlf
+                            )
+                        }
+                    } else if asciiCaseInsensitive {
+                        if parsedLineRegexp {
+                            exitCode = SwiftDarwinLiteralPreflight.asciiCaseInsensitiveExactLineCountExitCode(
+                                path: path,
+                                literal: countOutputLiteral,
+                                includeZero: parsedIncludeZero,
+                                maxCount: parsedMaxCount,
+                                countPrefix: parsedCountPrefix,
+                                crlfTerminated: parsedCrlf
+                            )
+                        } else {
+                            exitCode = SwiftDarwinLiteralPreflight.asciiCaseInsensitiveMultiLiteralCountLineExitCode(
+                                path: path,
+                                literals: [countOutputLiteral],
+                                includeZero: parsedIncludeZero,
+                                maxCount: parsedMaxCount,
+                                countPrefix: parsedCountPrefix,
+                                crlfTerminated: parsedCrlf
+                            )
+                        }
+                    } else if parsedLineRegexp {
+                        exitCode = SwiftDarwinLiteralPreflight.exactLineCountExitCode(
+                            path: path,
+                            literal: countOutputLiteral,
+                            includeZero: parsedIncludeZero,
+                            maxCount: parsedMaxCount,
+                            countPrefix: parsedCountPrefix,
+                            crlfTerminated: parsedCrlf
+                        )
+                    } else if parsedMaxCount == nil || parsedWithFilename {
+                        exitCode = SwiftDarwinLiteralPreflight.multiLiteralCountLineExitCode(
+                            path: path,
+                            literals: [countOutputLiteral],
+                            includeZero: parsedIncludeZero,
+                            maxCount: parsedMaxCount,
+                            countPrefix: parsedCountPrefix,
+                            crlfTerminated: parsedCrlf
+                        )
+                    } else {
+                        exitCode = SwiftDarwinLiteralPreflight.countLineExitCode(
+                            path: path,
+                            literal: countOutputLiteral,
+                            includeZero: parsedIncludeZero,
+                            maxCount: parsedMaxCount,
+                            crlfTerminated: parsedCrlf
+                        )
+                    }
+                    if let exitCode {
+                        return exitCode
+                    }
                 }
             }
         }
