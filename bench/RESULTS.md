@@ -84,7 +84,10 @@ context, JSON/stats, replacements, word/line boundaries, inverted searches, and
 other formatted modes. Sorted Linux corpus output for both `-n '\p{Greek}'` and
 `-n -i '\p{Greek}'` continued to match Rust exactly (105 and 245 lines). A
 five-run hyperfine sample measured Swift at 1.973 s plain and 2.016 s
-ignore-case, versus Rust plain at 2.804 s on the same corpus.
+ignore-case, versus Rust plain at 2.804 s on the same corpus. A current
+warm-cache `/usr/bin/time -p` recheck measured Swift at 1.99/2.01 s plain and
+1.96/1.98 s ignore-case, with Rust at 2.68/2.74 s plain and 2.86/2.91 s
+ignore-case.
 
 The executable ASCII case-insensitive containment proof now uses the existing
 folded byte scanner instead of building exact/lower/upper `Data` variants. It
