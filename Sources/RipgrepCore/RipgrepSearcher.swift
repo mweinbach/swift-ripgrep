@@ -6573,12 +6573,18 @@ public struct RipgrepSearcher: @unchecked Sendable {
         options: RipgrepOptions
     ) -> SearchFileResult? {
         let countOutput = options.printMode == .count
+        let countMatchesOutput = options.printMode == .countMatches
         let filesWithMatchesMode = options.printMode == .filesWithMatches
         let filesWithoutMatchMode = options.printMode == .filesWithoutMatch
-        let pathOnlyOutput = filesWithMatchesMode || filesWithoutMatchMode
+        let pathOnlyOutput = !options.stats && (filesWithMatchesMode || filesWithoutMatchMode)
+        let pathStatsOutput = options.stats && (filesWithMatchesMode || filesWithoutMatchMode)
         let lineOutput = !options.quiet
             && options.printMode == .matchingLines
         let quietOutput = options.quiet
+            && !options.stats
+            && options.printMode == .matchingLines
+        let quietStatsOutput = options.quiet
+            && options.stats
             && options.printMode == .matchingLines
         let firstMatchOutput = quietOutput || pathOnlyOutput
         guard let fastPath = matcher.wordWhitespaceSequenceFastPath(),
@@ -6587,7 +6593,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !data.starts(with: [0xFF, 0xFE]),
               !data.starts(with: [0xFE, 0xFF]),
               !options.json,
-              !options.stats,
               options.beforeContext == 0,
               options.afterContext == 0,
               !options.passthru,
@@ -6601,7 +6606,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !options.crlf,
               options.maxColumns == nil,
               !options.trim,
-              lineOutput || countOutput || pathOnlyOutput || quietOutput,
+              lineOutput || countOutput || countMatchesOutput || pathOnlyOutput || pathStatsOutput || quietOutput
+                  || quietStatsOutput,
               canOmitMatchSpans(options: options) else {
             return nil
         }
@@ -6615,6 +6621,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let dataCount = data.count
         let minimumSequenceByteCount = fastPath.groupCount * 5 + max(0, fastPath.groupCount - 1)
         let canPrefilterShortLines = dataCount >= 64 * 1024 * 1024
+        let needsExactMatchCount = countMatchesOutput || options.stats
         data.withUnsafeBytes { rawBuffer in
             let bytes = rawBuffer.bindMemory(to: UInt8.self)
             guard let baseAddress = bytes.baseAddress else {
@@ -6881,6 +6888,15 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         needsDecodedFallback = true
                         break
                     }
+                    let matchCount: Int
+                    if needsExactMatchCount {
+                        matchCount = matcher.spans(in: lineText).count
+                        guard matchCount > 0 else {
+                            continue
+                        }
+                    } else {
+                        matchCount = 1
+                    }
                     matches.append(SearchMatch(
                         fileURL: fileURL,
                         lineNumber: lineNumberCursor,
@@ -6888,7 +6904,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                         line: lineText,
                         lineTerminator: bound.hasNewline ? "\n" : "",
                         absoluteOffset: bound.start,
-                        matchCount: 1,
+                        matchCount: matchCount,
                         spans: []
                     ))
                 }
@@ -6903,6 +6919,15 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     needsDecodedFallback = true
                     return false
                 }
+                let matchCount: Int
+                if needsExactMatchCount {
+                    matchCount = matcher.spans(in: lineText).count
+                    guard matchCount > 0 else {
+                        return true
+                    }
+                } else {
+                    matchCount = 1
+                }
                 matches.append(SearchMatch(
                     fileURL: fileURL,
                     lineNumber: lineNumber,
@@ -6910,7 +6935,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     line: lineText,
                     lineTerminator: lineTerminator,
                     absoluteOffset: lineStart,
-                    matchCount: 1,
+                    matchCount: matchCount,
                     spans: []
                 ))
                 if matches.count == maxCount {

@@ -134,6 +134,28 @@ struct MiscTests {
             root.path("words.txt"),
         ], expectedExitCode: 0)
         #expect(quietOutput.isEmpty)
+        try root.write("alpha bravo charl delta echoo foxtt golfx hotel india julie\n", to: "multi-words.txt")
+        let exactLineCountOutput = try runExecutableData([
+            "-c",
+            pattern,
+            root.path("multi-words.txt"),
+        ], fixture: {})
+        #expect(exactLineCountOutput == Data("1\n".utf8))
+        let exactMatchCountOutput = try runExecutableData([
+            "--count-matches",
+            pattern,
+            root.path("multi-words.txt"),
+        ], fixture: {})
+        #expect(exactMatchCountOutput == Data("2\n".utf8))
+        let exactQuietStatsOutput = try runExecutableData([
+            "--stats",
+            "-q",
+            pattern,
+            root.path("multi-words.txt"),
+        ], fixture: {})
+        let exactQuietStats = String(decoding: exactQuietStatsOutput, as: UTF8.self)
+        #expect(exactQuietStats.contains("\n2 matches\n1 matched lines\n1 files contained matches\n1 files searched\n"))
+        #expect(exactQuietStats.contains("\n60 bytes searched\n"))
 
         let largeFillerLineCount = 600_000
         let largeFiller = String(repeating: "tiny words here\n", count: largeFillerLineCount)
