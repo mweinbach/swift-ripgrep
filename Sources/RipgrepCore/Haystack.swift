@@ -608,6 +608,86 @@ public struct FileWalker: @unchecked Sendable {
         try haystacksWithMessages(for: options, visitHaystack: visitHaystack)
     }
 
+    #if canImport(Darwin)
+    func firstVisitedFastSearchFileWithMessages(
+        for options: RipgrepOptions,
+        visitHaystack: @escaping (Haystack) -> Bool
+    ) throws -> FileWalkResults? {
+        guard canFastVisitSearchFiles(options: options),
+              options.effectiveRoots.count == 1 else {
+            return nil
+        }
+
+        var messages: [String] = []
+        var warnings: [String] = []
+        var diagnostics: [String] = []
+        var filtered = false
+
+        let root = options.effectiveRoots[0]
+        guard fileManager.fileExists(atPath: root.path) else {
+            let displayPath = rootDisplayPath(at: 0, root: root, options: options)
+            messages.append(missingRootMessage(displayPath, options: options, hasExistingRoot: false))
+            return FileWalkResults(
+                haystacks: [],
+                messages: messages,
+                warnings: warnings,
+                diagnostics: diagnostics,
+                filtered: false
+            )
+        }
+
+        guard let rootPlan = fastFilePathRootPlan(root: root, options: options) else {
+            return nil
+        }
+
+        var rootIgnoreStack = IgnoreStack()
+        appendExplicitIgnoreFiles(
+            to: &rootIgnoreStack,
+            rootBase: rootPlan.rootBase,
+            warnings: &warnings,
+            diagnostics: &diagnostics,
+            options: options
+        )
+        appendGlobalIgnoreFile(to: &rootIgnoreStack, rootBase: rootPlan.rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
+        appendParentIgnoreFiles(to: &rootIgnoreStack, rootBase: rootPlan.rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
+
+        let rootVCSContext = options.noRequireGit || isInGitRepository(rootPlan.rootBase)
+        var didStop = false
+        var matchedHaystacks: [Haystack] = []
+        try walkFastSearchFilesInOutputOrder(
+            directoryPath: rootPlan.rootURL.path,
+            logicalDirectoryPath: rootPlan.logicalPath,
+            logicalDirectoryPathIsASCII: rootPlan.logicalPathIsASCII,
+            relativePath: "",
+            rootBase: rootPlan.rootBase,
+            rootDebugDisplayPath: rootDisplayPath(at: 0, root: root, options: options),
+            rootArgumentIsAbsolute: rootPlan.rootArgumentIsAbsolute,
+            vcsContext: rootVCSContext,
+            messages: &messages,
+            warnings: &warnings,
+            diagnostics: &diagnostics,
+            filtered: &filtered,
+            ignoreStack: rootIgnoreStack,
+            options: options,
+            didStop: &didStop
+        ) { haystack in
+            if visitHaystack(haystack) {
+                matchedHaystacks.append(haystack)
+                return true
+            }
+            return false
+        }
+
+        return FileWalkResults(
+            haystacks: matchedHaystacks,
+            messages: messages,
+            warnings: warnings,
+            diagnostics: diagnostics,
+            filtered: filtered
+        )
+    }
+    #endif
+
     private func haystacksWithMessages(
         for options: RipgrepOptions,
         visitHaystack: ((Haystack) -> Bool)?
@@ -768,6 +848,26 @@ public struct FileWalker: @unchecked Sendable {
             && !options.useStdin
             && !options.nullPathTerminator
             && canSort
+            && options.pathSeparator == nil
+            && options.colorMode != .always
+            && options.colorMode != .ansi
+            && options.colorChanges.isEmpty
+            && !options.hyperlinkFormat.isEnabled
+            && options.globPatterns.isEmpty
+            && options.caseInsensitiveGlobPatterns.isEmpty
+            && options.typeChanges.isEmpty
+            && options.maxFileSize == nil
+            && options.maxDepth == nil
+            && !options.followSymlinks
+            && !options.oneFileSystem
+    }
+
+    private func canFastVisitSearchFiles(options: RipgrepOptions) -> Bool {
+        options.mode == .search
+            && !options.useStdin
+            && !options.nullPathTerminator
+            && options.sortMode == nil
+            && options.loggingMode == nil
             && options.pathSeparator == nil
             && options.colorMode != .always
             && options.colorMode != .ansi
@@ -1645,6 +1745,127 @@ public struct FileWalker: @unchecked Sendable {
             )
             if didStop {
                 return
+            }
+        }
+    }
+
+    private func walkFastSearchFilesInOutputOrder(
+        directoryPath: String,
+        logicalDirectoryPath: String,
+        logicalDirectoryPathIsASCII: Bool,
+        relativePath: String,
+        rootBase: URL,
+        rootDebugDisplayPath: String,
+        rootArgumentIsAbsolute: Bool,
+        vcsContext: Bool,
+        messages: inout [String],
+        warnings: inout [String],
+        diagnostics: inout [String],
+        filtered: inout Bool,
+        ignoreStack: IgnoreStack,
+        options: RipgrepOptions,
+        didStop: inout Bool,
+        visit: (Haystack) -> Bool
+    ) throws {
+        guard !didStop else {
+            return
+        }
+        let contents = try fastDirectoryContents(
+            atPath: directoryPath,
+            collectIgnoreMarkers: !(options.noIgnore && options.hidden)
+        )
+        let directoryVCSContext = vcsContext || (!options.noIgnoreVCS && contents.hasGitMarker)
+        var directoryIgnoreStack = ignoreStack
+        if !options.noIgnore && hasLoadableIgnoreFiles(
+            hasGitMarker: contents.hasGitMarker,
+            hasGitignore: contents.hasGitignore,
+            hasIgnore: contents.hasIgnore,
+            hasRgignore: contents.hasRgignore,
+            vcsContext: directoryVCSContext,
+            options: options
+        ) {
+            let directoryURL = URL(fileURLWithPath: directoryPath, isDirectory: true)
+            appendIgnoreFiles(
+                in: directoryURL,
+                to: &directoryIgnoreStack,
+                warnings: &warnings,
+                diagnostics: &diagnostics,
+                rootBase: rootBase,
+                rootDebugDisplayPath: rootDebugDisplayPath,
+                rootArgumentIsAbsolute: rootArgumentIsAbsolute,
+                vcsContext: directoryVCSContext,
+                scope: directoryIgnoreScope(relativePath: relativePath),
+                directoryContents: DirectoryContents(
+                    children: [],
+                    hasGitMarker: contents.hasGitMarker,
+                    hasGitignore: contents.hasGitignore,
+                    hasIgnore: contents.hasIgnore,
+                    hasRgignore: contents.hasRgignore
+                ),
+                options: options
+            )
+        }
+
+        let directoryPathPrefix = directoryPath + "/"
+        let logicalDirectoryPathPrefix = pathPrefix(logicalDirectoryPath)
+        let relativePathPrefix = relativePath.isEmpty ? "" : relativePath + "/"
+        for child in contents.children.reversed() {
+            if child.kind == .symbolicLink {
+                continue
+            }
+            let childRelativePath = relativePathPrefix + child.name
+            let isDirectory = child.kind.isDirectory
+            if !options.hidden,
+               child.isHidden,
+               !isIncludedByIgnore(
+                   relativePath: childRelativePath,
+                   basename: child.name,
+                   isDirectory: isDirectory,
+                   ignoreStack: directoryIgnoreStack
+               ) {
+                continue
+            }
+            if !directoryIgnoreStack.allows(relativePath: childRelativePath, basename: child.name, isDirectory: isDirectory) {
+                filtered = true
+                continue
+            }
+            if child.kind.isDirectory {
+                try walkFastSearchFilesInOutputOrder(
+                    directoryPath: directoryPathPrefix + child.name,
+                    logicalDirectoryPath: joinedPath(logicalDirectoryPath, child.name),
+                    logicalDirectoryPathIsASCII: logicalDirectoryPathIsASCII && child.isASCII,
+                    relativePath: childRelativePath,
+                    rootBase: rootBase,
+                    rootDebugDisplayPath: rootDebugDisplayPath,
+                    rootArgumentIsAbsolute: rootArgumentIsAbsolute,
+                    vcsContext: directoryVCSContext,
+                    messages: &messages,
+                    warnings: &warnings,
+                    diagnostics: &diagnostics,
+                    filtered: &filtered,
+                    ignoreStack: directoryIgnoreStack,
+                    options: options,
+                    didStop: &didStop,
+                    visit: visit
+                )
+                if didStop {
+                    return
+                }
+            } else if child.kind.isFile {
+                let haystack = Haystack(
+                    url: URL(fileURLWithPath: directoryPathPrefix + child.name),
+                    isExplicit: false,
+                    overridePath: outputPath(
+                        logicalDirectoryPathPrefix: logicalDirectoryPathPrefix,
+                        logicalDirectoryPathIsASCII: logicalDirectoryPathIsASCII,
+                        child: child
+                    ),
+                    isRegularFile: true
+                )
+                if visit(haystack) {
+                    didStop = true
+                    return
+                }
             }
         }
     }

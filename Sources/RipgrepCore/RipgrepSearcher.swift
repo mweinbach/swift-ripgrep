@@ -395,68 +395,85 @@ public struct RipgrepSearcher: @unchecked Sendable {
         var quietByteLiteralProbeBytes = 0
         let quietByteLiteralProbeFileLimit = 64
         let quietByteLiteralProbeByteLimit = 16 * 1024 * 1024
-        let walkResults = try FileWalker(fileManager: fileManager)
-            .withEnvironment(environment)
-            .firstVisitedHaystackWithMessages(for: options) { haystack in
-                if quietByteLiteralFastPath != nil,
-                   filesSearched >= quietByteLiteralProbeFileLimit
-                    || quietByteLiteralProbeBytes >= quietByteLiteralProbeByteLimit {
-                    abandonedQuietByteLiteralProbe = true
-                    return true
-                }
-                let outcome = quietByteLiteralFastPath.flatMap { fastPath in
-                    searchQuietByteLiteralFirstMatch(
-                        haystack,
-                        fastPath: fastPath,
-                        options: options
-                    )
-                }.map {
-                    FileSearchOutcome(result: $0)
-                } ?? searchFile(haystack, matcher: matcher, options: options)
-                if outcome.result.searched {
-                    filesSearched += 1
-                }
-                if quietByteLiteralFastPath != nil {
-                    quietByteLiteralProbeBytes += outcome.result.bytesSearched
-                }
-                if let message = outcome.message {
-                    searchMessages.append(message)
-                }
-                guard outcome.result.hasMatch else {
-                    return false
-                }
-                matchedResult = outcome.result
+        func visit(_ haystack: Haystack) -> Bool {
+            if quietByteLiteralFastPath != nil,
+               filesSearched >= quietByteLiteralProbeFileLimit
+                || quietByteLiteralProbeBytes >= quietByteLiteralProbeByteLimit {
+                abandonedQuietByteLiteralProbe = true
                 return true
             }
+            let outcome = quietByteLiteralFastPath.flatMap { fastPath in
+                searchQuietByteLiteralFirstMatch(
+                    haystack,
+                    fastPath: fastPath,
+                    options: options
+                )
+            }.map {
+                FileSearchOutcome(result: $0)
+            } ?? searchFile(haystack, matcher: matcher, options: options)
+            if outcome.result.searched {
+                filesSearched += 1
+            }
+            if quietByteLiteralFastPath != nil {
+                quietByteLiteralProbeBytes += outcome.result.bytesSearched
+            }
+            if let message = outcome.message {
+                searchMessages.append(message)
+            }
+            guard outcome.result.hasMatch else {
+                return false
+            }
+            matchedResult = outcome.result
+            return true
+        }
 
+        func searchResults(walkResults: FileWalkResults) -> SearchResults {
+            let files = matchedResult.map { [$0] } ?? []
+            let matchedLines = matchedResult.map { result in
+                result.matches.reduce(0) { $0 + MatchedLineCounter.count($1, options: options) }
+                    + result.supplementalMatchedLines
+                    + (result.hasBinaryMatch ? 1 : 0)
+            } ?? 0
+            let totalMatches = matchedResult.map { result in
+                let matchCount = result.matches.reduce(0) { $0 + $1.matchCount }
+                return matchCount + result.supplementalMatches + (result.hasBinaryMatch && matchCount == 0 ? 1 : 0)
+            } ?? 0
+
+            return SearchResults(
+                files: files,
+                summary: SearchSummary(
+                    filesSearched: filesSearched,
+                    filesWithMatches: matchedResult == nil ? 0 : 1,
+                    matchedLines: matchedLines,
+                    totalMatches: totalMatches
+                ),
+                messages: walkResults.messages + searchMessages,
+                warnings: walkResults.warnings,
+                diagnostics: walkResults.diagnostics,
+                filtered: walkResults.filtered
+            )
+        }
+
+        let fileWalker = FileWalker(fileManager: fileManager).withEnvironment(environment)
+        if quietByteLiteralFastPath != nil,
+           let fastWalkResults = try fileWalker.firstVisitedFastSearchFileWithMessages(
+            for: options,
+            visitHaystack: visit
+           ) {
+            if abandonedQuietByteLiteralProbe {
+                return nil
+            }
+            return searchResults(walkResults: fastWalkResults)
+        }
+
+        let walkResults = try fileWalker.firstVisitedHaystackWithMessages(
+            for: options,
+            visitHaystack: visit
+        )
         if abandonedQuietByteLiteralProbe {
             return nil
         }
-
-        let files = matchedResult.map { [$0] } ?? []
-        let matchedLines = matchedResult.map { result in
-            result.matches.reduce(0) { $0 + MatchedLineCounter.count($1, options: options) }
-                + result.supplementalMatchedLines
-                + (result.hasBinaryMatch ? 1 : 0)
-        } ?? 0
-        let totalMatches = matchedResult.map { result in
-            let matchCount = result.matches.reduce(0) { $0 + $1.matchCount }
-            return matchCount + result.supplementalMatches + (result.hasBinaryMatch && matchCount == 0 ? 1 : 0)
-        } ?? 0
-
-        return SearchResults(
-            files: files,
-            summary: SearchSummary(
-                filesSearched: filesSearched,
-                filesWithMatches: matchedResult == nil ? 0 : 1,
-                matchedLines: matchedLines,
-                totalMatches: totalMatches
-            ),
-            messages: walkResults.messages + searchMessages,
-            warnings: walkResults.warnings,
-            diagnostics: walkResults.diagnostics,
-            filtered: walkResults.filtered
-        )
+        return searchResults(walkResults: walkResults)
     }
 
     private func quietByteLiteralFirstMatchFastPath(
@@ -705,6 +722,14 @@ public struct RipgrepSearcher: @unchecked Sendable {
         guard canWriteDarwinSimpleByteLiteralLines(options: options) else {
             return nil
         }
+        guard let fileURL = options.roots.first?.standardizedFileURL else {
+            return nil
+        }
+        var isDirectory: ObjCBool = false
+        guard fileManager.fileExists(atPath: fileURL.path, isDirectory: &isDirectory),
+              !isDirectory.boolValue else {
+            return nil
+        }
 
         let matcher = try PatternMatcher(options: options)
         let fixedLookbehindFastPath = matcher.fixedPositiveLookbehindFastPath()
@@ -719,8 +744,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let byteLiteralFastPath = matcher.byteLiteralFastPath()
         let asciiBoundaryLiteralFastPath = asciiBoundaryLiteralPattern(options: options)
         let surroundingWordsLiteralFastPath = surroundingWordsLiteralPattern(options: options)
-        guard let fileURL = options.roots.first?.standardizedFileURL,
-              fixedLookbehindFastPath != nil
+        guard fixedLookbehindFastPath != nil
                 || fixedLookaheadFastPath != nil
                 || fixedNegativeLookbehindFastPath != nil
                 || fixedNegativeLookaheadFastPath != nil
@@ -758,12 +782,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
                   byteUnitFastPath == nil else {
                 return nil
             }
-        }
-
-        var isDirectory: ObjCBool = false
-        guard fileManager.fileExists(atPath: fileURL.path, isDirectory: &isDirectory),
-              !isDirectory.boolValue else {
-            return nil
         }
 
         if allowDirectStdout,
