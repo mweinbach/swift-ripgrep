@@ -60,7 +60,7 @@ public struct GlobMatcher: Equatable {
         let suffix: String
     }
 
-    private struct FastRuleIndex: Equatable {
+    private final class FastRuleIndex: Equatable {
         let indexedRuleCount: Int
         let exactPathRules: [String: [IndexedRule]]
         let suffixPathRulesByLastByte: [UInt8: [IndexedTextRule]]
@@ -71,6 +71,45 @@ public struct GlobMatcher: Equatable {
         let containsBasenameRules: [IndexedTextRule]
         let anyBasenameRules: [IndexedRule]
         let unindexedRuleIndicesDescending: [Int]
+
+        init(
+            indexedRuleCount: Int,
+            exactPathRules: [String: [IndexedRule]],
+            suffixPathRulesByLastByte: [UInt8: [IndexedTextRule]],
+            exactBasenameRules: [String: [IndexedRule]],
+            suffixBasenameRulesByLastByte: [UInt8: [IndexedTextRule]],
+            prefixBasenameRulesByFirstByte: [UInt8: [IndexedTextRule]],
+            prefixSuffixBasenameRulesByFirstByte: [UInt8: [IndexedPrefixSuffixRule]],
+            containsBasenameRules: [IndexedTextRule],
+            anyBasenameRules: [IndexedRule],
+            unindexedRuleIndicesDescending: [Int]
+        ) {
+            self.indexedRuleCount = indexedRuleCount
+            self.exactPathRules = exactPathRules
+            self.suffixPathRulesByLastByte = suffixPathRulesByLastByte
+            self.exactBasenameRules = exactBasenameRules
+            self.suffixBasenameRulesByLastByte = suffixBasenameRulesByLastByte
+            self.prefixBasenameRulesByFirstByte = prefixBasenameRulesByFirstByte
+            self.prefixSuffixBasenameRulesByFirstByte = prefixSuffixBasenameRulesByFirstByte
+            self.containsBasenameRules = containsBasenameRules
+            self.anyBasenameRules = anyBasenameRules
+            self.unindexedRuleIndicesDescending = unindexedRuleIndicesDescending
+        }
+
+        static func == (lhs: FastRuleIndex, rhs: FastRuleIndex) -> Bool {
+            lhs === rhs || (
+                lhs.indexedRuleCount == rhs.indexedRuleCount
+                    && lhs.exactPathRules == rhs.exactPathRules
+                    && lhs.suffixPathRulesByLastByte == rhs.suffixPathRulesByLastByte
+                    && lhs.exactBasenameRules == rhs.exactBasenameRules
+                    && lhs.suffixBasenameRulesByLastByte == rhs.suffixBasenameRulesByLastByte
+                    && lhs.prefixBasenameRulesByFirstByte == rhs.prefixBasenameRulesByFirstByte
+                    && lhs.prefixSuffixBasenameRulesByFirstByte == rhs.prefixSuffixBasenameRulesByFirstByte
+                    && lhs.containsBasenameRules == rhs.containsBasenameRules
+                    && lhs.anyBasenameRules == rhs.anyBasenameRules
+                    && lhs.unindexedRuleIndicesDescending == rhs.unindexedRuleIndicesDescending
+            )
+        }
     }
     #endif
 
@@ -1184,12 +1223,20 @@ public struct IgnoreStack: @unchecked Sendable {
         guard !matchers.isEmpty else {
             return nil
         }
-        for matcher in matchers.reversed() {
-            if let decision = matcher.decision(relativePath: relativePath, basename: basename, isDirectory: isDirectory) {
-                return decision
+        return matchers.withUnsafeBufferPointer { buffer in
+            guard let baseAddress = buffer.baseAddress else {
+                return nil
             }
+            var offset = buffer.count
+            while offset > 0 {
+                offset -= 1
+                let matcher = baseAddress.advanced(by: offset)
+                if let decision = matcher.pointee.decision(relativePath: relativePath, basename: basename, isDirectory: isDirectory) {
+                    return decision
+                }
+            }
+            return nil
         }
-        return nil
     }
 
     public func matchingRule(relativePath: String, isDirectory: Bool) -> GlobMatcher.Rule? {
@@ -1200,11 +1247,19 @@ public struct IgnoreStack: @unchecked Sendable {
         guard !matchers.isEmpty else {
             return nil
         }
-        for matcher in matchers.reversed() {
-            if let rule = matcher.matchingRule(relativePath: relativePath, basename: basename, isDirectory: isDirectory) {
-                return rule
+        return matchers.withUnsafeBufferPointer { buffer in
+            guard let baseAddress = buffer.baseAddress else {
+                return nil
             }
+            var offset = buffer.count
+            while offset > 0 {
+                offset -= 1
+                let matcher = baseAddress.advanced(by: offset)
+                if let rule = matcher.pointee.matchingRule(relativePath: relativePath, basename: basename, isDirectory: isDirectory) {
+                    return rule
+                }
+            }
+            return nil
         }
-        return nil
     }
 }
