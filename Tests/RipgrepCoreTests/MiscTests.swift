@@ -1392,6 +1392,27 @@ struct MiscTests {
             "missingliteral",
             root.path("summary.txt"),
         ])
+        let statsFilesWithMatchesNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "-l",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let statsCountNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "-c",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let statsCountMatchesNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "--count-matches",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
         let statsLineRegexpNoMatchSummary = try runExecutableResult([
             "--no-config",
             "--stats",
@@ -1492,6 +1513,9 @@ struct MiscTests {
             statsLineRegexpNoMatchSummary,
             statsOnlyMatchingNoMatchSummary,
             statsVimgrepNoMatchSummary,
+            statsFilesWithMatchesNoMatchSummary,
+            statsCountNoMatchSummary,
+            statsCountMatchesNoMatchSummary,
         ] {
             #expect(result.status == 1)
             #expect(result.stderr.isEmpty)

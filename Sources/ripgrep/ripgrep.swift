@@ -2740,8 +2740,13 @@ struct RipgrepCommand {
                     && !parsedEncodingExactLineMatchingOutputCanUsePreflight
                     && !parsedEncodingASCIIExactLineMatchingOutputCanUsePreflight))
         let parsedSearchZipAffectsPreflight = parsedSearchZip && pathMayUseSearchZip(path)
+        let parsedSummaryPrintModeCanUseNoMatchPreflight = parsedPrintMode == .matchingLines
+            || (parsedStats
+                && !parsedJson
+                && (parsedPrintMode == .filesWithMatches
+                    || ((parsedPrintMode == .count || parsedPrintMode == .countMatches) && !parsedIncludeZero)))
         if parsedJson || parsedStats,
-           parsedPrintMode == .matchingLines,
+           parsedSummaryPrintModeCanUseNoMatchPreflight,
            !parsedInvertMatch,
            parsedMaxCount != 0,
            !parsedNullData,

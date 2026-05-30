@@ -173,6 +173,18 @@ at 8.7 ms versus 2.220 s and 7.3 ms for Rust; `--stats -x` at 8.7 ms versus
 6.4 ms for Rust; and `--stats --vimgrep` at 8.8 ms versus 2.201 s and 7.6 ms
 for Rust.
 
+Stats-only files-with-matches and count no-match outputs now use the same
+summary preflight when `--include-zero` is not active. JSON count/path no-match
+outputs intentionally stay on the regular path because Rust emits no JSON
+records there, while `--include-zero` count modes still need the leading `0`
+before the stats block. Direct status/stdout/stderr checks matched the previous
+Swift binary and Rust for `--stats -l`, `--stats -c`,
+`--stats --count-matches`, the `--include-zero` fallback, and JSON count/path
+fallback controls. On the 46 MiB ASCII file, five-run A/Bs measured
+`--stats -l` at 9.0 ms for the probe versus 2.209 s baseline and 6.7 ms for
+Rust; `--stats -c` at 9.4 ms versus 2.173 s and 7.2 ms for Rust; and
+`--stats --count-matches` at 9.0 ms versus 2.210 s and 6.5 ms for Rust.
+
 Files-mode controls on `/tmp/swift-rg-bench/linux` isolated the cost to VCS
 ignore handling. A 30-run slice measured Swift `--files` at 101.3 ms ± 2.9 ms,
 Swift `--hidden --files` at 101.6 ms ± 2.7 ms, Swift
