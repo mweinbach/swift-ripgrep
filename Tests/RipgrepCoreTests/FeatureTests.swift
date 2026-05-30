@@ -193,6 +193,35 @@ struct FeatureTests {
         #expect(statsQuiet.contains("2 files contained matches"))
         #expect(statsQuiet.contains("3 files searched"))
         #expect(statsQuiet.contains("0 bytes printed"))
+        let jsonQuiet = try run([
+            "--json",
+            "-q",
+            #"\p{Greek}"#,
+            root.url.path,
+        ])
+        let jsonQuietObject = try jsonObject(jsonQuiet[0])
+        let jsonQuietData = jsonQuietObject["data"] as? [String: Any]
+        let jsonQuietStats = jsonQuietData?["stats"] as? [String: Any]
+        #expect(jsonQuietStats?["matches"] as? Int == 2)
+        #expect(jsonQuietStats?["matched_lines"] as? Int == 2)
+        #expect(jsonQuietStats?["searches_with_match"] as? Int == 2)
+        #expect(jsonQuietStats?["searches"] as? Int == 3)
+        #expect(jsonQuietStats?["bytes_printed"] as? Int == 0)
+        let jsonStatsQuiet = try run([
+            "--json",
+            "--stats",
+            "-q",
+            #"\p{Greek}"#,
+            root.url.path,
+        ])
+        let jsonStatsQuietObject = try jsonObject(jsonStatsQuiet[0])
+        let jsonStatsQuietData = jsonStatsQuietObject["data"] as? [String: Any]
+        let jsonStatsQuietStats = jsonStatsQuietData?["stats"] as? [String: Any]
+        #expect(jsonStatsQuietStats?["matches"] as? Int == 2)
+        #expect(jsonStatsQuietStats?["matched_lines"] as? Int == 2)
+        #expect(jsonStatsQuietStats?["searches_with_match"] as? Int == 2)
+        #expect(jsonStatsQuietStats?["searches"] as? Int == 3)
+        #expect(jsonStatsQuietStats?["bytes_printed"] as? Int == 0)
     }
 
     @Test("supports smart case and inverted matches")

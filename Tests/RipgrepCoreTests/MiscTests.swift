@@ -389,6 +389,20 @@ struct MiscTests {
         #expect(jsonQuietText.contains(#""matches":2"#))
         #expect(jsonQuietText.contains(#""searches":2"#))
         #expect(jsonQuietText.contains(#""searches_with_match":1"#))
+        let jsonStatsQuietOutput = try runExecutableData([
+            "--json",
+            "--stats",
+            "-q",
+            pattern,
+            root.url.path,
+        ], fixture: {})
+        let jsonStatsQuietText = String(decoding: jsonStatsQuietOutput, as: UTF8.self)
+        #expect(jsonStatsQuietText.contains(#""bytes_printed":0"#))
+        #expect(jsonStatsQuietText.contains(#""bytes_searched":98"#))
+        #expect(jsonStatsQuietText.contains(#""matched_lines":1"#))
+        #expect(jsonStatsQuietText.contains(#""matches":2"#))
+        #expect(jsonStatsQuietText.contains(#""searches":2"#))
+        #expect(jsonStatsQuietText.contains(#""searches_with_match":1"#))
 
         try root.write("""
         one Abcdefghi123 two Zbcdefghi999

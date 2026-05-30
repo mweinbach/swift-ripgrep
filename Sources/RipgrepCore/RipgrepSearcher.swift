@@ -7221,6 +7221,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
             && options.quiet
             && options.stats
             && options.printMode == .matchingLines
+        let jsonQuietSummaryOutput = options.json
+            && options.quiet
+            && options.printMode == .matchingLines
         let canIgnoreLineRenderingOptions = !lineOutput
         guard let fastPath = matcher.asciiFixedClassSequenceFastPath(),
               case .automatic = options.encodingMode,
@@ -7237,10 +7240,10 @@ public struct RipgrepSearcher: @unchecked Sendable {
               canUseMaxCount else {
             return nil
         }
-        let jsonQuietSummaryOutput = options.json && quietOutput
         let firstMatchOutput = (quietOutput && !options.json) || pathOnlyOutput
         guard quietOutput
             || quietStatsOutput
+            || jsonQuietSummaryOutput
             || countOutput
             || pathOnlyOutput
             || pathStatsOutput
@@ -8004,11 +8007,16 @@ public struct RipgrepSearcher: @unchecked Sendable {
             && (filesWithMatchesMode || filesWithoutMatchMode)
         let lineOutput = !options.quiet
             && options.printMode == .matchingLines
-        let quietOutput = options.quiet
+        let quietOutput = !options.json
+            && options.quiet
             && !options.stats
             && options.printMode == .matchingLines
-        let quietStatsOutput = options.quiet
+        let quietStatsOutput = !options.json
+            && options.quiet
             && options.stats
+            && options.printMode == .matchingLines
+        let jsonQuietSummaryOutput = options.json
+            && options.quiet
             && options.printMode == .matchingLines
         let firstMatchOutput = quietOutput || pathOnlyOutput
         let canIgnoreLineRenderingOptions = !lineOutput
@@ -8017,7 +8025,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !data.starts(with: [0xEF, 0xBB, 0xBF]),
               !data.starts(with: [0xFF, 0xFE]),
               !data.starts(with: [0xFE, 0xFF]),
-              !options.json,
+              !options.json || jsonQuietSummaryOutput,
               canIgnoreLineRenderingOptions || (options.beforeContext == 0
                   && options.afterContext == 0
                   && !options.passthru
@@ -8040,7 +8048,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
                   || pathStatsOutput
                   || lineOutput
                   || quietOutput
-                  || quietStatsOutput else {
+                  || quietStatsOutput
+                  || jsonQuietSummaryOutput else {
             return nil
         }
 
@@ -8093,7 +8102,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 guard !spans.isEmpty else {
                     return false
                 }
-                if countOutput || pathStatsOutput || quietStatsOutput {
+                if countOutput || pathStatsOutput || quietStatsOutput || jsonQuietSummaryOutput {
                     supplementalMatchedLines += 1
                     supplementalMatches += spans.count
                     if supplementalMatchedLines == maxCount {
