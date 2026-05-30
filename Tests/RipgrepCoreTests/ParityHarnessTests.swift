@@ -488,6 +488,18 @@ private func miscParityCases() -> [ParityCase] {
     let caseInsensitiveASCIIProofFixture: (URL) throws -> Void = { dir in
         try write("alpha\nNeedle here\nplain tail\n", to: "ascii", in: dir)
     }
+    let wordWhitespaceSequenceFixture: (URL) throws -> Void = { dir in
+        try write("""
+        alpha bravo charl delta echoo
+        abcdef bravo charl delta echoo
+        short words nope here
+        perche il contesto delle righe verra cambiato.
+        perché il contesto delle righe verrà cambiato.
+        alpha bravo charl delta echoo foxtt golfx
+        aaaaa bbbbb ccccc ddddd ééééé fffff ggggg
+        alpha bravo charlie delta echoo
+        """, to: "words.txt", in: dir)
+    }
     let asciiFixedClassFixture: (URL) throws -> Void = { dir in
         try write("prefix Abcdefghi123 middle Zbcdefghi999 suffix\n", to: "match.txt", in: dir)
         try write("Abcdefgh123\nabcdefghi123\nAbcdefghi12x\n", to: "miss.txt", in: dir)
@@ -556,6 +568,9 @@ private func miscParityCases() -> [ParityCase] {
         ParityCase(name: "misc::json_count_matches_ignore_case_word_match", fixture: caseInsensitiveASCIIProofFixture, arguments: ["--json", "-i", "-w", "--count-matches", "NEEDLE", "ascii"]),
         ParityCase(name: "misc::json_count_include_zero_no_match", fixture: caseInsensitiveASCIIProofFixture, arguments: ["--json", "-c", "--include-zero", "missingliteral", "ascii"]),
         ParityCase(name: "misc::json_count_matches_include_zero_no_match", fixture: caseInsensitiveASCIIProofFixture, arguments: ["--json", "--count-matches", "--include-zero", "missingliteral", "ascii"]),
+        ParityCase(name: "misc::word_whitespace_sequence_count", fixture: wordWhitespaceSequenceFixture, arguments: ["-c", #"\w{5}\s+\w{5}\s+\w{5}\s+\w{5}\s+\w{5}"#, "words.txt"]),
+        ParityCase(name: "misc::word_whitespace_sequence_files_with_matches", fixture: wordWhitespaceSequenceFixture, arguments: ["-l", #"\w{5}\s+\w{5}\s+\w{5}\s+\w{5}\s+\w{5}"#, "words.txt"]),
+        ParityCase(name: "misc::word_whitespace_sequence_quiet", fixture: wordWhitespaceSequenceFixture, arguments: ["-q", #"\w{5}\s+\w{5}\s+\w{5}\s+\w{5}\s+\w{5}"#, "words.txt"]),
         ParityCase(name: "misc::word", fixture: sherlockFixture, arguments: ["-w", "as", "sherlock"]),
         ParityCase(name: "misc::word_quiet_ascii_no_match", fixture: caseInsensitiveASCIIProofFixture, arguments: ["-w", "-q", "missingliteral", "ascii"]),
         ParityCase(name: "misc::word_files_with_matches_ascii_no_match", fixture: caseInsensitiveASCIIProofFixture, arguments: ["-w", "-l", "missingliteral", "ascii"]),

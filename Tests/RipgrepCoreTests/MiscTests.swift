@@ -116,6 +116,24 @@ struct MiscTests {
         6:alpha bravo charl delta echoo foxtt golfx
 
         """)
+        let countOutput = try runExecutableData([
+            "-c",
+            pattern,
+            root.path("words.txt"),
+        ], fixture: {})
+        #expect(countOutput == Data("6\n".utf8))
+        let filesWithMatchesOutput = try runExecutableData([
+            "-l",
+            pattern,
+            root.path("words.txt"),
+        ], fixture: {})
+        #expect(filesWithMatchesOutput == Data("\(root.path("words.txt"))\n".utf8))
+        let quietOutput = runWithExitCode([
+            "-q",
+            pattern,
+            root.path("words.txt"),
+        ], expectedExitCode: 0)
+        #expect(quietOutput.isEmpty)
 
         let largeFillerLineCount = 600_000
         let largeFiller = String(repeating: "tiny words here\n", count: largeFillerLineCount)

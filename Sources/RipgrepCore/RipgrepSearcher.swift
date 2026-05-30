@@ -6572,6 +6572,15 @@ public struct RipgrepSearcher: @unchecked Sendable {
         matcher: PatternMatcher,
         options: RipgrepOptions
     ) -> SearchFileResult? {
+        let countOutput = options.printMode == .count
+        let filesWithMatchesMode = options.printMode == .filesWithMatches
+        let filesWithoutMatchMode = options.printMode == .filesWithoutMatch
+        let pathOnlyOutput = filesWithMatchesMode || filesWithoutMatchMode
+        let lineOutput = !options.quiet
+            && options.printMode == .matchingLines
+        let quietOutput = options.quiet
+            && options.printMode == .matchingLines
+        let firstMatchOutput = quietOutput || pathOnlyOutput
         guard let fastPath = matcher.wordWhitespaceSequenceFastPath(),
               case .automatic = options.encodingMode,
               !data.starts(with: [0xEF, 0xBB, 0xBF]),
@@ -6592,7 +6601,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !options.crlf,
               options.maxColumns == nil,
               !options.trim,
-              options.printMode == .matchingLines,
+              lineOutput || countOutput || pathOnlyOutput || quietOutput,
               canOmitMatchSpans(options: options) else {
             return nil
         }
@@ -6602,7 +6611,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         var lineNumber = 1
         var bytesSearched = data.count
         var needsDecodedFallback = false
-        let maxCount = options.maxCount ?? Int.max
+        let maxCount = firstMatchOutput ? 1 : options.maxCount ?? Int.max
         let dataCount = data.count
         let minimumSequenceByteCount = fastPath.groupCount * 5 + max(0, fastPath.groupCount - 1)
         let canPrefilterShortLines = dataCount >= 64 * 1024 * 1024
