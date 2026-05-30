@@ -107,6 +107,12 @@ public struct PatternMatcher {
                 if let parseError = Self.defaultRegexParseErrorIfRecognized(pattern) {
                     throw RipgrepError.message(parseError)
                 }
+                if let greekScriptPattern = Self.defaultGreekScriptPattern(for: pattern, options: options) {
+                    return [.greekScript(
+                        caseInsensitive: greekScriptPattern.caseInsensitive,
+                        oneOrMore: greekScriptPattern.oneOrMore
+                    )]
+                }
                 if let literals = Self.defaultLiteralPatterns(for: pattern, options: options) {
                     return literals.map { literal in
                         .literal(usesByteSemantics ? Self.bytePattern(literal) : literal)
@@ -842,6 +848,14 @@ public struct PatternMatcher {
                 candidates.append(contentsOf: literalRanges(literal, in: line).map { range in
                     (range, replacement(for: range, in: line))
                 })
+            case .greekScript(let caseInsensitive, let oneOrMore):
+                candidates.append(contentsOf: greekScriptRanges(
+                    in: line,
+                    caseInsensitive: caseInsensitive,
+                    oneOrMore: oneOrMore
+                ).map { range in
+                    (range, replacement(for: range, in: line))
+                })
             }
         }
         if shouldAddBareCRLineEndNotWordBoundary(in: line) {
@@ -1022,6 +1036,30 @@ public struct PatternMatcher {
         }
     }
 
+    private static func defaultGreekScriptPattern(
+        for pattern: String,
+        options: RipgrepOptions
+    ) -> (caseInsensitive: Bool, oneOrMore: Bool)? {
+        guard options.engineMode == .default,
+              !options.noUnicode,
+              !options.fixedStrings,
+              !options.multiline,
+              !options.nullData,
+              !options.crlf,
+              options.regexSizeLimit == nil,
+              options.dfaSizeLimit == nil else {
+            return nil
+        }
+        switch pattern {
+        case #"\p{Greek}"#:
+            return (caseInsensitive: options.effectiveIgnoreCase, oneOrMore: false)
+        case #"\p{Greek}+"#:
+            return (caseInsensitive: options.effectiveIgnoreCase, oneOrMore: true)
+        default:
+            return nil
+        }
+    }
+
     private static func requiredLiteralPrefilters(
         for patterns: [String],
         options: RipgrepOptions,
@@ -1062,6 +1100,7 @@ public struct PatternMatcher {
         var runs: [String] = []
         var current = ""
         var escaped = false
+        var escapeStart: String.Index?
         var inClass = false
         var index = pattern.startIndex
 
@@ -1082,8 +1121,17 @@ public struct PatternMatcher {
             let next = nextIndex < pattern.endIndex ? pattern[nextIndex] : nil
 
             if escaped {
+                if let backslash = escapeStart,
+                   let escapeEnd = regexEscapeEnd(in: pattern, backslashAt: backslash) {
+                    flushRun()
+                    escaped = false
+                    escapeStart = nil
+                    index = escapeEnd
+                    continue
+                }
                 flushRun(next: character)
                 escaped = false
+                escapeStart = nil
                 index = nextIndex
                 continue
             }
@@ -1099,6 +1147,7 @@ public struct PatternMatcher {
             if character == "\\" {
                 flushRun(next: next)
                 escaped = true
+                escapeStart = index
             } else if character == "[" {
                 flushRun(next: next)
                 inClass = true
@@ -2838,6 +2887,11 @@ public struct PatternMatcher {
                 continue
             }
             if character == "\\" {
+                if let greekPropertyEnd = greekScriptPropertyEscapeEnd(in: pattern, backslashAt: index) {
+                    output += "(?:\(pattern[index..<greekPropertyEnd])|\\x{B5})"
+                    index = greekPropertyEnd
+                    continue
+                }
                 if let escapeEnd = regexEscapeEnd(in: pattern, backslashAt: index) {
                     output += pattern[index..<escapeEnd]
                     index = escapeEnd
@@ -2880,12 +2934,54 @@ public struct PatternMatcher {
         return output
     }
 
+    private static func greekScriptPropertyEscapeEnd(in pattern: String, backslashAt backslash: String.Index) -> String.Index? {
+        let marker = pattern.index(after: backslash)
+        guard marker < pattern.endIndex, pattern[marker] == "p" else {
+            return nil
+        }
+        let first = pattern.index(after: marker)
+        guard first < pattern.endIndex, pattern[first] == "{" else {
+            return nil
+        }
+        guard let close = pattern[first...].firstIndex(of: "}") else {
+            return nil
+        }
+        let nameStart = pattern.index(after: first)
+        let rawName = String(pattern[nameStart..<close])
+        let normalizedName = rawName
+            .lowercased()
+            .filter { character in
+                character != "_" && character != "-" && character != " "
+            }
+        guard normalizedName == "greek"
+                || normalizedName == "script=greek"
+                || normalizedName == "sc=greek" else {
+            return nil
+        }
+        return pattern.index(after: close)
+    }
+
     private static func regexEscapeEnd(in pattern: String, backslashAt backslash: String.Index) -> String.Index? {
         let marker = pattern.index(after: backslash)
         guard marker < pattern.endIndex else {
             return nil
         }
         switch pattern[marker] {
+        case "p", "P":
+            let first = pattern.index(after: marker)
+            guard first < pattern.endIndex else {
+                return nil
+            }
+            if pattern[first] == "{" {
+                guard let close = pattern[first...].firstIndex(of: "}") else {
+                    return nil
+                }
+                return pattern.index(after: close)
+            }
+            guard pattern[first].isASCII, pattern[first].isLetter else {
+                return nil
+            }
+            return pattern.index(after: first)
         case "x":
             let first = pattern.index(after: marker)
             guard first < pattern.endIndex else {
@@ -3395,6 +3491,71 @@ public struct PatternMatcher {
         return ranges
     }
 
+    private func greekScriptRanges(
+        in line: String,
+        caseInsensitive: Bool,
+        oneOrMore: Bool
+    ) -> [Range<String.Index>] {
+        guard line.utf8.contains(where: { $0 >= 0x80 }) else {
+            return []
+        }
+        var ranges: [Range<String.Index>] = []
+        var runStart: String.Index?
+        var index = line.startIndex
+        while index < line.endIndex {
+            let next = line.index(after: index)
+            let matches = isGreekScript(line[index], caseInsensitive: caseInsensitive)
+            if oneOrMore {
+                if matches {
+                    if runStart == nil {
+                        runStart = index
+                    }
+                } else if let start = runStart {
+                    ranges.append(start..<index)
+                    runStart = nil
+                }
+            } else if matches {
+                ranges.append(index..<next)
+            }
+            index = next
+        }
+        if oneOrMore, let start = runStart {
+            ranges.append(start..<line.endIndex)
+        }
+        return ranges
+    }
+
+    private func isGreekScript(_ character: Character, caseInsensitive: Bool) -> Bool {
+        for scalar in character.unicodeScalars {
+            if Self.isGreekScriptScalar(scalar) || (caseInsensitive && scalar.value == 0x00B5) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private static func isGreekScriptScalar(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x0370...0x0373,
+             0x0375...0x0377,
+             0x037A...0x037D,
+             0x037F...0x037F,
+             0x0384...0x038A,
+             0x038C...0x038C,
+             0x038E...0x03A1,
+             0x03A3...0x03E1,
+             0x03F0...0x03FF,
+             0x1F00...0x1FFF,
+             0x2126...0x2126,
+             0x10140...0x1018F,
+             0x101A0...0x101A0,
+             0x1D200...0x1D24F:
+            return true
+        default:
+            return false
+        }
+    }
+
     private func literalContains(_ literal: String, in line: String) -> Bool {
         guard !literal.isEmpty else {
             return true
@@ -3735,6 +3896,7 @@ private extension Character {
 
 private enum CompiledPattern {
     case emptyWordBoundary
+    case greekScript(caseInsensitive: Bool, oneOrMore: Bool)
     case regex(NSRegularExpression)
     case pcre2(PCRE2CompiledPattern)
     case literal(String)

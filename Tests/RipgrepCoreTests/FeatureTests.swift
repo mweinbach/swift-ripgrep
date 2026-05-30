@@ -13,6 +13,7 @@ struct FeatureTests {
         try root.write("ABC\nabc\nδ\n", to: "ascii-case.txt")
         try root.write("abc ABC 123 _ é π\nword-word\nfoo bar\n", to: "posix-alpha.txt")
         try root.write("abc ABC\nbar\nfoo bar\néx xé\n123_\n", to: "inline-word-boundary.txt")
+        try root.write("π δ Δ µ Ω\n", to: "greek-script.txt")
         try root.write("abc ABC café π δ Δ xyz_123 éx xé\n", to: "scoped-modes.txt")
         try root.write("\n##\n", to: "empty-word.txt")
 
@@ -81,6 +82,8 @@ struct FeatureTests {
         #expect(try run(["--no-unicode", "-i", "[a-z]+", root.path("ascii-case.txt")]) == ["ABC", "abc"])
         #expect(try run(["-o", "[[:alpha:]]+", root.path("posix-alpha.txt")]) == ["abc", "ABC", "word", "word", "foo", "bar"])
         #expect(try run(["-o", #"\pL+"#, root.path("posix-alpha.txt")]) == ["abc", "ABC", "é", "π", "word", "word", "foo", "bar"])
+        #expect(try run(["-o", #"\p{Greek}+"#, root.path("greek-script.txt")]) == ["π", "δ", "Δ", "Ω"])
+        #expect(try run(["-io", #"\p{Greek}+"#, root.path("greek-script.txt")]) == ["π", "δ", "Δ", "µ", "Ω"])
         #expect(try run(["-o", #"\PL+"#, root.path("posix-alpha.txt")]) == [" ", " 123 _ ", " ", "-", " "])
         var output: [String] = []
         var errors: [String] = []

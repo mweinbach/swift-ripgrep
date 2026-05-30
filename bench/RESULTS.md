@@ -66,6 +66,17 @@ to 1.938 s, versus 2.775 s for Rust. The neighboring single-literal
 `spin_lock` control stayed in the same band at 1.790 s versus 1.738 s before
 and 2.716 s for Rust.
 
+Unicode Greek script property searches now avoid treating the property name as a
+required literal prefilter and keep `\p{Greek}` intact through ignore-case
+pattern rewriting. A narrow Swift-native matcher covers the exact `\p{Greek}`
+and `\p{Greek}+` forms, including Rust-compatible `Ω` script handling and the
+`µ` ignore-case fold, with a high-bit guard for ASCII lines. Sorted Linux corpus
+output for `-n '\p{Greek}'` and `-n -i '\p{Greek}'` matched Rust exactly
+(105 and 245 lines respectively). The corrected Foundation-regex path measured
+about 30.9 s for plain `\p{Greek}` before the native matcher; the retained
+Swift matcher measured 21.5 s plain and 21.6 s ignore-case by `/usr/bin/time`,
+versus Rust at about 2.76 s in a five-run hyperfine sample.
+
 The executable ASCII case-insensitive containment proof now uses the existing
 folded byte scanner instead of building exact/lower/upper `Data` variants. It
 initially only proved no-match for literals without ASCII letters; lettered
