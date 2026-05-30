@@ -26,6 +26,10 @@ enum PathSort {
         path.split(separator: "/", omittingEmptySubsequences: false)
     }
 
+    static func key(forPath path: String) -> String {
+        path.replacingOccurrences(of: "/", with: "\0")
+    }
+
     static func compare(_ lhsComponents: [Substring], _ rhsComponents: [Substring]) -> ComparisonResult {
         for (lhsComponent, rhsComponent) in zip(lhsComponents, rhsComponents) {
             if lhsComponent == rhsComponent {

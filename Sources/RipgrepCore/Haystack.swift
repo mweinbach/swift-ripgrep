@@ -768,14 +768,13 @@ public struct FileWalker: @unchecked Sendable {
 
     private func emitSortedFilePathLines(_ lines: [String], reverse: Bool, emit: (String) -> Void) {
         let keyed = lines.map { line in
-            (line: line, components: PathSort.components(forPath: line))
+            (line: line, key: PathSort.key(forPath: line))
         }
         for entry in keyed.sorted(by: { lhs, rhs in
-            let order = PathSort.compare(lhs.components, rhs.components)
             if reverse {
-                return order == .orderedDescending
+                return lhs.key > rhs.key
             }
-            return order == .orderedAscending
+            return lhs.key < rhs.key
         }) {
             emit(entry.line)
         }

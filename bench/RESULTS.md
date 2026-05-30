@@ -94,6 +94,15 @@ measured default `--sort path --files` at 279.4 ms versus 3463.8 ms for the
 previous checkpoint, with Rust at 228.2 ms. The no-ignore-hidden sorted control
 measured 297.2 ms versus 3446.6 ms.
 
+Sorted file-listing path keys now encode component boundaries once per emitted
+path instead of storing split `Substring` component arrays. Exact output matched
+Rust for forward and reverse sorted file listing plus the sorted recursive
+`spin_lock` control. Against the previous checkpoint, a 10-run A/B measured
+`--sort path --files` at 197.8 ms versus 282.5 ms before. The generic sorted
+search path stayed on component arrays after a string-key probe regressed the
+`spin_lock` row; the final check kept sorted search neutral at 1802.5 ms versus
+1799.9 ms before.
+
 Several plausible Swift-only probes were rejected after exact Swift-output and
 sorted Rust-output checks:
 
