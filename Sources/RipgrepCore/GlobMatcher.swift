@@ -164,6 +164,7 @@ public struct GlobMatcher: Equatable {
     private let stripBasePath: String?
     private let stripBasePathPrefix: String?
     private let pathPrefix: String
+    private let isUnscoped: Bool
     private let overrideSemantics: Bool
     #if canImport(Darwin)
     private let fastRuleIndex: FastRuleIndex?
@@ -251,6 +252,7 @@ public struct GlobMatcher: Equatable {
         self.stripBasePath = stripBasePath?.isEmpty == true ? nil : stripBasePath
         self.stripBasePathPrefix = self.stripBasePath.map { "\($0)/" }
         self.pathPrefix = pathPrefix
+        self.isUnscoped = self.stripBasePath == nil && pathPrefix.isEmpty
         #if canImport(Darwin)
         if rules.count >= 8 {
             let fastRuleIndex = Self.makeFastRuleIndex(
@@ -295,7 +297,7 @@ public struct GlobMatcher: Equatable {
 
     public func decision(relativePath: String, basename pathBasename: String?, isDirectory: Bool) -> Decision? {
         let scopedRelativePath: String
-        if canUseUnscopedBasename(relativePath: relativePath) {
+        if isUnscoped || canUseUnscopedBasename(relativePath: relativePath) {
             scopedRelativePath = relativePath
         } else {
             guard let path = scopedPath(for: relativePath) else {
@@ -600,7 +602,7 @@ public struct GlobMatcher: Equatable {
 
     public func matchingRule(relativePath: String, basename pathBasename: String?, isDirectory: Bool) -> Rule? {
         let scopedRelativePath: String
-        if canUseUnscopedBasename(relativePath: relativePath) {
+        if isUnscoped || canUseUnscopedBasename(relativePath: relativePath) {
             scopedRelativePath = relativePath
         } else {
             guard let path = scopedPath(for: relativePath) else {

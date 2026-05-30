@@ -60,6 +60,19 @@ build measured `--files .` at 86.9 ms and `--no-ignore --hidden --files` at
 70.9 ms. An absolute-root control measured Swift at 88.9 ms versus Rust at
 73.2 ms, keeping the already-optimized explicit-root path in the same band.
 
+Unscoped ignore matchers now bypass the scoped-path helper and use the incoming
+relative path directly. This trims the root `.gitignore`/global-ignore decision
+path without changing scoped directory-local matchers. Exact output matched the
+previous Swift binary for `--files`, `--files .`, `--hidden --files`,
+`--no-ignore-vcs --files`, and `--no-ignore --hidden --files` from the Linux
+corpus root; sorted output matched Rust for the same controls. An 80-run A/B
+measured default `--files` at 86.2 ms for the probe versus 87.4 ms for the
+previous checkpoint, hidden at 86.7 ms versus 87.1 ms, and `--no-ignore-vcs` at
+63.7 ms versus 64.4 ms. A 100-run order-flipped confirmation was smaller but
+still directionally positive: default 87.1 ms versus 87.4 ms, hidden 86.6 ms
+versus 86.9 ms, and `--no-ignore-vcs` 64.1 ms versus 64.7 ms. Rust default
+measured 67.1 ms in both confirmation slices.
+
 Several plausible Swift-only probes were rejected after exact Swift-output and
 sorted Rust-output checks:
 
@@ -79,6 +92,13 @@ sorted Rust-output checks:
 - Storing path-suffix rule bytes and indexing small simple-glob basename rules
   both preserved output but regressed the optimizer-sensitive file-list path,
   raising default `--files` to about 102 ms in 80-run checks.
+- Indexing scoped slash simple-globs by literal path prefix also preserved exact
+  output and sorted Rust parity, but regressed default and hidden file listing
+  from about 87 ms to 101 ms while leaving `--no-ignore-vcs` flat.
+- Building with `-cross-module-optimization` preserved exact output and sorted
+  Rust parity, but was neutral overall: default moved from 87.7 ms to 87.0 ms,
+  hidden from 86.5 ms to 87.4 ms, and `--no-ignore-vcs` from 64.4 ms to
+  63.8 ms in a noisy 60-run pass.
 - Enabling the existing short-line prefilter for all no-literal Linux files,
   instead of only large mapped files, preserved the Unicode and ASCII
   no-literal output but was neutral-to-slower: the ASCII row measured 2.182 s
