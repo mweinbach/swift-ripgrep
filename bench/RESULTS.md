@@ -232,6 +232,12 @@ sorted Rust-output checks:
   showed default at 77.9 ms versus 78.6 ms before and no-vcs at 64.0 ms versus
   64.4 ms, but the order-flipped 100-run pass regressed default to 80.5 ms
   versus 77.6 ms and left no-vcs flat at 63.1 ms versus 63.2 ms.
+- Lowering the Darwin fast-rule-index activation threshold from four indexed
+  ignore rules to three preserved exact Swift output and sorted Rust parity, but
+  hidden file listing regressed immediately: an 80-run pass measured hidden at
+  81.8 ms versus 79.4 ms before, with user CPU up to 115.1 ms from 105.0 ms.
+  Default was only noise-level better at 77.8 ms versus 78.5 ms, so the
+  four-rule threshold stayed.
 
 ### Continuation probes — 2026-05-29
 
