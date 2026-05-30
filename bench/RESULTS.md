@@ -352,6 +352,14 @@ a bounded fallback control. On the 46 MiB matching ASCII file, 30-run checks
 measured `--stats -c` at 44.2 ms versus 8.074 s before and 38.1 ms for Rust,
 `--stats -H -c` at 44.0 ms versus 8.088 s before and 38.1 ms for Rust, and
 `--stats --count-matches` at 43.5 ms versus 38.3 ms for Rust.
+A follow-up fused the case-sensitive single-literal matched-line and total-match
+counts into one mapped-data pass for that stats route. Normalized output/status
+checks matched Rust for multiple matches on one line, count-matches totals,
+filename prefixes, final-line-without-newline input, one-byte literals, binary
+fallback, and the 46 MiB fixture. Forty-run release checks measured
+`--stats -c` at 17.7 ms versus 38.6 ms for Rust, `--stats -H -c` at 17.2 ms
+versus 38.2 ms for Rust, and `--stats --count-matches` at 17.0 ms versus
+38.1 ms for Rust.
 
 JSON files-with-matches and count/count-matches no-match modes now use a
 separate no-output preflight instead of the summary writer, preserving Rust's

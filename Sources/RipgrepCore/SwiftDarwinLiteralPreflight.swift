@@ -464,17 +464,9 @@ public enum SwiftDarwinLiteralPreflight {
                 foldedLiteral: foldedLiteral
             )
         } else {
-            guard let result = multiLiteralResult(
-                path: path,
-                literals: [literal],
-                maxCount: nil,
-                emitLines: false
-            ),
-                  result.status >= 0 else {
-                return nil
-            }
-            matchedLineCount = Int(result.matched_line_count)
-            totalMatchCount = countNonOverlappingMatches(in: data, literal: literal)
+            let counts = literalMatchedLineAndMatchCounts(in: data, literal: literal)
+            matchedLineCount = counts.matchedLines
+            totalMatchCount = counts.totalMatches
         }
         guard let matchedLineCount,
               matchedLineCount > 0,
@@ -7451,6 +7443,94 @@ private func countLiteralMatchedLines(
             return matchedLineCount
         }
     }
+}
+
+private struct LiteralMatchedLineAndMatchCounts {
+    let matchedLines: Int
+    let totalMatches: Int
+}
+
+private func literalMatchedLineAndMatchCounts(
+    in data: Data,
+    literal: [UInt8]
+) -> LiteralMatchedLineAndMatchCounts {
+    guard !literal.isEmpty,
+          data.count >= literal.count else {
+        return LiteralMatchedLineAndMatchCounts(matchedLines: 0, totalMatches: 0)
+    }
+    var result = LiteralMatchedLineAndMatchCounts(matchedLines: 0, totalMatches: 0)
+    data.withUnsafeBytes { (rawData: UnsafeRawBufferPointer) -> Void in
+        guard let rawBase = rawData.baseAddress else {
+            return
+        }
+        let base = rawBase.assumingMemoryBound(to: UInt8.self)
+        literal.withUnsafeBufferPointer { needle in
+            guard let needleBase = needle.baseAddress else {
+                return
+            }
+
+            var searchOffset = 0
+            var matchedLineCount = 0
+            var totalMatchCount = 0
+            var currentLineEnd = -1
+            if literal.count == 1 {
+                while searchOffset < data.count {
+                    guard let rawFound = memchr(
+                        base.advanced(by: searchOffset),
+                        Int32(needleBase[0]),
+                        data.count - searchOffset
+                    ) else {
+                        break
+                    }
+                    let found = rawFound.assumingMemoryBound(to: UInt8.self)
+                    let matchStart = base.distance(to: found)
+                    totalMatchCount += 1
+                    if matchStart >= currentLineEnd {
+                        matchedLineCount += 1
+                        let newline = memchr(
+                            found,
+                            Int32(UInt8(ascii: "\n")),
+                            data.count - matchStart
+                        )
+                        currentLineEnd = newline.map {
+                            base.distance(to: $0.assumingMemoryBound(to: UInt8.self))
+                        } ?? data.count
+                    }
+                    searchOffset = matchStart + 1
+                }
+            } else {
+                while searchOffset <= data.count - literal.count {
+                    guard let found = rg_memmem_simple(
+                        base.advanced(by: searchOffset),
+                        data.count - searchOffset,
+                        needleBase,
+                        literal.count
+                    ) else {
+                        break
+                    }
+                    let matchStart = base.distance(to: found)
+                    totalMatchCount += 1
+                    if matchStart >= currentLineEnd {
+                        matchedLineCount += 1
+                        let newline = memchr(
+                            found,
+                            Int32(UInt8(ascii: "\n")),
+                            data.count - matchStart
+                        )
+                        currentLineEnd = newline.map {
+                            base.distance(to: $0.assumingMemoryBound(to: UInt8.self))
+                        } ?? data.count
+                    }
+                    searchOffset = matchStart + literal.count
+                }
+            }
+            result = LiteralMatchedLineAndMatchCounts(
+                matchedLines: matchedLineCount,
+                totalMatches: totalMatchCount
+            )
+        }
+    }
+    return result
 }
 
 private func nonOverlappingDistinctLiterals(_ literals: [[UInt8]]) -> [[UInt8]]? {
