@@ -125,12 +125,8 @@ public struct GlobMatcher: Equatable {
             self.sourcePath = sourcePath
             let fastMatcher = GlobMatcher.compileFastMatcher(source, basenameOnly: basenameOnly, caseInsensitive: caseInsensitive)
             let needsRegexFallback: Bool
-            if let fastMatcher {
-                if case .simpleGlob = fastMatcher {
-                    needsRegexFallback = true
-                } else {
-                    needsRegexFallback = false
-                }
+            if fastMatcher != nil {
+                needsRegexFallback = false
             } else {
                 needsRegexFallback = true
             }
@@ -732,13 +728,6 @@ public struct GlobMatcher: Equatable {
 
     private func matchesGlob(_ rule: UnsafePointer<Rule>, _ value: String) -> Bool {
         if let fastMatcher = rule.pointee.fastMatcher {
-            if case .simpleGlob = fastMatcher,
-               !value.utf8.allSatisfy({ $0 < 0x80 }) {
-                guard let regex = rule.pointee.regex else {
-                    return false
-                }
-                return matches(regex, value)
-            }
             return matchesFast(fastMatcher, value)
         }
         guard let regex = rule.pointee.regex else {
@@ -752,17 +741,7 @@ public struct GlobMatcher: Equatable {
             if matchesFastAnywhere(fastMatcher, value) {
                 return true
             }
-            if case .simpleGlob = fastMatcher {
-                if !value.utf8.allSatisfy({ $0 < 0x80 }) {
-                    guard let regex = rule.pointee.anywhereRegex else {
-                        return false
-                    }
-                    return matches(regex, value)
-                }
-                return false
-            } else {
-                return false
-            }
+            return false
         }
         guard let regex = rule.pointee.anywhereRegex else {
             return false

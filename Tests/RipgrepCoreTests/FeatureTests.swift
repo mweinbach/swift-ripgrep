@@ -4535,6 +4535,29 @@ struct FeatureTests {
             indexedSlashRules.path("nested/foo/bar"),
         ])
 
+        let utf8ByteGlob = try TemporaryDirectory()
+        try utf8ByteGlob.createDirectory(".git")
+        try utf8ByteGlob.write("?.txt\n", to: ".gitignore")
+        try utf8ByteGlob.write("needle\n", to: "a.txt")
+        try utf8ByteGlob.write("needle\n", to: "é.txt")
+        try utf8ByteGlob.write("needle\n", to: "éa.txt")
+        #expect(Set(pathBasenames(try run(["--sort", "path", "--files", utf8ByteGlob.url.path]))) == Set([
+            "é.txt",
+            "éa.txt",
+        ]))
+
+        let utf8TwoByteGlob = try TemporaryDirectory()
+        try utf8TwoByteGlob.createDirectory(".git")
+        try utf8TwoByteGlob.write("??.txt\n", to: ".gitignore")
+        try utf8TwoByteGlob.write("needle\n", to: "a.txt")
+        try utf8TwoByteGlob.write("needle\n", to: "é.txt")
+        try utf8TwoByteGlob.write("needle\n", to: "éa.txt")
+        #expect(Set(pathBasenames(try run(["--sort", "path", "--files", utf8TwoByteGlob.url.path]))) == Set([
+            "a.txt",
+            "é.txt",
+            "éa.txt",
+        ]))
+
         let anywhereSlashMatcher = GlobMatcher(patterns: [
             "*.tmp", "*.bin", "*.log", "*.o", "*.d", "cache", "dist", "foo/bar",
         ])
