@@ -7259,7 +7259,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 bytesSearched: data.count,
                 searched: true,
                 supplementalMatchedLines: counts.matchedLines,
-                supplementalMatches: countOnly ? counts.matchedLines : counts.matches
+                supplementalMatches: counts.matches
             )
         }
 
