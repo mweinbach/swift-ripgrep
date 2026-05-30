@@ -3547,6 +3547,9 @@ Rust; the ASCII-scoped form measured 237.4 ms versus 5.897 s before. A sparse
 252 MiB rejection-heavy fixture also matched Rust byte-for-byte and measured
 default Unicode at 67.9 ms versus 148.0 ms before and 194.3 ms for Rust, with
 the ASCII-scoped form at 67.0 ms versus 127.7 ms before.
+Plain dense output now skips newline counting inside the same streaming route:
+the ASCII-scoped form measured 160.9 ms versus 5.225 s before and 310.0 ms for
+Rust, while default Unicode measured 252.9 ms.
 
 ASCII case-insensitive literal scanning now adds a middle-byte SIMD filter for
 literals of at least eight bytes, keeping the existing first/tail filter but

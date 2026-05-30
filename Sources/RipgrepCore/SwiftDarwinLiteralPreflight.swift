@@ -10536,22 +10536,38 @@ private func rgSwiftDarwinWriteSurroundingWordsBytes(
         var emittedHeading = false
 
         while searchOffset < haystackLength {
-            let result = rg_memmem_count_byte_before(
-                base.advanced(by: searchOffset),
-                haystackLength - searchOffset,
-                literalBase,
-                literal.count,
-                newlineByte
-            )
-            guard let found = result.match else {
+            let found: UnsafePointer<UInt8>?
+            let skippedNewlines: Int
+            if lineNumber {
+                let result = rg_memmem_count_byte_before(
+                    base.advanced(by: searchOffset),
+                    haystackLength - searchOffset,
+                    literalBase,
+                    literal.count,
+                    newlineByte
+                )
+                found = result.match
+                skippedNewlines = Int(result.count)
+            } else {
+                found = rg_memmem_simple(
+                    base.advanced(by: searchOffset),
+                    haystackLength - searchOffset,
+                    literalBase,
+                    literal.count
+                )
+                skippedNewlines = 0
+            }
+            guard let found else {
                 break
             }
 
             let literalStart = base.distance(to: found)
             let literalEnd = literalStart + literal.count
-            let matchedLineNumber = lineNumberAtSearchOffset + Int(result.count)
+            let matchedLineNumber = lineNumberAtSearchOffset + skippedNewlines
             if definitelyCannotMatchNearLiteral(literalStart: literalStart, literalEnd: literalEnd) {
-                lineNumberAtSearchOffset = matchedLineNumber
+                if lineNumber {
+                    lineNumberAtSearchOffset = matchedLineNumber
+                }
                 searchOffset = max(literalStart + 1, searchOffset + 1)
                 continue
             }
@@ -10572,7 +10588,9 @@ private func rgSwiftDarwinWriteSurroundingWordsBytes(
                 literalStart: literalStart,
                 literalEnd: literalEnd
             ) else {
-                lineNumberAtSearchOffset = matchedLineNumber
+                if lineNumber {
+                    lineNumberAtSearchOffset = matchedLineNumber
+                }
                 searchOffset = max(literalStart + 1, searchOffset + 1)
                 continue
             }
@@ -10594,7 +10612,9 @@ private func rgSwiftDarwinWriteSurroundingWordsBytes(
             }
 
             matchedLineCount += 1
-            lineNumberAtSearchOffset = newline == nil ? matchedLineNumber : matchedLineNumber + 1
+            if lineNumber {
+                lineNumberAtSearchOffset = newline == nil ? matchedLineNumber : matchedLineNumber + 1
+            }
             searchOffset = outputEnd
         }
 
