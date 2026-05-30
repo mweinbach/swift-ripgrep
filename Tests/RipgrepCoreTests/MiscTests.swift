@@ -457,6 +457,30 @@ struct MiscTests {
         ], fixture: {})
         #expect(trimOnlyMatchingOutput == Data("Abcdefghi123\nZbcdefghi999\n".utf8))
 
+        let maxColumnsOutput = try runExecutableData([
+            "--max-columns",
+            "10",
+            pattern,
+            root.path("src/match.txt"),
+        ], fixture: {})
+        #expect(maxColumnsOutput == Data("[Omitted long matching line]\n".utf8))
+        let maxColumnsPreviewOutput = try runExecutableData([
+            "--max-columns",
+            "10",
+            "--max-columns-preview",
+            pattern,
+            root.path("src/match.txt"),
+        ], fixture: {})
+        #expect(maxColumnsPreviewOutput == Data("prefix Abc [... omitted end of long line]\n".utf8))
+        let maxColumnsColumnOutput = try runExecutableData([
+            "--max-columns",
+            "10",
+            "--column",
+            pattern,
+            root.path("src/match.txt"),
+        ], fixture: {})
+        #expect(maxColumnsColumnOutput == Data("1:8:[Omitted long line with 2 matches]\n".utf8))
+
         func runQuiet(_ arguments: [String]) -> (stdout: [String], stderr: [String], status: Int32) {
             var stdout: [String] = []
             var stderr: [String] = []

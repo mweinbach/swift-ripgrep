@@ -7213,8 +7213,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !options.stopOnNonmatch,
               !options.invertMatch,
               !options.nullData,
-              canUseMaxCount,
-              options.maxColumns == nil else {
+              canUseMaxCount else {
             return nil
         }
         let countOnly = options.printMode == .count
