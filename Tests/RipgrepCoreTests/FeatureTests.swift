@@ -3902,6 +3902,48 @@ struct FeatureTests {
         )
         #expect(parallelResults?.count == sequentialResults?.count)
         #expect(parallelLines == sequentialLines)
+
+        let noVCSIgnoreRoot = try TemporaryDirectory()
+        try noVCSIgnoreRoot.createDirectory(".git")
+        try noVCSIgnoreRoot.write("keep\n", to: "a/keep-dot.txt")
+        try noVCSIgnoreRoot.write("skip\n", to: "a/skip-dot.txt")
+        try noVCSIgnoreRoot.write("skip-dot.txt\n", to: "a/.ignore")
+        try noVCSIgnoreRoot.write("keep\n", to: "b/keep-vcs.txt")
+        try noVCSIgnoreRoot.write("vcs\n", to: "b/skip-vcs.txt")
+        try noVCSIgnoreRoot.write("skip-vcs.txt\n", to: ".gitignore")
+        guard case .run(let noVCSIgnoreOptions) = RipgrepArgumentParser.parse([
+            "--no-ignore-vcs",
+            "--no-ignore-global",
+            "--no-ignore-parent",
+            "--files",
+            noVCSIgnoreRoot.url.path,
+        ]) else {
+            Issue.record("expected no-vcs file-list arguments to parse")
+            return
+        }
+        var noVCSIgnoreBytes = Data()
+        let noVCSIgnoreResults = try FileWalker().writeDarwinFilePathsWithMessages(
+            for: noVCSIgnoreOptions,
+            writeBytes: { bytes in
+                noVCSIgnoreBytes.append(bytes.bindMemory(to: UInt8.self))
+            }
+        )
+        let noVCSIgnoreRootPrefix = noVCSIgnoreRoot.url.path + "/"
+        let noVCSIgnoreRelativePaths = String(decoding: noVCSIgnoreBytes, as: UTF8.self)
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .map(String.init)
+            .map { path in
+                path.hasPrefix(noVCSIgnoreRootPrefix)
+                    ? String(path.dropFirst(noVCSIgnoreRootPrefix.count))
+                    : path
+            }
+            .sorted()
+        #expect(noVCSIgnoreResults?.count == 3)
+        #expect(noVCSIgnoreRelativePaths == [
+            "a/keep-dot.txt",
+            "b/keep-vcs.txt",
+            "b/skip-vcs.txt",
+        ])
         #endif
 
         let whitelisted = try TemporaryDirectory()

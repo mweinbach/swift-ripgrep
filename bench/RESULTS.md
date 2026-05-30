@@ -138,9 +138,32 @@ and hidden `--files` at 80.7 ms versus 81.8 ms. The `--no-ignore-vcs` control
 was noise-dominated at 70.2 ms versus 68.3 ms and does not exercise the moved
 global-ignore property.
 
+The ignore-aware Darwin file-list writer now skips ignore-stack decisions in
+`--no-ignore-vcs` directories that have not loaded any `.ignore` or `.rgignore`
+rules. That leaves VCS-ignore traversal unchanged while avoiding relative-path
+construction and empty `IgnoreStack` probes for no-vcs file listing. Exact Swift
+output matched the previous binary for default, hidden, and `--no-ignore-vcs`;
+sorted output matched Rust on the same controls. A 70-run A/B measured
+`--no-ignore-vcs --files` at 64.2 ms versus 67.8 ms for the previous
+checkpoint, with user CPU 27.4 ms versus 34.3 ms, and Rust no-vcs at 65.5 ms.
+Default stayed neutral at 78.5 ms versus 79.3 ms; hidden was noisy at 82.5 ms
+versus 80.7 ms, so keep monitoring that control. A later 60-run confirmation
+measured `--no-ignore-vcs --files` at 65.5 ms versus 67.8 ms before and Rust at
+65.9 ms; default was 79.0 ms versus a noisy 83.5 ms before, and hidden was
+84.0 ms versus 81.4 ms before. An order-flipped 100-run control then measured
+hidden neutral at 81.4 ms versus 81.5 ms before; default in that same control
+was noise-dominated at 81.4 ms versus 80.0 ms before.
+
 Several plausible Swift-only probes were rejected after exact Swift-output and
 sorted Rust-output checks:
 
+- Indexing exact path rules behind a character-count guard preserved exact
+  Swift output and sorted Rust parity, but measured flat-to-worse: default
+  `--files` was about 81.0 ms and hidden was about 81.2 ms.
+- Switching the ignore-aware file-list loops to a local directory-entry-kind
+  enum preserved exact Swift output and sorted Rust parity, but was flat or
+  slower: default `--files` was about 81.6 ms, hidden about 81.0 ms, and
+  `--no-ignore-vcs` about 67.0 ms.
 - Replacing the array-backed `IgnoreStack` with a linked stack preserved exact
   Swift output and sorted Rust parity, but raised default/hidden user CPU and
   measured neutral-to-worse: a 30-run check put default `--files` at 83.7 ms and

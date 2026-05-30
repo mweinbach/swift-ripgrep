@@ -1151,35 +1151,49 @@ public struct FileWalker: @unchecked Sendable {
         orderedChildren.reserveCapacity(contents.children.count)
         var directoryCount = 0
         var rootFiltered = false
-        for child in contents.children.reversed() {
-            if child.kind == .symbolicLink {
-                continue
+        if options.noIgnoreVCS && directoryIgnoreStack.isEmpty {
+            for child in contents.children.reversed() {
+                if child.kind == .symbolicLink || (!options.hidden && child.isHidden) {
+                    continue
+                }
+                if child.kind.isDirectory {
+                    directoryCount += 1
+                    orderedChildren.append(child)
+                } else if child.kind.isFile {
+                    orderedChildren.append(child)
+                }
             }
-            let childRelativePath = child.name
-            let isDirectory = child.kind.isDirectory
-            if !options.hidden,
-               child.isHidden,
-               !isIncludedByIgnore(
-                   relativePath: childRelativePath,
-                   basename: child.name,
-                   isDirectory: isDirectory,
-                   ignoreStack: directoryIgnoreStack
-               ) {
-                continue
-            }
-            guard directoryIgnoreStack.allows(
-                relativePath: childRelativePath,
-                basename: child.name,
-                isDirectory: isDirectory
-            ) else {
-                rootFiltered = true
-                continue
-            }
-            if child.kind.isDirectory {
-                directoryCount += 1
-                orderedChildren.append(child)
-            } else if child.kind.isFile {
-                orderedChildren.append(child)
+        } else {
+            for child in contents.children.reversed() {
+                if child.kind == .symbolicLink {
+                    continue
+                }
+                let childRelativePath = child.name
+                let isDirectory = child.kind.isDirectory
+                if !options.hidden,
+                   child.isHidden,
+                   !isIncludedByIgnore(
+                       relativePath: childRelativePath,
+                       basename: child.name,
+                       isDirectory: isDirectory,
+                       ignoreStack: directoryIgnoreStack
+                   ) {
+                    continue
+                }
+                guard directoryIgnoreStack.allows(
+                    relativePath: childRelativePath,
+                    basename: child.name,
+                    isDirectory: isDirectory
+                ) else {
+                    rootFiltered = true
+                    continue
+                }
+                if child.kind.isDirectory {
+                    directoryCount += 1
+                    orderedChildren.append(child)
+                } else if child.kind.isFile {
+                    orderedChildren.append(child)
+                }
             }
         }
         guard directoryCount >= 2 else {
@@ -1354,6 +1368,47 @@ public struct FileWalker: @unchecked Sendable {
 
         let directoryPathPrefix = directoryPath + "/"
         let relativePathPrefix = relativePath.isEmpty ? "" : relativePath + "/"
+        if options.noIgnoreVCS && directoryIgnoreStack.isEmpty {
+            for child in contents.children.reversed() {
+                if child.kind == .symbolicLink || (!options.hidden && child.isHidden) {
+                    continue
+                }
+                if child.kind.isDirectory {
+                    let childRelativePath = relativePathPrefix + child.name
+                    var childLogicalPathBytes = logicalPathBytes
+                    childLogicalPathBytes.append(UInt8(ascii: "/"))
+                    appendUTF8(child.name, to: &childLogicalPathBytes)
+                    try walkFilePathsInOutputOrderData(
+                        directoryPath: directoryPathPrefix + child.name,
+                        logicalPathBytes: childLogicalPathBytes,
+                        logicalDirectoryPathIsASCII: logicalDirectoryPathIsASCII && child.isASCII,
+                        relativePath: childRelativePath,
+                        rootBase: rootBase,
+                        rootDebugDisplayPath: rootDebugDisplayPath,
+                        rootArgumentIsAbsolute: rootArgumentIsAbsolute,
+                        vcsContext: directoryVCSContext,
+                        messages: &messages,
+                        warnings: &warnings,
+                        diagnostics: &diagnostics,
+                        filtered: &filtered,
+                        ignoreStack: directoryIgnoreStack,
+                        options: options,
+                        emittedCount: &emittedCount,
+                        outputBuffer: &outputBuffer
+                    )
+                } else if child.kind.isFile {
+                    emittedCount += 1
+                    appendDarwinFilePathLine(
+                        logicalPathBytes: logicalPathBytes,
+                        logicalPathIsASCII: logicalDirectoryPathIsASCII,
+                        childName: child.name,
+                        childNameIsASCII: child.isASCII,
+                        outputBuffer: &outputBuffer
+                    )
+                }
+            }
+            return
+        }
         for child in contents.children.reversed() {
             if child.kind == .symbolicLink {
                 continue
