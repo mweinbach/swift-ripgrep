@@ -3176,15 +3176,24 @@ public struct FileWalker: @unchecked Sendable {
               let globalIgnoreFile = globalGitIgnoreFile() else {
             return
         }
-        appendLoadedMatcher(
+        let loaded = loadMatcher(
             from: globalIgnoreFile,
-            to: &ignoreStack,
-            warnings: &warnings,
-            diagnostics: &diagnostics,
             rootBase: nil,
-            emitDiagnostics: false,
-            options: options
+            reportLoadErrors: false,
+            caseInsensitive: options.ignoreFileCaseInsensitive
         )
+        if options.mode == .files,
+           !options.hidden,
+           options.loggingMode == nil,
+           loaded.messages.isEmpty,
+           !ignoreStack.canIncludePaths,
+           loaded.matcher.excludesOnlyHiddenPaths {
+            return
+        }
+        ignoreStack.append(loaded.matcher)
+        if !options.noIgnoreMessages {
+            warnings.append(contentsOf: loaded.messages)
+        }
     }
 
     private func appendExplicitIgnoreFiles(

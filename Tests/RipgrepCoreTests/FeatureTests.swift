@@ -4482,6 +4482,49 @@ struct FeatureTests {
             "needle",
             configuredRoot.url.path,
         ], environment: ["HOME": configuredHome.url.path])) == ["keep.txt"])
+
+        let hiddenHome = try TemporaryDirectory()
+        let hiddenRoot = try TemporaryDirectory()
+        try hiddenRoot.createDirectory(".git")
+        try hiddenRoot.createDirectory(".cache")
+        try hiddenRoot.write("", to: "visible.txt")
+        try hiddenRoot.write("", to: ".cache/keep.txt")
+        try hiddenRoot.write("", to: ".cache/skip.txt")
+        try hiddenHome.write("**/.cache/skip.txt\n", to: ".config/git/ignore")
+        let hiddenEnvironment = [
+            "HOME": hiddenHome.url.path,
+            "XDG_CONFIG_HOME": hiddenHome.path(".config"),
+        ]
+        #expect(Set(try run([
+            "--sort",
+            "path",
+            "--files",
+            hiddenRoot.url.path,
+        ], environment: hiddenEnvironment)) == Set([
+            hiddenRoot.path("visible.txt"),
+        ]))
+        #expect(Set(try run([
+            "--sort",
+            "path",
+            "--hidden",
+            "--files",
+            hiddenRoot.url.path,
+        ], environment: hiddenEnvironment)) == Set([
+            hiddenRoot.path(".cache/keep.txt"),
+            hiddenRoot.path("visible.txt"),
+        ]))
+        #expect(Set(try run([
+            "--sort",
+            "path",
+            "--hidden",
+            "--no-ignore-global",
+            "--files",
+            hiddenRoot.url.path,
+        ], environment: hiddenEnvironment)) == Set([
+            hiddenRoot.path(".cache/keep.txt"),
+            hiddenRoot.path(".cache/skip.txt"),
+            hiddenRoot.path("visible.txt"),
+        ]))
     }
 
     @Test("honors rgignore and ignore family switches")

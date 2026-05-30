@@ -73,6 +73,18 @@ still directionally positive: default 87.1 ms versus 87.4 ms, hidden 86.6 ms
 versus 86.9 ms, and `--no-ignore-vcs` 64.1 ms versus 64.7 ms. Rust default
 measured 67.1 ms in both confirmation slices.
 
+The global-ignore setup now skips appending global matchers that can only
+exclude hidden paths during default non-hidden file listing when no earlier
+ignore file supplied an include rule. Hidden paths are already filtered before
+ignore matching in that mode, while `--hidden` continues to load and apply the
+global matcher. Exact output matched the previous Swift binary for default,
+hidden, no-global, no-vcs, and no-ignore-hidden file listing; sorted output
+matched Rust for the same controls. An 80-run A/B measured default `--files` at
+84.5 ms versus 86.8 ms for the previous checkpoint, hidden stayed neutral at
+86.9 ms versus 86.5 ms, and the no-global control stayed neutral. A 100-run
+order-flipped confirmation measured default at 84.8 ms versus 86.2 ms, hidden
+at 87.5 ms for both binaries, and Rust default at 67.2 ms.
+
 Several plausible Swift-only probes were rejected after exact Swift-output and
 sorted Rust-output checks:
 
