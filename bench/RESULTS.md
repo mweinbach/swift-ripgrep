@@ -154,6 +154,17 @@ measured `--no-ignore-vcs --files` at 65.5 ms versus 67.8 ms before and Rust at
 hidden neutral at 81.4 ms versus 81.5 ms before; default in that same control
 was noise-dominated at 81.4 ms versus 80.0 ms before.
 
+The CLI files-mode path now defers allocating the generic 64 KiB line-output
+buffer until after the Darwin byte-output fast path declines the request. The
+fast path writes bytes directly, so successful default, hidden, and no-vcs
+file-listing runs no longer pay for an unused fallback buffer. Exact Swift
+output matched the previous binary for default, hidden, and `--no-ignore-vcs`;
+sorted default output matched Rust. A 100-run A/B measured default `--files` at
+80.6 ms versus 80.5 ms before, hidden at 80.8 ms versus 81.5 ms, and no-vcs at
+63.5 ms versus 64.5 ms. An order-flipped 120-run confirmation measured default
+at 78.5 ms versus 79.0 ms before, hidden at 80.9 ms versus 81.6 ms, and no-vcs
+neutral at 63.7 ms versus 63.6 ms.
+
 Several plausible Swift-only probes were rejected after exact Swift-output and
 sorted Rust-output checks:
 

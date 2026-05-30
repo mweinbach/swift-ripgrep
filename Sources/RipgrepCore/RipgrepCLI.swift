@@ -89,8 +89,6 @@ public enum RipgrepCLI {
                 let searcher = RipgrepSearcher(fileManager: fileManager, environment: environment)
 
                 if options.mode == .files {
-                    var filePathOutputBuffer = Data()
-                    filePathOutputBuffer.reserveCapacity(64 * 1024)
                     if stdout == nil,
                        let filePathResults = try searcher.writeDarwinFilePathsWithMessages(
                         options: options,
@@ -115,6 +113,8 @@ public enum RipgrepCLI {
                         }
                         return filePathResults.count == 0 ? 1 : 0
                     }
+                    var filePathOutputBuffer = Data()
+                    filePathOutputBuffer.reserveCapacity(64 * 1024)
                     if let filePathResults = try searcher.streamFilePathsWithMessages(
                         options: options,
                         stopAfterFirst: options.quiet,
