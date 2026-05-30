@@ -221,6 +221,17 @@ sorted Rust-output checks:
   81.4 ms versus 80.2 ms), and a visible-path fast index that skipped rules
   which can only match hidden paths also regressed default user CPU
   (82.2 ms versus 80.4 ms).
+- Two later bookkeeping probes also stayed rejected after exact Swift output and
+  sorted Rust parity. Removing the fast file-list chunk message/warning/
+  diagnostic side channels was mixed: an 80-run pass measured default at
+  77.6 ms versus 79.0 ms before and no-vcs at 66.6 ms versus a noisy
+  79.3 ms before, but hidden regressed to 86.6 ms versus 81.8 ms; the
+  order-flipped 100-run pass put default slower at 79.2 ms versus 78.0 ms and
+  no-vcs neutral at 63.7 ms versus 63.8 ms. Reserving cloned logical path byte
+  arrays before appending directory names was likewise noise: an 80-run pass
+  showed default at 77.9 ms versus 78.6 ms before and no-vcs at 64.0 ms versus
+  64.4 ms, but the order-flipped 100-run pass regressed default to 80.5 ms
+  versus 77.6 ms and left no-vcs flat at 63.1 ms versus 63.2 ms.
 
 ### Continuation probes — 2026-05-29
 
