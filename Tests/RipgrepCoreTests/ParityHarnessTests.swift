@@ -539,6 +539,8 @@ private func miscParityCases() -> [ParityCase] {
         ParityCase(name: "misc::word_unicode_boundary_fallback", fixture: wordUnicodeBoundaryFallbackFixture, arguments: ["-w", "-q", "missingliteral", "unicode-word"]),
         ParityCase(name: "misc::word_period", fixture: { dir in try write("...", to: "haystack", in: dir) }, arguments: ["-ow", ".", "haystack"]),
         ParityCase(name: "misc::line", fixture: sherlockFixture, arguments: ["-x", "Watson|and exhibited clearly, with a label attached.", "sherlock"]),
+        ParityCase(name: "misc::line_ascii_fixed_class", fixture: asciiFixedClassFixture, arguments: ["[A-Z][a-z]{8}[0-9]{3}", "."]),
+        ParityCase(name: "misc::line_number_ascii_fixed_class", fixture: asciiFixedClassFixture, arguments: ["-n", "[A-Z][a-z]{8}[0-9]{3}", "."]),
         ParityCase(name: "misc::quiet_ascii_fixed_class", fixture: asciiFixedClassFixture, arguments: ["-q", "[A-Z][a-z]{8}[0-9]{3}", "."]),
         ParityCase(name: "misc::quiet_ascii_fixed_class_no_match", fixture: asciiFixedClassFixture, arguments: ["-q", "[A-Z][a-z]{8}[0-9]{3}", "miss.txt"]),
         ParityCase(name: "misc::count_ascii_fixed_class", fixture: asciiFixedClassFixture, arguments: ["-c", "[A-Z][a-z]{8}[0-9]{3}", "."]),

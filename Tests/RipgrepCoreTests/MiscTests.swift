@@ -161,6 +161,14 @@ struct MiscTests {
         """, to: "src/miss.txt")
         let pattern = "[A-Z][a-z]{8}[0-9]{3}"
 
+        let plainLineOutput = try runExecutableData([
+            pattern,
+            root.url.path,
+        ], fixture: {})
+        #expect(String(decoding: plainLineOutput, as: UTF8.self) == """
+        \(root.path("src/match.txt")):prefix Abcdefghi123 middle Zbcdefghi999 suffix
+
+        """)
         let lineOutput = try runExecutableData([
             "-n",
             pattern,

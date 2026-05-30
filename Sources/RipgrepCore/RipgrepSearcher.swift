@@ -7205,6 +7205,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
               options.replacement == nil,
               !options.stopOnNonmatch,
               !options.invertMatch,
+              !options.nullData,
               options.maxCount == nil,
               !options.onlyMatching,
               !options.column,
@@ -7217,7 +7218,13 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
         let countOnly = options.printMode == .count
         let countMatchesOnly = options.printMode == .countMatches
-        guard (options.quiet && options.printMode == .matchingLines) || countOnly || countMatchesOnly else {
+        let lineOutput = !options.quiet
+            && options.printMode == .matchingLines
+            && canOmitMatchSpans(options: options)
+        guard (options.quiet && options.printMode == .matchingLines)
+            || countOnly
+            || countMatchesOnly
+            || lineOutput else {
             return nil
         }
 
@@ -7246,6 +7253,30 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 searched: true,
                 supplementalMatchedLines: counts.matchedLines,
                 supplementalMatches: countOnly ? counts.matchedLines : counts.matches
+            )
+        }
+
+        if lineOutput {
+            let matches = data.withUnsafeBytes { rawBuffer -> [SearchMatch]? in
+                let bytes = rawBuffer.bindMemory(to: UInt8.self)
+                guard let baseAddress = bytes.baseAddress else {
+                    return []
+                }
+                return asciiFixedClassLineMatches(
+                    baseAddress: baseAddress,
+                    dataCount: data.count,
+                    classes: classes,
+                    fileURL: fileURL
+                )
+            }
+            guard let matches else {
+                return nil
+            }
+            return SearchFileResult(
+                fileURL: fileURL,
+                matches: matches,
+                bytesSearched: data.count,
+                searched: true
             )
         }
 
@@ -7346,6 +7377,96 @@ public struct RipgrepSearcher: @unchecked Sendable {
             offset += 1
         }
         return counts
+    }
+
+    private func asciiFixedClassLineMatches(
+        baseAddress: UnsafePointer<UInt8>,
+        dataCount: Int,
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass],
+        fileURL: URL
+    ) -> [SearchMatch]? {
+        let width = classes.count
+        guard width > 0, dataCount >= width else {
+            return []
+        }
+
+        let newline = UInt8(ascii: "\n")
+        var matches: [SearchMatch] = []
+        var lineStart = 0
+        var lineNumber = 1
+        var offset = 0
+
+        func scanLine(lineEnd: Int, terminator: String) -> Bool {
+            guard lineEnd - lineStart >= width else {
+                return true
+            }
+
+            let lastStart = lineEnd - width
+            var lineMatchCount = 0
+            var candidateOffset = lineStart
+            while candidateOffset <= lastStart {
+                guard byte(baseAddress[candidateOffset], matches: classes[0]) else {
+                    candidateOffset += 1
+                    continue
+                }
+
+                var classIndex = 1
+                while classIndex < width,
+                      byte(baseAddress[candidateOffset + classIndex], matches: classes[classIndex]) {
+                    classIndex += 1
+                }
+                if classIndex == width {
+                    lineMatchCount += 1
+                    candidateOffset += width
+                    continue
+                }
+                candidateOffset += 1
+            }
+
+            guard lineMatchCount > 0 else {
+                return true
+            }
+
+            let lineData = Data(
+                bytes: baseAddress.advanced(by: lineStart),
+                count: lineEnd - lineStart
+            )
+            guard let line = String(data: lineData, encoding: .utf8) else {
+                return false
+            }
+            matches.append(SearchMatch(
+                fileURL: fileURL,
+                lineNumber: lineNumber,
+                column: nil,
+                line: line,
+                lineTerminator: terminator,
+                absoluteOffset: lineStart,
+                matchCount: lineMatchCount,
+                spans: []
+            ))
+            return true
+        }
+
+        while offset < dataCount {
+            if baseAddress[offset] == newline {
+                guard scanLine(lineEnd: offset, terminator: "\n") else {
+                    return nil
+                }
+                offset += 1
+                lineStart = offset
+                lineNumber += 1
+                continue
+            }
+            offset += 1
+        }
+
+        if lineStart < dataCount || dataCount == 0 || baseAddress[dataCount - 1] != newline {
+            guard scanLine(lineEnd: dataCount, terminator: "") else {
+                return nil
+            }
+        }
+
+        return matches
     }
 
     private func searchRawLiteralContents(
