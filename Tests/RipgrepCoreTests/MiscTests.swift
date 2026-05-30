@@ -178,6 +178,24 @@ struct MiscTests {
         \(root.path("src/match.txt")):1:prefix Abcdefghi123 middle Zbcdefghi999 suffix
 
         """)
+        let redBold = "\u{1B}[1m\u{1B}[31m"
+        let reset = "\u{1B}[0m"
+        let colorOutput = try runExecutableData([
+            "--color=always",
+            pattern,
+            root.path("src/match.txt"),
+        ], fixture: {})
+        #expect(String(decoding: colorOutput, as: UTF8.self) == """
+        prefix \(reset)\(redBold)Abcdefghi123\(reset) middle \(reset)\(redBold)Zbcdefghi999\(reset) suffix
+
+        """)
+        let jsonOutput = try runExecutableData([
+            "--json",
+            pattern,
+            root.path("src/match.txt"),
+        ], fixture: {})
+        let jsonText = String(decoding: jsonOutput, as: UTF8.self)
+        #expect(jsonText.contains(#""submatches":[{"match":{"text":"Abcdefghi123"},"start":7,"end":19},{"match":{"text":"Zbcdefghi999"},"start":27,"end":39}]"#))
         let countOutput = try runExecutableData([
             "-c",
             pattern,
@@ -196,6 +214,22 @@ struct MiscTests {
         \(root.path("src/match.txt")):2
 
         """)
+        let statsCountOutput = try runExecutableData([
+            "--stats",
+            "-c",
+            pattern,
+            root.url.path,
+        ], fixture: {})
+        let statsCountText = String(decoding: statsCountOutput, as: UTF8.self)
+        #expect(statsCountText.contains("""
+        \(root.path("src/match.txt")):1
+
+        1 matches
+        1 matched lines
+        1 files contained matches
+        2 files searched
+        """))
+        #expect(statsCountText.contains("\n98 bytes searched\n"))
 
         func runQuiet(_ arguments: [String]) -> (stdout: [String], stderr: [String], status: Int32) {
             var stdout: [String] = []

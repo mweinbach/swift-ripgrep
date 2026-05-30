@@ -7197,8 +7197,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !data.starts(with: [0xEF, 0xBB, 0xBF]),
               !data.starts(with: [0xFF, 0xFE]),
               !data.starts(with: [0xFE, 0xFF]),
-              !options.json,
-              !options.stats,
               options.beforeContext == 0,
               options.afterContext == 0,
               !options.passthru,
@@ -7218,12 +7216,14 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
         let countOnly = options.printMode == .count
         let countMatchesOnly = options.printMode == .countMatches
+        let countOutput = !options.json && (countOnly || countMatchesOnly)
         let lineOutput = !options.quiet
             && options.printMode == .matchingLines
-            && canOmitMatchSpans(options: options)
-        guard (options.quiet && options.printMode == .matchingLines)
-            || countOnly
-            || countMatchesOnly
+        let quietOutput = options.quiet
+            && !options.stats
+            && options.printMode == .matchingLines
+        guard quietOutput
+            || countOutput
             || lineOutput else {
             return nil
         }
@@ -7234,7 +7234,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: data.count, searched: true)
         }
 
-        if countOnly || countMatchesOnly {
+        if countOutput {
             let counts = data.withUnsafeBytes { rawBuffer -> ASCIIFixedClassCounts in
                 let bytes = rawBuffer.bindMemory(to: UInt8.self)
                 guard let baseAddress = bytes.baseAddress else {
@@ -7257,6 +7257,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
 
         if lineOutput {
+            let includeSpans = options.json || !canOmitMatchSpans(options: options)
             let matches = data.withUnsafeBytes { rawBuffer -> [SearchMatch]? in
                 let bytes = rawBuffer.bindMemory(to: UInt8.self)
                 guard let baseAddress = bytes.baseAddress else {
@@ -7266,6 +7267,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     baseAddress: baseAddress,
                     dataCount: data.count,
                     classes: classes,
+                    includeSpans: includeSpans,
                     fileURL: fileURL
                 )
             }
@@ -7280,6 +7282,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
             )
         }
 
+        guard quietOutput else {
+            return nil
+        }
         let matchOffset = data.withUnsafeBytes { rawBuffer -> Int? in
             let bytes = rawBuffer.bindMemory(to: UInt8.self)
             guard let baseAddress = bytes.baseAddress else {
@@ -7383,6 +7388,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         baseAddress: UnsafePointer<UInt8>,
         dataCount: Int,
         classes: [ASCIIFixedClassSequenceFastPath.ByteClass],
+        includeSpans: Bool,
         fileURL: URL
     ) -> [SearchMatch]? {
         let width = classes.count
@@ -7403,6 +7409,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
 
             let lastStart = lineEnd - width
             var lineMatchCount = 0
+            var spans: [MatchSpan] = []
             var candidateOffset = lineStart
             while candidateOffset <= lastStart {
                 guard byte(baseAddress[candidateOffset], matches: classes[0]) else {
@@ -7417,6 +7424,21 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 }
                 if classIndex == width {
                     lineMatchCount += 1
+                    if includeSpans {
+                        let startByte = candidateOffset - lineStart
+                        let endByte = startByte + width
+                        let textBytes = UnsafeBufferPointer(
+                            start: baseAddress.advanced(by: candidateOffset),
+                            count: width
+                        )
+                        spans.append(MatchSpan(
+                            startColumn: startByte + 1,
+                            endColumn: endByte + 1,
+                            startByte: startByte,
+                            endByte: endByte,
+                            text: String(decoding: textBytes, as: UTF8.self)
+                        ))
+                    }
                     candidateOffset += width
                     continue
                 }
@@ -7442,7 +7464,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 lineTerminator: terminator,
                 absoluteOffset: lineStart,
                 matchCount: lineMatchCount,
-                spans: []
+                spans: spans
             ))
             return true
         }

@@ -541,6 +541,8 @@ private func miscParityCases() -> [ParityCase] {
         ParityCase(name: "misc::line", fixture: sherlockFixture, arguments: ["-x", "Watson|and exhibited clearly, with a label attached.", "sherlock"]),
         ParityCase(name: "misc::line_ascii_fixed_class", fixture: asciiFixedClassFixture, arguments: ["[A-Z][a-z]{8}[0-9]{3}", "."]),
         ParityCase(name: "misc::line_number_ascii_fixed_class", fixture: asciiFixedClassFixture, arguments: ["-n", "[A-Z][a-z]{8}[0-9]{3}", "."]),
+        ParityCase(name: "misc::json_ascii_fixed_class", fixture: asciiFixedClassFixture, arguments: ["--json", "[A-Z][a-z]{8}[0-9]{3}", "."]),
+        ParityCase(name: "misc::color_ascii_fixed_class", fixture: asciiFixedClassFixture, arguments: ["--color=always", "[A-Z][a-z]{8}[0-9]{3}", "match.txt"]),
         ParityCase(name: "misc::quiet_ascii_fixed_class", fixture: asciiFixedClassFixture, arguments: ["-q", "[A-Z][a-z]{8}[0-9]{3}", "."]),
         ParityCase(name: "misc::quiet_ascii_fixed_class_no_match", fixture: asciiFixedClassFixture, arguments: ["-q", "[A-Z][a-z]{8}[0-9]{3}", "miss.txt"]),
         ParityCase(name: "misc::count_ascii_fixed_class", fixture: asciiFixedClassFixture, arguments: ["-c", "[A-Z][a-z]{8}[0-9]{3}", "."]),
