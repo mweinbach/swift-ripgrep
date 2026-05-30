@@ -209,6 +209,18 @@ normalizing stats timing text. On the 46 MiB ASCII file, eight-run A/Bs measured
 at 8.5 ms versus 2.180 s and 6.5 ms for Rust; `--stats -i -w -c --include-zero`
 at 11.7 ms versus 4.959 s and 10.0 ms for Rust.
 
+No-match `--files-without-match` JSON/stats path output now uses the same
+literal absence proof and writes the path through the existing path-only
+formatter, including CRLF and NUL path terminators. Stats timing fields were
+normalized for comparisons. Direct status/stdout/stderr checks matched the
+previous Swift binary and Rust for JSON, stats, CRLF, NUL, combined `-i -w`,
+and combined JSON+stats controls. On a regenerated 46 MiB ASCII no-match file,
+eight-run A/Bs measured `--json --files-without-match` at 9.7 ms for the probe
+versus 43.3 ms baseline and 8.1 ms for Rust; `--stats --files-without-match`
+at 11.7 ms versus 2.318 s and 8.6 ms for Rust. A six-run A/B measured
+`--stats -i -w --files-without-match` at 15.2 ms versus 5.298 s and 13.3 ms
+for Rust.
+
 Line-shaping flags that do not affect a proven zero-match summary now share the
 summary preflight as well: `--crlf`, `--trim`, and `--stop-on-nonmatch`. Direct
 status/stdout/stderr checks matched the previous Swift binary and Rust for JSON

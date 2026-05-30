@@ -155,6 +155,41 @@ public enum SwiftDarwinLiteralPreflight {
         return 1
     }
 
+    public static func noMatchPathOutputExitCode(
+        path: String,
+        literal: [UInt8],
+        asciiCaseInsensitive: Bool,
+        wordRegexp: Bool,
+        nullTerminated: Bool,
+        crlfTerminated: Bool,
+        outputPath: [UInt8]?,
+        stats: Bool
+    ) -> Int32? {
+        guard let bytesSearched = noMatchByteCount(
+            path: path,
+            literal: literal,
+            asciiCaseInsensitive: asciiCaseInsensitive,
+            wordRegexp: wordRegexp
+        ) else {
+            return nil
+        }
+        guard writePathOnlyOutput(
+            path: path,
+            outputPath: outputPath,
+            nullTerminated: nullTerminated,
+            crlfTerminated: crlfTerminated
+        ) else {
+            return nil
+        }
+        if stats {
+            guard fflush(Darwin.stdout) == 0 else {
+                return nil
+            }
+            return writeNoMatchSummary(bytesSearched: bytesSearched, json: false, exitCode: 0)
+        }
+        return 0
+    }
+
     public static func literalNoMatchSummaryExitCode(
         path: String,
         literal: [UInt8],
@@ -207,7 +242,7 @@ public enum SwiftDarwinLiteralPreflight {
         return writeNoMatchSummary(bytesSearched: bytesSearched, json: json)
     }
 
-    private static func writeNoMatchSummary(bytesSearched: Int, json: Bool) -> Int32 {
+    private static func writeNoMatchSummary(bytesSearched: Int, json: Bool, exitCode: Int32 = 1) -> Int32 {
         if json {
             let line = #"{"data":{"elapsed_total":{"human":"0.000000s","nanos":0,"secs":0},"stats":{"bytes_printed":0,"bytes_searched":\#(bytesSearched),"elapsed":{"human":"0.000000s","nanos":0,"secs":0},"matched_lines":0,"matches":0,"searches":1,"searches_with_match":0}},"type":"summary"}"#
             FileHandle.standardOutput.write(Data((line + "\n").utf8))
@@ -226,7 +261,7 @@ public enum SwiftDarwinLiteralPreflight {
             """
             FileHandle.standardOutput.write(Data(output.utf8))
         }
-        return 1
+        return exitCode
     }
 
     public static func pathOnlyExitCode(

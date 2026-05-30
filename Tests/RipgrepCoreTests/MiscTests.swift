@@ -1413,6 +1413,13 @@ struct MiscTests {
             "missingliteral",
             root.path("summary.txt"),
         ])
+        let jsonFilesWithoutMatchNoMatch = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "--files-without-match",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
         let jsonCountNoMatch = try runExecutableResult([
             "--no-config",
             "--json",
@@ -1484,6 +1491,21 @@ struct MiscTests {
             "--no-config",
             "--stats",
             "-l",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let statsFilesWithoutMatchNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "--files-without-match",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let statsCrlfFilesWithoutMatchNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "--crlf",
+            "--files-without-match",
             "missingliteral",
             root.path("summary.txt"),
         ])
@@ -1601,6 +1623,10 @@ struct MiscTests {
         """.utf8)
         let expectedZeroCountStatsNoMatchSummary = Data("0\n".utf8) + expectedStatsNoMatchSummary
         let expectedCrlfZeroCountStatsNoMatchSummary = Data("0\r\n".utf8) + expectedStatsNoMatchSummary
+        let expectedPathNoMatch = Data((root.path("summary.txt") + "\n").utf8)
+        let expectedPathStatsNoMatchSummary = expectedPathNoMatch + expectedStatsNoMatchSummary
+        let expectedCrlfPathStatsNoMatchSummary = Data((root.path("summary.txt") + "\r\n").utf8)
+            + expectedStatsNoMatchSummary
 
         for result in [
             jsonNoMatchSummary,
@@ -1654,6 +1680,15 @@ struct MiscTests {
         #expect(statsCrlfCountIncludeZeroNoMatchSummary.status == 1)
         #expect(statsCrlfCountIncludeZeroNoMatchSummary.stderr.isEmpty)
         #expect(statsCrlfCountIncludeZeroNoMatchSummary.stdout == expectedCrlfZeroCountStatsNoMatchSummary)
+        #expect(jsonFilesWithoutMatchNoMatch.status == 0)
+        #expect(jsonFilesWithoutMatchNoMatch.stderr.isEmpty)
+        #expect(jsonFilesWithoutMatchNoMatch.stdout == expectedPathNoMatch)
+        #expect(statsFilesWithoutMatchNoMatchSummary.status == 0)
+        #expect(statsFilesWithoutMatchNoMatchSummary.stderr.isEmpty)
+        #expect(statsFilesWithoutMatchNoMatchSummary.stdout == expectedPathStatsNoMatchSummary)
+        #expect(statsCrlfFilesWithoutMatchNoMatchSummary.status == 0)
+        #expect(statsCrlfFilesWithoutMatchNoMatchSummary.stderr.isEmpty)
+        #expect(statsCrlfFilesWithoutMatchNoMatchSummary.stdout == expectedCrlfPathStatsNoMatchSummary)
         for result in [
             jsonFilesWithMatchesNoMatch,
             jsonCountNoMatch,
