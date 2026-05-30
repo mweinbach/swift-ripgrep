@@ -148,6 +148,56 @@ struct MiscTests {
         """)
     }
 
+    @Test("quiet fixed ASCII class regex matches recursively")
+    func quietFixedASCIIClassRegexMatchesRecursively() throws {
+        let root = try TemporaryDirectory()
+        try root.createDirectory("src")
+        try root.write("prefix Abcdefghi123 suffix\n", to: "src/match.txt")
+        try root.write("""
+        Abcdefgh123
+        abcdefghi123
+        Abcdefghi12x
+        Aabcdefghi123
+        """, to: "src/miss.txt")
+        let pattern = "[A-Z][a-z]{8}[0-9]{3}"
+
+        let lineOutput = try runExecutableData([
+            "-n",
+            pattern,
+            root.url.path,
+        ], fixture: {})
+        #expect(String(decoding: lineOutput, as: UTF8.self) == """
+        \(root.path("src/match.txt")):1:prefix Abcdefghi123 suffix
+
+        """)
+
+        func runQuiet(_ arguments: [String]) -> (stdout: [String], stderr: [String], status: Int32) {
+            var stdout: [String] = []
+            var stderr: [String] = []
+            let status = RipgrepCLI.run(
+                arguments: arguments,
+                stdout: { stdout.append($0) },
+                stderr: { stderr.append($0) }
+            )
+            return (stdout, stderr, status)
+        }
+
+        let quietMatch = runQuiet(["-q", pattern, root.url.path])
+        #expect(quietMatch.stdout.isEmpty)
+        #expect(quietMatch.stderr.isEmpty)
+        #expect(quietMatch.status == 0)
+
+        let quietNoUnicodeMatch = runQuiet(["-q", "(?-u)\(pattern)", root.url.path])
+        #expect(quietNoUnicodeMatch.stdout.isEmpty)
+        #expect(quietNoUnicodeMatch.stderr.isEmpty)
+        #expect(quietNoUnicodeMatch.status == 0)
+
+        let quietNoMatch = runQuiet(["-q", pattern, root.path("src/miss.txt")])
+        #expect(quietNoMatch.stdout.isEmpty)
+        #expect(quietNoMatch.stderr.isEmpty)
+        #expect(quietNoMatch.status == 1)
+    }
+
     @Test("word-prefix literal regex preserves Unicode and ASCII output")
     func wordPrefixLiteralRegexPreservesUnicodeAndASCIIOutput() throws {
         let root = try TemporaryDirectory()

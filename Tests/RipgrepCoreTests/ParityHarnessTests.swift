@@ -480,6 +480,10 @@ private func miscParityCases() -> [ParityCase] {
     let caseInsensitiveASCIIProofFixture: (URL) throws -> Void = { dir in
         try write("alpha\nNeedle here\nplain tail\n", to: "ascii", in: dir)
     }
+    let asciiFixedClassFixture: (URL) throws -> Void = { dir in
+        try write("prefix Abcdefghi123 suffix\n", to: "match.txt", in: dir)
+        try write("Abcdefgh123\nabcdefghi123\nAbcdefghi12x\n", to: "miss.txt", in: dir)
+    }
     let caseInsensitiveUnicodeFallbackFixture: (URL) throws -> Void = { dir in
         try write("alpha\nstraße\nCAFÉ\nİstanbul\n", to: "unicode", in: dir)
     }
@@ -535,6 +539,8 @@ private func miscParityCases() -> [ParityCase] {
         ParityCase(name: "misc::word_unicode_boundary_fallback", fixture: wordUnicodeBoundaryFallbackFixture, arguments: ["-w", "-q", "missingliteral", "unicode-word"]),
         ParityCase(name: "misc::word_period", fixture: { dir in try write("...", to: "haystack", in: dir) }, arguments: ["-ow", ".", "haystack"]),
         ParityCase(name: "misc::line", fixture: sherlockFixture, arguments: ["-x", "Watson|and exhibited clearly, with a label attached.", "sherlock"]),
+        ParityCase(name: "misc::quiet_ascii_fixed_class", fixture: asciiFixedClassFixture, arguments: ["-q", "[A-Z][a-z]{8}[0-9]{3}", "."]),
+        ParityCase(name: "misc::quiet_ascii_fixed_class_no_match", fixture: asciiFixedClassFixture, arguments: ["-q", "[A-Z][a-z]{8}[0-9]{3}", "miss.txt"]),
         ParityCase(name: "misc::literal", fixture: { dir in try write(SHERLOCK, to: "sherlock", in: dir); try write("blib\n()\nblab\n", to: "file", in: dir) }, arguments: ["-F", "()", "file"]),
         ParityCase(name: "misc::quiet", fixture: sherlockFixture, arguments: ["-q", "Sherlock", "sherlock"]),
         ParityCase(name: "misc::replace", fixture: sherlockFixture, arguments: ["-r", "FooBar", "Sherlock", "sherlock"]),

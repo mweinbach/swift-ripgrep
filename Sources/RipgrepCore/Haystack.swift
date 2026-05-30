@@ -598,6 +598,20 @@ public struct FileWalker: @unchecked Sendable {
     #endif
 
     public func haystacksWithMessages(for options: RipgrepOptions) throws -> FileWalkResults {
+        try haystacksWithMessages(for: options, visitHaystack: nil)
+    }
+
+    func firstVisitedHaystackWithMessages(
+        for options: RipgrepOptions,
+        visitHaystack: @escaping (Haystack) -> Bool
+    ) throws -> FileWalkResults {
+        try haystacksWithMessages(for: options, visitHaystack: visitHaystack)
+    }
+
+    private func haystacksWithMessages(
+        for options: RipgrepOptions,
+        visitHaystack: ((Haystack) -> Bool)?
+    ) throws -> FileWalkResults {
         var haystacks: [Haystack] = []
         var messages: [String] = []
         var warnings: [String] = []
@@ -624,10 +638,11 @@ public struct FileWalker: @unchecked Sendable {
             throw RipgrepError.message(error)
         }
 
-        let shouldStopAfterFirstHaystack = options.mode == .files
+        let shouldStopAfterFirstHaystack = (options.mode == .files
             && options.quiet
             && options.sortMode == nil
-            && options.loggingMode == nil
+            && options.loggingMode == nil)
+            || visitHaystack != nil
         let rootExistence = options.effectiveRoots.map { fileManager.fileExists(atPath: $0.path) }
         let hasExistingRoot = rootExistence.contains(true)
         for (offset, root) in options.effectiveRoots.enumerated() {
@@ -716,7 +731,8 @@ public struct FileWalker: @unchecked Sendable {
                 metadataOverride: nil,
                 relativePathOverride: rootRelativePathOverride,
                 fileName: nil,
-                shouldStopAfterFirstHaystack: shouldStopAfterFirstHaystack
+                shouldStopAfterFirstHaystack: shouldStopAfterFirstHaystack,
+                visitHaystack: visitHaystack
             )
             haystacks.append(contentsOf: sorted(walked, options: options))
         }
@@ -2354,7 +2370,8 @@ public struct FileWalker: @unchecked Sendable {
         metadataOverride: WalkMetadata? = nil,
         relativePathOverride: String? = nil,
         fileName: String? = nil,
-        shouldStopAfterFirstHaystack: Bool = false
+        shouldStopAfterFirstHaystack: Bool = false,
+        visitHaystack: ((Haystack) -> Bool)? = nil
     ) throws {
         let metadataURL = physicalURL ?? url
         let values = try metadataOverride ?? metadata(for: metadataURL, followingSymlinks: false)
@@ -2474,13 +2491,20 @@ public struct FileWalker: @unchecked Sendable {
                 debug("ignoring \(url.path): \(fileSize) bytes exceeds max filesize \(maxFileSize)", options: options, diagnostics: &diagnostics)
                 return
             }
-            haystacks.append(Haystack(
+            let haystack = Haystack(
                 url: url,
                 isExplicit: isExplicit,
                 overridePath: overridePath,
                 fileSize: resolvedValues.fileSize,
                 isRegularFile: true
-            ))
+            )
+            if let visitHaystack {
+                if visitHaystack(haystack) {
+                    haystacks.append(haystack)
+                }
+            } else {
+                haystacks.append(haystack)
+            }
             return
         }
 
@@ -2566,7 +2590,8 @@ public struct FileWalker: @unchecked Sendable {
                 metadataOverride: child.metadata,
                 relativePathOverride: childRelativePath,
                 fileName: child.name,
-                shouldStopAfterFirstHaystack: shouldStopAfterFirstHaystack
+                shouldStopAfterFirstHaystack: shouldStopAfterFirstHaystack,
+                visitHaystack: visitHaystack
             )
             if shouldStopAfterFirstHaystack && !haystacks.isEmpty {
                 break

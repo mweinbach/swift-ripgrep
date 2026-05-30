@@ -8,6 +8,7 @@ public struct PatternMatcher {
     private let byteLiteralFastPathCache: ByteLiteralFastPath?
     private let byteRequiredLiteralPrefilterCache: ByteLiteralFastPath?
     private let wordWhitespaceSequenceFastPathCache: WordWhitespaceSequenceFastPath?
+    private let asciiFixedClassSequenceFastPathCache: ASCIIFixedClassSequenceFastPath?
     public let usesByteSemantics: Bool
 
     public init(options: RipgrepOptions) throws {
@@ -24,6 +25,10 @@ public struct PatternMatcher {
             patterns: patternSources,
             options: options,
             usesByteSemantics: usesByteSemantics
+        )
+        let asciiFixedClassSequenceFastPath = Self.makeASCIIFixedClassSequenceFastPath(
+            patterns: patternSources,
+            options: options
         )
 
         let patterns = try patternSources.flatMap { pattern -> [CompiledPattern] in
@@ -166,6 +171,7 @@ public struct PatternMatcher {
             usesByteSemantics: usesByteSemantics
         )
         self.wordWhitespaceSequenceFastPathCache = wordWhitespaceSequenceFastPath
+        self.asciiFixedClassSequenceFastPathCache = asciiFixedClassSequenceFastPath
     }
 
     private static func lineTerminatorPatternError(terminator: String) -> String {
@@ -537,6 +543,10 @@ public struct PatternMatcher {
         return wordWhitespaceSequenceFastPathCache
     }
 
+    func asciiFixedClassSequenceFastPath() -> ASCIIFixedClassSequenceFastPath? {
+        return asciiFixedClassSequenceFastPathCache
+    }
+
     func greekScriptFastPath() -> GreekScriptFastPath? {
         guard patterns.count == 1,
               case .greekScript(let caseInsensitive, _) = patterns[0] else {
@@ -701,6 +711,92 @@ public struct PatternMatcher {
             }
             remainder.removeFirst(separator.count)
         }
+    }
+
+    private static func makeASCIIFixedClassSequenceFastPath(
+        patterns: [String],
+        options: RipgrepOptions
+    ) -> ASCIIFixedClassSequenceFastPath? {
+        guard patterns.count == 1,
+              !options.fixedStrings,
+              !options.effectiveIgnoreCase,
+              !options.multiline,
+              !options.nullData,
+              !options.crlf,
+              !options.wordRegexp,
+              !options.lineRegexp,
+              !options.invertMatch,
+              options.engineMode != .pcre2 else {
+            return nil
+        }
+
+        var bytes = Array(patterns[0].utf8)
+        let noUnicodePrefix = Array("(?-u)".utf8)
+        if bytes.starts(with: noUnicodePrefix) {
+            bytes.removeFirst(noUnicodePrefix.count)
+        }
+        return asciiFixedClassSequence(in: bytes)
+    }
+
+    private static func asciiFixedClassSequence(in bytes: [UInt8]) -> ASCIIFixedClassSequenceFastPath? {
+        guard !bytes.isEmpty else {
+            return nil
+        }
+
+        var index = 0
+        var classes: [ASCIIFixedClassSequenceFastPath.ByteClass] = []
+        classes.reserveCapacity(bytes.count)
+
+        while index < bytes.count {
+            guard index + 4 < bytes.count,
+                  bytes[index] == UInt8(ascii: "["),
+                  bytes[index + 2] == UInt8(ascii: "-"),
+                  bytes[index + 4] == UInt8(ascii: "]") else {
+                return nil
+            }
+
+            let byteClass: ASCIIFixedClassSequenceFastPath.ByteClass
+            switch (bytes[index + 1], bytes[index + 3]) {
+            case (UInt8(ascii: "A"), UInt8(ascii: "Z")):
+                byteClass = .uppercase
+            case (UInt8(ascii: "a"), UInt8(ascii: "z")):
+                byteClass = .lowercase
+            case (UInt8(ascii: "0"), UInt8(ascii: "9")):
+                byteClass = .digit
+            default:
+                return nil
+            }
+            index += 5
+
+            var repeatCount = 1
+            if index < bytes.count, bytes[index] == UInt8(ascii: "{") {
+                index += 1
+                guard index < bytes.count, bytes[index].isASCIIDigit else {
+                    return nil
+                }
+                repeatCount = 0
+                while index < bytes.count, bytes[index].isASCIIDigit {
+                    repeatCount = repeatCount * 10 + Int(bytes[index] - UInt8(ascii: "0"))
+                    guard repeatCount <= 1024 else {
+                        return nil
+                    }
+                    index += 1
+                }
+                guard repeatCount > 0,
+                      index < bytes.count,
+                      bytes[index] == UInt8(ascii: "}") else {
+                    return nil
+                }
+                index += 1
+            }
+
+            guard classes.count + repeatCount <= 1024 else {
+                return nil
+            }
+            classes.append(contentsOf: repeatElement(byteClass, count: repeatCount))
+        }
+
+        return classes.isEmpty ? nil : ASCIIFixedClassSequenceFastPath(classes: classes)
     }
 
     private static func makeByteRequiredLiteralPrefilter(
@@ -3921,6 +4017,16 @@ struct WordWhitespaceSequenceFastPath {
     let groupCount: Int
 }
 
+struct ASCIIFixedClassSequenceFastPath {
+    enum ByteClass {
+        case uppercase
+        case lowercase
+        case digit
+    }
+
+    let classes: [ByteClass]
+}
+
 struct GreekScriptFastPath {
     let caseInsensitive: Bool
 }
@@ -3928,6 +4034,10 @@ struct GreekScriptFastPath {
 private extension UInt8 {
     var isASCII: Bool {
         self < 0x80
+    }
+
+    var isASCIIDigit: Bool {
+        self >= UInt8(ascii: "0") && self <= UInt8(ascii: "9")
     }
 }
 

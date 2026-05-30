@@ -71,15 +71,21 @@ private final class DarwinMatchedLineBoundStore: @unchecked Sendable {
 
 private actor ParallelSearchState {
     private let items: [SearchWorkItem]
+    private let stopAfterFirstMatch: Bool
     private var nextIndex = 0
     private var results: [SearchedHaystack?]
+    private var foundMatch = false
 
-    init(items: [SearchWorkItem]) {
+    init(items: [SearchWorkItem], stopAfterFirstMatch: Bool = false) {
         self.items = items
+        self.stopAfterFirstMatch = stopAfterFirstMatch
         self.results = Array(repeating: nil, count: items.count)
     }
 
     func next() -> SearchWorkItem? {
+        if stopAfterFirstMatch, foundMatch {
+            return nil
+        }
         guard nextIndex < items.count else {
             return nil
         }
@@ -94,6 +100,9 @@ private actor ParallelSearchState {
             result: outcome.result,
             message: outcome.message
         )
+        if stopAfterFirstMatch, outcome.result.hasMatch {
+            foundMatch = true
+        }
     }
 
     func orderedResults() -> [SearchedHaystack] {
@@ -266,6 +275,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
 
     public func search(options: RipgrepOptions, stdin: String?) throws -> SearchResults {
         let matcher = try PatternMatcher(options: options)
+        if let quietResult = try searchQuietFirstMatchByWalking(options: options, matcher: matcher) {
+            return quietResult
+        }
         let walkResults = options.useStdin && options.roots.isEmpty
             ? FileWalkResults(haystacks: [], messages: [], warnings: explicitIgnoreFileLoadWarnings(options: options))
             : try FileWalker(fileManager: fileManager)
@@ -358,6 +370,65 @@ public struct RipgrepSearcher: @unchecked Sendable {
             messages: messages,
             warnings: warnings,
             diagnostics: diagnostics,
+            filtered: walkResults.filtered
+        )
+    }
+
+    private func searchQuietFirstMatchByWalking(
+        options: RipgrepOptions,
+        matcher: PatternMatcher
+    ) throws -> SearchResults? {
+        guard options.mode == .search,
+              options.sortMode == nil,
+              !options.useStdin,
+              !options.patternFileStdin,
+              canStopSearchAfterFirstMatch(options: options),
+              matcher.asciiFixedClassSequenceFastPath() != nil else {
+            return nil
+        }
+
+        var filesSearched = 0
+        var matchedResult: SearchFileResult?
+        var searchMessages: [String] = []
+        let walkResults = try FileWalker(fileManager: fileManager)
+            .withEnvironment(environment)
+            .firstVisitedHaystackWithMessages(for: options) { haystack in
+                let outcome = searchFile(haystack, matcher: matcher, options: options)
+                if outcome.result.searched {
+                    filesSearched += 1
+                }
+                if let message = outcome.message {
+                    searchMessages.append(message)
+                }
+                guard outcome.result.hasMatch else {
+                    return false
+                }
+                matchedResult = outcome.result
+                return true
+            }
+
+        let files = matchedResult.map { [$0] } ?? []
+        let matchedLines = matchedResult.map { result in
+            result.matches.reduce(0) { $0 + MatchedLineCounter.count($1, options: options) }
+                + result.supplementalMatchedLines
+                + (result.hasBinaryMatch ? 1 : 0)
+        } ?? 0
+        let totalMatches = matchedResult.map { result in
+            let matchCount = result.matches.reduce(0) { $0 + $1.matchCount }
+            return matchCount + result.supplementalMatches + (result.hasBinaryMatch && matchCount == 0 ? 1 : 0)
+        } ?? 0
+
+        return SearchResults(
+            files: files,
+            summary: SearchSummary(
+                filesSearched: filesSearched,
+                filesWithMatches: matchedResult == nil ? 0 : 1,
+                matchedLines: matchedLines,
+                totalMatches: totalMatches
+            ),
+            messages: walkResults.messages + searchMessages,
+            warnings: walkResults.warnings,
+            diagnostics: walkResults.diagnostics,
             filtered: walkResults.filtered
         )
     }
@@ -5772,16 +5843,23 @@ public struct RipgrepSearcher: @unchecked Sendable {
         matcher: PatternMatcher,
         options: RipgrepOptions
     ) throws -> [SearchedHaystack] {
+        let stopAfterFirstMatch = canStopSearchAfterFirstMatch(options: options)
         let workerCount = effectiveWorkerCount(options: options)
         guard workerCount > 1, haystacks.count > 1 else {
-            return haystacks.map { haystack in
+            var results: [SearchedHaystack] = []
+            results.reserveCapacity(stopAfterFirstMatch ? min(haystacks.count, 1) : haystacks.count)
+            for haystack in haystacks {
                 let outcome = searchFile(haystack, matcher: matcher, options: options)
-                return SearchedHaystack(
+                results.append(SearchedHaystack(
                     url: haystack.url,
                     result: outcome.result,
                     message: outcome.message
-                )
+                ))
+                if stopAfterFirstMatch, outcome.result.hasMatch {
+                    break
+                }
             }
+            return results
         }
 
         let items = haystacks.enumerated().map { index, haystack in
@@ -5794,7 +5872,22 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 isRegularFile: haystack.isRegularFile
             )
         }
-        return try runParallelSearch(items: items, options: options, workerCount: min(workerCount, items.count))
+        return try runParallelSearch(
+            items: items,
+            options: options,
+            workerCount: min(workerCount, items.count),
+            stopAfterFirstMatch: stopAfterFirstMatch
+        )
+    }
+
+    private func canStopSearchAfterFirstMatch(options: RipgrepOptions) -> Bool {
+        options.quiet
+            && options.printMode == .matchingLines
+            && !options.stats
+            && !options.json
+            && !options.invertMatch
+            && !options.stopOnNonmatch
+            && options.maxCount == nil
     }
 
     private func effectiveWorkerCount(options: RipgrepOptions) -> Int {
@@ -5811,7 +5904,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
     private func runParallelSearch(
         items: [SearchWorkItem],
         options: RipgrepOptions,
-        workerCount: Int
+        workerCount: Int,
+        stopAfterFirstMatch: Bool
     ) throws -> [SearchedHaystack] {
         let semaphore = DispatchSemaphore(value: 0)
         let completion = ParallelSearchCompletion()
@@ -5820,7 +5914,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 let results = try await searchHaystacksConcurrently(
                     items: items,
                     options: options,
-                    workerCount: workerCount
+                    workerCount: workerCount,
+                    stopAfterFirstMatch: stopAfterFirstMatch
                 )
                 completion.set(.success(results))
             } catch {
@@ -5835,9 +5930,10 @@ public struct RipgrepSearcher: @unchecked Sendable {
     private func searchHaystacksConcurrently(
         items: [SearchWorkItem],
         options: RipgrepOptions,
-        workerCount: Int
+        workerCount: Int,
+        stopAfterFirstMatch: Bool
     ) async throws -> [SearchedHaystack] {
-        let state = ParallelSearchState(items: items)
+        let state = ParallelSearchState(items: items, stopAfterFirstMatch: stopAfterFirstMatch)
         try await withThrowingTaskGroup(of: Void.self) { group in
             for _ in 0..<workerCount {
                 group.addTask { [options] in
@@ -6417,6 +6513,14 @@ public struct RipgrepSearcher: @unchecked Sendable {
             return FileSearchOutcome(result: fastResult)
         }
         if let fastResult = searchRawGreekScriptContents(
+            data,
+            fileURL: fileURL,
+            matcher: matcher,
+            options: options
+        ) {
+            return FileSearchOutcome(result: fastResult)
+        }
+        if let fastResult = searchRawASCIIFixedClassSequenceContents(
             data,
             fileURL: fileURL,
             matcher: matcher,
@@ -7078,6 +7182,93 @@ public struct RipgrepSearcher: @unchecked Sendable {
             fileURL: fileURL,
             matches: matches,
             bytesSearched: bytesSearched,
+            searched: true
+        )
+    }
+
+    private func searchRawASCIIFixedClassSequenceContents(
+        _ data: Data,
+        fileURL: URL,
+        matcher: PatternMatcher,
+        options: RipgrepOptions
+    ) -> SearchFileResult? {
+        guard let fastPath = matcher.asciiFixedClassSequenceFastPath(),
+              case .automatic = options.encodingMode,
+              !data.starts(with: [0xEF, 0xBB, 0xBF]),
+              !data.starts(with: [0xFF, 0xFE]),
+              !data.starts(with: [0xFE, 0xFF]),
+              options.quiet,
+              options.printMode == .matchingLines,
+              !options.json,
+              !options.stats,
+              options.beforeContext == 0,
+              options.afterContext == 0,
+              !options.passthru,
+              options.replacement == nil,
+              !options.stopOnNonmatch,
+              !options.invertMatch,
+              options.maxCount == nil,
+              !options.onlyMatching,
+              !options.column,
+              !options.byteOffset,
+              !options.vimgrep,
+              !options.crlf,
+              options.maxColumns == nil,
+              !options.trim else {
+            return nil
+        }
+
+        let classes = fastPath.classes
+        let width = classes.count
+        guard width > 0, data.count >= width else {
+            return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: data.count, searched: true)
+        }
+
+        let matchOffset = data.withUnsafeBytes { rawBuffer -> Int? in
+            let bytes = rawBuffer.bindMemory(to: UInt8.self)
+            guard let baseAddress = bytes.baseAddress else {
+                return nil
+            }
+
+            let lastStart = data.count - width
+            var offset = 0
+            while offset <= lastStart {
+                guard byte(baseAddress[offset], matches: classes[0]) else {
+                    offset += 1
+                    continue
+                }
+
+                var classIndex = 1
+                while classIndex < width,
+                      byte(baseAddress[offset + classIndex], matches: classes[classIndex]) {
+                    classIndex += 1
+                }
+                if classIndex == width {
+                    return offset
+                }
+                offset += 1
+            }
+            return nil
+        }
+
+        guard let matchOffset else {
+            return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: data.count, searched: true)
+        }
+
+        return SearchFileResult(
+            fileURL: fileURL,
+            matches: [
+                SearchMatch(
+                    fileURL: fileURL,
+                    lineNumber: 1,
+                    column: nil,
+                    line: "",
+                    absoluteOffset: matchOffset,
+                    matchCount: 1,
+                    spans: []
+                ),
+            ],
+            bytesSearched: min(data.count, matchOffset + width),
             searched: true
         )
     }
@@ -8645,6 +8836,17 @@ public struct RipgrepSearcher: @unchecked Sendable {
 
     private func isASCIIRegexWhitespaceByte(_ byte: UInt8) -> Bool {
         byte == UInt8(ascii: " ") || (byte >= 0x09 && byte <= 0x0D)
+    }
+
+    private func byte(_ byte: UInt8, matches byteClass: ASCIIFixedClassSequenceFastPath.ByteClass) -> Bool {
+        switch byteClass {
+        case .uppercase:
+            return byte >= UInt8(ascii: "A") && byte <= UInt8(ascii: "Z")
+        case .lowercase:
+            return byte >= UInt8(ascii: "a") && byte <= UInt8(ascii: "z")
+        case .digit:
+            return byte >= UInt8(ascii: "0") && byte <= UInt8(ascii: "9")
+        }
     }
 
     private func canUseBufferedRawLiteralSearch(fileURL: URL) -> Bool {
