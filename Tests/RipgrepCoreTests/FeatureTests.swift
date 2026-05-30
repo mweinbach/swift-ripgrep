@@ -33,6 +33,35 @@ struct FeatureTests {
         #expect(errors.isEmpty)
     }
 
+    @Test("quiet literal recursive summaries count exact matches")
+    func quietLiteralRecursiveSummariesCountExactMatches() throws {
+        let root = try TemporaryDirectory()
+        try root.write("needle needle\nplain\nneedle\n", to: "a.txt")
+        try root.write("plain\nneedle\n", to: "nested/b.txt")
+
+        let statsQuiet = try run(["--stats", "-q", "needle", root.url.path])
+        #expect(statsQuiet.contains("4 matches"))
+        #expect(statsQuiet.contains("3 matched lines"))
+        #expect(statsQuiet.contains("2 files contained matches"))
+        #expect(statsQuiet.contains("2 files searched"))
+        #expect(statsQuiet.contains("0 bytes printed"))
+
+        let jsonQuiet = try run(["--json", "-q", "needle", root.url.path])
+        let jsonQuietObject = try jsonObject(jsonQuiet[0])
+        let jsonQuietData = jsonQuietObject["data"] as? [String: Any]
+        let jsonQuietStats = jsonQuietData?["stats"] as? [String: Any]
+        #expect(jsonQuietStats?["matches"] as? Int == 4)
+        #expect(jsonQuietStats?["matched_lines"] as? Int == 3)
+        #expect(jsonQuietStats?["searches_with_match"] as? Int == 2)
+        #expect(jsonQuietStats?["searches"] as? Int == 2)
+        #expect(jsonQuietStats?["bytes_printed"] as? Int == 0)
+
+        #expect(pathBasenames(try run(["-A1", "-l", "needle", root.url.path])).sorted() == [
+            "a.txt",
+            "b.txt",
+        ])
+    }
+
     @Test("honors no unicode regex and literal semantics")
     func honorsNoUnicodeSemantics() throws {
         let root = try TemporaryDirectory()

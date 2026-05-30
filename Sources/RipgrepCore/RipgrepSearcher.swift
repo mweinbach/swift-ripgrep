@@ -7886,15 +7886,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !data.starts(with: [0xEF, 0xBB, 0xBF]),
               !data.starts(with: [0xFF, 0xFE]),
               !data.starts(with: [0xFE, 0xFF]),
-              !options.json,
-              !options.stats,
-              options.beforeContext == 0,
-              options.afterContext == 0,
-              !options.passthru,
-              options.replacement == nil,
               !options.stopOnNonmatch,
               options.maxCount == nil,
-              !options.onlyMatching,
               !options.column,
               !options.byteOffset,
               !options.vimgrep,
@@ -7917,6 +7910,24 @@ public struct RipgrepSearcher: @unchecked Sendable {
             let bytes = rawBytes.bindMemory(to: UInt8.self)
             guard let baseAddress = bytes.baseAddress else {
                 return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: data.count)
+            }
+            if let literalResult = searchDarwinPlainLiteralSuppressedOutput(
+                data: data,
+                fileURL: fileURL,
+                baseAddress: baseAddress,
+                fastPath: fastPath,
+                options: options
+            ) {
+                return literalResult
+            }
+            guard !options.json,
+                  !options.stats,
+                  options.beforeContext == 0,
+                  options.afterContext == 0,
+                  !options.passthru,
+                  options.replacement == nil,
+                  !options.onlyMatching else {
+                return nil
             }
             if options.printMode == .matchingLines,
                canOmitMatchSpans(options: options),
@@ -9599,6 +9610,99 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
         #endif
         return byteLiteralLineMatch(fastPath: fastPath, bytes: bytes, lineStart: 0, lineEnd: lineEnd)
+    }
+
+    private func searchDarwinPlainLiteralSuppressedOutput(
+        data: Data,
+        fileURL: URL,
+        baseAddress: UnsafePointer<UInt8>,
+        fastPath: ByteLiteralFastPath,
+        options: RipgrepOptions
+    ) -> SearchFileResult? {
+        #if !canImport(Darwin)
+        return nil
+        #else
+        let filesWithMatchesMode = options.printMode == .filesWithMatches
+        let filesWithoutMatchMode = options.printMode == .filesWithoutMatch
+        let pathMode = filesWithMatchesMode || filesWithoutMatchMode
+        let pathOnlyOutput = !options.json && !options.stats && pathMode
+        let pathStatsOutput = !options.json && options.stats && pathMode
+        let quietStatsOutput = !options.json
+            && options.quiet
+            && options.stats
+            && options.printMode == .matchingLines
+        let jsonQuietSummaryOutput = options.json
+            && options.quiet
+            && options.printMode == .matchingLines
+        guard !options.invertMatch,
+              !options.onlyMatching,
+              !options.passthru,
+              options.replacement == nil,
+              !fastPath.caseInsensitiveASCII,
+              !fastPath.wordASCII,
+              fastPath.literals.count == 1,
+              let literal = fastPath.literals.first,
+              !literal.isEmpty,
+              pathOnlyOutput || pathStatsOutput || quietStatsOutput || jsonQuietSummaryOutput else {
+            return nil
+        }
+
+        if pathOnlyOutput {
+            let found = literal.withUnsafeBufferPointer { needle in
+                rg_memmem_simple(baseAddress, data.count, needle.baseAddress, needle.count)
+            }
+            let hasMatch = found != nil
+            return SearchFileResult(
+                fileURL: fileURL,
+                matches: [],
+                bytesSearched: found.map { baseAddress.distance(to: $0) + literal.count } ?? data.count,
+                searched: true,
+                supplementalMatchedLines: hasMatch ? 1 : 0,
+                supplementalMatches: hasMatch ? 1 : 0
+            )
+        }
+
+        var searchOffset = 0
+        var matchedLines = 0
+        var totalMatches = 0
+        var currentMatchedLineEnd = -1
+        while searchOffset < data.count {
+            let foundPointer = literal.withUnsafeBufferPointer { needle in
+                rg_memmem_simple(
+                    baseAddress.advanced(by: searchOffset),
+                    data.count - searchOffset,
+                    needle.baseAddress,
+                    needle.count
+                )
+            }
+            guard let rawFoundPointer = foundPointer else {
+                break
+            }
+            let matchStart = baseAddress.distance(to: rawFoundPointer)
+            totalMatches += 1
+            if matchStart >= currentMatchedLineEnd {
+                matchedLines += 1
+                let newlinePointer = memchr(
+                    baseAddress.advanced(by: matchStart),
+                    Int32(UInt8(ascii: "\n")),
+                    data.count - matchStart
+                )
+                currentMatchedLineEnd = newlinePointer.map {
+                    baseAddress.distance(to: $0.assumingMemoryBound(to: UInt8.self)) + 1
+                } ?? data.count + 1
+            }
+            searchOffset = matchStart + literal.count
+        }
+
+        return SearchFileResult(
+            fileURL: fileURL,
+            matches: [],
+            bytesSearched: data.count,
+            searched: true,
+            supplementalMatchedLines: matchedLines,
+            supplementalMatches: totalMatches
+        )
+        #endif
     }
 
     private func searchDarwinPlainLiteralLines(
