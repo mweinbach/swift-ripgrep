@@ -142,6 +142,20 @@ struct MiscTests {
             root.path("words.txt"),
         ], fixture: {})
         #expect(passthruCountOutput == Data("6\n".utf8))
+        let streamingCountOutput = try runExecutableData([
+            "--no-mmap",
+            "-c",
+            pattern,
+            root.path("words.txt"),
+        ], fixture: {})
+        #expect(streamingCountOutput == countOutput)
+        let streamingFilesWithMatchesOutput = try runExecutableData([
+            "--no-mmap",
+            "-l",
+            pattern,
+            root.path("words.txt"),
+        ], fixture: {})
+        #expect(streamingFilesWithMatchesOutput == filesWithMatchesOutput)
         let quietOutput = runWithExitCode([
             "-q",
             pattern,
@@ -161,6 +175,13 @@ struct MiscTests {
             root.path("multi-words.txt"),
         ], fixture: {})
         #expect(exactMatchCountOutput == Data("2\n".utf8))
+        let streamingExactMatchCountOutput = try runExecutableData([
+            "--no-mmap",
+            "--count-matches",
+            pattern,
+            root.path("multi-words.txt"),
+        ], fixture: {})
+        #expect(streamingExactMatchCountOutput == exactMatchCountOutput)
         let exactQuietStatsOutput = try runExecutableData([
             "--stats",
             "-q",
@@ -170,6 +191,16 @@ struct MiscTests {
         let exactQuietStats = String(decoding: exactQuietStatsOutput, as: UTF8.self)
         #expect(exactQuietStats.contains("\n2 matches\n1 matched lines\n1 files contained matches\n1 files searched\n"))
         #expect(exactQuietStats.contains("\n60 bytes searched\n"))
+        let streamingExactQuietStatsOutput = try runExecutableData([
+            "--no-mmap",
+            "--stats",
+            "-q",
+            pattern,
+            root.path("multi-words.txt"),
+        ], fixture: {})
+        let streamingExactQuietStats = String(decoding: streamingExactQuietStatsOutput, as: UTF8.self)
+        #expect(streamingExactQuietStats.contains("\n2 matches\n1 matched lines\n1 files contained matches\n1 files searched\n"))
+        #expect(streamingExactQuietStats.contains("\n60 bytes searched\n"))
         let exactQuietJSONOutput = try runExecutableData([
             "--json",
             "-q",

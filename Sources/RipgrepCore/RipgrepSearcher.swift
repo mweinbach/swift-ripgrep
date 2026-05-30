@@ -6015,28 +6015,48 @@ public struct RipgrepSearcher: @unchecked Sendable {
             options.mmapMode == .always || isBufferedLimitError(error)
         }
 
-        func canStreamLineByLine() -> Bool {
-            let wordWhitespaceFastPath = matcher.wordWhitespaceSequenceFastPath()
-            let canUseWordWhitespaceStreamFastPath = wordWhitespaceFastPath != nil
+        func canUseWordWhitespaceStreamFastPath(_ fastPath: WordWhitespaceSequenceFastPath?) -> Bool {
+            let countOutput = options.printMode == .count
+            let countMatchesOutput = options.printMode == .countMatches
+            let filesWithMatchesMode = options.printMode == .filesWithMatches
+            let filesWithoutMatchMode = options.printMode == .filesWithoutMatch
+            let pathOutput = filesWithMatchesMode || filesWithoutMatchMode
+            let lineOutput = !options.quiet
                 && options.printMode == .matchingLines
+            let quietOutput = options.quiet
+                && options.printMode == .matchingLines
+            let canIgnoreLineRenderingOptions = !lineOutput
+            return fastPath != nil
                 && canOmitMatchSpans(options: options)
-                && !options.stats
+                && !options.json
+                && !options.onlyMatching
                 && !options.column
                 && !options.byteOffset
                 && options.maxColumns == nil
                 && !options.trim
+                && (lineOutput || countOutput || countMatchesOutput || pathOutput || quietOutput)
+                && (canIgnoreLineRenderingOptions || (options.beforeContext == 0
+                    && options.afterContext == 0
+                    && !options.passthru
+                    && options.replacement == nil))
+        }
+
+        func canStreamLineByLine() -> Bool {
+            let wordWhitespaceFastPath = matcher.wordWhitespaceSequenceFastPath()
+            let canUseWordWhitespaceStreamFastPath = canUseWordWhitespaceStreamFastPath(wordWhitespaceFastPath)
+            let canStreamWithRenderingOptions = options.beforeContext == 0
+                && options.afterContext == 0
+                && !options.passthru
+                && options.replacement == nil
             guard !shouldPreprocess(haystack, options: options),
                   decompressionCommand(for: fileURL, options: options) == nil,
                   (try? HaystackReader.selectedPath(for: haystack, options: options)) == .buffered,
                   !options.multiline,
                   !options.nullData,
                   !options.json,
-                  options.beforeContext == 0,
-                  options.afterContext == 0,
-                  !options.passthru,
+                  canStreamWithRenderingOptions || canUseWordWhitespaceStreamFastPath,
                   !options.invertMatch,
                   !options.stopOnNonmatch,
-                  options.replacement == nil,
                   (!matcher.usesByteSemantics || canUseWordWhitespaceStreamFastPath) else {
                 return false
             }
@@ -6073,7 +6093,17 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 && !options.byteOffset
             let streamByteFastPath = streamingByteLiteralFastPath(matcher: matcher, options: options)
             let wordWhitespaceFastPath = matcher.wordWhitespaceSequenceFastPath()
+            let useWordWhitespaceStreamFastPath = canUseWordWhitespaceStreamFastPath(wordWhitespaceFastPath)
+            let firstMatchOutput = !options.stats
+                && (options.quiet
+                    || options.printMode == .filesWithMatches
+                    || options.printMode == .filesWithoutMatch)
+            let needsExactWordWhitespaceMatchCount = options.printMode == .countMatches || options.stats
             if streamByteFastPath != nil,
+               canUseBufferedRawLiteralSearch(fileURL: fileURL) {
+                return nil
+            }
+            if useWordWhitespaceStreamFastPath,
                canUseBufferedRawLiteralSearch(fileURL: fileURL) {
                 return nil
             }
@@ -6104,13 +6134,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     return
                 }
                 if let wordWhitespaceFastPath,
-                   options.printMode == .matchingLines,
-                   canOmitMatchSpans(options: options),
-                   !options.stats,
-                   !options.column,
-                   !options.byteOffset,
-                   options.maxColumns == nil,
-                   !options.trim {
+                   useWordWhitespaceStreamFastPath {
                     let scan = wordWhitespaceSequenceLineMatch(
                         streamedLine.data,
                         groupCount: wordWhitespaceFastPath.groupCount
@@ -6128,23 +6152,71 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     guard hasMatch else {
                         return
                     }
-                    guard let lineText = String(data: streamedLine.data, encoding: .utf8) else {
-                        fellBackToBufferedSearch = true
-                        terminate = true
-                        return
+                    let lineText: String?
+                    if needsExactWordWhitespaceMatchCount || options.printMode == .matchingLines && !options.quiet {
+                        guard let decodedLine = String(data: streamedLine.data, encoding: .utf8) else {
+                            fellBackToBufferedSearch = true
+                            terminate = true
+                            return
+                        }
+                        lineText = decodedLine
+                    } else {
+                        lineText = nil
                     }
-                    let lineTerminator = String(data: streamedLine.terminator, encoding: .utf8) ?? ""
-                    matches.append(SearchMatch(
-                        fileURL: fileURL,
-                        lineNumber: lineNumber,
-                        column: nil,
-                        line: lineText,
-                        lineTerminator: lineTerminator,
-                        absoluteOffset: streamedLine.absoluteOffset,
-                        matchCount: 1,
-                        spans: []
-                    ))
-                    if matches.count >= maxCount {
+                    let matchCount: Int
+                    if needsExactWordWhitespaceMatchCount {
+                        matchCount = matcher.spans(in: lineText ?? "").count
+                        guard matchCount > 0 else {
+                            return
+                        }
+                    } else {
+                        matchCount = 1
+                    }
+                    switch options.printMode {
+                    case .count:
+                        supplementalMatchedLines += 1
+                        if options.stats {
+                            supplementalMatches += matchCount
+                        }
+                    case .countMatches:
+                        supplementalMatchedLines += 1
+                        supplementalMatches += matchCount
+                    case .filesWithMatches, .filesWithoutMatch:
+                        supplementalMatchedLines += 1
+                        if options.stats {
+                            supplementalMatches += matchCount
+                        }
+                        if !options.stats {
+                            terminate = true
+                        }
+                    case .matchingLines:
+                        if options.quiet {
+                            supplementalMatchedLines += 1
+                            if options.stats {
+                                supplementalMatches += matchCount
+                            } else {
+                                terminate = true
+                            }
+                            return
+                        }
+                        guard let lineText else {
+                            fellBackToBufferedSearch = true
+                            terminate = true
+                            return
+                        }
+                        let lineTerminator = String(data: streamedLine.terminator, encoding: .utf8) ?? ""
+                        matches.append(SearchMatch(
+                            fileURL: fileURL,
+                            lineNumber: lineNumber,
+                            column: nil,
+                            line: lineText,
+                            lineTerminator: lineTerminator,
+                            absoluteOffset: streamedLine.absoluteOffset,
+                            matchCount: matchCount,
+                            spans: []
+                        ))
+                    }
+                    if supplementalMatchedLines >= maxCount || matches.count >= maxCount || firstMatchOutput {
                         terminate = true
                     }
                     return
