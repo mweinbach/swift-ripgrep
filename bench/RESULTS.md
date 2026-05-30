@@ -45,6 +45,21 @@ remaining gap: a direct 30-run check measured Swift `--files` at 92.7 ms versus
 Rust at 73.6 ms, while `--no-ignore-vcs --files` was much closer at 66.6 ms
 versus Rust at 64.0 ms.
 
+The Darwin file-list fast writer now also handles implicit and relative
+single-directory roots by separating the physical traversal root from the
+logical output prefix. This keeps ignore matching on absolute filesystem paths
+while allowing `rg --files` from the current directory to emit `path/to/file`
+instead of falling back to the generic `Haystack` walker. Exact output matched
+the previous Swift binary for `--files`, `--files .`, `--no-ignore --hidden
+--files`, and `--no-ignore-vcs --files` from the Linux corpus root; sorted
+output matched Rust for those controls plus absolute `/tmp/.../linux`,
+`/tmp/.../linux/`, and `/tmp/.../linux/.` roots. A 40-run same-machine A/B from
+inside `/tmp/swift-rg-bench/linux` improved Swift implicit-root `--files` from
+924.7 ms before to 86.9 ms after, versus Rust at 67.8 ms. The same retained
+build measured `--files .` at 86.9 ms and `--no-ignore --hidden --files` at
+70.9 ms. An absolute-root control measured Swift at 88.9 ms versus Rust at
+73.2 ms, keeping the already-optimized explicit-root path in the same band.
+
 Several plausible Swift-only probes were rejected after exact Swift-output and
 sorted Rust-output checks:
 

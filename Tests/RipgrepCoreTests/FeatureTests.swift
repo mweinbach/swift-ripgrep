@@ -3644,6 +3644,28 @@ struct FeatureTests {
         #expect(directResults?.count == streamedResults?.count)
         #expect(directLines == streamedLines)
 
+        let implicitRoot = try TemporaryDirectory()
+        try implicitRoot.write("root\n", to: "keep.txt")
+        try implicitRoot.write("nested\n", to: "nested/ok.txt")
+        try implicitRoot.write("skip\n", to: "skip.txt")
+        try implicitRoot.write("hidden\n", to: ".hidden.txt")
+        try implicitRoot.write("skip.txt\n", to: ".ignore")
+        let originalDirectory = FileManager.default.currentDirectoryPath
+        defer { FileManager.default.changeCurrentDirectoryPath(originalDirectory) }
+        #expect(FileManager.default.changeCurrentDirectoryPath(implicitRoot.url.path))
+
+        let implicitFileList = try runExecutableData(["--files"]) {}
+        #expect(String(decoding: implicitFileList, as: UTF8.self)
+            .split(separator: "\n")
+            .map(String.init)
+            .sorted() == ["keep.txt", "nested/ok.txt"])
+
+        let explicitDotFileList = try runExecutableData(["--files", "."]) {}
+        #expect(String(decoding: explicitDotFileList, as: UTF8.self)
+            .split(separator: "\n")
+            .map(String.init)
+            .sorted() == ["./keep.txt", "./nested/ok.txt"])
+
         let equivalentNoIgnoreRoot = try TemporaryDirectory()
         try equivalentNoIgnoreRoot.createDirectory(".git")
         try equivalentNoIgnoreRoot.write("root\n", to: "visible.txt")
