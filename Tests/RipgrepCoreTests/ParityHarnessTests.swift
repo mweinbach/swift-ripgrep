@@ -497,6 +497,9 @@ private func miscParityCases() -> [ParityCase] {
             in: dir
         )
     }
+    let asciiFixedClassTrimFixture: (URL) throws -> Void = { dir in
+        try write("   trim Abcdefghi123 more Zbcdefghi999\n", to: "trim.txt", in: dir)
+    }
     let caseInsensitiveUnicodeFallbackFixture: (URL) throws -> Void = { dir in
         try write("alpha\nstraße\nCAFÉ\nİstanbul\n", to: "unicode", in: dir)
     }
@@ -587,6 +590,11 @@ private func miscParityCases() -> [ParityCase] {
         ParityCase(name: "misc::crlf_count_ascii_fixed_class", fixture: asciiFixedClassCRLFFixture, arguments: ["--crlf", "-c", "[A-Z][a-z]{8}[0-9]{3}", "crlf.txt"]),
         ParityCase(name: "misc::crlf_max_count_ascii_fixed_class", fixture: asciiFixedClassCRLFFixture, arguments: ["--crlf", "-m1", "[A-Z][a-z]{8}[0-9]{3}", "crlf.txt"]),
         ParityCase(name: "misc::json_crlf_ascii_fixed_class", fixture: asciiFixedClassCRLFFixture, arguments: ["--json", "--crlf", "[A-Z][a-z]{8}[0-9]{3}", "crlf.txt"]),
+        ParityCase(name: "misc::trim_ascii_fixed_class", fixture: asciiFixedClassTrimFixture, arguments: ["--trim", "[A-Z][a-z]{8}[0-9]{3}", "trim.txt"]),
+        ParityCase(name: "misc::trim_column_ascii_fixed_class", fixture: asciiFixedClassTrimFixture, arguments: ["--trim", "--column", "[A-Z][a-z]{8}[0-9]{3}", "trim.txt"]),
+        ParityCase(name: "misc::trim_only_matching_ascii_fixed_class", fixture: asciiFixedClassTrimFixture, arguments: ["--trim", "-o", "[A-Z][a-z]{8}[0-9]{3}", "trim.txt"]),
+        ParityCase(name: "misc::trim_vimgrep_ascii_fixed_class", fixture: asciiFixedClassTrimFixture, arguments: ["--trim", "--vimgrep", "[A-Z][a-z]{8}[0-9]{3}", "trim.txt"]),
+        ParityCase(name: "misc::trim_color_ascii_fixed_class", fixture: asciiFixedClassTrimFixture, arguments: ["--trim", "--color=always", "[A-Z][a-z]{8}[0-9]{3}", "trim.txt"]),
         ParityCase(name: "misc::literal", fixture: { dir in try write(SHERLOCK, to: "sherlock", in: dir); try write("blib\n()\nblab\n", to: "file", in: dir) }, arguments: ["-F", "()", "file"]),
         ParityCase(name: "misc::quiet", fixture: sherlockFixture, arguments: ["-q", "Sherlock", "sherlock"]),
         ParityCase(name: "misc::replace", fixture: sherlockFixture, arguments: ["-r", "FooBar", "Sherlock", "sherlock"]),

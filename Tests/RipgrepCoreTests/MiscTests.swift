@@ -435,6 +435,28 @@ struct MiscTests {
         ], fixture: {})
         #expect(crlfCountOutput == Data("1\r\n".utf8))
 
+        try root.write("   trim Abcdefghi123 more Zbcdefghi999\n", to: "src/trim.txt")
+        let trimLineOutput = try runExecutableData([
+            "--trim",
+            pattern,
+            root.path("src/trim.txt"),
+        ], fixture: {})
+        #expect(trimLineOutput == Data("trim Abcdefghi123 more Zbcdefghi999\n".utf8))
+        let trimColumnOutput = try runExecutableData([
+            "--trim",
+            "--column",
+            pattern,
+            root.path("src/trim.txt"),
+        ], fixture: {})
+        #expect(trimColumnOutput == Data("1:9:trim Abcdefghi123 more Zbcdefghi999\n".utf8))
+        let trimOnlyMatchingOutput = try runExecutableData([
+            "--trim",
+            "-o",
+            pattern,
+            root.path("src/trim.txt"),
+        ], fixture: {})
+        #expect(trimOnlyMatchingOutput == Data("Abcdefghi123\nZbcdefghi999\n".utf8))
+
         func runQuiet(_ arguments: [String]) -> (stdout: [String], stderr: [String], status: Int32) {
             var stdout: [String] = []
             var stderr: [String] = []

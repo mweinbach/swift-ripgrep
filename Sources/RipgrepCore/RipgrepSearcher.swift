@@ -7214,8 +7214,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !options.invertMatch,
               !options.nullData,
               canUseMaxCount,
-              options.maxColumns == nil,
-              !options.trim else {
+              options.maxColumns == nil else {
             return nil
         }
         let countOnly = options.printMode == .count
