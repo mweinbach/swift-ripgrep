@@ -574,6 +574,8 @@ private func miscParityCases() -> [ParityCase] {
         ParityCase(name: "misc::word_whitespace_sequence_stats_count_matches", fixture: wordWhitespaceSequenceFixture, arguments: ["--stats", "--count-matches", #"\w{5}\s+\w{5}\s+\w{5}\s+\w{5}\s+\w{5}"#, "words.txt"]),
         ParityCase(name: "misc::word_whitespace_sequence_stats_quiet", fixture: wordWhitespaceSequenceFixture, arguments: ["--stats", "-q", #"\w{5}\s+\w{5}\s+\w{5}\s+\w{5}\s+\w{5}"#, "words.txt"]),
         ParityCase(name: "misc::word_whitespace_sequence_stats_files_with_matches", fixture: wordWhitespaceSequenceFixture, arguments: ["--stats", "-l", #"\w{5}\s+\w{5}\s+\w{5}\s+\w{5}\s+\w{5}"#, "words.txt"]),
+        ParityCase(name: "misc::word_whitespace_sequence_json_quiet", fixture: wordWhitespaceSequenceFixture, arguments: ["--json", "-q", #"\w{5}\s+\w{5}\s+\w{5}\s+\w{5}\s+\w{5}"#, "words.txt"]),
+        ParityCase(name: "misc::word_whitespace_sequence_json_stats_quiet", fixture: wordWhitespaceSequenceFixture, arguments: ["--json", "--stats", "-q", #"\w{5}\s+\w{5}\s+\w{5}\s+\w{5}\s+\w{5}"#, "words.txt"]),
         ParityCase(name: "misc::word_whitespace_sequence_files_with_matches", fixture: wordWhitespaceSequenceFixture, arguments: ["-l", #"\w{5}\s+\w{5}\s+\w{5}\s+\w{5}\s+\w{5}"#, "words.txt"]),
         ParityCase(name: "misc::word_whitespace_sequence_quiet", fixture: wordWhitespaceSequenceFixture, arguments: ["-q", #"\w{5}\s+\w{5}\s+\w{5}\s+\w{5}\s+\w{5}"#, "words.txt"]),
         ParityCase(name: "misc::word", fixture: sherlockFixture, arguments: ["-w", "as", "sherlock"]),

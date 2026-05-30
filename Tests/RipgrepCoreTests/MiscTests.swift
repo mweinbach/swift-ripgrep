@@ -156,6 +156,16 @@ struct MiscTests {
         let exactQuietStats = String(decoding: exactQuietStatsOutput, as: UTF8.self)
         #expect(exactQuietStats.contains("\n2 matches\n1 matched lines\n1 files contained matches\n1 files searched\n"))
         #expect(exactQuietStats.contains("\n60 bytes searched\n"))
+        let exactQuietJSONOutput = try runExecutableData([
+            "--json",
+            "-q",
+            pattern,
+            root.path("multi-words.txt"),
+        ], fixture: {})
+        let exactQuietJSON = String(decoding: exactQuietJSONOutput, as: UTF8.self)
+        #expect(exactQuietJSON.contains(#""matches":2"#))
+        #expect(exactQuietJSON.contains(#""matched_lines":1"#))
+        #expect(exactQuietJSON.contains(#""bytes_searched":60"#))
 
         let largeFillerLineCount = 600_000
         let largeFiller = String(repeating: "tiny words here\n", count: largeFillerLineCount)

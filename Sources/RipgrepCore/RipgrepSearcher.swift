@@ -6576,15 +6576,20 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let countMatchesOutput = options.printMode == .countMatches
         let filesWithMatchesMode = options.printMode == .filesWithMatches
         let filesWithoutMatchMode = options.printMode == .filesWithoutMatch
-        let pathOnlyOutput = !options.stats && (filesWithMatchesMode || filesWithoutMatchMode)
-        let pathStatsOutput = options.stats && (filesWithMatchesMode || filesWithoutMatchMode)
+        let pathOnlyOutput = !options.json && !options.stats && (filesWithMatchesMode || filesWithoutMatchMode)
+        let pathStatsOutput = !options.json && options.stats && (filesWithMatchesMode || filesWithoutMatchMode)
         let lineOutput = !options.quiet
             && options.printMode == .matchingLines
         let quietOutput = options.quiet
+            && !options.json
             && !options.stats
             && options.printMode == .matchingLines
-        let quietStatsOutput = options.quiet
+        let quietStatsOutput = !options.json
+            && options.quiet
             && options.stats
+            && options.printMode == .matchingLines
+        let jsonQuietSummaryOutput = options.json
+            && options.quiet
             && options.printMode == .matchingLines
         let firstMatchOutput = quietOutput || pathOnlyOutput
         guard let fastPath = matcher.wordWhitespaceSequenceFastPath(),
@@ -6592,7 +6597,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !data.starts(with: [0xEF, 0xBB, 0xBF]),
               !data.starts(with: [0xFF, 0xFE]),
               !data.starts(with: [0xFE, 0xFF]),
-              !options.json,
+              !options.json || jsonQuietSummaryOutput,
               options.beforeContext == 0,
               options.afterContext == 0,
               !options.passthru,
@@ -6607,7 +6612,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
               options.maxColumns == nil,
               !options.trim,
               lineOutput || countOutput || countMatchesOutput || pathOnlyOutput || pathStatsOutput || quietOutput
-                  || quietStatsOutput,
+                  || quietStatsOutput || jsonQuietSummaryOutput,
               canOmitMatchSpans(options: options) else {
             return nil
         }
@@ -6621,7 +6626,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let dataCount = data.count
         let minimumSequenceByteCount = fastPath.groupCount * 5 + max(0, fastPath.groupCount - 1)
         let canPrefilterShortLines = dataCount >= 64 * 1024 * 1024
-        let needsExactMatchCount = countMatchesOutput || options.stats
+        let needsExactMatchCount = countMatchesOutput || options.stats || jsonQuietSummaryOutput
         data.withUnsafeBytes { rawBuffer in
             let bytes = rawBuffer.bindMemory(to: UInt8.self)
             guard let baseAddress = bytes.baseAddress else {
