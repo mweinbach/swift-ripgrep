@@ -332,6 +332,48 @@ struct MiscTests {
         """))
         #expect(statsCountText.contains("\n98 bytes searched\n"))
 
+        try root.write("""
+        one Abcdefghi123 two Zbcdefghi999
+        three Ybcdefghi555
+        """, to: "src/max.txt")
+        let maxCountLineOutput = try runExecutableData([
+            "-m1",
+            pattern,
+            root.path("src/max.txt"),
+        ], fixture: {})
+        #expect(String(decoding: maxCountLineOutput, as: UTF8.self) == """
+        one Abcdefghi123 two Zbcdefghi999
+
+        """)
+        let maxCountOnlyMatchingOutput = try runExecutableData([
+            "-o",
+            "-m1",
+            pattern,
+            root.path("src/max.txt"),
+        ], fixture: {})
+        #expect(String(decoding: maxCountOnlyMatchingOutput, as: UTF8.self) == """
+        Abcdefghi123
+        Zbcdefghi999
+
+        """)
+        let statsMaxCountOutput = try runExecutableData([
+            "--stats",
+            "-m1",
+            pattern,
+            root.path("src/max.txt"),
+        ], fixture: {})
+        let statsMaxCountText = String(decoding: statsMaxCountOutput, as: UTF8.self)
+        #expect(statsMaxCountText.contains("""
+        one Abcdefghi123 two Zbcdefghi999
+
+        2 matches
+        1 matched lines
+        1 files contained matches
+        1 files searched
+        34 bytes printed
+        34 bytes searched
+        """))
+
         func runQuiet(_ arguments: [String]) -> (stdout: [String], stderr: [String], status: Int32) {
             var stdout: [String] = []
             var stderr: [String] = []
