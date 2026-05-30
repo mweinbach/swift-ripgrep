@@ -180,6 +180,19 @@ struct FeatureTests {
         #expect(statsFilesWithMatches.contains("2 matched lines"))
         #expect(statsFilesWithMatches.contains("2 files contained matches"))
         #expect(statsFilesWithMatches.contains("3 files searched"))
+        let statsQuiet = try run([
+            "--sort",
+            "path",
+            "--stats",
+            "-q",
+            #"\p{Greek}"#,
+            root.url.path,
+        ])
+        #expect(statsQuiet.contains("2 matches"))
+        #expect(statsQuiet.contains("2 matched lines"))
+        #expect(statsQuiet.contains("2 files contained matches"))
+        #expect(statsQuiet.contains("3 files searched"))
+        #expect(statsQuiet.contains("0 bytes printed"))
     }
 
     @Test("supports smart case and inverted matches")

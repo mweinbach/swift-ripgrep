@@ -7217,6 +7217,10 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let quietOutput = options.quiet
             && !options.stats
             && options.printMode == .matchingLines
+        let quietStatsOutput = !options.json
+            && options.quiet
+            && options.stats
+            && options.printMode == .matchingLines
         let canIgnoreLineRenderingOptions = !lineOutput
         guard let fastPath = matcher.asciiFixedClassSequenceFastPath(),
               case .automatic = options.encodingMode,
@@ -7236,6 +7240,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let jsonQuietSummaryOutput = options.json && quietOutput
         let firstMatchOutput = (quietOutput && !options.json) || pathOnlyOutput
         guard quietOutput
+            || quietStatsOutput
             || countOutput
             || pathOnlyOutput
             || pathStatsOutput
@@ -7249,7 +7254,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: data.count, searched: true)
         }
 
-        if countOutput || pathStatsOutput || jsonQuietSummaryOutput {
+        if countOutput || pathStatsOutput || jsonQuietSummaryOutput || quietStatsOutput {
             let counts = data.withUnsafeBytes { rawBuffer -> ASCIIFixedClassCounts in
                 let bytes = rawBuffer.bindMemory(to: UInt8.self)
                 guard let baseAddress = bytes.baseAddress else {
@@ -8002,6 +8007,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let quietOutput = options.quiet
             && !options.stats
             && options.printMode == .matchingLines
+        let quietStatsOutput = options.quiet
+            && options.stats
+            && options.printMode == .matchingLines
         let firstMatchOutput = quietOutput || pathOnlyOutput
         let canIgnoreLineRenderingOptions = !lineOutput
         guard matcher.greekScriptFastPath() != nil,
@@ -8031,7 +8039,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
                   || pathOnlyOutput
                   || pathStatsOutput
                   || lineOutput
-                  || quietOutput else {
+                  || quietOutput
+                  || quietStatsOutput else {
             return nil
         }
 
@@ -8084,7 +8093,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 guard !spans.isEmpty else {
                     return false
                 }
-                if countOutput || pathStatsOutput {
+                if countOutput || pathStatsOutput || quietStatsOutput {
                     supplementalMatchedLines += 1
                     supplementalMatches += spans.count
                     if supplementalMatchedLines == maxCount {

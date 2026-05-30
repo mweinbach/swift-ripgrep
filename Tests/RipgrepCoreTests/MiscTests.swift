@@ -361,6 +361,21 @@ struct MiscTests {
         2 files searched
         """))
         #expect(statsCountText.contains("\n98 bytes searched\n"))
+        let statsQuietOutput = try runExecutableData([
+            "--stats",
+            "-q",
+            pattern,
+            root.url.path,
+        ], fixture: {})
+        let statsQuietText = String(decoding: statsQuietOutput, as: UTF8.self)
+        #expect(statsQuietText.contains("""
+        2 matches
+        1 matched lines
+        1 files contained matches
+        2 files searched
+        0 bytes printed
+        98 bytes searched
+        """))
 
         let jsonQuietOutput = try runExecutableData([
             "--json",
