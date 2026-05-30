@@ -7216,7 +7216,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
             return nil
         }
         let countOnly = options.printMode == .count
-        guard (options.quiet && options.printMode == .matchingLines) || countOnly else {
+        let countMatchesOnly = options.printMode == .countMatches
+        guard (options.quiet && options.printMode == .matchingLines) || countOnly || countMatchesOnly else {
             return nil
         }
 
@@ -7226,13 +7227,13 @@ public struct RipgrepSearcher: @unchecked Sendable {
             return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: data.count, searched: true)
         }
 
-        if countOnly {
-            let matchedLineCount = data.withUnsafeBytes { rawBuffer -> Int in
+        if countOnly || countMatchesOnly {
+            let counts = data.withUnsafeBytes { rawBuffer -> ASCIIFixedClassCounts in
                 let bytes = rawBuffer.bindMemory(to: UInt8.self)
                 guard let baseAddress = bytes.baseAddress else {
-                    return 0
+                    return ASCIIFixedClassCounts(matchedLines: 0, matches: 0)
                 }
-                return asciiFixedClassMatchedLineCount(
+                return asciiFixedClassCounts(
                     baseAddress: baseAddress,
                     dataCount: data.count,
                     classes: classes
@@ -7243,8 +7244,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 matches: [],
                 bytesSearched: data.count,
                 searched: true,
-                supplementalMatchedLines: matchedLineCount,
-                supplementalMatches: matchedLineCount
+                supplementalMatchedLines: counts.matchedLines,
+                supplementalMatches: countOnly ? counts.matchedLines : counts.matches
             )
         }
 
@@ -7297,22 +7298,29 @@ public struct RipgrepSearcher: @unchecked Sendable {
         )
     }
 
-    private func asciiFixedClassMatchedLineCount(
+    private struct ASCIIFixedClassCounts {
+        var matchedLines: Int
+        var matches: Int
+    }
+
+    private func asciiFixedClassCounts(
         baseAddress: UnsafePointer<UInt8>,
         dataCount: Int,
         classes: [ASCIIFixedClassSequenceFastPath.ByteClass]
-    ) -> Int {
+    ) -> ASCIIFixedClassCounts {
         let width = classes.count
         guard width > 0, dataCount >= width else {
-            return 0
+            return ASCIIFixedClassCounts(matchedLines: 0, matches: 0)
         }
 
         let newline = UInt8(ascii: "\n")
         let lastStart = dataCount - width
-        var matchedLineCount = 0
+        var counts = ASCIIFixedClassCounts(matchedLines: 0, matches: 0)
+        var lineHasMatch = false
         var offset = 0
         while offset <= lastStart {
             if baseAddress[offset] == newline {
+                lineHasMatch = false
                 offset += 1
                 continue
             }
@@ -7327,19 +7335,17 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 classIndex += 1
             }
             if classIndex == width {
-                matchedLineCount += 1
+                counts.matches += 1
+                if !lineHasMatch {
+                    counts.matchedLines += 1
+                    lineHasMatch = true
+                }
                 offset += width
-                while offset < dataCount, baseAddress[offset] != newline {
-                    offset += 1
-                }
-                if offset < dataCount {
-                    offset += 1
-                }
                 continue
             }
             offset += 1
         }
-        return matchedLineCount
+        return counts
     }
 
     private func searchRawLiteralContents(

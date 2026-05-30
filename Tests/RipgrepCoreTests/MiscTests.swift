@@ -152,7 +152,7 @@ struct MiscTests {
     func quietFixedASCIIClassRegexMatchesRecursively() throws {
         let root = try TemporaryDirectory()
         try root.createDirectory("src")
-        try root.write("prefix Abcdefghi123 suffix\n", to: "src/match.txt")
+        try root.write("prefix Abcdefghi123 middle Zbcdefghi999 suffix\n", to: "src/match.txt")
         try root.write("""
         Abcdefgh123
         abcdefghi123
@@ -167,7 +167,7 @@ struct MiscTests {
             root.url.path,
         ], fixture: {})
         #expect(String(decoding: lineOutput, as: UTF8.self) == """
-        \(root.path("src/match.txt")):1:prefix Abcdefghi123 suffix
+        \(root.path("src/match.txt")):1:prefix Abcdefghi123 middle Zbcdefghi999 suffix
 
         """)
         let countOutput = try runExecutableData([
@@ -177,6 +177,15 @@ struct MiscTests {
         ], fixture: {})
         #expect(String(decoding: countOutput, as: UTF8.self) == """
         \(root.path("src/match.txt")):1
+
+        """)
+        let countMatchesOutput = try runExecutableData([
+            "--count-matches",
+            pattern,
+            root.url.path,
+        ], fixture: {})
+        #expect(String(decoding: countMatchesOutput, as: UTF8.self) == """
+        \(root.path("src/match.txt")):2
 
         """)
 
