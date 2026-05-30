@@ -975,22 +975,14 @@ public struct FileWalker: @unchecked Sendable {
             }
             let childRelativePath = child.name
             let isDirectory = child.kind.isDirectory
-            if !options.hidden,
-               child.isHidden,
-               !isIncludedByIgnore(
-                   relativePath: childRelativePath,
-                   basename: child.name,
-                   isDirectory: isDirectory,
-                   ignoreStack: directoryIgnoreStack
-               ) {
-                continue
-            }
-            guard directoryIgnoreStack.allows(
-                relativePath: childRelativePath,
-                basename: child.name,
-                isDirectory: isDirectory
+            guard shouldEmitFastFilePath(
+                child: child,
+                childRelativePath: childRelativePath,
+                isDirectory: isDirectory,
+                ignoreStack: directoryIgnoreStack,
+                options: options,
+                filtered: &rootFiltered
             ) else {
-                rootFiltered = true
                 continue
             }
             if child.kind.isDirectory {
@@ -1368,18 +1360,14 @@ public struct FileWalker: @unchecked Sendable {
             }
             let childRelativePath = relativePathPrefix + child.name
             let isDirectory = child.kind.isDirectory
-            if !options.hidden,
-               child.isHidden,
-               !isIncludedByIgnore(
-                   relativePath: childRelativePath,
-                   basename: child.name,
-                   isDirectory: isDirectory,
-                   ignoreStack: directoryIgnoreStack
-               ) {
-                continue
-            }
-            if !directoryIgnoreStack.allows(relativePath: childRelativePath, basename: child.name, isDirectory: isDirectory) {
-                filtered = true
+            guard shouldEmitFastFilePath(
+                child: child,
+                childRelativePath: childRelativePath,
+                isDirectory: isDirectory,
+                ignoreStack: directoryIgnoreStack,
+                options: options,
+                filtered: &filtered
+            ) else {
                 continue
             }
             if child.kind.isDirectory {
@@ -2153,17 +2141,15 @@ public struct FileWalker: @unchecked Sendable {
         options: RipgrepOptions,
         filtered: inout Bool
     ) -> Bool {
-        if !options.hidden,
-           child.isHidden,
-           !isIncludedByIgnore(
-               relativePath: childRelativePath,
-               basename: child.name,
-               isDirectory: isDirectory,
-               ignoreStack: ignoreStack
-           ) {
+        let ignoreDecision = ignoreStack.decision(
+            relativePath: childRelativePath,
+            basename: child.name,
+            isDirectory: isDirectory
+        )
+        if !options.hidden, child.isHidden, ignoreDecision != .include {
             return false
         }
-        if !ignoreStack.allows(relativePath: childRelativePath, basename: child.name, isDirectory: isDirectory) {
+        if ignoreDecision == .exclude {
             filtered = true
             return false
         }

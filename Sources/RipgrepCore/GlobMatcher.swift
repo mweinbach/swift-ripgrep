@@ -295,12 +295,12 @@ public struct GlobMatcher: Equatable {
         self.pathPrefix = pathPrefix
         self.isUnscoped = self.stripBasePath == nil && pathPrefix.isEmpty
         #if canImport(Darwin)
-        if rules.count >= 8 {
+        if rules.count >= 4 {
             let fastRuleIndex = Self.makeFastRuleIndex(
                 for: rules,
                 slashPatternsMatchAnywhere: resolvedSlashPatternsMatchAnywhere
             )
-            self.fastRuleIndex = fastRuleIndex.indexedRuleCount >= 8
+            self.fastRuleIndex = fastRuleIndex.indexedRuleCount >= 4
                 && fastRuleIndex.indexedRuleCount >= fastRuleIndex.unindexedRuleIndicesDescending.count
                 ? fastRuleIndex
                 : nil
