@@ -1568,6 +1568,10 @@ struct FeatureTests {
             componentRoot.path("a/c"),
             componentRoot.path("a-b"),
         ])
+        #expect(try run(["--sortr", "path", "--files", componentRoot.url.path]) == [
+            componentRoot.path("a-b"),
+            componentRoot.path("a/c"),
+        ])
 
         let traversalRoot = try TemporaryDirectory()
         try traversalRoot.createDirectory("a")

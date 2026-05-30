@@ -265,9 +265,21 @@ public struct FileWalker: @unchecked Sendable {
         emit: (String) -> Void
     ) throws -> FilePathStreamResults? {
         #if canImport(Darwin)
-        guard canFastWalkFilePaths(options: options),
+        guard canFastWalkFilePaths(options: options, allowPathSort: true),
               options.effectiveRoots.count == 1 else {
             return nil
+        }
+        let pathSortMode = options.sortMode?.kind == .path ? options.sortMode : nil
+        var sortedFilePathLines: [String] = []
+        if pathSortMode != nil {
+            sortedFilePathLines.reserveCapacity(1024)
+        }
+        func emitOrCollect(_ line: String) {
+            if pathSortMode != nil {
+                sortedFilePathLines.append(line)
+            } else {
+                emit(line)
+            }
         }
         var messages: [String] = []
         var warnings: [String] = []
@@ -341,12 +353,15 @@ public struct FileWalker: @unchecked Sendable {
             rootIgnoreStack: rootIgnoreStack,
             options: options,
             stopAfterFirst: stopAfterFirst,
-            emit: emit
+            emit: emitOrCollect
         ) {
             messages.append(contentsOf: parallelResults.messages)
             warnings.append(contentsOf: parallelResults.warnings)
             diagnostics.append(contentsOf: parallelResults.diagnostics)
             filtered = filtered || parallelResults.filtered
+            if let pathSortMode {
+                emitSortedFilePathLines(sortedFilePathLines, reverse: pathSortMode.reverse, emit: emit)
+            }
             return FilePathStreamResults(
                 count: parallelResults.count,
                 messages: messages,
@@ -375,7 +390,10 @@ public struct FileWalker: @unchecked Sendable {
             didStop: &didStop
         ) { path in
             emittedCount += 1
-            emit(path)
+            emitOrCollect(path)
+        }
+        if let pathSortMode {
+            emitSortedFilePathLines(sortedFilePathLines, reverse: pathSortMode.reverse, emit: emit)
         }
         return FilePathStreamResults(
             count: emittedCount,
@@ -728,11 +746,12 @@ public struct FileWalker: @unchecked Sendable {
     }
 
     #if canImport(Darwin)
-    private func canFastWalkFilePaths(options: RipgrepOptions) -> Bool {
+    private func canFastWalkFilePaths(options: RipgrepOptions, allowPathSort: Bool = false) -> Bool {
+        let canSort = options.sortMode == nil || (allowPathSort && options.sortMode?.kind == .path)
         return options.mode == .files
             && !options.useStdin
             && !options.nullPathTerminator
-            && options.sortMode == nil
+            && canSort
             && options.pathSeparator == nil
             && options.colorMode != .always
             && options.colorMode != .ansi
@@ -745,6 +764,21 @@ public struct FileWalker: @unchecked Sendable {
             && options.maxDepth == nil
             && !options.followSymlinks
             && !options.oneFileSystem
+    }
+
+    private func emitSortedFilePathLines(_ lines: [String], reverse: Bool, emit: (String) -> Void) {
+        let keyed = lines.map { line in
+            (line: line, components: PathSort.components(forPath: line))
+        }
+        for entry in keyed.sorted(by: { lhs, rhs in
+            let order = PathSort.compare(lhs.components, rhs.components)
+            if reverse {
+                return order == .orderedDescending
+            }
+            return order == .orderedAscending
+        }) {
+            emit(entry.line)
+        }
     }
 
     private func hasLoadableIgnoreFiles(
@@ -2831,6 +2865,18 @@ public struct FileWalker: @unchecked Sendable {
     private func sorted(_ haystacks: [Haystack], options: RipgrepOptions) -> [Haystack] {
         guard let sortMode = options.sortMode else {
             return haystacks
+        }
+        if sortMode.kind == .path {
+            let keyed = haystacks.map { haystack in
+                (haystack: haystack, components: PathSort.components(for: haystack.url))
+            }
+            return keyed.sorted { lhs, rhs in
+                let order = PathSort.compare(lhs.components, rhs.components)
+                if sortMode.reverse {
+                    return order == .orderedDescending
+                }
+                return order == .orderedAscending
+            }.map(\.haystack)
         }
         return haystacks.sorted { lhs, rhs in
             let order = compare(lhs.url, rhs.url, by: sortMode.kind)

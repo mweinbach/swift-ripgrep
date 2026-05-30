@@ -85,6 +85,15 @@ matched Rust for the same controls. An 80-run A/B measured default `--files` at
 order-flipped confirmation measured default at 84.8 ms versus 86.2 ms, hidden
 at 87.5 ms for both binaries, and Rust default at 67.2 ms.
 
+Sorted `--files` now stays on the Swift-first file-list walker for path sorts
+instead of falling back to the generic `Haystack`/`URL` result path, and path
+sorts cache component keys instead of rebuilding them per comparator call. On
+the full Linux corpus, exact sorted output matched both the previous Swift
+binary and Rust for default, no-vcs, and no-ignore-hidden controls. An 8-run A/B
+measured default `--sort path --files` at 279.4 ms versus 3463.8 ms for the
+previous checkpoint, with Rust at 228.2 ms. The no-ignore-hidden sorted control
+measured 297.2 ms versus 3446.6 ms.
+
 Several plausible Swift-only probes were rejected after exact Swift-output and
 sorted Rust-output checks:
 
