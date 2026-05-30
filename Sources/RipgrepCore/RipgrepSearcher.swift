@@ -7201,21 +7201,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     || options.printMode == .countMatches
                     || options.printMode == .filesWithMatches
                     || options.printMode == .filesWithoutMatch))
-        guard let fastPath = matcher.asciiFixedClassSequenceFastPath(),
-              case .automatic = options.encodingMode,
-              !data.starts(with: [0xEF, 0xBB, 0xBF]),
-              !data.starts(with: [0xFF, 0xFE]),
-              !data.starts(with: [0xFE, 0xFF]),
-              options.beforeContext == 0,
-              options.afterContext == 0,
-              !options.passthru,
-              options.replacement == nil,
-              !options.stopOnNonmatch,
-              !options.invertMatch,
-              !options.nullData,
-              canUseMaxCount else {
-            return nil
-        }
         let countOnly = options.printMode == .count
         let countMatchesOnly = options.printMode == .countMatches
         let filesWithMatchesMode = options.printMode == .filesWithMatches
@@ -7232,6 +7217,22 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let quietOutput = options.quiet
             && !options.stats
             && options.printMode == .matchingLines
+        let canIgnoreLineRenderingOptions = !lineOutput
+        guard let fastPath = matcher.asciiFixedClassSequenceFastPath(),
+              case .automatic = options.encodingMode,
+              !data.starts(with: [0xEF, 0xBB, 0xBF]),
+              !data.starts(with: [0xFF, 0xFE]),
+              !data.starts(with: [0xFE, 0xFF]),
+              canIgnoreLineRenderingOptions || (options.beforeContext == 0
+                  && options.afterContext == 0
+                  && !options.passthru
+                  && options.replacement == nil),
+              !options.stopOnNonmatch,
+              !options.invertMatch,
+              !options.nullData,
+              canUseMaxCount else {
+            return nil
+        }
         let jsonQuietSummaryOutput = options.json && quietOutput
         let firstMatchOutput = (quietOutput && !options.json) || pathOnlyOutput
         guard quietOutput

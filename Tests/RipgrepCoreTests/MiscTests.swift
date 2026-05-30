@@ -248,6 +248,13 @@ struct MiscTests {
         \(root.path("src/match.txt"))
 
         """)
+        let afterContextFilesWithMatchesOutput = try runExecutableData([
+            "-A1",
+            "-l",
+            pattern,
+            root.url.path,
+        ], fixture: {})
+        #expect(afterContextFilesWithMatchesOutput == filesWithMatchesOutput)
         let filesWithoutMatchOutput = try runExecutableData([
             "--files-without-match",
             pattern,
@@ -272,6 +279,14 @@ struct MiscTests {
         1 files contained matches
         2 files searched
         """))
+        let statsAfterContextFilesWithMatchesOutput = try runExecutableData([
+            "--stats",
+            "-A1",
+            "-l",
+            pattern,
+            root.url.path,
+        ], fixture: {})
+        #expect(statsAfterContextFilesWithMatchesOutput == statsFilesWithMatchesOutput)
         let statsFilesWithoutMatchOutput = try runExecutableData([
             "--stats",
             "--files-without-match",
@@ -306,6 +321,13 @@ struct MiscTests {
         \(root.path("src/match.txt")):1
 
         """)
+        let passthruCountOutput = try runExecutableData([
+            "--passthru",
+            "-c",
+            pattern,
+            root.url.path,
+        ], fixture: {})
+        #expect(passthruCountOutput == countOutput)
         let countMatchesOutput = try runExecutableData([
             "--count-matches",
             pattern,
@@ -315,6 +337,14 @@ struct MiscTests {
         \(root.path("src/match.txt")):2
 
         """)
+        let replacementCountMatchesOutput = try runExecutableData([
+            "-r",
+            "X",
+            "--count-matches",
+            pattern,
+            root.url.path,
+        ], fixture: {})
+        #expect(replacementCountMatchesOutput == countMatchesOutput)
         let statsCountOutput = try runExecutableData([
             "--stats",
             "-c",
