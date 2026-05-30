@@ -6592,16 +6592,17 @@ public struct RipgrepSearcher: @unchecked Sendable {
             && options.quiet
             && options.printMode == .matchingLines
         let firstMatchOutput = quietOutput || pathOnlyOutput
+        let canIgnoreLineRenderingOptions = !lineOutput
         guard let fastPath = matcher.wordWhitespaceSequenceFastPath(),
               case .automatic = options.encodingMode,
               !data.starts(with: [0xEF, 0xBB, 0xBF]),
               !data.starts(with: [0xFF, 0xFE]),
               !data.starts(with: [0xFE, 0xFF]),
               !options.json || jsonQuietSummaryOutput,
-              options.beforeContext == 0,
-              options.afterContext == 0,
-              !options.passthru,
-              options.replacement == nil,
+              canIgnoreLineRenderingOptions || (options.beforeContext == 0
+                  && options.afterContext == 0
+                  && !options.passthru
+                  && options.replacement == nil),
               !options.stopOnNonmatch,
               !options.invertMatch,
               !options.onlyMatching,

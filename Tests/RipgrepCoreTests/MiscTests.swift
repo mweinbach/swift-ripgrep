@@ -128,6 +128,20 @@ struct MiscTests {
             root.path("words.txt"),
         ], fixture: {})
         #expect(filesWithMatchesOutput == Data("\(root.path("words.txt"))\n".utf8))
+        let contextFilesWithMatchesOutput = try runExecutableData([
+            "-A1",
+            "-l",
+            pattern,
+            root.path("words.txt"),
+        ], fixture: {})
+        #expect(contextFilesWithMatchesOutput == filesWithMatchesOutput)
+        let passthruCountOutput = try runExecutableData([
+            "--passthru",
+            "-c",
+            pattern,
+            root.path("words.txt"),
+        ], fixture: {})
+        #expect(passthruCountOutput == Data("6\n".utf8))
         let quietOutput = runWithExitCode([
             "-q",
             pattern,
