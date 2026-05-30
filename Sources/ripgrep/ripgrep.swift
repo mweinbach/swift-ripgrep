@@ -2753,6 +2753,10 @@ struct RipgrepCommand {
             && !parsedStats
             && !parsedQuiet
             && (parsedPrintMode == .count || parsedPrintMode == .countMatches)
+        let parsedStatsCountPrintModeCanUseMatchedStatsPreflight = parsedStats
+            && !parsedJson
+            && !parsedQuiet
+            && (parsedPrintMode == .count || parsedPrintMode == .countMatches)
         let parsedJSONFilesWithMatchesPrintModeCanUseMatchedPathPreflight = parsedJson
             && !parsedStats
             && !parsedQuiet
@@ -2908,6 +2912,48 @@ struct RipgrepCommand {
                         countPrefix: parsedCountPrefix,
                         crlfTerminated: parsedCrlf,
                         stats: parsedStats
+                   ) {
+                    return exitCode
+                }
+            }
+        }
+        if parsedStatsCountPrintModeCanUseMatchedStatsPreflight,
+           !parsedInvertMatch,
+           parsedMaxCount == nil,
+           !parsedNullData,
+           !parsedPassthru,
+           !parsedSearchZipAffectsPreflight,
+           parsedEncodingIsAutomatic,
+           !parsedColorAffectsPreflightOutput,
+           !parsedLineRegexp,
+           !parsedOnlyMatching,
+           !parsedReplacement,
+           (patternCanStartWithDash || !pattern.hasPrefix("-")),
+           path != "-" {
+            let statsCountLiteralPattern: String?
+            if fixedStrings {
+                statsCountLiteralPattern = pattern
+            } else if asciiBoundaryLiteral(pattern, allowPCREQuotedLiterals: allowPCREQuotedLiterals) != nil {
+                statsCountLiteralPattern = nil
+            } else {
+                statsCountLiteralPattern = RegexLiteralParser.literal(
+                    fromPlainRegexPattern: pattern,
+                    allowPCREQuotedLiterals: allowPCREQuotedLiterals
+                )
+            }
+            if let statsCountLiteralPattern {
+                let statsCountLiteral = Array(statsCountLiteralPattern.utf8)
+                if !statsCountLiteral.isEmpty,
+                   !statsCountLiteral.contains(UInt8(ascii: "\n")),
+                   let exitCode = SwiftDarwinLiteralPreflight.matchedCountStatsExitCode(
+                        path: path,
+                        literal: statsCountLiteral,
+                        asciiCaseInsensitive: asciiCaseInsensitive,
+                        wordRegexp: wordRegexp,
+                        countMatches: parsedPrintMode == .countMatches,
+                        includeZero: parsedIncludeZero,
+                        countPrefix: parsedCountPrefix,
+                        crlfTerminated: parsedCrlf
                    ) {
                     return exitCode
                 }

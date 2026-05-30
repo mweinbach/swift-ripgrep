@@ -342,6 +342,17 @@ five-run A/Bs measured
 Rust; `--stats -c` at 9.4 ms versus 2.173 s and 7.2 ms for Rust; and
 `--stats --count-matches` at 9.0 ms versus 2.210 s and 6.5 ms for Rust.
 
+Matching stats count output now writes the count line and deterministic stats
+block from the same matched-summary helper instead of falling through to the
+full search path. The fast route is scoped to unbounded single-literal
+`--stats -c` and `--stats --count-matches` forms with safe ASCII word and
+ignore-case support. Normalized stdout/status checks matched Rust for plain and
+prefixed counts, count-matches, `-i`, `-w`, `-i -w`, include-zero-on-match, and
+a bounded fallback control. On the 46 MiB matching ASCII file, 30-run checks
+measured `--stats -c` at 44.2 ms versus 8.074 s before and 38.1 ms for Rust,
+`--stats -H -c` at 44.0 ms versus 8.088 s before and 38.1 ms for Rust, and
+`--stats --count-matches` at 43.5 ms versus 38.3 ms for Rust.
+
 JSON files-with-matches and count/count-matches no-match modes now use a
 separate no-output preflight instead of the summary writer, preserving Rust's
 empty JSON output for those modes while keeping `--include-zero` on the fallback
