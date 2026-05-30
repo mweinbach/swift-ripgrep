@@ -1233,6 +1233,26 @@ struct MiscTests {
 
         """)
 
+        let denseLine = "The game is afoot Sherlock Holmes and Doctor Watson cross London."
+        let denseText = Array(repeating: denseLine, count: 16_500).joined(separator: "\n") + "\n"
+        try root.write(denseText, to: "dense-surrounding.txt")
+        let denseUnicodeOutput = try runExecutableData([
+            "-n",
+            #"\w+\s+Holmes\s+\w+"#,
+            root.path("dense-surrounding.txt"),
+        ], fixture: {})
+        let denseUnicodeLines = String(decoding: denseUnicodeOutput, as: UTF8.self).split(separator: "\n")
+        #expect(denseUnicodeLines.count == 16_500)
+        #expect(denseUnicodeLines.first == "1:\(denseLine)")
+        #expect(denseUnicodeLines.last == "16500:\(denseLine)")
+
+        let denseASCIIOutput = try runExecutableData([
+            "-n",
+            #"(?-u)\w+\s+Holmes\s+\w+"#,
+            root.path("dense-surrounding.txt"),
+        ], fixture: {})
+        #expect(denseASCIIOutput == denseUnicodeOutput)
+
         try root.write("Mr Holmes returns", to: "sherlock-no-final-newline.txt")
         let noFinalNewlineOutput = try runExecutableData([
             "-n",

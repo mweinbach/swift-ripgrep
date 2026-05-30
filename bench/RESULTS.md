@@ -3536,6 +3536,18 @@ returns` and `Dr Holmes étrange`; on the subtitles corpus, default Unicode
 and improved from the 277.62 ms recheck band to 217.58 ms, while the ASCII form
 measured 219.37 ms.
 
+Dense ASCII-compatible surrounding-word output now streams from the executable
+preflight instead of falling through after the 16,384 buffered-line cutoff. The
+ASCII-scoped form streams immediately, while default Unicode streams only after
+that cutoff and a whole-file ASCII proof so Unicode fallback semantics stay
+unchanged. A 4,000,000-line, 264 MiB synthetic `Holmes` corpus matched Rust
+byte-for-byte for both Unicode-default and `(?-u)` forms. Ten-run A/B checks
+measured default Unicode at 322.7 ms versus 5.904 s before and 496.0 ms for
+Rust; the ASCII-scoped form measured 237.4 ms versus 5.897 s before. A sparse
+252 MiB rejection-heavy fixture also matched Rust byte-for-byte and measured
+default Unicode at 67.9 ms versus 148.0 ms before and 194.3 ms for Rust, with
+the ASCII-scoped form at 67.0 ms versus 127.7 ms before.
+
 ASCII case-insensitive literal scanning now adds a middle-byte SIMD filter for
 literals of at least eight bytes, keeping the existing first/tail filter but
 avoiding many false candidate verifications on longer folded literals. Single

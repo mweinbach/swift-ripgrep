@@ -10263,6 +10263,7 @@ private func rgSwiftDarwinWriteSurroundingWordsBytes(
         let outputEnd: Int
         let needsFinalNewline: Bool
     }
+    let newlineByte = UInt8(ascii: "\n")
 
     @inline(__always)
     func hasSurroundingASCIIWords(lineStart: Int, lineEnd: Int, literalStart: Int, literalEnd: Int) -> Bool {
@@ -10481,6 +10482,132 @@ private func rgSwiftDarwinWriteSurroundingWordsBytes(
             && rightSideMayNeedUnicode(lineEnd: lineEnd, literalEnd: literalEnd)
     }
 
+    @inline(__always)
+    func definitelyCannotMatchNearLiteral(literalStart: Int, literalEnd: Int) -> Bool {
+        guard literalStart > 0, literalEnd < haystackLength else {
+            return true
+        }
+
+        let before = base[literalStart - 1]
+        if before == newlineByte {
+            return true
+        }
+        if before < 0x80 {
+            guard rgSwiftIsASCIIRegexWhitespaceByte(before) else {
+                return true
+            }
+        } else if asciiOnly {
+            return true
+        }
+
+        let after = base[literalEnd]
+        if after == newlineByte {
+            return true
+        }
+        if after < 0x80 {
+            guard rgSwiftIsASCIIRegexWhitespaceByte(after) else {
+                return true
+            }
+        } else if asciiOnly {
+            return true
+        }
+
+        return false
+    }
+
+    func haystackContainsNonASCII() -> Bool {
+        for offset in 0..<haystackLength where base[offset] >= 0x80 {
+            return true
+        }
+        return false
+    }
+
+    func writeStreamingASCIICompatibleMatches() -> Int? {
+        guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+            return nil
+        }
+        defer {
+            output.deallocate()
+        }
+
+        var lineNumberAtSearchOffset = 1
+        var searchOffset = 0
+        var matchedLineCount = 0
+        var emittedHeading = false
+
+        while searchOffset < haystackLength {
+            let result = rg_memmem_count_byte_before(
+                base.advanced(by: searchOffset),
+                haystackLength - searchOffset,
+                literalBase,
+                literal.count,
+                newlineByte
+            )
+            guard let found = result.match else {
+                break
+            }
+
+            let literalStart = base.distance(to: found)
+            let literalEnd = literalStart + literal.count
+            let matchedLineNumber = lineNumberAtSearchOffset + Int(result.count)
+            if definitelyCannotMatchNearLiteral(literalStart: literalStart, literalEnd: literalEnd) {
+                lineNumberAtSearchOffset = matchedLineNumber
+                searchOffset = max(literalStart + 1, searchOffset + 1)
+                continue
+            }
+
+            var lineStart = literalStart
+            while lineStart > 0, base[lineStart - 1] != newlineByte {
+                lineStart -= 1
+            }
+            let newline = memchr(found, Int32(newlineByte), haystackLength - literalStart)
+            let lineEnd = newline.map {
+                base.distance(to: $0.assumingMemoryBound(to: UInt8.self))
+            } ?? haystackLength
+            let outputEnd = newline == nil ? haystackLength : lineEnd + 1
+
+            guard hasSurroundingASCIIWords(
+                lineStart: lineStart,
+                lineEnd: lineEnd,
+                literalStart: literalStart,
+                literalEnd: literalEnd
+            ) else {
+                lineNumberAtSearchOffset = matchedLineNumber
+                searchOffset = max(literalStart + 1, searchOffset + 1)
+                continue
+            }
+
+            guard output.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading),
+                  output.writeBytes(linePrefix) else {
+                return nil
+            }
+            if lineNumber,
+               !output.writeLineNumberPrefix(matchedLineNumber, fieldSeparator: lineNumberFieldSeparator) {
+                return nil
+            }
+            guard output.write(base.advanced(by: lineStart), count: outputEnd - lineStart) else {
+                return nil
+            }
+            if newline == nil,
+               !output.writeByte(newlineByte) {
+                return nil
+            }
+
+            matchedLineCount += 1
+            lineNumberAtSearchOffset = newline == nil ? matchedLineNumber : matchedLineNumber + 1
+            searchOffset = outputEnd
+        }
+
+        guard output.flush() else {
+            return nil
+        }
+        return matchedLineCount
+    }
+
+    if asciiOnly {
+        return writeStreamingASCIICompatibleMatches()
+    }
+
     var pendingLines: [PendingLine] = []
     pendingLines.reserveCapacity(1024)
     let maxBufferedLines = 16_384
@@ -10494,7 +10621,7 @@ private func rgSwiftDarwinWriteSurroundingWordsBytes(
             haystackLength - searchOffset,
             literalBase,
             literal.count,
-            UInt8(ascii: "\n")
+            newlineByte
         )
         guard let found = result.match else {
             break
@@ -10503,11 +10630,17 @@ private func rgSwiftDarwinWriteSurroundingWordsBytes(
         let literalStart = base.distance(to: found)
         let literalEnd = literalStart + literal.count
         let matchedLineNumber = lineNumberAtSearchOffset + Int(result.count)
+        if definitelyCannotMatchNearLiteral(literalStart: literalStart, literalEnd: literalEnd) {
+            lineNumberAtSearchOffset = matchedLineNumber
+            searchOffset = max(literalStart + 1, searchOffset + 1)
+            continue
+        }
+
         var lineStart = literalStart
-        while lineStart > 0, base[lineStart - 1] != UInt8(ascii: "\n") {
+        while lineStart > 0, base[lineStart - 1] != newlineByte {
             lineStart -= 1
         }
-        let newline = memchr(found, Int32(UInt8(ascii: "\n")), haystackLength - literalStart)
+        let newline = memchr(found, Int32(newlineByte), haystackLength - literalStart)
         let lineEnd = newline.map {
             base.distance(to: $0.assumingMemoryBound(to: UInt8.self))
         } ?? haystackLength
@@ -10522,7 +10655,10 @@ private func rgSwiftDarwinWriteSurroundingWordsBytes(
         if asciiMatched {
             if lineStart != lastEmittedLineStart {
                 guard pendingLines.count < maxBufferedLines else {
-                    return nil
+                    guard !haystackContainsNonASCII() else {
+                        return nil
+                    }
+                    return writeStreamingASCIICompatibleMatches()
                 }
                 pendingLines.append(PendingLine(
                     number: matchedLineNumber,
