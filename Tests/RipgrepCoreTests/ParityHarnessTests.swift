@@ -541,6 +541,7 @@ private func miscParityCases() -> [ParityCase] {
         ParityCase(name: "misc::line", fixture: sherlockFixture, arguments: ["-x", "Watson|and exhibited clearly, with a label attached.", "sherlock"]),
         ParityCase(name: "misc::quiet_ascii_fixed_class", fixture: asciiFixedClassFixture, arguments: ["-q", "[A-Z][a-z]{8}[0-9]{3}", "."]),
         ParityCase(name: "misc::quiet_ascii_fixed_class_no_match", fixture: asciiFixedClassFixture, arguments: ["-q", "[A-Z][a-z]{8}[0-9]{3}", "miss.txt"]),
+        ParityCase(name: "misc::count_ascii_fixed_class", fixture: asciiFixedClassFixture, arguments: ["-c", "[A-Z][a-z]{8}[0-9]{3}", "."]),
         ParityCase(name: "misc::literal", fixture: { dir in try write(SHERLOCK, to: "sherlock", in: dir); try write("blib\n()\nblab\n", to: "file", in: dir) }, arguments: ["-F", "()", "file"]),
         ParityCase(name: "misc::quiet", fixture: sherlockFixture, arguments: ["-q", "Sherlock", "sherlock"]),
         ParityCase(name: "misc::replace", fixture: sherlockFixture, arguments: ["-r", "FooBar", "Sherlock", "sherlock"]),

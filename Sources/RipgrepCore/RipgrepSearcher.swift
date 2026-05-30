@@ -7197,8 +7197,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !data.starts(with: [0xEF, 0xBB, 0xBF]),
               !data.starts(with: [0xFF, 0xFE]),
               !data.starts(with: [0xFE, 0xFF]),
-              options.quiet,
-              options.printMode == .matchingLines,
               !options.json,
               !options.stats,
               options.beforeContext == 0,
@@ -7217,11 +7215,37 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !options.trim else {
             return nil
         }
+        let countOnly = options.printMode == .count
+        guard (options.quiet && options.printMode == .matchingLines) || countOnly else {
+            return nil
+        }
 
         let classes = fastPath.classes
         let width = classes.count
         guard width > 0, data.count >= width else {
             return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: data.count, searched: true)
+        }
+
+        if countOnly {
+            let matchedLineCount = data.withUnsafeBytes { rawBuffer -> Int in
+                let bytes = rawBuffer.bindMemory(to: UInt8.self)
+                guard let baseAddress = bytes.baseAddress else {
+                    return 0
+                }
+                return asciiFixedClassMatchedLineCount(
+                    baseAddress: baseAddress,
+                    dataCount: data.count,
+                    classes: classes
+                )
+            }
+            return SearchFileResult(
+                fileURL: fileURL,
+                matches: [],
+                bytesSearched: data.count,
+                searched: true,
+                supplementalMatchedLines: matchedLineCount,
+                supplementalMatches: matchedLineCount
+            )
         }
 
         let matchOffset = data.withUnsafeBytes { rawBuffer -> Int? in
@@ -7271,6 +7295,51 @@ public struct RipgrepSearcher: @unchecked Sendable {
             bytesSearched: min(data.count, matchOffset + width),
             searched: true
         )
+    }
+
+    private func asciiFixedClassMatchedLineCount(
+        baseAddress: UnsafePointer<UInt8>,
+        dataCount: Int,
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass]
+    ) -> Int {
+        let width = classes.count
+        guard width > 0, dataCount >= width else {
+            return 0
+        }
+
+        let newline = UInt8(ascii: "\n")
+        let lastStart = dataCount - width
+        var matchedLineCount = 0
+        var offset = 0
+        while offset <= lastStart {
+            if baseAddress[offset] == newline {
+                offset += 1
+                continue
+            }
+            guard byte(baseAddress[offset], matches: classes[0]) else {
+                offset += 1
+                continue
+            }
+
+            var classIndex = 1
+            while classIndex < width,
+                  byte(baseAddress[offset + classIndex], matches: classes[classIndex]) {
+                classIndex += 1
+            }
+            if classIndex == width {
+                matchedLineCount += 1
+                offset += width
+                while offset < dataCount, baseAddress[offset] != newline {
+                    offset += 1
+                }
+                if offset < dataCount {
+                    offset += 1
+                }
+                continue
+            }
+            offset += 1
+        }
+        return matchedLineCount
     }
 
     private func searchRawLiteralContents(

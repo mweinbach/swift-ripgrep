@@ -170,6 +170,15 @@ struct MiscTests {
         \(root.path("src/match.txt")):1:prefix Abcdefghi123 suffix
 
         """)
+        let countOutput = try runExecutableData([
+            "-c",
+            pattern,
+            root.url.path,
+        ], fixture: {})
+        #expect(String(decoding: countOutput, as: UTF8.self) == """
+        \(root.path("src/match.txt")):1
+
+        """)
 
         func runQuiet(_ arguments: [String]) -> (stdout: [String], stderr: [String], status: Int32) {
             var stdout: [String] = []
