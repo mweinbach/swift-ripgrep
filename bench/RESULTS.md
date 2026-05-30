@@ -196,6 +196,20 @@ sorted Rust-output checks:
   instead of only large mapped files, preserved the Unicode and ASCII
   no-literal output but was neutral-to-slower: the ASCII row measured 2.182 s
   versus 2.162 s before in a seven-run A/B.
+- Follow-up VCS-ignore file-list probes on 2026-05-30 also preserved exact
+  Swift output and sorted Rust parity but did not retain a measurable win:
+  URL `isDirectory` hints for known ignore/config file appends were mixed
+  (default about 78.9 ms versus 80.2 ms before, but hidden/no-vcs slightly
+  worse), a scoped-traversal flag for directory-local basename matchers was
+  flat-to-worse (default about 79.4 ms versus 78.8 ms), boxing the
+  `IgnoreStack` matcher array was neutral after order-flipped confirmations
+  (default about 79.0 ms versus 80.4 ms, hidden worse/noisy), first-byte guards
+  around exact fast-index dictionaries were flat (default 78.5 ms versus
+  78.4 ms), caching basename and relative-path edge bytes once per stack
+  decision regressed user CPU (default 81.5 ms versus 80.1 ms, hidden
+  81.4 ms versus 80.2 ms), and a visible-path fast index that skipped rules
+  which can only match hidden paths also regressed default user CPU
+  (82.2 ms versus 80.4 ms).
 
 ### Continuation probes — 2026-05-29
 
