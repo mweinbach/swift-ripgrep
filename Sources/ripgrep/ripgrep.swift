@@ -2745,6 +2745,10 @@ struct RipgrepCommand {
                 && !parsedJson
                 && (parsedPrintMode == .filesWithMatches
                     || ((parsedPrintMode == .count || parsedPrintMode == .countMatches) && !parsedIncludeZero)))
+        let parsedJSONNoOutputPrintModeCanUseNoMatchPreflight = parsedJson
+            && !parsedStats
+            && (parsedPrintMode == .filesWithMatches
+                || ((parsedPrintMode == .count || parsedPrintMode == .countMatches) && !parsedIncludeZero))
         if parsedJson || parsedStats,
            parsedSummaryPrintModeCanUseNoMatchPreflight,
            !parsedInvertMatch,
@@ -2797,6 +2801,35 @@ struct RipgrepCommand {
                     if let exitCode {
                         return exitCode
                     }
+                }
+            }
+        }
+        if parsedJSONNoOutputPrintModeCanUseNoMatchPreflight,
+           !parsedInvertMatch,
+           parsedMaxCount != 0,
+           !parsedNullData,
+           !parsedPassthru,
+           !parsedSearchZipAffectsPreflight,
+           !parsedEncodingAffectsPreflightOutput,
+           (patternCanStartWithDash || !pattern.hasPrefix("-")),
+           path != "-" {
+            let noOutputLiteralPattern = fixedStrings
+                ? pattern
+                : RegexLiteralParser.literal(
+                    fromPlainRegexPattern: pattern,
+                    allowPCREQuotedLiterals: allowPCREQuotedLiterals
+                )
+            if let noOutputLiteralPattern {
+                let noOutputLiteral = Array(noOutputLiteralPattern.utf8)
+                if !noOutputLiteral.isEmpty,
+                   !noOutputLiteral.contains(UInt8(ascii: "\n")),
+                   let exitCode = SwiftDarwinLiteralPreflight.noMatchExitCode(
+                        path: path,
+                        literal: noOutputLiteral,
+                        asciiCaseInsensitive: asciiCaseInsensitive,
+                        wordRegexp: wordRegexp
+                   ) {
+                    return exitCode
                 }
             }
         }

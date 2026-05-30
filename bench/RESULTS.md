@@ -174,16 +174,27 @@ at 8.7 ms versus 2.220 s and 7.3 ms for Rust; `--stats -x` at 8.7 ms versus
 for Rust.
 
 Stats-only files-with-matches and count no-match outputs now use the same
-summary preflight when `--include-zero` is not active. JSON count/path no-match
-outputs intentionally stay on the regular path because Rust emits no JSON
-records there, while `--include-zero` count modes still need the leading `0`
-before the stats block. Direct status/stdout/stderr checks matched the previous
-Swift binary and Rust for `--stats -l`, `--stats -c`,
-`--stats --count-matches`, the `--include-zero` fallback, and JSON count/path
-fallback controls. On the 46 MiB ASCII file, five-run A/Bs measured
+summary preflight when `--include-zero` is not active. `--include-zero` count
+modes still need the leading `0` before the stats block. Direct
+status/stdout/stderr checks matched the previous Swift binary and Rust for
+`--stats -l`, `--stats -c`, `--stats --count-matches`, the `--include-zero`
+fallback, and JSON count/path fallback controls. On the 46 MiB ASCII file,
+five-run A/Bs measured
 `--stats -l` at 9.0 ms for the probe versus 2.209 s baseline and 6.7 ms for
 Rust; `--stats -c` at 9.4 ms versus 2.173 s and 7.2 ms for Rust; and
 `--stats --count-matches` at 9.0 ms versus 2.210 s and 6.5 ms for Rust.
+
+JSON files-with-matches and count/count-matches no-match modes now use a
+separate no-output preflight instead of the summary writer, preserving Rust's
+empty JSON output for those modes while keeping `--include-zero` on the fallback
+path. Direct status/stdout/stderr checks matched the previous Swift binary and
+Rust for plain, `-i`, `-w`, combined `-i -w`, and `--include-zero` controls. On
+the 46 MiB ASCII file, ten-run A/Bs measured `--json -l` at 7.1 ms for the
+probe versus 28.1 ms baseline and 6.6 ms for Rust; `--json -c` at 7.4 ms versus
+28.2 ms and 6.5 ms for Rust; `--json --count-matches` at 7.4 ms versus 24.9 ms
+and 6.6 ms for Rust; `--json -i -c` at 9.6 ms versus 29.2 ms and 9.9 ms for
+Rust; `--json -w -c` at 7.4 ms versus 108.9 ms and 6.6 ms for Rust; and
+`--json -i -w -c` at 10.6 ms versus 117.5 ms and 9.9 ms for Rust.
 
 Line-shaping flags that do not affect a proven zero-match summary now share the
 summary preflight as well: `--crlf`, `--trim`, and `--stop-on-nonmatch`. Direct

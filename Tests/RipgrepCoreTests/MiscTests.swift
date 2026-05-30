@@ -1406,6 +1406,35 @@ struct MiscTests {
             "missingliteral",
             root.path("summary.txt"),
         ])
+        let jsonFilesWithMatchesNoMatch = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "-l",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let jsonCountNoMatch = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "-c",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let jsonCountMatchesNoMatch = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "--count-matches",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let jsonCountIncludeZeroNoMatch = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "-c",
+            "--include-zero",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
         let statsNoMatchSummary = try runExecutableResult([
             "--no-config",
             "--stats",
@@ -1569,6 +1598,18 @@ struct MiscTests {
             #expect(result.stderr.isEmpty)
             #expect(result.stdout == expectedStatsNoMatchSummary)
         }
+        for result in [
+            jsonFilesWithMatchesNoMatch,
+            jsonCountNoMatch,
+            jsonCountMatchesNoMatch,
+        ] {
+            #expect(result.status == 1)
+            #expect(result.stderr.isEmpty)
+            #expect(result.stdout.isEmpty)
+        }
+        #expect(jsonCountIncludeZeroNoMatch.status == 1)
+        #expect(jsonCountIncludeZeroNoMatch.stderr.isEmpty)
+        #expect(jsonCountIncludeZeroNoMatch.stdout == Data("0\n".utf8))
 
         let output = try runExecutableData([
             "needle",

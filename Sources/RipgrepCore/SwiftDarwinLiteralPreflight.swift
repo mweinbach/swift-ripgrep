@@ -109,6 +109,23 @@ public enum SwiftDarwinLiteralPreflight {
         return matched ? 0 : 1
     }
 
+    public static func noMatchExitCode(
+        path: String,
+        literal: [UInt8],
+        asciiCaseInsensitive: Bool,
+        wordRegexp: Bool
+    ) -> Int32? {
+        guard noMatchByteCount(
+            path: path,
+            literal: literal,
+            asciiCaseInsensitive: asciiCaseInsensitive,
+            wordRegexp: wordRegexp
+        ) != nil else {
+            return nil
+        }
+        return 1
+    }
+
     public static func literalNoMatchSummaryExitCode(
         path: String,
         literal: [UInt8],
@@ -3328,6 +3345,24 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         return data.count
+    }
+
+    private static func noMatchByteCount(
+        path: String,
+        literal: [UInt8],
+        asciiCaseInsensitive: Bool,
+        wordRegexp: Bool
+    ) -> Int? {
+        if asciiCaseInsensitive && wordRegexp {
+            return asciiCaseInsensitiveWordNoMatchByteCount(path: path, literal: literal)
+        }
+        if asciiCaseInsensitive {
+            return asciiCaseInsensitiveNoMatchByteCount(path: path, literal: literal)
+        }
+        if wordRegexp {
+            return wordNoMatchByteCount(path: path, literal: literal)
+        }
+        return literalNoMatchByteCount(path: path, literal: literal)
     }
 
     private static func asciiCaseInsensitiveNoMatchByteCount(path: String, literal: [UInt8]) -> Int? {
