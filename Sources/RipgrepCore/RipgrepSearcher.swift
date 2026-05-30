@@ -378,24 +378,46 @@ public struct RipgrepSearcher: @unchecked Sendable {
         options: RipgrepOptions,
         matcher: PatternMatcher
     ) throws -> SearchResults? {
+        let quietByteLiteralFastPath = quietByteLiteralFirstMatchFastPath(options: options, matcher: matcher)
         guard options.mode == .search,
               options.sortMode == nil,
               !options.useStdin,
               !options.patternFileStdin,
               canStopSearchAfterFirstMatch(options: options),
-              matcher.asciiFixedClassSequenceFastPath() != nil else {
+              (matcher.asciiFixedClassSequenceFastPath() != nil || quietByteLiteralFastPath != nil) else {
             return nil
         }
 
         var filesSearched = 0
         var matchedResult: SearchFileResult?
         var searchMessages: [String] = []
+        var abandonedQuietByteLiteralProbe = false
+        var quietByteLiteralProbeBytes = 0
+        let quietByteLiteralProbeFileLimit = 64
+        let quietByteLiteralProbeByteLimit = 16 * 1024 * 1024
         let walkResults = try FileWalker(fileManager: fileManager)
             .withEnvironment(environment)
             .firstVisitedHaystackWithMessages(for: options) { haystack in
-                let outcome = searchFile(haystack, matcher: matcher, options: options)
+                if quietByteLiteralFastPath != nil,
+                   filesSearched >= quietByteLiteralProbeFileLimit
+                    || quietByteLiteralProbeBytes >= quietByteLiteralProbeByteLimit {
+                    abandonedQuietByteLiteralProbe = true
+                    return true
+                }
+                let outcome = quietByteLiteralFastPath.flatMap { fastPath in
+                    searchQuietByteLiteralFirstMatch(
+                        haystack,
+                        fastPath: fastPath,
+                        options: options
+                    )
+                }.map {
+                    FileSearchOutcome(result: $0)
+                } ?? searchFile(haystack, matcher: matcher, options: options)
                 if outcome.result.searched {
                     filesSearched += 1
+                }
+                if quietByteLiteralFastPath != nil {
+                    quietByteLiteralProbeBytes += outcome.result.bytesSearched
                 }
                 if let message = outcome.message {
                     searchMessages.append(message)
@@ -406,6 +428,10 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 matchedResult = outcome.result
                 return true
             }
+
+        if abandonedQuietByteLiteralProbe {
+            return nil
+        }
 
         let files = matchedResult.map { [$0] } ?? []
         let matchedLines = matchedResult.map { result in
@@ -431,6 +457,104 @@ public struct RipgrepSearcher: @unchecked Sendable {
             diagnostics: walkResults.diagnostics,
             filtered: walkResults.filtered
         )
+    }
+
+    private func quietByteLiteralFirstMatchFastPath(
+        options: RipgrepOptions,
+        matcher: PatternMatcher
+    ) -> ByteLiteralFastPath? {
+        #if !canImport(Darwin)
+        return nil
+        #else
+        guard case .automatic = options.encodingMode,
+              options.binaryMode == .automatic,
+              !options.multiline,
+              !options.nullData,
+              !options.invertMatch,
+              !options.stopOnNonmatch,
+              !options.wordRegexp,
+              !options.lineRegexp,
+              !options.onlyMatching,
+              !options.column,
+              !options.byteOffset,
+              !options.vimgrep,
+              !options.crlf,
+              options.beforeContext == 0,
+              options.afterContext == 0,
+              !options.passthru,
+              options.replacement == nil,
+              options.maxColumns == nil,
+              let fastPath = matcher.byteLiteralFastPath(),
+              !fastPath.caseInsensitiveASCII,
+              !fastPath.wordASCII,
+              fastPath.literals.count == 1,
+              fastPath.literals.first?.isEmpty == false else {
+            return nil
+        }
+        return fastPath
+        #endif
+    }
+
+    private func searchQuietByteLiteralFirstMatch(
+        _ haystack: Haystack,
+        fastPath: ByteLiteralFastPath,
+        options: RipgrepOptions
+    ) -> SearchFileResult? {
+        #if !canImport(Darwin)
+        return nil
+        #else
+        guard let literal = fastPath.literals.first,
+              !literal.isEmpty,
+              !shouldPreprocess(haystack, options: options),
+              decompressionCommand(for: haystack.url, options: options) == nil,
+              canUseBufferedRawLiteralSearch(fileURL: haystack.url) else {
+            return nil
+        }
+
+        let data: Data
+        do {
+            data = try HaystackReader.read(haystack, options: options)
+        } catch {
+            return nil
+        }
+
+        guard !data.starts(with: [0xEF, 0xBB, 0xBF]),
+              !data.starts(with: [0xFF, 0xFE]),
+              !data.starts(with: [0xFE, 0xFF]) else {
+            return nil
+        }
+        if !options.disablesBinaryDetection,
+           shouldCheckBinary(data, options: options),
+           firstNulByteOffset(in: data, limit: Self.binaryDetectionBufferSize) != nil {
+            return nil
+        }
+
+        return data.withUnsafeBytes { rawBytes -> SearchFileResult? in
+            let bytes = rawBytes.bindMemory(to: UInt8.self)
+            guard let baseAddress = bytes.baseAddress else {
+                return SearchFileResult(fileURL: haystack.url, matches: [], bytesSearched: 0, searched: true)
+            }
+            let foundPointer = literal.withUnsafeBufferPointer { needle in
+                rg_memmem_simple(baseAddress, data.count, needle.baseAddress, needle.count)
+            }
+            guard let foundPointer else {
+                return SearchFileResult(
+                    fileURL: haystack.url,
+                    matches: [],
+                    bytesSearched: data.count,
+                    searched: true
+                )
+            }
+            return SearchFileResult(
+                fileURL: haystack.url,
+                matches: [],
+                bytesSearched: baseAddress.distance(to: foundPointer) + literal.count,
+                searched: true,
+                supplementalMatchedLines: 1,
+                supplementalMatches: 1
+            )
+        }
+        #endif
     }
 
     private func canStreamPlainMatchingLines(options: RipgrepOptions) -> Bool {

@@ -4,6 +4,35 @@ import Testing
 
 @Suite("Ripgrep feature parity area", .serialized)
 struct FeatureTests {
+    @Test("quiet literal recursive search returns only exit status")
+    func quietLiteralRecursiveSearchReturnsOnlyExitStatus() throws {
+        let root = try TemporaryDirectory()
+        try root.write("plain\n", to: "a.txt")
+        try root.write("needle\n", to: "nested/b.txt")
+
+        var output: [String] = []
+        var errors: [String] = []
+        var exitCode = RipgrepCLI.run(
+            arguments: ["-q", "needle", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(output.isEmpty)
+        #expect(errors.isEmpty)
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["-q", "absent", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 1)
+        #expect(output.isEmpty)
+        #expect(errors.isEmpty)
+    }
+
     @Test("honors no unicode regex and literal semantics")
     func honorsNoUnicodeSemantics() throws {
         let root = try TemporaryDirectory()
