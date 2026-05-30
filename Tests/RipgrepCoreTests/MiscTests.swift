@@ -1385,10 +1385,52 @@ struct MiscTests {
             "missingliteral",
             root.path("summary.txt"),
         ])
+        let jsonCrlfNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "--crlf",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let jsonTrimNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "--trim",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let jsonStopOnNonmatchNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "--stop-on-nonmatch",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
         let statsNoMatchSummary = try runExecutableResult([
             "--no-config",
             "--stats",
             "-q",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let statsCrlfNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "--crlf",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let statsTrimNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "--trim",
+            "missingliteral",
+            root.path("summary.txt"),
+        ])
+        let statsStopOnNonmatchNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "--stop-on-nonmatch",
             "missingliteral",
             root.path("summary.txt"),
         ])
@@ -1498,6 +1540,9 @@ struct MiscTests {
             jsonLineRegexpNoMatchSummary,
             jsonOnlyMatchingNoMatchSummary,
             jsonVimgrepNoMatchSummary,
+            jsonCrlfNoMatchSummary,
+            jsonTrimNoMatchSummary,
+            jsonStopOnNonmatchNoMatchSummary,
         ] {
             #expect(result.status == 1)
             #expect(result.stderr.isEmpty)
@@ -1516,6 +1561,9 @@ struct MiscTests {
             statsFilesWithMatchesNoMatchSummary,
             statsCountNoMatchSummary,
             statsCountMatchesNoMatchSummary,
+            statsCrlfNoMatchSummary,
+            statsTrimNoMatchSummary,
+            statsStopOnNonmatchNoMatchSummary,
         ] {
             #expect(result.status == 1)
             #expect(result.stderr.isEmpty)

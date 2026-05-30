@@ -2752,9 +2752,6 @@ struct RipgrepCommand {
            !parsedNullData,
            !parsedPassthru,
            !parsedSearchZipAffectsPreflight,
-           !parsedStopOnNonmatch,
-           !parsedTrim,
-           !parsedCrlf,
            !parsedEncodingAffectsPreflightOutput,
            (patternCanStartWithDash || !pattern.hasPrefix("-")),
            path != "-" {

@@ -185,6 +185,18 @@ fallback controls. On the 46 MiB ASCII file, five-run A/Bs measured
 Rust; `--stats -c` at 9.4 ms versus 2.173 s and 7.2 ms for Rust; and
 `--stats --count-matches` at 9.0 ms versus 2.210 s and 6.5 ms for Rust.
 
+Line-shaping flags that do not affect a proven zero-match summary now share the
+summary preflight as well: `--crlf`, `--trim`, and `--stop-on-nonmatch`. Direct
+status/stdout/stderr checks matched the previous Swift binary and Rust for JSON
+and stats controls after normalizing elapsed timing fields. On the 46 MiB ASCII
+file, five-run A/Bs measured `--json --crlf` at 8.6 ms for the probe versus
+3.590 s baseline and 7.4 ms for Rust; `--stats --crlf` at 8.1 ms versus
+3.593 s and 7.3 ms for Rust; `--json --trim` at 8.6 ms versus 2.183 s and
+7.4 ms for Rust; `--stats --trim` at 8.5 ms versus 2.189 s and 6.5 ms for
+Rust; `--json --stop-on-nonmatch` at 8.5 ms versus 2.173 s and 7.4 ms for
+Rust; and `--stats --stop-on-nonmatch` at 9.2 ms versus 2.169 s and 6.7 ms for
+Rust.
+
 Files-mode controls on `/tmp/swift-rg-bench/linux` isolated the cost to VCS
 ignore handling. A 30-run slice measured Swift `--files` at 101.3 ms ± 2.9 ms,
 Swift `--hidden --files` at 101.6 ms ± 2.7 ms, Swift
