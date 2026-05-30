@@ -2378,6 +2378,7 @@ public enum SwiftDarwinLiteralPreflight {
         literal: [UInt8],
         includeZero: Bool,
         maxCount: Int? = nil,
+        countPrefix: [UInt8] = [],
         crlfTerminated: Bool = false
     ) -> Int32? {
         guard !literal.isEmpty,
@@ -2396,7 +2397,11 @@ public enum SwiftDarwinLiteralPreflight {
         )
 
         if matchedLineCount > 0 || includeZero {
-            guard writeCountOutput(matchedLineCount, crlfTerminated: crlfTerminated) else {
+            guard writeCountOutput(
+                matchedLineCount,
+                countPrefix: countPrefix,
+                crlfTerminated: crlfTerminated
+            ) else {
                 return nil
             }
         }

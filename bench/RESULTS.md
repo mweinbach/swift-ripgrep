@@ -414,14 +414,16 @@ matching file. Eight-run Swift/Rust measurements on the 46 MiB file put
 `--json -c` at 33.4 ms versus Rust at 22.1 ms, down from the earlier 68.1 ms
 Swift probe; `--json --count-matches` measured 12.3 ms versus Rust at 39.6 ms.
 
-Single-literal count output without a filename prefix now bypasses the generic
-multi-literal line walker and uses the Swift literal matched-line counter
-directly. The generic path remains in place for prefixed output. Direct
-stdout/status comparisons matched Rust for `--json -c`, bounded
-`--json -m2 -c`, `--json -c --include-zero`, and prefixed `--json -H -c`.
-On the same 46 MiB matching ASCII file, a 30-run check measured `--json -c` at
-15.2 ms versus the prior same-run route at 34.0 ms and Rust at 22.2 ms;
-`--json --count-matches` remained 12.2 ms.
+Single-literal count output now bypasses the generic multi-literal line walker
+and uses the Swift literal matched-line counter directly, including
+filename-prefixed count output. Direct stdout/status comparisons matched Rust
+for `--json -c`, bounded `--json -m2 -c`, `--json -c --include-zero`,
+prefixed `--json -H -c`, bounded prefixed count output, and prefixed
+include-zero output. On the same 46 MiB matching ASCII file, a 30-run check
+measured `--json -c` at 15.2 ms versus the prior same-run route at 34.0 ms and
+Rust at 22.2 ms; `--json --count-matches` remained 12.2 ms. A follow-up
+30-run prefixed check measured `--json -H -c` at 15.3 ms versus the previous
+route at 33.7 ms and Rust at 22.0 ms, with unprefixed `--json -c` at 14.8 ms.
 
 Line-shaping flags that do not affect a proven zero-match summary now share the
 summary preflight as well: `--crlf`, `--trim`, and `--stop-on-nonmatch`. Direct

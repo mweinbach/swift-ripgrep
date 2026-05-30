@@ -3078,21 +3078,13 @@ struct RipgrepCommand {
                             countPrefix: parsedCountPrefix,
                             crlfTerminated: parsedCrlf
                         )
-                    } else if !parsedCountPrefix.isEmpty {
-                        exitCode = SwiftDarwinLiteralPreflight.multiLiteralCountLineExitCode(
-                            path: path,
-                            literals: [countOutputLiteral],
-                            includeZero: parsedIncludeZero,
-                            maxCount: parsedMaxCount,
-                            countPrefix: parsedCountPrefix,
-                            crlfTerminated: parsedCrlf
-                        )
                     } else {
                         exitCode = SwiftDarwinLiteralPreflight.countLineExitCode(
                             path: path,
                             literal: countOutputLiteral,
                             includeZero: parsedIncludeZero,
                             maxCount: parsedMaxCount,
+                            countPrefix: parsedCountPrefix,
                             crlfTerminated: parsedCrlf
                         )
                     }
