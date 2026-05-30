@@ -7988,35 +7988,56 @@ public struct RipgrepSearcher: @unchecked Sendable {
         #if !canImport(Darwin)
         return nil
         #else
+        let countOnly = options.printMode == .count
+        let countMatchesOnly = options.printMode == .countMatches
+        let filesWithMatchesMode = options.printMode == .filesWithMatches
+        let filesWithoutMatchMode = options.printMode == .filesWithoutMatch
+        let countOutput = countOnly || countMatchesOnly
+        let pathOnlyOutput = !options.stats
+            && (filesWithMatchesMode || filesWithoutMatchMode)
+        let pathStatsOutput = options.stats
+            && (filesWithMatchesMode || filesWithoutMatchMode)
+        let lineOutput = !options.quiet
+            && options.printMode == .matchingLines
+        let quietOutput = options.quiet
+            && !options.stats
+            && options.printMode == .matchingLines
+        let firstMatchOutput = quietOutput || pathOnlyOutput
+        let canIgnoreLineRenderingOptions = !lineOutput
         guard matcher.greekScriptFastPath() != nil,
               case .automatic = options.encodingMode,
               !data.starts(with: [0xEF, 0xBB, 0xBF]),
               !data.starts(with: [0xFF, 0xFE]),
               !data.starts(with: [0xFE, 0xFF]),
               !options.json,
-              !options.stats,
-              options.beforeContext == 0,
-              options.afterContext == 0,
-              !options.passthru,
-              options.replacement == nil,
+              canIgnoreLineRenderingOptions || (options.beforeContext == 0
+                  && options.afterContext == 0
+                  && !options.passthru
+                  && options.replacement == nil),
               !options.stopOnNonmatch,
               !options.invertMatch,
               !options.wordRegexp,
               !options.lineRegexp,
               options.maxCount != 0,
-              !options.onlyMatching,
-              !options.column,
-              !options.byteOffset,
-              !options.vimgrep,
-              !options.crlf,
-              options.maxColumns == nil,
-              !options.trim,
-              options.printMode == .matchingLines,
-              canOmitMatchSpans(options: options) else {
+              canIgnoreLineRenderingOptions || (!options.onlyMatching
+                  && !options.column
+                  && !options.byteOffset
+                  && !options.vimgrep
+                  && !options.crlf
+                  && options.maxColumns == nil
+                  && !options.trim
+                  && canOmitMatchSpans(options: options)),
+              countOutput
+                  || pathOnlyOutput
+                  || pathStatsOutput
+                  || lineOutput
+                  || quietOutput else {
             return nil
         }
 
         var matches: [SearchMatch] = []
+        var supplementalMatchedLines = 0
+        var supplementalMatches = 0
         var lineStart = 0
         var lineNumber = 1
         var bytesSearchedThroughMaxCount: Int?
@@ -8063,6 +8084,29 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 guard !spans.isEmpty else {
                     return false
                 }
+                if countOutput || pathStatsOutput {
+                    supplementalMatchedLines += 1
+                    supplementalMatches += spans.count
+                    if supplementalMatchedLines == maxCount {
+                        bytesSearchedThroughMaxCount = outputEnd
+                        return true
+                    }
+                    return false
+                }
+                if firstMatchOutput {
+                    matches.append(SearchMatch(
+                        fileURL: fileURL,
+                        lineNumber: lineNumber,
+                        column: nil,
+                        line: "",
+                        lineTerminator: "",
+                        absoluteOffset: lineStart,
+                        matchCount: spans.count,
+                        spans: []
+                    ))
+                    bytesSearchedThroughMaxCount = outputEnd
+                    return true
+                }
                 matches.append(SearchMatch(
                     fileURL: fileURL,
                     lineNumber: lineNumber,
@@ -8104,7 +8148,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 fileURL: fileURL,
                 matches: matches,
                 bytesSearched: bytesSearchedThroughMaxCount ?? data.count,
-                searched: true
+                searched: true,
+                supplementalMatchedLines: supplementalMatchedLines,
+                supplementalMatches: supplementalMatches
             )
         }
         return result

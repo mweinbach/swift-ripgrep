@@ -152,6 +152,34 @@ struct FeatureTests {
             "\(root.path("nested/b.txt")):1:micro µ",
             "\(root.path("nested/b.txt")):2:omega Ω",
         ])
+        #expect(try run(["--sort", "path", "-c", #"\p{Greek}"#, root.url.path]) == [
+            "\(root.path("a.txt")):1",
+            "\(root.path("nested/b.txt")):1",
+        ])
+        #expect(try run(["--sort", "path", "-i", "-c", #"\p{Greek}"#, root.url.path]) == [
+            "\(root.path("a.txt")):1",
+            "\(root.path("nested/b.txt")):2",
+        ])
+        #expect(try run(["--sort", "path", "--count-matches", #"\p{Greek}+"#, root.url.path]) == [
+            "\(root.path("a.txt")):1",
+            "\(root.path("nested/b.txt")):1",
+        ])
+        #expect(try run(["--sort", "path", "-l", #"\p{Greek}"#, root.url.path]) == [
+            root.path("a.txt"),
+            root.path("nested/b.txt"),
+        ])
+        let statsFilesWithMatches = try run([
+            "--sort",
+            "path",
+            "--stats",
+            "-l",
+            #"\p{Greek}"#,
+            root.url.path,
+        ])
+        #expect(statsFilesWithMatches.contains("2 matches"))
+        #expect(statsFilesWithMatches.contains("2 matched lines"))
+        #expect(statsFilesWithMatches.contains("2 files contained matches"))
+        #expect(statsFilesWithMatches.contains("3 files searched"))
     }
 
     @Test("supports smart case and inverted matches")
