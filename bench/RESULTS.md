@@ -221,6 +221,16 @@ at 11.7 ms versus 2.318 s and 8.6 ms for Rust. A six-run A/B measured
 `--stats -i -w --files-without-match` at 15.2 ms versus 5.298 s and 13.3 ms
 for Rust.
 
+Matching `--json --files-without-match` outputs now avoid the full JSON/search
+fallback too: once the existing literal, word, or ASCII ignore-case proof finds
+a match, Swift emits no output and returns the required status 1 directly.
+Direct release comparisons matched the previous Swift binary and Rust for
+matching, no-match, binary, and combined `-i -w` controls; stats matching output
+remains on the full stats path. On the 46 MiB matching ASCII file, eight-run
+A/Bs measured `--json --files-without-match` at 4.9 ms for the probe versus
+29.4 ms baseline and 27.3 ms for Rust; `--json -i -w --files-without-match`
+at 3.2 ms versus 429.7 ms and 81.7 ms for Rust.
+
 Line-shaping flags that do not affect a proven zero-match summary now share the
 summary preflight as well: `--crlf`, `--trim`, and `--stop-on-nonmatch`. Direct
 status/stdout/stderr checks matched the previous Swift binary and Rust for JSON

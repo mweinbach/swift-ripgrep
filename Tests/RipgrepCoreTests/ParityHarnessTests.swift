@@ -509,6 +509,7 @@ private func miscParityCases() -> [ParityCase] {
         ParityCase(name: "misc::json_stop_on_nonmatch_no_match_summary", fixture: caseInsensitiveASCIIProofFixture, arguments: ["--json", "--stop-on-nonmatch", "missingliteral", "ascii"]),
         ParityCase(name: "misc::json_files_with_matches_no_match_empty", fixture: caseInsensitiveASCIIProofFixture, arguments: ["--json", "-l", "missingliteral", "ascii"]),
         ParityCase(name: "misc::json_files_without_match_no_match_path", fixture: caseInsensitiveASCIIProofFixture, arguments: ["--json", "--files-without-match", "missingliteral", "ascii"]),
+        ParityCase(name: "misc::json_files_without_match_match_empty", fixture: caseInsensitiveASCIIProofFixture, arguments: ["--json", "--files-without-match", "Needle", "ascii"]),
         ParityCase(name: "misc::json_count_no_match_empty", fixture: caseInsensitiveASCIIProofFixture, arguments: ["--json", "-c", "missingliteral", "ascii"]),
         ParityCase(name: "misc::json_count_matches_no_match_empty", fixture: caseInsensitiveASCIIProofFixture, arguments: ["--json", "--count-matches", "missingliteral", "ascii"]),
         ParityCase(name: "misc::json_count_include_zero_no_match", fixture: caseInsensitiveASCIIProofFixture, arguments: ["--json", "-c", "--include-zero", "missingliteral", "ascii"]),

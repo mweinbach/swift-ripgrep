@@ -190,6 +190,28 @@ public enum SwiftDarwinLiteralPreflight {
         return 0
     }
 
+    public static func matchedPathSuppressedExitCode(
+        path: String,
+        literal: [UInt8],
+        asciiCaseInsensitive: Bool,
+        wordRegexp: Bool
+    ) -> Int32? {
+        let matched: Bool?
+        if asciiCaseInsensitive && wordRegexp {
+            matched = asciiCaseInsensitiveWordMatched(path: path, literal: literal)
+        } else if asciiCaseInsensitive {
+            matched = containsASCIICaseInsensitiveLiteral(path: path, literal: literal)
+        } else if wordRegexp {
+            matched = containsWordLiteral(path: path, literal: literal)
+        } else {
+            matched = containsLiteral(path: path, literal: literal)
+        }
+        guard matched == true else {
+            return nil
+        }
+        return 1
+    }
+
     public static func literalNoMatchSummaryExitCode(
         path: String,
         literal: [UInt8],

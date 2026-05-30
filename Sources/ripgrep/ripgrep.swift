@@ -2842,6 +2842,16 @@ struct RipgrepCommand {
                    ) {
                     return exitCode
                 }
+                if parsedJson,
+                   !parsedStats,
+                   let exitCode = SwiftDarwinLiteralPreflight.matchedPathSuppressedExitCode(
+                        path: path,
+                        literal: pathOutputLiteral,
+                        asciiCaseInsensitive: asciiCaseInsensitive,
+                        wordRegexp: wordRegexp
+                   ) {
+                    return exitCode
+                }
             }
         }
         if parsedCountIncludeZeroPrintModeCanUseNoMatchPreflight,
