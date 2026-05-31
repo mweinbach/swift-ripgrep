@@ -352,6 +352,14 @@ sorted Rust-output checks:
   at 79.0 ms versus 81.3 ms before, but the order-flipped 100-run confirmation
   flattened default to 78.6 ms versus 78.5 ms before and made no-vcs slightly
   worse at 63.6 ms versus 63.2 ms, so the shared helper stayed unchanged.
+- Guarding the fast-rule exact-path dictionary lookup when the dictionary was
+  empty also stayed rejected. It preserved exact Swift stdout and stderr for
+  default, hidden, no-vcs, no-global, and `--debug --files`, and sorted output
+  matched Rust for the same file-list controls. The first 100-run A/B was
+  neutral for default at 78.6 ms for both binaries and no-vcs slightly worse at
+  63.5 ms versus 63.2 ms before; the order-flipped 120-run confirmation
+  regressed default to 78.9 ms versus 78.1 ms before and no-vcs to 63.8 ms
+  versus 63.1 ms before, so the unconditional lookup stayed.
 
 ### Continuation probes — 2026-05-29
 
