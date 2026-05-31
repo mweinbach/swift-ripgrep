@@ -8,6 +8,34 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Multi-file quiet stats repeated-regexp checkpoint — 2026-05-31
+
+Explicit regular-file `--stats -q` searches with more than one `-e` pattern now
+use a Swift Darwin aggregate summary preflight. The fast path writes the same
+deterministic stats summary as the existing single-file preflights, uses a
+Foundation `Data.range(of:)` containment proof for files with no candidate
+literal, and only uses the existing non-overlapping multi-literal scanners when
+a file actually contains one of the repeated literals. Overlapping repeated
+literals still fall back when a match is possible, preserving current and Rust
+count semantics.
+
+Validation:
+
+- Current Swift output matched the saved pre-change Swift binary byte-for-byte
+  for mixed match/no-match and all-absent repeated-`-e` stats targets.
+- Current Swift output matched Rust after normalizing only the elapsed-time
+  stats lines.
+- Coverage was added for multi-file repeated-`-e` quiet stats match and
+  no-match summaries.
+
+On two 46 MiB explicit files under `/tmp/swift-rg-bench`, 8 timed runs with
+1 warmup for current Swift/Rust and 3 timed runs for the saved previous Swift:
+
+| Command | Current Swift | Previous Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--stats -q -e missingliteral -e absentliteral no-match-ascii-46m.txt match-ascii-46m.txt` | 87.6 ms | 11.308 s | 57.2 ms |
+| `--stats -q -e absentliteral -e otherabsent no-match-ascii-46m.txt match-ascii-46m.txt` | 79.0 ms | 4.060 s | 12.0 ms |
+
 ## Multi-file word repeated-regexp path preflight checkpoint — 2026-05-31
 
 Explicit regular-file repeated-`-e` searches with `-w` now keep multi-file

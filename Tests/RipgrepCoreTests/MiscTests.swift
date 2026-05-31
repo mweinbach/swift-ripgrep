@@ -2264,6 +2264,39 @@ struct MiscTests {
             "ALPHA",
             root.path("summary-match.txt"),
         ])
+        let statsQuietRepeatedRegexpMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "-q",
+            "-e",
+            "needle",
+            "-e",
+            "tail",
+            root.path("quiet-no-match.txt"),
+            root.path("dense.txt"),
+        ])
+        let statsQuietRepeatedRegexpNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "-q",
+            "-e",
+            "missingliteral",
+            "-e",
+            "absentliteral",
+            root.path("quiet-no-match.txt"),
+            root.path("dense.txt"),
+        ])
+        let statsQuietRepeatedRegexpOverlappingNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "-q",
+            "-e",
+            "absentliteral",
+            "-e",
+            "otherabsent",
+            root.path("quiet-no-match.txt"),
+            root.path("dense.txt"),
+        ])
 
         let expectedJsonNoMatchSummary = Data((#"{"data":{"elapsed_total":{"human":"0.000000s","nanos":0,"secs":0},"stats":{"bytes_printed":0,"bytes_searched":12,"elapsed":{"human":"0.000000s","nanos":0,"secs":0},"matched_lines":0,"matches":0,"searches":1,"searches_with_match":0}},"type":"summary"}"# + "\n").utf8)
         let expectedStatsNoMatchSummary = Data("""
@@ -2293,6 +2326,26 @@ struct MiscTests {
             1 files searched
             0 bytes printed
             40 bytes searched
+            0.000000 seconds spent searching
+            0.000000 seconds total
+
+            """.utf8)
+        }
+        let repeatedStatsBytesSearched = try Data(contentsOf: URL(fileURLWithPath: root.path("quiet-no-match.txt"))).count
+            + Data(contentsOf: URL(fileURLWithPath: root.path("dense.txt"))).count
+        func expectedRepeatedQuietStatsSummary(
+            matches: Int,
+            matchedLines: Int,
+            filesWithMatches: Int
+        ) -> Data {
+            Data("""
+
+            \(matches) matches
+            \(matchedLines) matched lines
+            \(filesWithMatches) files contained matches
+            2 files searched
+            0 bytes printed
+            \(repeatedStatsBytesSearched) bytes searched
             0.000000 seconds spent searching
             0.000000 seconds total
 
@@ -2388,6 +2441,27 @@ struct MiscTests {
         #expect(statsIgnoreCaseWordFilesWithoutMatchMatchSummary.status == 1)
         #expect(statsIgnoreCaseWordFilesWithoutMatchMatchSummary.stderr.isEmpty)
         #expect(statsIgnoreCaseWordFilesWithoutMatchMatchSummary.stdout == expectedStatsMatchSummary(matches: 4, matchedLines: 3))
+        #expect(statsQuietRepeatedRegexpMatchSummary.status == 0)
+        #expect(statsQuietRepeatedRegexpMatchSummary.stderr.isEmpty)
+        #expect(statsQuietRepeatedRegexpMatchSummary.stdout == expectedRepeatedQuietStatsSummary(
+            matches: 6,
+            matchedLines: 3,
+            filesWithMatches: 1
+        ))
+        #expect(statsQuietRepeatedRegexpNoMatchSummary.status == 1)
+        #expect(statsQuietRepeatedRegexpNoMatchSummary.stderr.isEmpty)
+        #expect(statsQuietRepeatedRegexpNoMatchSummary.stdout == expectedRepeatedQuietStatsSummary(
+            matches: 0,
+            matchedLines: 0,
+            filesWithMatches: 0
+        ))
+        #expect(statsQuietRepeatedRegexpOverlappingNoMatchSummary.status == 1)
+        #expect(statsQuietRepeatedRegexpOverlappingNoMatchSummary.stderr.isEmpty)
+        #expect(statsQuietRepeatedRegexpOverlappingNoMatchSummary.stdout == expectedRepeatedQuietStatsSummary(
+            matches: 0,
+            matchedLines: 0,
+            filesWithMatches: 0
+        ))
         for result in [
             jsonFilesWithMatchesNoMatch,
             jsonFilesWithMatchesExactLineMismatch,

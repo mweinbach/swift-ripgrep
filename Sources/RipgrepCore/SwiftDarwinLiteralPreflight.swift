@@ -285,6 +285,106 @@ public enum SwiftDarwinLiteralPreflight {
         )
     }
 
+    public static func multiLiteralQuietStatsExitCode(
+        paths: [String],
+        literals rawLiterals: [[UInt8]]
+    ) -> Int32? {
+        guard !paths.isEmpty,
+              !rawLiterals.isEmpty,
+              rawLiterals.count <= 64,
+              rawLiterals.allSatisfy({
+                !$0.isEmpty && !$0.contains(UInt8(ascii: "\n"))
+              }) else {
+            return nil
+        }
+        if let literals = nonOverlappingDistinctLiterals(rawLiterals),
+           !literals.isEmpty {
+            return nonOverlappingMultiLiteralQuietStatsExitCode(paths: paths, literals: literals)
+        }
+
+        let rawLiteralData = rawLiterals.map { Data($0) }
+        var bytesSearched = 0
+        for path in paths {
+            guard let data = mappedPreflightData(path: path),
+                  !hasBinaryDetectionPrefix(data),
+                  !containsNULByte(data) else {
+                return nil
+            }
+            bytesSearched += data.count
+            if dataContainsAnyLiteralUsingFoundation(data, literals: rawLiteralData) {
+                return nil
+            }
+        }
+        return writeStatsSummary(
+            totalMatches: 0,
+            matchedLines: 0,
+            filesWithMatches: 0,
+            filesSearched: paths.count,
+            bytesSearched: bytesSearched,
+            exitCode: 1
+        )
+    }
+
+    private static func nonOverlappingMultiLiteralQuietStatsExitCode(
+        paths: [String],
+        literals: [[UInt8]]
+    ) -> Int32? {
+        let literalData = literals.map { Data($0) }
+
+        var totalMatches = 0
+        var matchedLines = 0
+        var filesWithMatches = 0
+        var bytesSearched = 0
+
+        for path in paths {
+            guard let data = mappedPreflightData(path: path),
+                  !hasBinaryDetectionPrefix(data),
+                  !containsNULByte(data) else {
+                return nil
+            }
+            guard dataContainsAnyLiteralUsingFoundation(data, literals: literalData) else {
+                bytesSearched += data.count
+                continue
+            }
+            guard let result = multiLiteralResult(
+                    path: path,
+                    literals: literals,
+                    maxCount: nil,
+                    emitLines: false
+                  ),
+                  result.status >= 0 else {
+                return nil
+            }
+
+            let fileMatchedLines = result.matched_line_count
+            totalMatches += countNonOverlappingMultiLiteralMatches(in: data, literals: literals)
+            matchedLines += fileMatchedLines
+            bytesSearched += result.bytes_searched
+            if fileMatchedLines > 0 {
+                filesWithMatches += 1
+            }
+        }
+
+        return writeStatsSummary(
+            totalMatches: totalMatches,
+            matchedLines: matchedLines,
+            filesWithMatches: filesWithMatches,
+            filesSearched: paths.count,
+            bytesSearched: bytesSearched,
+            exitCode: totalMatches > 0 ? 0 : 1
+        )
+    }
+
+    private static func dataContainsAnyLiteralUsingFoundation(
+        _ data: Data,
+        literals: [Data]
+    ) -> Bool {
+        for literal in literals where data.range(of: literal) != nil {
+            return true
+        }
+        return false
+    }
+
     public static func matchedPathOutputExitCode(
         path: String,
         literal: [UInt8],
