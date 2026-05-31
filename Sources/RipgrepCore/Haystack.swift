@@ -3310,7 +3310,7 @@ public struct FileWalker: @unchecked Sendable {
         let parentURLs = ancestorPaths(of: rootPath).map { path in
             URL(fileURLWithPath: path, isDirectory: true)
         }
-        let gitBoundary = parentURLs.last { hasGitMarker(in: $0) }
+        let gitBoundary = hasGitMarker(in: rootBase) ? rootBase : parentURLs.last { hasGitMarker(in: $0) }
         for parentURL in parentURLs {
             appendParentDotIgnoreFiles(
                 in: parentURL,

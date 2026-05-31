@@ -190,6 +190,18 @@ wall-time neutral at default 78.0 ms versus 77.9 ms before, hidden 79.9 ms
 versus 80.2 ms before, and no-vcs 63.1 ms versus 62.9 ms before; default user
 CPU moved from 94.2 ms before to 92.7 ms after.
 
+Parent VCS ignore setup now treats a `.git` marker at the traversal root as the
+nearest Git boundary before checking ancestor directories. Parent VCS ignores
+above that boundary cannot apply, so this skips redundant ancestor
+`isInGitRepository` probes while leaving parent `.ignore` handling unchanged.
+Exact Swift output matched the previous binary for default, hidden, no-parent,
+and no-vcs file listing; sorted output matched Rust for the same controls. A
+100-run A/B measured default at 77.4 ms versus 79.2 ms before, hidden at
+80.9 ms versus 79.4 ms before, and no-parent neutral at 77.4 ms versus
+76.9 ms before. The order-flipped 100-run confirmation was wall-time neutral:
+default 78.2 ms for both, hidden 80.0 ms versus 79.8 ms before, and no-parent
+77.5 ms versus 77.6 ms before.
+
 Several plausible Swift-only probes were rejected after exact Swift-output and
 sorted Rust-output checks:
 
