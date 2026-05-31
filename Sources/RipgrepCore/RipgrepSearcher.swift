@@ -6202,6 +6202,13 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 && options.afterContext == 0
                 && !options.passthru
                 && options.replacement == nil
+            #if canImport(Darwin)
+            if options.mmapMode == .automatic,
+               haystack.isRegularFile == true,
+               haystack.fileSize == nil {
+                return false
+            }
+            #endif
             guard !shouldPreprocess(haystack, options: options),
                   decompressionCommand(for: fileURL, options: options) == nil,
                   (try? HaystackReader.selectedPath(for: haystack, options: options)) == .buffered,
@@ -9661,6 +9668,10 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let pathMode = filesWithMatchesMode || filesWithoutMatchMode
         let pathOnlyOutput = !options.json && !options.stats && pathMode
         let pathStatsOutput = !options.json && options.stats && pathMode
+        let quietOutput = !options.json
+            && !options.stats
+            && options.quiet
+            && options.printMode == .matchingLines
         let quietStatsOutput = !options.json
             && options.quiet
             && options.stats
@@ -9672,24 +9683,63 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !options.onlyMatching,
               !options.passthru,
               options.replacement == nil,
-              !fastPath.caseInsensitiveASCII,
               !fastPath.wordASCII,
               fastPath.literals.count == 1,
               let literal = fastPath.literals.first,
               !literal.isEmpty,
-              pathOnlyOutput || pathStatsOutput || quietStatsOutput || jsonQuietSummaryOutput else {
+              !fastPath.caseInsensitiveASCII || literal.allSatisfy({ $0 < 0x80 }),
+              pathOnlyOutput || pathStatsOutput || quietOutput || quietStatsOutput || jsonQuietSummaryOutput else {
             return nil
         }
 
-        if pathOnlyOutput {
-            let found = literal.withUnsafeBufferPointer { needle in
-                rg_memmem_simple(baseAddress, data.count, needle.baseAddress, needle.count)
+        let literalStorage: [UInt8]
+        var caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
+        if fastPath.caseInsensitiveASCII {
+            literalStorage = literal.map(asciiLowercase)
+            if literalStorage.count > 1 {
+                for index in 0..<(literalStorage.count - 1) {
+                    caseInsensitiveShifts[Int(literalStorage[index])] = literalStorage.count - 1 - index
+                }
+            }
+        } else {
+            literalStorage = literal
+        }
+
+        func firstMatch(from offset: Int, literalBaseAddress: UnsafePointer<UInt8>) -> UnsafePointer<UInt8>? {
+            guard offset < data.count else {
+                return nil
+            }
+            if fastPath.caseInsensitiveASCII {
+                return caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
+                    rg_memcasemem_ascii_prepared(
+                        baseAddress.advanced(by: offset),
+                        data.count - offset,
+                        literalBaseAddress,
+                        literalStorage.count,
+                        shifts.baseAddress
+                    )
+                }
+            }
+            return rg_memmem_simple(
+                baseAddress.advanced(by: offset),
+                data.count - offset,
+                literalBaseAddress,
+                literalStorage.count
+            )
+        }
+
+        if pathOnlyOutput || quietOutput {
+            let found = literalStorage.withUnsafeBufferPointer { needle -> UnsafePointer<UInt8>? in
+                guard let literalBaseAddress = needle.baseAddress else {
+                    return nil
+                }
+                return firstMatch(from: 0, literalBaseAddress: literalBaseAddress)
             }
             let hasMatch = found != nil
             return SearchFileResult(
                 fileURL: fileURL,
                 matches: [],
-                bytesSearched: found.map { baseAddress.distance(to: $0) + literal.count } ?? data.count,
+                bytesSearched: found.map { baseAddress.distance(to: $0) + literalStorage.count } ?? data.count,
                 searched: true,
                 supplementalMatchedLines: hasMatch ? 1 : 0,
                 supplementalMatches: hasMatch ? 1 : 0
@@ -9700,32 +9750,32 @@ public struct RipgrepSearcher: @unchecked Sendable {
         var matchedLines = 0
         var totalMatches = 0
         var currentMatchedLineEnd = -1
-        while searchOffset < data.count {
-            let foundPointer = literal.withUnsafeBufferPointer { needle in
-                rg_memmem_simple(
-                    baseAddress.advanced(by: searchOffset),
-                    data.count - searchOffset,
-                    needle.baseAddress,
-                    needle.count
-                )
+        literalStorage.withUnsafeBufferPointer { needle in
+            guard let literalBaseAddress = needle.baseAddress else {
+                return
             }
-            guard let rawFoundPointer = foundPointer else {
-                break
+            while searchOffset < data.count {
+                guard let rawFoundPointer = firstMatch(
+                    from: searchOffset,
+                    literalBaseAddress: literalBaseAddress
+                ) else {
+                    break
+                }
+                let matchStart = baseAddress.distance(to: rawFoundPointer)
+                totalMatches += 1
+                if matchStart >= currentMatchedLineEnd {
+                    matchedLines += 1
+                    let newlinePointer = memchr(
+                        baseAddress.advanced(by: matchStart),
+                        Int32(UInt8(ascii: "\n")),
+                        data.count - matchStart
+                    )
+                    currentMatchedLineEnd = newlinePointer.map {
+                        baseAddress.distance(to: $0.assumingMemoryBound(to: UInt8.self)) + 1
+                    } ?? data.count + 1
+                }
+                searchOffset = matchStart + literalStorage.count
             }
-            let matchStart = baseAddress.distance(to: rawFoundPointer)
-            totalMatches += 1
-            if matchStart >= currentMatchedLineEnd {
-                matchedLines += 1
-                let newlinePointer = memchr(
-                    baseAddress.advanced(by: matchStart),
-                    Int32(UInt8(ascii: "\n")),
-                    data.count - matchStart
-                )
-                currentMatchedLineEnd = newlinePointer.map {
-                    baseAddress.distance(to: $0.assumingMemoryBound(to: UInt8.self)) + 1
-                } ?? data.count + 1
-            }
-            searchOffset = matchStart + literal.count
         }
 
         return SearchFileResult(

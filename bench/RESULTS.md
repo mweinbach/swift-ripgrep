@@ -8,6 +8,41 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Known-regular quiet read and suppressed literal output — 2026-05-31
+
+Fast-walk haystacks now carry the existing known-regular-file signal through
+the automatic Darwin read path. When size metadata is unavailable, the reader
+tries the existing mmap reader directly instead of first asking
+`selectedPath(for:)` to stat the path and then opening/fstatting again for the
+mmap. The streaming eligibility check skips the same redundant selected-path
+probe for those known-regular automatic reads. Suppressed literal output also
+now handles plain quiet and safe ASCII ignore-case quiet/path/summary modes
+without constructing line matches that will not be printed.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched the saved pre-fast-fallback Swift
+  binary byte-for-byte for recursive quiet hit/miss, early quiet hit,
+  ignore-case quiet, regex-suffix quiet, and normalized `--stats -q -i` /
+  `--json -q -i` controls.
+- Current Swift matched Rust for the same quiet controls after normalizing only
+  elapsed stats/JSON timing fields.
+- Sampling `-q -i absent_needledoesnotexist /tmp/swift-rg-bench/linux` no
+  longer showed the prior `HaystackReader.selectedPath` stack under the worker
+  search path; remaining samples were dominated by existing mmap/open/fstat and
+  the ASCII case-insensitive scanner.
+- `xcrun swift build -c release` passed before benchmarking.
+
+Tighter A/B checks against checkpoint `d185828` measured:
+
+| Command | Current Swift | Previous Swift |
+| --- | ---: | ---: |
+| `-q PM_RESUME linux` | 353.9 ms mean / 353.5 ms median | 377.4 ms / 377.1 ms |
+| `-q ABSENT_NEEDLE_DOES_NOT_EXIST linux` | 924.0 ms / 920.2 ms | 1035.5 ms / 1030.7 ms |
+| `-q -i pm_resume linux` | 236.5 ms / 236.3 ms | 238.9 ms / 236.0 ms |
+| `-q '[A-Z]+_RESUME' linux` | 240.9 ms / 238.2 ms | 239.5 ms / 238.3 ms |
+| `-q EXPORT_SYMBOL linux` | 5.6 ms / 5.6 ms | 6.9 ms / 6.9 ms |
+
 ## Fast quiet file-URL directory hint — 2026-05-31
 
 The fast quiet fallback walker now constructs known-file haystack URLs with

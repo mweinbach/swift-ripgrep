@@ -26,6 +26,17 @@ struct HaystackReader {
         options: RipgrepOptions,
         maxBufferBytes: Int = defaultMaxBufferBytes
     ) throws -> Data {
+        #if canImport(Darwin)
+        if options.mmapMode == .automatic,
+           haystack.isRegularFile == true,
+           haystack.fileSize == nil {
+            do {
+                return try readMmap(fileURL: haystack.url)
+            } catch {
+                return try readBuffered(fileURL: haystack.url, maxBufferBytes: maxBufferBytes)
+            }
+        }
+        #endif
         let readPath = try selectedPath(for: haystack, options: options)
         switch readPath {
         case .buffered:
