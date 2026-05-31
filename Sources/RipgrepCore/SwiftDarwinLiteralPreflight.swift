@@ -163,6 +163,16 @@ public enum SwiftDarwinLiteralPreflight {
         return output.flush()
     }
 
+    private static let statsMatchesSuffix = Array(" matches\n".utf8)
+    private static let statsMatchedLinesSuffix = Array(" matched lines\n".utf8)
+    private static let statsFilesWithMatchesSuffix = Array(" files contained matches\n".utf8)
+    private static let statsFilesSearchedSuffix = Array(" files searched\n".utf8)
+    private static let statsBytesPrintedSuffix = Array(" bytes printed\n".utf8)
+    private static let statsBytesSearchedSuffix = Array(" bytes searched\n".utf8)
+    private static let statsElapsedSuffix = Array(
+        "0.000000 seconds spent searching\n0.000000 seconds total\n".utf8
+    )
+
     public static func zeroCountOutputExitCode(
         countPrefix: [UInt8],
         crlfTerminated: Bool
@@ -848,19 +858,26 @@ public enum SwiftDarwinLiteralPreflight {
         bytesSearched: Int,
         exitCode: Int32
     ) -> Int32 {
-        let output = """
-
-        \(totalMatches) matches
-        \(matchedLines) matched lines
-        \(filesWithMatches) files contained matches
-        \(filesSearched) files searched
-        \(bytesPrinted) bytes printed
-        \(bytesSearched) bytes searched
-        0.000000 seconds spent searching
-        0.000000 seconds total
-
-        """
-        FileHandle.standardOutput.write(Data(output.utf8))
+        guard var output = rgSwiftStdoutBuffer(capacity: 256) else {
+            return exitCode
+        }
+        defer {
+            output.deallocate()
+        }
+        guard output.writeByte(UInt8(ascii: "\n")),
+              output.writeLineNumberPrefix(totalMatches, fieldSeparator: statsMatchesSuffix),
+              output.writeLineNumberPrefix(matchedLines, fieldSeparator: statsMatchedLinesSuffix),
+              output.writeLineNumberPrefix(
+                filesWithMatches,
+                fieldSeparator: statsFilesWithMatchesSuffix
+              ),
+              output.writeLineNumberPrefix(filesSearched, fieldSeparator: statsFilesSearchedSuffix),
+              output.writeLineNumberPrefix(bytesPrinted, fieldSeparator: statsBytesPrintedSuffix),
+              output.writeLineNumberPrefix(bytesSearched, fieldSeparator: statsBytesSearchedSuffix),
+              output.writeBytes(statsElapsedSuffix),
+              output.flush() else {
+            return exitCode
+        }
         return exitCode
     }
 

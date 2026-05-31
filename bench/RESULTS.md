@@ -8,6 +8,28 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Direct stats summary writer — 2026-05-31
+
+Single-file Darwin preflight stats summaries now use the existing Swift stdout
+buffer and decimal writer instead of constructing one interpolated Swift
+`String` and wrapping it in `Data`. This keeps the summary format identical
+while trimming the summary-only path.
+
+Validation:
+
+- Current Swift output matched the saved previous Swift binary byte-for-byte for
+  `--stats --files-without-match` match/no-match, `--stats -l`,
+  `--stats --count`, and `--stats --count-matches` on the 46 MiB ASCII fixture.
+- Current Swift output matched Rust for the same modes after normalizing only
+  elapsed-time stats lines.
+
+On `/tmp/swift-rg-bench/match-ascii-46m.txt`, timed with 10 warmups:
+
+| Command | Current Swift | Previous Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--stats --files-without-match absentliteral` | 7.7 ms | 8.3 ms | 6.9 ms |
+| `--stats -l missingliteral` | 37.8 ms | 38.9 ms | 38.5 ms |
+
 ## NUL-terminated file-list direct writer — 2026-05-31
 
 The Darwin file-list direct writer now supports `-0`/`--null` by threading the
