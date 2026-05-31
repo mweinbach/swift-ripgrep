@@ -43,6 +43,16 @@ public enum SwiftDarwinLiteralPreflight {
         return output.flush()
     }
 
+    public static func zeroCountOutputExitCode(
+        countPrefix: [UInt8],
+        crlfTerminated: Bool
+    ) -> Int32? {
+        guard writeCountOutput(0, countPrefix: countPrefix, crlfTerminated: crlfTerminated) else {
+            return nil
+        }
+        return 1
+    }
+
     private static func appendLineNumberPrefix(
         _ lineNumber: Int,
         to output: inout Data,

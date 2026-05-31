@@ -8,6 +8,33 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Multi-file include-zero count checkpoint — 2026-05-31
+
+Explicit regular-file `--include-zero` count output now stays on the existing
+Swift Darwin literal preflight. The multi-path gate no longer rejects count
+modes solely because zero rows are requested, and known no-match files emit
+their zero count directly after the status probe instead of rescanning the file.
+This keeps the path Swift-first and uses the existing preflight output buffer;
+no C shims or custom low-level code were added.
+
+Validation:
+
+- Current Swift output matched the saved pre-change Swift binary byte-for-byte
+  for multi-file `--include-zero -c`, `--include-zero --count-matches`,
+  `--no-filename --include-zero -c`, and `--crlf --include-zero -c` controls.
+- Current Swift output matched Rust for the zero-plus-match target command
+  `--include-zero -c missingliteral no-match-ascii-46m.txt match-ascii-46m.txt`.
+- `xcrun swift test --filter MiscTests` passed after adding multi-file
+  include-zero count coverage.
+
+On two 46 MiB explicit files under `/tmp/swift-rg-bench`, 40 timed runs with
+5 warmups:
+
+| Command | Current Swift | Previous Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--include-zero -c missingliteral no-match-ascii-46m.txt match-ascii-46m.txt` | 23.84 ms | 307.42 ms | 24.96 ms |
+| Same command, order-flipped confirmation | 22.03 ms | 307.63 ms | 24.75 ms |
+
 ## Files-mode root setup checkpoint — 2026-05-31
 
 The Darwin file-list root planner now proves the fast root is a directory before

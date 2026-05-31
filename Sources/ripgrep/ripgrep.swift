@@ -3240,8 +3240,7 @@ struct RipgrepCommand {
                   paths.allSatisfy({ $0 != "-" }),
                   paths.allSatisfy(isReadableRegularFile),
                   !parsedHeading,
-                  !parsedCanEmitDefaultColoredCountPrefix,
-                  !(parsedCountStyleOutput && parsedIncludeZero) else {
+                  !parsedCanEmitDefaultColoredCountPrefix else {
                 return nil
             }
             let multiPathASCIIBoundaryLiteralPattern = (fixedStrings || asciiCaseInsensitive) ? nil : asciiBoundaryLiteral(
@@ -3429,6 +3428,18 @@ struct RipgrepCommand {
                     continue
                 }
                 let prefix = countPrefix(for: candidatePath)
+                if status != 0 && parsedIncludeZero {
+                    guard let exitCode = SwiftDarwinLiteralPreflight.zeroCountOutputExitCode(
+                        countPrefix: prefix,
+                        crlfTerminated: parsedCrlf
+                    ) else {
+                        return nil
+                    }
+                    if exitCode == 0 {
+                        matchedAny = true
+                    }
+                    continue
+                }
                 let exitCode: Int32?
                 if parsedPrintMode == .countMatches {
                     guard !parsedLineRegexp else {
