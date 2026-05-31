@@ -4,6 +4,33 @@ import Foundation
 import Darwin
 
 public enum SwiftDarwinLiteralPreflight {
+    private final class QuietStatsProbeAccumulator: @unchecked Sendable {
+        private let lock = NSLock()
+        private var bytesSearched = 0
+        private var hasMatch = false
+        private var failed = false
+
+        func record(bytes: Int, matched: Bool) {
+            lock.lock()
+            bytesSearched += bytes
+            hasMatch = hasMatch || matched
+            lock.unlock()
+        }
+
+        func recordFailure() {
+            lock.lock()
+            failed = true
+            lock.unlock()
+        }
+
+        func snapshot() -> (bytesSearched: Int, hasMatch: Bool, failed: Bool) {
+            lock.lock()
+            let result = (bytesSearched, hasMatch, failed)
+            lock.unlock()
+            return result
+        }
+    }
+
     private static func writePathTerminator(
         nullTerminated: Bool,
         crlfTerminated: Bool
@@ -302,25 +329,38 @@ public enum SwiftDarwinLiteralPreflight {
             return nonOverlappingMultiLiteralQuietStatsExitCode(paths: paths, literals: literals)
         }
 
+        return overlappingMultiLiteralNoMatchQuietStatsExitCode(paths: paths, literals: rawLiterals)
+    }
+
+    private static func overlappingMultiLiteralNoMatchQuietStatsExitCode(
+        paths: [String],
+        literals rawLiterals: [[UInt8]]
+    ) -> Int32? {
         let rawLiteralData = rawLiterals.map { Data($0) }
-        var bytesSearched = 0
-        for path in paths {
-            guard let data = mappedPreflightData(path: path),
+        let accumulator = QuietStatsProbeAccumulator()
+
+        DispatchQueue.concurrentPerform(iterations: paths.count) { index in
+            guard let data = mappedPreflightData(path: paths[index]),
                   !hasBinaryDetectionPrefix(data),
                   !containsNULByte(data) else {
-                return nil
+                accumulator.recordFailure()
+                return
             }
-            bytesSearched += data.count
-            if dataContainsAnyLiteralUsingFoundation(data, literals: rawLiteralData) {
-                return nil
-            }
+            let matched = dataContainsAnyLiteralUsingFoundation(data, literals: rawLiteralData)
+            accumulator.record(bytes: data.count, matched: matched)
+        }
+
+        let result = accumulator.snapshot()
+        guard !result.failed,
+              !result.hasMatch else {
+            return nil
         }
         return writeStatsSummary(
             totalMatches: 0,
             matchedLines: 0,
             filesWithMatches: 0,
             filesSearched: paths.count,
-            bytesSearched: bytesSearched,
+            bytesSearched: result.bytesSearched,
             exitCode: 1
         )
     }
