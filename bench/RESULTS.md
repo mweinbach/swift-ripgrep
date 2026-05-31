@@ -180,6 +180,38 @@ because they did not improve the current checkpoint:
   control set. A 100-run A/B measured default `--files` at 82.3 ms versus
   83.4 ms baseline, hidden flat at 85.4 ms versus 85.1 ms, and
   `--no-ignore-vcs` slower at 67.8 ms versus 66.3 ms.
+- Unifying the top-level non-empty ignore-stack file-list filter through
+  `shouldEmitFastFilePath` preserved exact Swift output and sorted Rust parity,
+  but slowed the primary controls. A 100-run A/B measured default `--files` at
+  82.3 ms versus 81.6 ms baseline and `--no-ignore-vcs` at 67.0 ms versus
+  66.0 ms. Hidden mode was noisy at 84.9 ms versus 85.9 ms, so the manual root
+  branch stayed.
+- Passing `RipgrepSearcher`'s stored environment directly into `FileWalker`
+  avoided a redundant `ProcessInfo.processInfo.environment` default-argument
+  read and preserved exact Swift output plus sorted Rust parity, but process
+  timings did not improve. A 120-run A/B measured default `--files` at
+  83.7 ms versus 82.5 ms baseline, hidden at 85.1 ms versus 86.4 ms, and
+  `--no-ignore-vcs` at 68.8 ms versus 67.3 ms.
+- Shrinking the parallel ignore-aware file-list worker's initial `Data`
+  reserve from 64 KiB was also rejected. A 16 KiB probe preserved exact Swift
+  output and sorted Rust parity but measured default `--files` at 82.7 ms
+  versus 83.0 ms baseline, hidden slower at 86.8 ms versus 85.9 ms, and
+  `--no-ignore-vcs` faster at 66.1 ms versus 68.0 ms. A 32 KiB follow-up was
+  flat on default/hidden and slower on `--no-ignore-vcs` at 66.9 ms versus
+  66.1 ms, so the 64 KiB reserve stayed.
+- Adding a single-matcher shortcut to `IgnoreStack.decision` preserved exact
+  Swift output and sorted Rust parity but slowed default file listing in a
+  140-run A/B: default `--files` measured 86.8 ms versus 84.2 ms baseline,
+  hidden was flat at 99.7 ms, and `--no-ignore-vcs` only moved within noise at
+  66.4 ms versus 67.0 ms.
+- Raising the string-based Darwin directory child-array reserve from 64 to 128
+  entries also failed confirmation. It preserved exact Swift output and sorted
+  Rust parity; a first hyperfine run looked mildly positive for default and
+  no-vcs file listing, but an 80-pair alternating harness measured default
+  `--files` flat at 82.64 ms versus 82.49 ms baseline, hidden at 84.07 ms
+  versus 84.37 ms, `--no-ignore-vcs` at 66.87 ms versus 67.16 ms, and
+  `--no-ignore` at 65.28 ms versus 65.15 ms. The original 64-entry reserve
+  stayed.
 
 ## Visible line stats preflight — 2026-05-31
 
