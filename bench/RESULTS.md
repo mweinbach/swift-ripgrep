@@ -8,6 +8,41 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected parallel search work-item removal — 2026-05-31
+
+A Swift-only probe removed the transient `SearchWorkItem` array from the
+parallel haystack search path and let the actor hand out indexed `Haystack`
+values directly. This avoided one allocation/copy pass before recursive
+parallel search, but the direct A/B against checkpoint `17640ee` was flat in
+the quiet rows and slightly worse in file-listing controls, so the source
+change was backed out.
+
+The 20-run interleaved comparison used the release binary from checkpoint
+`17640ee`, the probed current binary, and Rust `rg` on `/tmp/swift-rg-bench/linux`:
+
+| Command | Probe Swift | Baseline Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `-q PM_RESUME linux` | 371.86 ms mean / 379.76 ms median | 373.87 ms / 380.52 ms | 314.82 ms / 295.55 ms |
+| `-q __swift_rg_missing_needle__ linux` | 930.54 ms / 924.74 ms | 935.36 ms / 927.67 ms | 2.755 s / 2.718 s |
+| `--files linux` | 96.23 ms / 91.39 ms | 96.48 ms / 89.09 ms | 96.83 ms / 86.47 ms |
+| `--hidden --files linux` | 102.85 ms / 105.74 ms | 102.27 ms / 102.66 ms | 86.16 ms / 76.85 ms |
+| `PM_RESUME linux` | 1.613 s / 1.603 s | 1.611 s / 1.613 s | 2.711 s / 2.704 s |
+
+## Rejected quiet worker-count retune — 2026-05-31
+
+A worker-count scan tested whether quiet fallback search should raise or lower
+the default Darwin parallelism. The current default cap of 4 workers remained
+best for both a late hit and a miss on `/tmp/swift-rg-bench/linux`; explicit
+`--threads 1`, `--threads 2`, `--threads 8`, `--threads 12`, and `--threads 16`
+were all slower. No source change was retained.
+
+Measured medians:
+
+| Command | Default | `--threads 1` | `--threads 2` | `--threads 8` | `--threads 12` | `--threads 16` |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `-q PM_RESUME linux` | 355.8 ms | 516.2 ms | 413.0 ms | 429.0 ms | 506.2 ms | 773.3 ms |
+| `-q __swift_rg_missing_needle__ linux` | 924.2 ms | 2.003 s | 1.282 s | 1.486 s | n/a | n/a |
+
 ## Rejected required-literal quiet jump — 2026-05-31
 
 A Swift-only probe for quiet regexes with one required ASCII literal jumped
