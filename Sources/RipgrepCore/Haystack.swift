@@ -913,12 +913,10 @@ public struct FileWalker: @unchecked Sendable {
         let keyed = lines.map { line in
             (line: line, key: PathSort.byteKey(forPath: line, droppingFirstBytes: commonPrefixByteCount))
         }
-        for entry in keyed.sorted(by: { lhs, rhs in
-            if reverse {
-                return rhs.key.lexicographicallyPrecedes(lhs.key)
-            }
-            return lhs.key.lexicographicallyPrecedes(rhs.key)
-        }) {
+        let sorted = reverse
+            ? keyed.sorted(by: { lhs, rhs in rhs.key.lexicographicallyPrecedes(lhs.key) })
+            : keyed.sorted(by: { lhs, rhs in lhs.key.lexicographicallyPrecedes(rhs.key) })
+        for entry in sorted {
             emit(entry.line)
         }
     }

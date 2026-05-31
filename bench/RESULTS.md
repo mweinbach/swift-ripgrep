@@ -99,6 +99,19 @@ measured the manual key builder:
 | `--sort path --files linux` | 122.22 ms / 121.29 ms | 124.71 ms / 123.84 ms | 233.30 ms / 232.67 ms |
 | `--sortr path --files linux` | 125.02 ms / 122.44 ms | 129.52 ms / 125.26 ms | 274.85 ms / 270.45 ms |
 
+The sorted emitter now also chooses the forward or reverse comparator before
+calling `sorted`, avoiding a reverse-mode branch inside every key comparison.
+Output still matched the previous Swift binary byte-for-byte and matched Rust
+ordered output for the sorted Linux file-list controls. A 140-pair confirmation
+against checkpoint `8b9f74c` measured small median wins:
+
+| Command | Current Swift | Previous Swift |
+| --- | ---: | ---: |
+| `--sort path --no-ignore-vcs --files linux` | 107.46 ms mean / 106.43 ms median | 107.20 ms / 106.62 ms |
+| `--sort path --files linux` | 121.92 ms / 120.17 ms | 121.22 ms / 120.70 ms |
+| `--sortr path --files linux` | 120.48 ms / 119.75 ms | 121.49 ms / 120.14 ms |
+| `--sort path --no-ignore --files linux` | 147.41 ms / 146.14 ms | 147.28 ms / 146.22 ms |
+
 ## Hoisted executable argument snapshot — 2026-05-31
 
 The Swift executable entry point now materializes
