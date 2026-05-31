@@ -143,6 +143,44 @@ On `/tmp/swift-rg-bench/linux`, 80 timed runs with 5 warmups:
 | --- | ---: | ---: | ---: |
 | `--files linux` | 82.6 ms | 85.1 ms | 75.8 ms |
 
+### Rejected continuation probes — 2026-05-31
+
+The following Swift-first/no-C-shim probes preserved exact Swift output and
+Rust-compatible sorted file-list output where applicable, but were backed out
+because they did not improve the current checkpoint:
+
+- Threading physical directory paths as UTF-8 byte buffers through the
+  ignore-aware data walker was mixed and noisy. The flipped confirmation
+  measured default `--files` at 81.1 ms for the probe versus 84.8 ms baseline,
+  hidden at 83.9 ms versus 83.8 ms, and `--no-ignore-vcs` at 69.7 ms versus
+  66.4 ms, so the string physical-path walker stayed.
+- Raising the ignore-aware data walker queue QoS from `.userInitiated` to
+  `.userInteractive` was flat-to-slower: default `--files` measured 81.8 ms
+  versus 81.5 ms baseline, hidden 85.2 ms versus 83.9 ms, and `--no-ignore-vcs`
+  68.4 ms versus 65.9 ms.
+- Combining path/count output and no-match stats summary writes into one helper
+  preserved stdout/stderr/status for stats and JSON controls, but regressed the
+  explicit-file stats rows: `--stats --files-without-match absentliteral`
+  measured 8.5 ms versus 8.2 ms baseline and Rust at 7.5 ms.
+- Classifying `.git`/`.gitignore`/`.ignore`/`.rgignore` markers from directory
+  entry bytes instead of switching on the decoded `String` was also rejected.
+  Exact file-list output matched the saved Swift checkpoint and sorted Rust, but
+  the 80-run A/B measured default `--files` at 82.1 ms versus 82.3 ms baseline,
+  hidden at 90.2 ms versus 84.4 ms, and `--no-ignore-vcs` at 66.2 ms versus
+  65.6 ms.
+- Removing intermediate `fflush(stdout)` calls between preflight output and
+  stats summaries preserved exact stdout/stderr/status, but the order-flipped
+  160-run confirmation did not hold: `--stats --files-without-match` measured
+  7.9 ms versus 7.5 ms baseline, `--stats --include-zero -c` was flat at
+  7.6 ms, `--stats -c literal` regressed to 19.1 ms versus 18.8 ms, and visible
+  `--stats literal` was flat at 67.4 ms.
+- Lazily constructing recursive `directory/` and `relative/` prefixes only when
+  the empty-ignore-stack file-list branch saw a child directory preserved exact
+  Swift output and sorted Rust parity, but did not improve the full file-list
+  control set. A 100-run A/B measured default `--files` at 82.3 ms versus
+  83.4 ms baseline, hidden flat at 85.4 ms versus 85.1 ms, and
+  `--no-ignore-vcs` slower at 67.8 ms versus 66.3 ms.
+
 ## Visible line stats preflight — 2026-05-31
 
 Single explicit-file `--stats` searches that emit normal matching lines now use
