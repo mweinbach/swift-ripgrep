@@ -3356,7 +3356,6 @@ struct RipgrepCommand {
                       paths.allSatisfy({ $0 != "-" }),
                       paths.allSatisfy(isReadableRegularFile),
                       !parsedCanEmitDefaultColoredCountPrefix,
-                      !asciiCaseInsensitive,
                       !wordRegexp,
                       !parsedLineRegexp,
                       let literals = explicitRegexpPatternLiterals(
@@ -3387,10 +3386,16 @@ struct RipgrepCommand {
 
                 if parsedQuiet {
                     for candidatePath in paths {
-                        guard let status = SwiftDarwinLiteralPreflight.multiLiteralQuietExitCode(
-                            path: candidatePath,
-                            literals: literals
-                        ) else {
+                        let status = asciiCaseInsensitive
+                            ? SwiftDarwinLiteralPreflight.asciiCaseInsensitiveMultiLiteralQuietExitCode(
+                                path: candidatePath,
+                                literals: literals
+                            )
+                            : SwiftDarwinLiteralPreflight.multiLiteralQuietExitCode(
+                                path: candidatePath,
+                                literals: literals
+                            )
+                        guard let status else {
                             return nil
                         }
                         if status == 0 {
@@ -3404,14 +3409,24 @@ struct RipgrepCommand {
                     let printWhenMatched = parsedPathOnlyMode == .matching
                     var printed = false
                     for candidatePath in paths {
-                        guard let exitCode = SwiftDarwinLiteralPreflight.multiLiteralPathOnlyExitCode(
-                            path: candidatePath,
-                            literals: literals,
-                            printWhenMatched: printWhenMatched,
-                            nullTerminated: parsedNullPathTerminator,
-                            crlfTerminated: parsedCrlf,
-                            outputPath: pathOnlyOutputPath(for: candidatePath)
-                        ) else {
+                        let exitCode = asciiCaseInsensitive
+                            ? SwiftDarwinLiteralPreflight.asciiCaseInsensitiveMultiLiteralPathOnlyExitCode(
+                                path: candidatePath,
+                                literals: literals,
+                                printWhenMatched: printWhenMatched,
+                                nullTerminated: parsedNullPathTerminator,
+                                crlfTerminated: parsedCrlf,
+                                outputPath: pathOnlyOutputPath(for: candidatePath)
+                            )
+                            : SwiftDarwinLiteralPreflight.multiLiteralPathOnlyExitCode(
+                                path: candidatePath,
+                                literals: literals,
+                                printWhenMatched: printWhenMatched,
+                                nullTerminated: parsedNullPathTerminator,
+                                crlfTerminated: parsedCrlf,
+                                outputPath: pathOnlyOutputPath(for: candidatePath)
+                            )
+                        guard let exitCode else {
                             return nil
                         }
                         if exitCode == 0 {
@@ -3426,6 +3441,9 @@ struct RipgrepCommand {
                     let prefix = countPrefix(for: candidatePath)
                     let exitCode: Int32?
                     if parsedPrintMode == .countMatches {
+                        guard !asciiCaseInsensitive else {
+                            return nil
+                        }
                         exitCode = SwiftDarwinLiteralPreflight.multiLiteralCountMatchesExitCode(
                             path: candidatePath,
                             literals: literals,
@@ -3435,6 +3453,9 @@ struct RipgrepCommand {
                             crlfTerminated: parsedCrlf
                         )
                     } else {
+                        guard !asciiCaseInsensitive else {
+                            return nil
+                        }
                         exitCode = SwiftDarwinLiteralPreflight.multiLiteralCountLineExitCode(
                             path: candidatePath,
                             literals: literals,
