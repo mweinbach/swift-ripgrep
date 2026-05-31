@@ -262,6 +262,12 @@ sorted Rust-output checks:
   measured 80.8 ms versus 77.9 ms before, hidden 81.0 ms versus 79.9 ms,
   no-vcs 64.7 ms versus 62.9 ms, and hidden/no-global 78.5 ms versus 77.2 ms.
   The single final-byte guard stayed.
+- Reordering the retained suffix guard to check the candidate final byte before
+  the slash boundary also stayed rejected. It preserved exact Swift output and
+  sorted Rust parity, and a 100-run pass initially improved default to 77.1 ms
+  versus 79.3 ms before, but the order-flipped 120-run pass put default slower
+  at 78.7 ms versus 77.8 ms and no-vcs slower at 63.9 ms versus 63.0 ms.
+  The original slash-then-final-byte ordering stayed.
 
 ### Continuation probes — 2026-05-29
 
