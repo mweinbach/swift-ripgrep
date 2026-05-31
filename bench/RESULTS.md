@@ -371,6 +371,27 @@ sorted Rust-output checks:
   `--quiet --files` in the flipped order. A narrow multiple-explicit-file quiet
   shortcut preserved output/status but did not improve the two-file match or
   no-match controls. The existing quiet first-match route stayed.
+- Replacing the recursive quiet raw-literal size guard's `FileManager`
+  attribute lookup with a Darwin `fstatat` call also stayed rejected. It
+  preserved quiet stdout/stderr/status versus the previous Swift binary and
+  Rust for recursive match, recursive no-match, explicit-file match/no-match,
+  and two-file controls, but the 80-run A/B was flat-to-slower: recursive
+  `EXPORT_SYMBOL -q` measured 32.9 ms versus 30.4 ms before, recursive
+  no-match measured 1.580 s versus 1.579 s before, and count/json-count
+  controls were neutral. The existing Foundation attribute guard stayed.
+- Removing that recursive quiet raw-literal size guard entirely was also
+  rejected. It preserved quiet stdout/stderr/status versus the previous Swift
+  binary and Rust for the same controls, but an 80-run A/B slowed the near-match
+  `EXPORT_SYMBOL -q` control to 39.7 ms versus 34.1 ms before while leaving the
+  recursive no-match median flat at 1.579 s. The guard remains in place so the
+  quiet fast path does not trade the common early-match case for noise.
+- Continuing with generic per-file search after the quiet raw-literal probe
+  reaches its file/byte budget was rejected too. It preserved quiet
+  stdout/stderr/status versus the previous Swift binary and Rust, including a
+  synthetic match after the probe budget, but it gave up the existing parallel
+  fallback and regressed recursive Linux no-match to 2.500 s versus 1.579 s
+  before. The restart into the normal search path remains faster for exhaustive
+  quiet misses.
 
 ### Continuation probes — 2026-05-29
 
