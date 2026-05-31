@@ -337,6 +337,13 @@ sorted Rust-output checks:
   moved from 92.2/93.6 ms before to 97.1/96.4 ms after, while hidden moved from
   80.7/80.6 ms before to 82.0/81.8 ms after. The existing empty matcher path
   stayed.
+- Reusing the traversal root Git-repository context for global-ignore setup
+  also stayed rejected. It preserved exact stdout and stderr versus the previous
+  Swift binary for default, hidden, no-vcs, and `--debug --files`, and sorted
+  output matched Rust for the same file-list controls. But both 100-run A/B
+  orders were neutral-to-slower: default measured 78.0 ms versus 77.9 ms before
+  in the first pass and 78.3 ms versus 77.5 ms before in the flipped pass, with
+  no-vcs likewise neutral/slower. The simpler existing setup order stayed.
 
 ### Continuation probes — 2026-05-29
 
