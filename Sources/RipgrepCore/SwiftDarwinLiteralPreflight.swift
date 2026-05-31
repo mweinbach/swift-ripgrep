@@ -4488,6 +4488,11 @@ public enum SwiftDarwinLiteralPreflight {
               data.count >= minimumLiteralLength else {
             return 0
         }
+        if foldedLiterals.count == 1,
+           foldedLiterals[0].count == 1,
+           !dataContainsASCIICaseInsensitiveByte(data, foldedByte: foldedLiterals[0][0]) {
+            return 0
+        }
         let limit = maxCount ?? Int.max
         return data.withUnsafeBytes { rawData in
             guard let rawBase = rawData.baseAddress else {
@@ -4560,6 +4565,9 @@ public enum SwiftDarwinLiteralPreflight {
               data.count >= foldedLiteral.count else {
             return 0
         }
+        if foldedLiteral.count == 1 {
+            return countASCIICaseInsensitiveByteMatches(in: data, foldedByte: foldedLiteral[0])
+        }
         return data.withUnsafeBytes { rawData in
             guard let rawBase = rawData.baseAddress else {
                 return 0
@@ -4593,6 +4601,25 @@ public enum SwiftDarwinLiteralPreflight {
                 searchOffset = matchStart + foldedLiteral.count
             }
             return matchCount
+        }
+    }
+
+    private static func countASCIICaseInsensitiveByteMatches(
+        in data: Data,
+        foldedByte: UInt8
+    ) -> Int {
+        return data.withUnsafeBytes { rawData in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
+            }
+            let base = rawBase.assumingMemoryBound(to: UInt8.self)
+            if foldedByte >= UInt8(ascii: "a"),
+               foldedByte <= UInt8(ascii: "z") {
+                let upperByte = foldedByte - (UInt8(ascii: "a") - UInt8(ascii: "A"))
+                return Int(rg_memcount_byte(base, data.count, foldedByte))
+                    + Int(rg_memcount_byte(base, data.count, upperByte))
+            }
+            return Int(rg_memcount_byte(base, data.count, foldedByte))
         }
     }
 

@@ -652,6 +652,20 @@ measured 7.1 ms versus 25.3 ms before and 5.6 ms for Rust. The order-flipped
 confirmation measured `-q -i Z` at 7.2 ms versus 28.1 ms before and `-l -i Z`
 at 6.9 ms versus 24.9 ms before.
 
+Single-byte ASCII case-insensitive count paths now share that one-byte
+specialization. `-c` first proves the byte is absent with the byte-set search
+before falling into matched-line accounting, while `--count-matches` sums the
+existing Swift byte counters for folded lower/upper variants instead of walking
+the generic folded scanner. Targeted output/status checks matched the previous
+Swift binary and Rust for count, count-matches, include-zero, prefixed count,
+positive match, no-match, and Unicode fallback controls. On the same 48 MiB
+fixture, a 40-run A/B measured `--count-matches -i Z` at 11.7 ms versus
+27.4 ms before and 5.6 ms for Rust; `-c -i Z` measured 7.4 ms versus 25.5 ms
+before and 5.5 ms for Rust. The order-flipped confirmation measured
+`--count-matches -i Z` at 9.3 ms versus 28.8 ms before and `-c -i Z` at
+7.3 ms versus 25.2 ms before. A dense positive `--count-matches -i N` check
+measured Swift at 11.8 ms versus Rust at 107.9 ms.
+
 Word-regexp quiet/path-only existence checks now reuse the existing Swift byte
 scanner and ASCII boundary helper instead of `Data.range(of:)`. This preserves
 the binary guard, Unicode-boundary fallback, and rejected-boundary cap while
