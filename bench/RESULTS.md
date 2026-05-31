@@ -227,6 +227,12 @@ sorted Rust-output checks:
   before and ASCII 2.126 s versus 2.150 s before; the current-first 10-run
   confirmation reversed that to Unicode 2.277 s versus 2.196 s before and ASCII
   2.284 s versus 2.131 s before, so the plain helpers stay.
+- A narrow ASCII-only matching-line specialization for the Linux five-group
+  no-literal scanner also stayed rejected. It preserved exact Swift output and
+  byte-sorted Rust parity for both `(?-u)` ASCII (720 lines) and default
+  Unicode (721 lines), but the targeted seven-run A/B slowed ASCII to 2.158 s
+  versus 2.117 s before. The generic word/whitespace scanner remains faster
+  despite carrying the Unicode fallback bookkeeping.
 - A Swift UTF-8 prescan for the Greek-script fast path also stayed rejected.
   It preserved exact Swift output and sorted Rust parity for recursive
   matching-lines, count, count-matches, and files-with-matches modes, but the
