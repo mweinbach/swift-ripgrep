@@ -8,6 +8,21 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected required-literal quiet jump — 2026-05-31
+
+A Swift-only probe for quiet regexes with one required ASCII literal jumped
+directly to the literal with the existing fallback `memmem`, decoded only
+candidate lines, and verified the real regex before returning a quiet match.
+It preserved stdout/stderr/status for `[A-Z]+_RESUME`, a false-positive
+`[Z]{3}_RESUME` miss, `.+_RESUME`, and literal-regex `PM_RESUME` against the
+previous Swift checkpoint and Rust, but did not improve the target workload.
+
+A 30-run A/B against checkpoint `0296d02` measured
+`-q '[A-Z]+_RESUME' linux` at 250.0 ms for the probe versus 244.2 ms baseline
+and Rust at 6.5 ms. The false-positive miss `-q '[Z]{3}_RESUME' linux`
+remained flat at 960.7 ms versus 958.8 ms baseline, with Rust at 2.788 s. The
+source change was backed out.
+
 ## Suppressed literal exact-path allocation cleanup — 2026-05-31
 
 The suppressed literal-output path now builds the prepared ASCII
