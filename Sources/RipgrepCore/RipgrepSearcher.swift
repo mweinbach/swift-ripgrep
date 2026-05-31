@@ -278,11 +278,11 @@ public struct RipgrepSearcher: @unchecked Sendable {
         if let quietResult = try searchQuietFirstMatchByWalking(options: options, matcher: matcher) {
             return quietResult
         }
+        let fileWalker = FileWalker(fileManager: fileManager).withEnvironment(environment)
         let walkResults = options.useStdin && options.roots.isEmpty
             ? FileWalkResults(haystacks: [], messages: [], warnings: explicitIgnoreFileLoadWarnings(options: options))
-            : try FileWalker(fileManager: fileManager)
-                .withEnvironment(environment)
-                .haystacksWithMessages(for: options)
+            : try fastQuietFallbackHaystacks(options: options, fileWalker: fileWalker)
+                ?? fileWalker.haystacksWithMessages(for: options)
         var messages = walkResults.messages
         let warnings = walkResults.warnings
         let diagnostics = walkResults.diagnostics
@@ -374,6 +374,18 @@ public struct RipgrepSearcher: @unchecked Sendable {
         )
     }
 
+    private func fastQuietFallbackHaystacks(
+        options: RipgrepOptions,
+        fileWalker: FileWalker
+    ) throws -> FileWalkResults? {
+        guard canStopSearchAfterFirstMatch(options: options),
+              !options.useStdin,
+              !options.patternFileStdin else {
+            return nil
+        }
+        return try fileWalker.fastSearchHaystacksWithMessages(for: options)
+    }
+
     private func searchQuietFirstMatchByWalking(
         options: RipgrepOptions,
         matcher: PatternMatcher
@@ -393,7 +405,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         var searchMessages: [String] = []
         var abandonedQuietByteLiteralProbe = false
         var quietByteLiteralProbeBytes = 0
-        let quietByteLiteralProbeFileLimit = 64
+        let quietByteLiteralProbeFileLimit = 16
         let quietByteLiteralProbeByteLimit = 16 * 1024 * 1024
         func visit(_ haystack: Haystack) -> Bool {
             if quietByteLiteralFastPath != nil,

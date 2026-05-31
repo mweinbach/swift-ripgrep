@@ -8,6 +8,41 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Fast quiet fallback haystack walk — 2026-05-31
+
+Recursive quiet search now reuses the existing Darwin fast search-file walker
+when the bounded first-match probe cannot finish the search. This keeps normal
+line/path output traversal unchanged, but avoids restarting late quiet hits and
+quiet misses through the generic `URL`/metadata-heavy haystack walker. The
+raw-literal first-match probe now stops after 16 searched files instead of 64;
+the original 16 MiB byte cap remains, preserving the cheap early-hit behavior
+for large files while reducing redundant probe work before the fast fallback.
+
+Validation:
+
+- Current Swift output matched the saved previous Swift binary byte-for-byte for
+  recursive quiet hit/miss, early quiet hit, explicit-file quiet hit/miss,
+  ignore-case quiet, word quiet, regex-suffix quiet, binary fallback,
+  `--quiet --files`, and `--stats -q` controls.
+- The same controls matched Rust exit statuses; output remained empty or
+  unchanged where applicable.
+- `xcrun swift build -c release` passed before benchmarking.
+- `xcrun swift test` passed after the implementation.
+
+Final process-level checks on `/tmp/swift-rg-bench/linux` measured:
+
+| Command | Current Swift | Previous Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `-q PM_RESUME linux` | 606.44 ms mean / 595.55 ms median | 1021.61 ms / 1016.90 ms | 258.88 ms / 221.99 ms |
+| `-q ABSENT_NEEDLE_DOES_NOT_EXIST linux` | 1276.36 ms / 1281.79 ms | 1632.54 ms / 1627.78 ms | 2943.48 ms / 2973.98 ms |
+| `-q EXPORT_SYMBOL linux` | 6.24 ms / 6.12 ms | 6.31 ms / 6.09 ms | 5.66 ms / 5.26 ms |
+| `-q -i pm_resume linux` | 475.80 ms / 454.62 ms | 926.90 ms / 904.25 ms | 6.03 ms / 6.01 ms |
+| `-q '[A-Z]+_RESUME' linux` | 463.86 ms / 455.46 ms | 902.34 ms / 890.87 ms | 7.17 ms / 7.08 ms |
+| `--quiet --files linux` | 5.29 ms / 5.25 ms | 5.40 ms / 5.31 ms | 5.50 ms / 5.24 ms |
+
+A smaller four-file probe cap was parity-clean but slower on the target late
+and no-match quiet controls, so the retained cap is 16 files.
+
 ## Utility-mode preflight bypass — 2026-05-31
 
 The Swift executable now bypasses the Darwin literal preflight parser for

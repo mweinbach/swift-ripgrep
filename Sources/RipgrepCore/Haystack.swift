@@ -626,11 +626,33 @@ public struct FileWalker: @unchecked Sendable {
         try haystacksWithMessages(for: options, visitHaystack: visitHaystack)
     }
 
-    #if canImport(Darwin)
+    func fastSearchHaystacksWithMessages(
+        for options: RipgrepOptions
+    ) throws -> FileWalkResults? {
+        try fastSearchFileWalkResults(for: options) { haystack, haystacks in
+            haystacks.append(haystack)
+            return false
+        }
+    }
+
     func firstVisitedFastSearchFileWithMessages(
         for options: RipgrepOptions,
         visitHaystack: @escaping (Haystack) -> Bool
     ) throws -> FileWalkResults? {
+        try fastSearchFileWalkResults(for: options) { haystack, haystacks in
+            if visitHaystack(haystack) {
+                haystacks.append(haystack)
+                return true
+            }
+            return false
+        }
+    }
+
+    private func fastSearchFileWalkResults(
+        for options: RipgrepOptions,
+        visitHaystack: (Haystack, inout [Haystack]) -> Bool
+    ) throws -> FileWalkResults? {
+        #if canImport(Darwin)
         guard canFastVisitSearchFiles(options: options),
               options.effectiveRoots.count == 1 else {
             return nil
@@ -689,11 +711,7 @@ public struct FileWalker: @unchecked Sendable {
             options: options,
             didStop: &didStop
         ) { haystack in
-            if visitHaystack(haystack) {
-                matchedHaystacks.append(haystack)
-                return true
-            }
-            return false
+            visitHaystack(haystack, &matchedHaystacks)
         }
 
         return FileWalkResults(
@@ -703,8 +721,10 @@ public struct FileWalker: @unchecked Sendable {
             diagnostics: diagnostics,
             filtered: filtered
         )
+        #else
+        return nil
+        #endif
     }
-    #endif
 
     private func haystacksWithMessages(
         for options: RipgrepOptions,
