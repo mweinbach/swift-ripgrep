@@ -128,6 +128,29 @@ harness and the full Swift test suite passed after the retained slices. A
 | `--hidden --files` | 81.1 ms ± 2.3 ms | not rerun in this slice |
 | `--no-ignore-vcs --files` | 71.1 ms ± 12.9 ms | not rerun in this slice |
 
+### Continuation probes — 2026-05-31
+
+Fresh Swift-first/no-C-shim measurements on the Linux corpus still point at
+VCS-ignore-aware file listing as the main remaining file-walk gap. A 50-run
+no-shell refresh measured default `--files` at 87.0 ms median for Swift versus
+77.1 ms for Rust, `--hidden --files` at 93.4 ms versus 82.0 ms, and
+`--no-ignore-vcs --files` effectively tied at 71.49 ms versus 71.47 ms. Quiet
+file listing is already close: an 80-run check measured Swift
+`--quiet --files` at 5.23 ms versus Rust at 4.89 ms, and
+`--no-ignore --hidden --quiet --files` at 4.52 ms versus Rust at 4.13 ms.
+
+Two fresh Swift-only probes were parity-clean but not retained:
+
+- Guarding the fast ignore decision before the unindexed-rule loop preserved
+  exact Swift output and sorted Rust parity for default, hidden, and no-vcs file
+  listing, but an 80-run A/B regressed the hot default/hidden cases: default
+  moved from 86.9 ms to 88.8 ms and hidden from 86.7 ms to 89.7 ms.
+- Reading quiet literal probe files through Foundation mapped `Data(contentsOf:)`
+  instead of the existing `HaystackReader` path preserved stdout, stderr, and
+  status for quiet hit/miss, `--no-mmap`, JSON quiet, and stats quiet controls,
+  but regressed default recursive `-q EXPORT_SYMBOL` from 30.7 ms to 35.6 ms in
+  an 80-run A/B. The existing reader route stayed.
+
 `GlobMatcher.excludesOnlyHiddenPaths` is now computed only when the global-ignore
 setup asks for it, instead of classifying every rule in every directory-local
 ignore matcher during construction. Exact Swift output matched the previous
