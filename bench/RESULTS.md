@@ -302,6 +302,14 @@ because they did not improve the current checkpoint:
   by median, NUL no-ignore mildly faster at 75.91 ms versus 76.09 ms median,
   and the all-ignore-disabled spelling flat at 64.38 ms versus 64.29 ms median.
   The existing flush-and-collect structure stayed.
+- Broadening the entry-point utility classifier shape was also rejected. A
+  targeted second-argument `--files` bypass preserved exact Swift output and
+  sorted Rust parity, but regressed the no-ignore/no-vcs controls by
+  0.22-0.30 ms median while only helping NUL by 0.14 ms median. A narrower
+  non-optional first-argument helper kept the utility-mode startup win
+  (`--help` and `--generate man` about 3.3 ms faster) but regressed primary
+  file-list medians by 0.20-0.60 ms, so the original optional first-argument
+  classifier stayed.
 
 ## Visible line stats preflight — 2026-05-31
 
