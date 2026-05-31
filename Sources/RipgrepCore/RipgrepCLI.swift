@@ -205,7 +205,6 @@ public enum RipgrepCLI {
                     return registry.definitions.isEmpty ? 1 : 0
                 }
 
-                let printer = StandardPrinter(options: options)
                 let results: SearchResults
                 if stdout == nil,
                    let streamedResults = try searcher.writeDarwinSimpleByteLiteralLines(
@@ -221,9 +220,14 @@ public enum RipgrepCLI {
                 } else {
                     results = try searcher.search(options: options, stdin: searchStdin)
                     let outputEncodingMode = options.json ? nil : outputEncodingMode(for: options, results: results)
-                    let outputLines = options.json
-                        ? JSONPrinter(options: options).lines(for: results)
-                        : printer.lines(for: results)
+                    let outputLines: [String]
+                    if options.quiet && !options.stats && !options.json {
+                        outputLines = []
+                    } else if options.json {
+                        outputLines = JSONPrinter(options: options).lines(for: results)
+                    } else {
+                        outputLines = StandardPrinter(options: options).lines(for: results)
+                    }
                     for line in outputLines {
                         emitStdout(
                             line,

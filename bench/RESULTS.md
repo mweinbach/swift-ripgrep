@@ -183,6 +183,16 @@ checks matched the previous Swift binary and Rust for the accepted modes. An
 | `-c EXPORT_SYMBOL bfq-iosched.c bsg.c` | 31.10 ms | 4.94 ms | 6.47 ms |
 | `--count-matches EXPORT_SYMBOL bfq-iosched.c bsg.c` | 33.43 ms | 4.46 ms | 6.49 ms |
 
+Plain quiet search output now skips constructing `StandardPrinter` entirely
+when neither JSON nor stats output can be emitted. This removes search-mode
+formatting setup from `-q` runs while keeping JSON quiet summaries and quiet
+stats on their existing formatters. An 80-run A/B on the Linux corpus measured
+recursive `-q EXPORT_SYMBOL /tmp/swift-rg-bench/linux` at 5.48 ms versus
+28.64 ms for the previous Swift binary and 4.24 ms for Rust. A 100-run
+directory/empty-root check measured `-q EXPORT_SYMBOL linux/block` at 5.52 ms
+versus 31.54 ms before and an empty-directory quiet miss at 4.30 ms versus
+34.26 ms before.
+
 `GlobMatcher.excludesOnlyHiddenPaths` is now computed only when the global-ignore
 setup asks for it, instead of classifying every rule in every directory-local
 ignore matcher during construction. Exact Swift output matched the previous
