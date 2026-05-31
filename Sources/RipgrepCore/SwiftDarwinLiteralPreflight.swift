@@ -223,26 +223,47 @@ public enum SwiftDarwinLiteralPreflight {
         nullTerminated: Bool,
         crlfTerminated: Bool
     ) -> Bool {
-        let wrotePath = if let outputPath {
-            outputPath.withUnsafeBufferPointer { bytes in
+        let terminatorCount = crlfTerminated ? 2 : 1
+        let pathByteCount = outputPath?.count ?? path.utf8.count
+        guard var output = rgSwiftStdoutBuffer(capacity: max(64, pathByteCount + terminatorCount)) else {
+            return false
+        }
+        defer {
+            output.deallocate()
+        }
+        let wrotePath: Bool
+        if let outputPath {
+            wrotePath = output.writeBytes(outputPath)
+        } else {
+            var path = path
+            wrotePath = path.withUTF8 { bytes in
                 guard let baseAddress = bytes.baseAddress else {
                     return true
                 }
-                return fwrite(baseAddress, 1, bytes.count, Darwin.stdout) == bytes.count
-            }
-        } else {
-            path.withCString { cString in
-                let byteCount = strlen(cString)
-                return fwrite(cString, 1, byteCount, Darwin.stdout) == byteCount
+                return output.write(baseAddress, count: bytes.count)
             }
         }
         guard wrotePath else {
             return false
         }
-        return writePathTerminator(
-            nullTerminated: nullTerminated,
-            crlfTerminated: crlfTerminated
-        )
+        if nullTerminated {
+            guard output.writeByte(0) else {
+                return false
+            }
+        } else if crlfTerminated {
+            guard output.writeByte(UInt8(ascii: "\r")),
+                  output.writeByte(UInt8(ascii: "\n")) else {
+                return false
+            }
+        } else {
+            guard output.writeByte(UInt8(ascii: "\n")) else {
+                return false
+            }
+        }
+        guard output.flush() else {
+            return false
+        }
+        return true
     }
 
     public static func quietExitCode(

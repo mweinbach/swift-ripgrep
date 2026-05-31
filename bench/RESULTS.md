@@ -8,6 +8,31 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Buffered path-only preflight output — 2026-05-31
+
+Single-file Darwin path-only preflights now emit the display path and its
+newline/CRLF/NUL terminator through the existing Swift stdout buffer in one
+flush. This avoids a separate terminator write while preserving the same path
+bytes and terminator semantics for `-l` and `--files-without-match` forms.
+
+Validation:
+
+- Current Swift output matched the saved previous Swift binary byte-for-byte for
+  `--files-without-match` match/no-match, NUL, CRLF, `--files-with-matches`,
+  `--stats --files-without-match`, and `--json --files-without-match` controls
+  on the 46 MiB ASCII fixture.
+- Current Swift output matched Rust byte-for-byte for path-only
+  `--files-without-match`, NUL, CRLF, and `--files-with-matches` controls on the
+  same explicit file.
+
+On `/tmp/swift-rg-bench/match-ascii-46m.txt`, timed with 10-20 warmups:
+
+| Command | Current Swift | Previous Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--files-without-match absentliteral` | 6.9 ms | 7.0 ms | 6.4 ms |
+| `--stats --files-without-match absentliteral` | 7.7 ms | 8.0 ms | 6.9 ms |
+| `--json --files-without-match absentliteral` | 7.7 ms | 7.9 ms | 6.9 ms |
+
 ## Direct JSON summary writer — 2026-05-31
 
 JSON no-match summaries now share the same direct Swift stdout buffer path as
