@@ -310,6 +310,13 @@ sorted Rust-output checks:
   95.4 ms before to 97.5 ms after in the first pass and from 94.3 ms before to
   96.8 ms after in the flipped pass; hidden moved from 102.0/101.5 ms before to
   103.6/103.8 ms after. The standard `String.hasPrefix`/`hasSuffix` path stayed.
+- One-level nested parallel file-list splitting under large root-child
+  directories was also rejected. It preserved exact Swift output and sorted Rust
+  parity for default, hidden, no-vcs, and no-global file listing, but the extra
+  GCD work and ordered chunk buffering overwhelmed any straggler benefit:
+  default regressed to 150.0 ms versus 79.8 ms before, hidden to 150.0 ms versus
+  80.6 ms before, and system CPU jumped to about 2.9 s per run. The existing
+  root-child parallel boundary stayed.
 
 ### Continuation probes — 2026-05-29
 
