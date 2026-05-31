@@ -343,6 +343,25 @@ because they did not improve the current checkpoint:
   versus 84.37 ms, `--no-ignore-vcs` at 66.87 ms versus 67.16 ms, and
   `--no-ignore` at 65.28 ms versus 65.15 ms. The original 64-entry reserve
   stayed.
+- Routing raw-literal buffer eligibility through walker-provided `Haystack`
+  metadata, then skipping the streaming preflight when that buffered raw path
+  would be chosen anyway, also stayed rejected. Both forms preserved exact Swift
+  output for quiet literal match/no-match, explicit literal output, path-only
+  output, and binary-NUL controls, with matching Rust quiet statuses. The
+  metadata-only probe measured `PM_RESUME -q` flat at 1.016 s median versus
+  1.016 s baseline, no-match quiet slightly slower at 1.581 s versus 1.574 s,
+  and `spin_lock -n` flat at 1.739 s. The combined skip-stream probe likewise
+  stayed flat-to-slower: `PM_RESUME -q` 1.018 s versus 1.014 s, no-match quiet
+  1.587 s versus 1.582 s, `spin_lock -n` 1.740 s versus 1.735 s, and
+  `spin_lock -l` 1.654 s versus 1.652 s. The existing streamed-search gate and
+  file-attribute helper stayed.
+- Returning immediately from `GlobMatcher.fastDecision` when the Darwin fast
+  index had no unindexed fallback rules preserved exact Swift output for default,
+  hidden, no-vcs, debug, and sorted file-list controls, with sorted Rust parity.
+  It was not retained because the 80-pair A/B was mixed: default `--files`
+  improved to 81.06 ms median versus 82.13 ms baseline, but hidden regressed to
+  83.52 ms versus 83.15 ms, no-vcs to 66.37 ms versus 65.94 ms, and sorted
+  default stayed flat at 121.16 ms versus 121.04 ms.
 - Decoding raw Greek-script candidate lines from an
   `UnsafeBufferPointer<UInt8>` instead of copying them into temporary `Data`
   preserved exact Swift output and sorted Rust parity, but did not improve the
