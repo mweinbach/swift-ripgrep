@@ -59,6 +59,30 @@ On two 46 MiB explicit files under `/tmp/swift-rg-bench`, 40 timed runs with
 | `--heading -c missingliteral no-match-ascii-46m.txt match-ascii-46m.txt` | 25.21 ms | 312.44 ms | 25.14 ms |
 | Same command, order-flipped confirmation | 21.78 ms | 310.91 ms | 24.83 ms |
 
+## Multi-file repeated-regexp preflight checkpoint — 2026-05-31
+
+Explicit regular-file searches with more than one `-e` pattern now have a
+narrow multi-file Swift preflight for plain literal count, path-only, and quiet
+modes. The branch reuses the existing multi-literal Darwin helpers and stays
+deliberately conservative: case-insensitive, word-regexp, and exact-line forms
+still use the previous route until they are measured and proven separately.
+
+Validation:
+
+- Current Swift output matched the saved pre-change Swift binary and Rust
+  byte-for-byte for repeated-`-e` multi-file count, include-zero count,
+  count-matches, files-with-matches, files-without-match, and quiet controls.
+- Coverage was added for repeated-`-e` multi-file count, include-zero count,
+  count-matches, path-only, files-without-match, and quiet forms.
+
+On two 46 MiB explicit files under `/tmp/swift-rg-bench`, 40 timed runs with
+5 warmups:
+
+| Command | Current Swift | Previous Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `-c -e missingliteral -e absentliteral no-match-ascii-46m.txt match-ascii-46m.txt` | 45.32 ms | 342.55 ms | 32.42 ms |
+| Same command, order-flipped confirmation | 45.60 ms | 346.74 ms | 33.13 ms |
+
 ## Files-mode root setup checkpoint — 2026-05-31
 
 The Darwin file-list root planner now proves the fast root is a directory before
