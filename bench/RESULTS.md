@@ -389,6 +389,13 @@ because they did not improve the current checkpoint:
   versus 142.31 ms, no-vcs 108.17 ms versus 108.04 ms, default 122.17 ms
   versus 121.69 ms, and reverse default 122.64 ms versus 121.66 ms. The 1,024
   reserve stayed.
+- Sorting reverse file-list output with the forward comparator and then
+  iterating the sorted array in reverse also stayed rejected. It preserved exact
+  Swift output and Rust ordered output, but an alternating 120-pair A/B against
+  checkpoint `2e0dcad` regressed every reverse control: no-ignore reverse
+  sorting measured 145.86 ms median versus 144.77 ms baseline, hidden no-ignore
+  reverse sorting 140.07 ms versus 139.23 ms, and default reverse sorting
+  123.20 ms versus 121.87 ms. The dedicated reverse comparator stayed.
 
 ## Visible line stats preflight — 2026-05-31
 
