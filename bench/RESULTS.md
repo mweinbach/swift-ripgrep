@@ -1266,6 +1266,18 @@ sorted Rust-output checks:
   `--quiet --files` in the flipped order. A narrow multiple-explicit-file quiet
   shortcut preserved output/status but did not improve the two-file match or
   no-match controls. The existing quiet first-match route stayed.
+- Follow-up quiet literal probes on 2026-05-31 also stayed rejected. The
+  `PM_RESUME -q` hotspot first matched at file 14,840 in Swift file-list order,
+  after about 164 MiB, while the existing 16 MiB probe budget covered roughly
+  the first 937 files. Reusing the same raw byte-literal first-match scan inside
+  the normal parallel fallback preserved quiet stdout/stderr/status versus the
+  previous Swift binary and Rust for recursive match/no-match, explicit-file,
+  `--quiet --files`, and binary-NUL controls, but regressed `PM_RESUME -q` to
+  1.242 s median versus 1.024 s before and no-match quiet to 2.951 s versus
+  1.772 s before. Skipping files that the bounded probe had already proven
+  no-match was also parity-clean, but measured `PM_RESUME -q` at 1.030 s versus
+  1.007 s before and no-match quiet at 1.596 s versus 1.583 s before, so the
+  fallback still restarts through the normal parallel search path.
 - Replacing the recursive quiet raw-literal size guard's `FileManager`
   attribute lookup with a Darwin `fstatat` call also stayed rejected. It
   preserved quiet stdout/stderr/status versus the previous Swift binary and
