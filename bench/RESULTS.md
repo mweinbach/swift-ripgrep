@@ -517,6 +517,28 @@ sorted Rust-output checks:
   83.0 ms before, and no-vcs was neutral. The order-flipped 120-run
   confirmation still had default slower at 78.9 ms versus 78.4 ms before and
   no-vcs flat, so the single last-byte suffix bucket stayed.
+- Skipping path-dependent ignore rules for deep relative paths outside literal
+  first-component prefixes was rejected. Exact Swift output matched the
+  previous binary for default, hidden, no-vcs, and no-global file listing, and
+  sorted output matched Rust on those controls. The 80-run A/B showed the extra
+  branch/prefix bookkeeping overwhelmed the avoided path-rule checks: default
+  regressed to 86.0 ms versus 78.7 ms before, hidden to 88.0 ms versus
+  80.8 ms before, and no-vcs stayed slightly worse at 64.8 ms versus 63.7 ms.
+- Calling `opendir` through a local `String.withCString` helper instead of the
+  direct Swift string bridge was also rejected. It preserved exact Swift output
+  and sorted Rust parity for default, hidden, no-vcs, and no-ignore file
+  listing, but the timings were order-sensitive and not a clear win: a
+  current-first 100-run pass put default at 81.0 ms versus 78.9 ms before,
+  while an order-flipped 120-run pass put default nearly flat at 79.3 ms versus
+  79.5 ms before and hidden slightly worse at 81.0 ms versus 80.8 ms before.
+  The existing direct `opendir(path)` calls stayed.
+
+A fresh three-run Linux benchsuite scan kept recursive search ahead of Rust on
+all captured rows, so the active gap remains ignore-aware file listing rather
+than search throughput. The slowest Swift/Rust ratios were still Swift wins:
+`linux_alternates_casei` at 2.308 s versus Rust 2.635 s, `linux_no_literal` at
+2.214 s versus Rust 2.602 s, `linux_no_literal (ASCII)` at 2.159 s versus Rust
+2.691 s, and `linux_unicode_greek_casei` at 2.123 s versus Rust 2.618 s.
 
 ### Continuation probes — 2026-05-29
 
