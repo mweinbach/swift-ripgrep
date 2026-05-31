@@ -37,6 +37,54 @@ public enum SwiftDarwinLiteralPreflight {
         }
     }
 
+    private final class QuietStatsCountAccumulator: @unchecked Sendable {
+        private let lock = NSLock()
+        private var count = 0
+
+        func add(_ value: Int) {
+            lock.lock()
+            count += value
+            lock.unlock()
+        }
+
+        func snapshot() -> Int {
+            lock.lock()
+            let result = count
+            lock.unlock()
+            return result
+        }
+    }
+
+    private final class QuietStatsMatchedFileAccumulator: @unchecked Sendable {
+        private let lock = NSLock()
+        private var result: rg_darwin_literal_file_result?
+        private var matchCount: Int?
+        private var failed = false
+
+        func recordResult(_ value: rg_darwin_literal_file_result?) {
+            lock.lock()
+            if let value, value.status >= 0 {
+                result = value
+            } else {
+                failed = true
+            }
+            lock.unlock()
+        }
+
+        func recordMatchCount(_ value: Int) {
+            lock.lock()
+            matchCount = value
+            lock.unlock()
+        }
+
+        func snapshot() -> (result: rg_darwin_literal_file_result?, matchCount: Int?, failed: Bool) {
+            lock.lock()
+            let snapshot = (result, matchCount, failed)
+            lock.unlock()
+            return snapshot
+        }
+    }
+
     private static func writePathTerminator(
         nullTerminated: Bool,
         crlfTerminated: Bool
@@ -443,21 +491,18 @@ public enum SwiftDarwinLiteralPreflight {
                 bytesSearched += data.count
                 continue
             }
-            guard let result = multiLiteralResult(
-                    path: path,
-                    literals: literals,
-                    maxCount: nil,
-                    emitLines: false
-                  ),
-                  result.status >= 0 else {
+            guard let summary = nonOverlappingMultiLiteralMatchedStats(
+                path: path,
+                data: data,
+                literals: literals
+            ) else {
                 return nil
             }
 
-            let fileMatchedLines = result.matched_line_count
-            totalMatches += countNonOverlappingMultiLiteralMatches(in: data, literals: literals)
-            matchedLines += fileMatchedLines
-            bytesSearched += result.bytes_searched
-            if fileMatchedLines > 0 {
+            totalMatches += summary.totalMatches
+            matchedLines += summary.matchedLines
+            bytesSearched += summary.bytesSearched
+            if summary.matchedLines > 0 {
                 filesWithMatches += 1
             }
         }
@@ -469,6 +514,67 @@ public enum SwiftDarwinLiteralPreflight {
             filesSearched: paths.count,
             bytesSearched: bytesSearched,
             exitCode: totalMatches > 0 ? 0 : 1
+        )
+    }
+
+    private static func nonOverlappingMultiLiteralMatchedStats(
+        path: String,
+        data: Data,
+        literals: [[UInt8]]
+    ) -> (totalMatches: Int, matchedLines: Int, bytesSearched: Int)? {
+        guard literals.count > 1,
+              data.count >= 1024 * 1024 else {
+            guard let result = multiLiteralResult(
+                    path: path,
+                    literals: literals,
+                    maxCount: nil,
+                    emitLines: false
+                  ),
+                  result.status >= 0 else {
+                return nil
+            }
+            return (
+                totalMatches: countNonOverlappingMultiLiteralMatches(in: data, literals: literals),
+                matchedLines: result.matched_line_count,
+                bytesSearched: result.bytes_searched
+            )
+        }
+
+        let accumulator = QuietStatsMatchedFileAccumulator()
+        let group = DispatchGroup()
+        let queue = DispatchQueue.global(qos: .userInitiated)
+
+        group.enter()
+        queue.async {
+            accumulator.recordResult(multiLiteralResult(
+                path: path,
+                literals: literals,
+                maxCount: nil,
+                emitLines: false
+            ))
+            group.leave()
+        }
+
+        group.enter()
+        queue.async {
+            accumulator.recordMatchCount(countNonOverlappingMultiLiteralMatches(
+                in: data,
+                literals: literals
+            ))
+            group.leave()
+        }
+
+        group.wait()
+        let summary = accumulator.snapshot()
+        guard !summary.failed,
+              let result = summary.result,
+              let matchCount = summary.matchCount else {
+            return nil
+        }
+        return (
+            totalMatches: matchCount,
+            matchedLines: result.matched_line_count,
+            bytesSearched: result.bytes_searched
         )
     }
 
@@ -6934,11 +7040,19 @@ public enum SwiftDarwinLiteralPreflight {
         in data: Data,
         literals: [[UInt8]]
     ) -> Int {
-        var matchCount = 0
-        for literal in literals {
-            matchCount += countNonOverlappingMatches(in: data, literal: literal)
+        guard literals.count > 1,
+              data.count >= 1024 * 1024 else {
+            var matchCount = 0
+            for literal in literals {
+                matchCount += countNonOverlappingMatches(in: data, literal: literal)
+            }
+            return matchCount
         }
-        return matchCount
+        let accumulator = QuietStatsCountAccumulator()
+        DispatchQueue.concurrentPerform(iterations: literals.count) { index in
+            accumulator.add(countNonOverlappingMatches(in: data, literal: literals[index]))
+        }
+        return accumulator.snapshot()
     }
 
     static func multiLiteralResult(
