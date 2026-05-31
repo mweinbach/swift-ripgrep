@@ -227,6 +227,14 @@ sorted Rust-output checks:
   before and ASCII 2.126 s versus 2.150 s before; the current-first 10-run
   confirmation reversed that to Unicode 2.277 s versus 2.196 s before and ASCII
   2.284 s versus 2.131 s before, so the plain helpers stay.
+- A Swift UTF-8 prescan for the Greek-script fast path also stayed rejected.
+  It preserved exact Swift output and sorted Rust parity for recursive
+  matching-lines, count, count-matches, and files-with-matches modes, but the
+  added validation pass did not beat the retained high-bit guard plus decode.
+  A seven-run line-output A/B measured plain `\p{Greek}` at 1.868 s versus
+  1.853 s before and ignore-case at 1.884 s versus 1.883 s before. Count and
+  count-matches checks were flat at about 1.86 s, so the simpler matcher-backed
+  scan stayed.
 - Follow-up VCS-ignore file-list probes on 2026-05-30 also preserved exact
   Swift output and sorted Rust parity but did not retain a measurable win:
   URL `isDirectory` hints for known ignore/config file appends were mixed
