@@ -392,6 +392,33 @@ sorted Rust-output checks:
   fallback and regressed recursive Linux no-match to 2.500 s versus 1.579 s
   before. The restart into the normal search path remains faster for exhaustive
   quiet misses.
+- Folding the fast directory-entry current/parent/ASCII/hidden checks into one
+  byte pass before string decoding also stayed rejected. It preserved exact
+  Swift output for default, hidden, no-vcs, sorted file listing, and quiet
+  controls, with sorted Rust output parity for file listing and exact Rust
+  parity for sorted/quiet controls. The 80-run A/B was flat for default
+  `--files` at 79.3 ms versus 79.6 ms before, regressed hidden to 82.3 ms
+  versus 81.6 ms, and regressed recursive `EXPORT_SYMBOL -q` to 52.5 ms versus
+  38.1 ms. The existing helper plus `allSatisfy` stayed.
+- Combining the recursive quiet raw-literal BOM checks, binary NUL check, and
+  literal scan into one `Data.withUnsafeBytes` pass was rejected after the
+  order-flipped confirmation. It preserved quiet stdout/stderr/status versus the
+  previous Swift binary and Rust for recursive match/no-match, explicit-file
+  match/no-match, two-file match, UTF-8 BOM, UTF-16LE BOM, and binary-NUL
+  controls. The first 100-run pass was mixed at 58.2 ms versus 60.7 ms before
+  for near-match quiet and 1.573 s versus 1.572 s before for no-match quiet; the
+  flipped pass regressed both, with near-match at 50.5 ms versus 47.5 ms and
+  no-match at 1.582 s versus 1.578 s. The separate existing BOM/binary checks
+  stayed.
+- Raising the block-buffered stdout size from 64 KiB to 256 KiB also stayed
+  rejected. Exact output matched the previous Swift binary for default, hidden,
+  no-vcs, sorted file listing, normal line output, and explicit
+  `--block-buffered`/`--line-buffered` controls; sorted output matched Rust for
+  the same file-list and line-output controls. The 80-run A/B was flat on
+  default `--files` at 79.6 ms versus 80.1 ms before and no-vcs at 64.6 ms for
+  both, but sorted `--files` regressed to 152.6 ms versus 151.8 ms and recursive
+  `EXPORT_SYMBOL` line output regressed to 1.687 s versus 1.679 s. The 64 KiB
+  stdout buffer stayed.
 
 ### Continuation probes — 2026-05-29
 
