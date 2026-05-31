@@ -256,6 +256,12 @@ sorted Rust-output checks:
   user CPU up to 112.6 ms from 104.6 ms; the hidden no-global control was also
   slower at 78.6 ms versus 77.4 ms. The reverse matcher loop stayed faster for
   these tiny global-ignore shapes.
+- Adding a first-byte check alongside the retained final-byte guard in
+  `hasPathComponentSuffix` also preserved exact Swift output and sorted Rust
+  parity, but it slowed the file-listing controls in a 100-run A/B: default
+  measured 80.8 ms versus 77.9 ms before, hidden 81.0 ms versus 79.9 ms,
+  no-vcs 64.7 ms versus 62.9 ms, and hidden/no-global 78.5 ms versus 77.2 ms.
+  The single final-byte guard stayed.
 
 ### Continuation probes — 2026-05-29
 
