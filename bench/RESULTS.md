@@ -165,6 +165,18 @@ sorted default output matched Rust. A 100-run A/B measured default `--files` at
 at 78.5 ms versus 79.0 ms before, hidden at 80.9 ms versus 81.6 ms, and no-vcs
 neutral at 63.7 ms versus 63.6 ms.
 
+The path-component suffix matcher now checks the candidate's final byte before
+falling into `memcmp`. This keeps tiny exact slash-pattern ignores cheap on the
+non-match path while preserving the existing Swift-only UTF-8 buffer helper.
+Exact Swift output matched the previous binary for default, hidden,
+`--no-ignore-vcs`, and hidden/no-global file listing; sorted output matched Rust
+for the same controls. The first 80-run A/B was noisy but had better medians for
+default and hidden. The order-flipped 100-run pass kept default median slightly
+positive at 78.5 ms versus 78.6 ms before and hidden mean positive at 80.6 ms
+versus 82.4 ms before, while no-vcs was noise-level. A focused 150-run pass
+measured default at 77.4 ms versus 78.2 ms before, with hidden neutral at
+80.0 ms versus 79.7 ms and no-vcs noise-dominated at 64.9 ms versus 65.5 ms.
+
 Several plausible Swift-only probes were rejected after exact Swift-output and
 sorted Rust-output checks:
 

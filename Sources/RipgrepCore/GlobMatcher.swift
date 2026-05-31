@@ -846,7 +846,8 @@ public struct GlobMatcher: Equatable {
                     return false
                 }
                 let offset = valueBytes.count - suffixBytes.count
-                guard valueBytes[offset - 1] == UInt8(ascii: "/") else {
+                guard valueBytes[offset - 1] == UInt8(ascii: "/"),
+                      valueBytes[valueBytes.count - 1] == suffixBytes[suffixBytes.count - 1] else {
                     return false
                 }
                 return memcmp(valueBase.advanced(by: offset), suffixBase, suffixBytes.count) == 0
