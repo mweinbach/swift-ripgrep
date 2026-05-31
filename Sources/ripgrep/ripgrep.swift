@@ -3568,6 +3568,13 @@ struct RipgrepCommand {
                             maxCount: parsedMaxCount,
                             countPrefix: prefix,
                             crlfTerminated: parsedCrlf
+                        ) ?? SwiftDarwinLiteralPreflight.multiLiteralOverlappingCountMatchesExitCode(
+                            path: candidatePath,
+                            literals: literals,
+                            includeZero: parsedIncludeZero,
+                            maxCount: parsedMaxCount,
+                            countPrefix: prefix,
+                            crlfTerminated: parsedCrlf
                         )
                     } else {
                         guard !asciiCaseInsensitive else {
@@ -4232,6 +4239,13 @@ struct RipgrepCommand {
                     maxCount: parsedMaxCount,
                     countPrefix: parsedCountPrefix,
                     crlfTerminated: parsedCrlf
+                ) ?? SwiftDarwinLiteralPreflight.multiLiteralOverlappingCountMatchesExitCode(
+                    path: path,
+                    literals: literals,
+                    includeZero: parsedIncludeZero,
+                    maxCount: parsedMaxCount,
+                    countPrefix: parsedCountPrefix,
+                    crlfTerminated: parsedCrlf
                 )
             }
             if asciiCaseInsensitive {
@@ -4889,6 +4903,13 @@ struct RipgrepCommand {
                     return nil
                 }
                 return SwiftDarwinLiteralPreflight.multiLiteralCountMatchesExitCode(
+                    path: path,
+                    literals: literals,
+                    includeZero: parsedIncludeZero,
+                    maxCount: parsedMaxCount,
+                    countPrefix: parsedCountPrefix,
+                    crlfTerminated: parsedCrlf
+                ) ?? SwiftDarwinLiteralPreflight.multiLiteralOverlappingCountMatchesExitCode(
                     path: path,
                     literals: literals,
                     includeZero: parsedIncludeZero,

@@ -422,133 +422,68 @@ public enum SwiftDarwinLiteralPreflight {
             return nonOverlappingMultiLiteralQuietStatsExitCode(paths: paths, literals: literals)
         }
 
-        return overlappingMultiLiteralNoMatchQuietStatsExitCode(paths: paths, literals: rawLiterals)
+        return overlappingMultiLiteralQuietStatsExitCode(paths: paths, literals: rawLiterals)
     }
 
-    private static func overlappingMultiLiteralNoMatchQuietStatsExitCode(
+    private static func overlappingMultiLiteralQuietStatsExitCode(
         paths: [String],
         literals rawLiterals: [[UInt8]]
     ) -> Int32? {
-        if let existingScannerResult = existingScannerOverlappingMultiLiteralNoMatchQuietStatsExitCode(
-            paths: paths,
-            literals: rawLiterals
-        ) {
-            return existingScannerResult
-        }
-
-        let rawLiteralData = rawLiterals.map { Data($0) }
-
-        let processorCount = max(1, ProcessInfo.processInfo.processorCount)
-        if rawLiteralData.count > 1,
-           paths.count <= processorCount,
-           paths.count * rawLiteralData.count <= processorCount * 4 {
-            return flattenedOverlappingMultiLiteralNoMatchQuietStatsExitCode(
-                paths: paths,
-                literals: rawLiteralData
-            )
-        }
-
-        let accumulator = QuietStatsProbeAccumulator()
+        let accumulator = QuietStatsSummaryAccumulator()
         DispatchQueue.concurrentPerform(iterations: paths.count) { index in
-            guard let data = mappedPreflightData(path: paths[index]),
-                  !hasBinaryDetectionPrefix(data),
-                  !containsNULByte(data) else {
-                accumulator.recordFailure()
-                return
-            }
-            let matched = dataContainsAnyLiteralUsingFoundation(data, literals: rawLiteralData)
-            accumulator.record(bytes: data.count, matched: matched)
-        }
-
-        let result = accumulator.snapshot()
-        guard !result.failed,
-              !result.hasMatch else {
-            return nil
-        }
-        return writeStatsSummary(
-            totalMatches: 0,
-            matchedLines: 0,
-            filesWithMatches: 0,
-            filesSearched: paths.count,
-            bytesSearched: result.bytesSearched,
-            exitCode: 1
-        )
-    }
-
-    private static func existingScannerOverlappingMultiLiteralNoMatchQuietStatsExitCode(
-        paths: [String],
-        literals rawLiterals: [[UInt8]]
-    ) -> Int32? {
-        let accumulator = QuietStatsProbeAccumulator()
-        DispatchQueue.concurrentPerform(iterations: paths.count) { index in
-            guard let result = multiLiteralResult(
+            guard let summary = overlappingMultiLiteralFileStats(
                 path: paths[index],
-                literals: rawLiterals,
-                maxCount: 1,
-                emitLines: false
-            ), result.status >= 0 else {
+                literals: rawLiterals
+            ) else {
                 accumulator.recordFailure()
                 return
             }
             accumulator.record(
-                bytes: result.bytes_searched,
-                matched: result.matched_line_count > 0
+                totalMatches: summary.totalMatches,
+                matchedLines: summary.matchedLines,
+                bytesSearched: summary.bytesSearched
             )
         }
 
-        let result = accumulator.snapshot()
-        guard !result.failed,
-              !result.hasMatch else {
+        let summary = accumulator.snapshot()
+        guard !summary.failed else {
             return nil
         }
         return writeStatsSummary(
-            totalMatches: 0,
-            matchedLines: 0,
-            filesWithMatches: 0,
+            totalMatches: summary.totalMatches,
+            matchedLines: summary.matchedLines,
+            filesWithMatches: summary.filesWithMatches,
             filesSearched: paths.count,
-            bytesSearched: result.bytesSearched,
-            exitCode: 1
+            bytesSearched: summary.bytesSearched,
+            exitCode: summary.totalMatches > 0 ? 0 : 1
         )
     }
 
-    private static func flattenedOverlappingMultiLiteralNoMatchQuietStatsExitCode(
-        paths: [String],
-        literals rawLiteralData: [Data]
-    ) -> Int32? {
-        var mappedData: [Data] = []
-        mappedData.reserveCapacity(paths.count)
-        var bytesSearched = 0
-        for path in paths {
-            guard let data = mappedPreflightData(path: path),
-                  !hasBinaryDetectionPrefix(data),
-                  !containsNULByte(data) else {
-                return nil
-            }
-            bytesSearched += data.count
-            mappedData.append(data)
-        }
-
-        let mappedFiles = mappedData
-        let accumulator = QuietStatsProbeAccumulator()
-        let literalCount = rawLiteralData.count
-        DispatchQueue.concurrentPerform(iterations: mappedFiles.count * literalCount) { index in
-            let fileIndex = index / literalCount
-            let literalIndex = index % literalCount
-            if mappedFiles[fileIndex].range(of: rawLiteralData[literalIndex]) != nil {
-                accumulator.recordMatch()
-            }
-        }
-
-        guard !accumulator.snapshot().hasMatch else {
+    private static func overlappingMultiLiteralFileStats(
+        path: String,
+        literals rawLiterals: [[UInt8]]
+    ) -> (totalMatches: Int, matchedLines: Int, bytesSearched: Int)? {
+        guard let data = mappedPreflightData(path: path),
+              !hasBinaryDetectionPrefix(data),
+              !containsNULByte(data),
+              let totalMatches = countMultiLiteralOnlyMatches(in: data, literals: rawLiterals) else {
             return nil
         }
-        return writeStatsSummary(
-            totalMatches: 0,
-            matchedLines: 0,
-            filesWithMatches: 0,
-            filesSearched: paths.count,
-            bytesSearched: bytesSearched,
-            exitCode: 1
+        guard totalMatches > 0 else {
+            return (totalMatches: 0, matchedLines: 0, bytesSearched: data.count)
+        }
+        guard let result = multiLiteralResult(
+            path: path,
+            literals: rawLiterals,
+            maxCount: nil,
+            emitLines: false
+        ), result.status >= 0 else {
+            return nil
+        }
+        return (
+            totalMatches: totalMatches,
+            matchedLines: result.matched_line_count,
+            bytesSearched: result.bytes_searched
         )
     }
 
@@ -7007,6 +6942,70 @@ public enum SwiftDarwinLiteralPreflight {
         return matchCount > 0 ? 0 : 1
     }
 
+    public static func multiLiteralOverlappingCountMatchesExitCode(
+        path: String,
+        literals: [[UInt8]],
+        includeZero: Bool,
+        maxCount: Int? = nil,
+        countPrefix: [UInt8] = [],
+        crlfTerminated: Bool = false
+    ) -> Int32? {
+        guard maxCount.map({ $0 > 0 }) ?? true,
+              let data = mappedPreflightData(path: path),
+              !hasBinaryDetectionPrefix(data),
+              let matchCount = countMultiLiteralOnlyMatches(
+                in: data,
+                literals: literals,
+                maxCount: maxCount
+              ) else {
+            return nil
+        }
+
+        if matchCount > 0 || includeZero {
+            guard writeCountOutput(
+                matchCount,
+                countPrefix: countPrefix,
+                crlfTerminated: crlfTerminated
+            ) else {
+                return nil
+            }
+        }
+        return matchCount > 0 ? 0 : 1
+    }
+
+    private static func countMultiLiteralOnlyMatches(
+        in data: Data,
+        literals rawLiterals: [[UInt8]],
+        maxCount: Int? = nil
+    ) -> Int? {
+        guard let literals = distinctExactLineLiterals(rawLiterals),
+              !literals.isEmpty,
+              maxCount.map({ $0 > 0 }) ?? true else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return 0
+        }
+        return data.withUnsafeBytes { rawData -> Int? in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
+            }
+            return rgSwiftDarwinWriteMultiLiteralOnlyMatches(
+                rawBase.assumingMemoryBound(to: UInt8.self),
+                haystackLength: data.count,
+                literals: literals,
+                lineNumber: false,
+                byteOffset: false,
+                column: false,
+                maxCount: maxCount ?? Int.max,
+                lineNumberFieldSeparator: [58],
+                linePrefix: [],
+                headingPrefix: [],
+                emitMatches: false
+            )
+        }
+    }
+
     private static func countMultiLiteralMatchesWithinFirstMatchingLines(
         data: Data,
         literals: [[UInt8]],
@@ -10359,7 +10358,8 @@ private func rgSwiftDarwinWriteMultiLiteralOnlyMatches(
     maxCount: Int,
     lineNumberFieldSeparator: [UInt8],
     linePrefix: [UInt8],
-    headingPrefix: [UInt8]
+    headingPrefix: [UInt8],
+    emitMatches: Bool = true
 ) -> Int? {
     guard maxCount > 0 else {
         return nil
@@ -10367,11 +10367,12 @@ private func rgSwiftDarwinWriteMultiLiteralOnlyMatches(
     guard !literals.isEmpty else {
         return 0
     }
-    guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+    var output = emitMatches ? rgSwiftStdoutBuffer(capacity: 1024 * 1024) : nil
+    if emitMatches, output == nil {
         return nil
     }
     defer {
-        output.deallocate()
+        output?.deallocate()
     }
 
     func nextCandidate(literalIndex: Int, from offset: Int) -> (start: Int, literalIndex: Int) {
@@ -10445,55 +10446,57 @@ private func rgSwiftDarwinWriteMultiLiteralOnlyMatches(
             )
         }
 
-        guard output.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading) else {
-            return nil
-        }
-        guard output.writeBytes(linePrefix) else {
-            return nil
-        }
-        if column {
-            advanceLineState(to: matchStart)
-        }
-        if lineNumber {
+        if emitMatches {
+            guard output?.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading) == true else {
+                return nil
+            }
+            guard output?.writeBytes(linePrefix) == true else {
+                return nil
+            }
             if column {
-                guard output.writeLineNumberPrefix(
-                    currentLineNumber,
-                    fieldSeparator: lineNumberFieldSeparator
-                ) else {
-                    return nil
-                }
-            } else {
-                currentLineNumber += rg_memcount_byte(
-                    base.advanced(by: lineCountOffset),
-                    matchStart - lineCountOffset,
-                    newline
-                )
-                lineCountOffset = matchStart
-                guard output.writeLineNumberPrefix(
-                    currentLineNumber,
-                    fieldSeparator: lineNumberFieldSeparator
-                ) else {
-                    return nil
+                advanceLineState(to: matchStart)
+            }
+            if lineNumber {
+                if column {
+                    guard output?.writeLineNumberPrefix(
+                        currentLineNumber,
+                        fieldSeparator: lineNumberFieldSeparator
+                    ) == true else {
+                        return nil
+                    }
+                } else {
+                    currentLineNumber += rg_memcount_byte(
+                        base.advanced(by: lineCountOffset),
+                        matchStart - lineCountOffset,
+                        newline
+                    )
+                    lineCountOffset = matchStart
+                    guard output?.writeLineNumberPrefix(
+                        currentLineNumber,
+                        fieldSeparator: lineNumberFieldSeparator
+                    ) == true else {
+                        return nil
+                    }
                 }
             }
-        }
-        if column,
-           !output.writeLineNumberPrefix(
-            matchStart - currentLineStart + 1,
-            fieldSeparator: lineNumberFieldSeparator
-           ) {
-            return nil
-        }
-        if byteOffset,
-           !output.writeLineNumberPrefix(
-            matchStart,
-            fieldSeparator: lineNumberFieldSeparator
-           ) {
-            return nil
-        }
-        guard output.write(base.advanced(by: matchStart), count: literalLength),
-              output.writeByte(UInt8(ascii: "\n")) else {
-            return nil
+            if column,
+               output?.writeLineNumberPrefix(
+                matchStart - currentLineStart + 1,
+                fieldSeparator: lineNumberFieldSeparator
+               ) != true {
+                return nil
+            }
+            if byteOffset,
+               output?.writeLineNumberPrefix(
+                matchStart,
+                fieldSeparator: lineNumberFieldSeparator
+               ) != true {
+                return nil
+            }
+            guard output?.write(base.advanced(by: matchStart), count: literalLength) == true,
+                  output?.writeByte(UInt8(ascii: "\n")) == true else {
+                return nil
+            }
         }
         matchCount += 1
 
@@ -10505,8 +10508,10 @@ private func rgSwiftDarwinWriteMultiLiteralOnlyMatches(
         }
     }
 
-    guard output.flush() else {
-        return nil
+    if emitMatches {
+        guard output?.flush() == true else {
+            return nil
+        }
     }
     return matchCount
 }

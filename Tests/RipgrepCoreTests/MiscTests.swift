@@ -2275,6 +2275,17 @@ struct MiscTests {
             root.path("quiet-no-match.txt"),
             root.path("dense.txt"),
         ])
+        let statsQuietRepeatedRegexpOverlappingMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "-q",
+            "-e",
+            "needle",
+            "-e",
+            "eedle",
+            root.path("quiet-no-match.txt"),
+            root.path("dense.txt"),
+        ])
         let statsQuietRepeatedRegexpNoMatchSummary = try runExecutableResult([
             "--no-config",
             "--stats",
@@ -2444,6 +2455,13 @@ struct MiscTests {
         #expect(statsQuietRepeatedRegexpMatchSummary.status == 0)
         #expect(statsQuietRepeatedRegexpMatchSummary.stderr.isEmpty)
         #expect(statsQuietRepeatedRegexpMatchSummary.stdout == expectedRepeatedQuietStatsSummary(
+            matches: 6,
+            matchedLines: 3,
+            filesWithMatches: 1
+        ))
+        #expect(statsQuietRepeatedRegexpOverlappingMatchSummary.status == 0)
+        #expect(statsQuietRepeatedRegexpOverlappingMatchSummary.stderr.isEmpty)
+        #expect(statsQuietRepeatedRegexpOverlappingMatchSummary.stdout == expectedRepeatedQuietStatsSummary(
             matches: 6,
             matchedLines: 3,
             filesWithMatches: 1
@@ -6143,6 +6161,16 @@ struct MiscTests {
         ], fixture: {})
         #expect(repeatedRegexpCountMatchesOutput == Data("6\n".utf8))
 
+        let overlappingRepeatedRegexpCountMatchesOutput = try runExecutableData([
+            "--count-matches",
+            "-e",
+            "needle",
+            "-e",
+            "eedle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(overlappingRepeatedRegexpCountMatchesOutput == Data("6\n".utf8))
+
         let boundedRepeatedRegexpCountMatchesOutput = try runExecutableData([
             "--count-matches",
             "-m2",
@@ -6153,6 +6181,17 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(boundedRepeatedRegexpCountMatchesOutput == Data("4\n".utf8))
+
+        let boundedOverlappingRepeatedRegexpCountMatchesOutput = try runExecutableData([
+            "--count-matches",
+            "-m2",
+            "-e",
+            "needle",
+            "-e",
+            "eedle",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(boundedOverlappingRepeatedRegexpCountMatchesOutput == Data("5\n".utf8))
 
         let patternFileCountMatchesOutput = try runExecutableData([
             "--count-matches",

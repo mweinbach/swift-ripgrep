@@ -8,6 +8,35 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Overlapping repeated-literal count/stat parity — 2026-05-31
+
+Overlapping repeated `-e` count paths now reuse the existing Swift multi-literal
+only-matching scanner with output disabled. This makes `--count-matches` and
+`--stats -q` count the same leftmost visible matches as Rust ripgrep, without a
+C shim or a new low-level scanner. Matching `--stats -q` summaries use that
+count plus the existing matched-line helper; all-absent overlap summaries stay
+on the fast Swift preflight path.
+
+Validation:
+
+- Current Swift output matched Rust byte-for-byte for overlapping
+  `--count-matches`, bounded `-m2 --count-matches`, and `--stats -q` after
+  normalizing only elapsed-time stats lines.
+- The prior Swift fallback double-counted overlapping repeated literals in
+  `--count-matches`/stats; this checkpoint intentionally changes that output to
+  match Rust and the already-correct Swift `-o` output.
+- `xcrun swift test --filter MiscTests/darwinExecutableLiteralPreflightDenseLines`
+  passed with focused overlapping count/stat coverage.
+
+On one or two 46 MiB explicit files under `/tmp/swift-rg-bench`, 20 timed runs
+with 2 warmups:
+
+| Command | Current Swift | Previous Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--stats -q -e missingliteral -e literal no-match-ascii-46m.txt match-ascii-46m.txt` | 80.5 ms | 12.968 s | 51.5 ms |
+| `--count-matches -e missingliteral -e literal match-ascii-46m.txt` | 30.3 ms | count-divergent | 47.7 ms |
+| `--stats -q -e absentliteral -e otherabsent no-match-ascii-46m.txt match-ascii-46m.txt` | 14.7 ms | 15.5 ms | 12.4 ms |
+
 ## Existing-scanner overlap no-match proof — 2026-05-31
 
 The overlapping repeated-`-e` `--stats -q` all-absent proof now first asks the
