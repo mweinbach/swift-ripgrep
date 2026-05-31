@@ -4479,6 +4479,10 @@ struct MiscTests {
 
         for (pathOnlyArguments, expectedOutput, expectedStatus) in [
             (["-l", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
+            (["-l", "needle", root.path("quiet-no-match.txt"), root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
+            (["-l", "needle|tail", root.path("quiet-no-match.txt"), root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
+            (["--files-without-match", "needle", root.path("quiet-no-match.txt"), root.path("dense.txt")], Data("\(root.path("quiet-no-match.txt"))\n".utf8), Int32(0)),
+            (["--files-with-matches", "--null", "needle", root.path("quiet-no-match.txt"), root.path("dense.txt")], Data("\(root.path("dense.txt"))\0".utf8), Int32(0)),
             (["--line-buffered", "-l", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
             (["--crlf", "-l", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt"))\r\n".utf8), Int32(0)),
             (["--crlf", "--null", "-l", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt"))\0".utf8), Int32(0)),
@@ -4893,6 +4897,10 @@ struct MiscTests {
 
         for (countArguments, expectedOutput, expectedStatus) in [
             (["-c", "needle", root.path("dense.txt")], Data("3\n".utf8), Int32(0)),
+            (["-c", "needle", root.path("quiet-no-match.txt"), root.path("dense.txt")], Data("\(root.path("dense.txt")):3\n".utf8), Int32(0)),
+            (["-c", "missing", root.path("quiet-no-match.txt"), root.path("dense.txt")], Data(), Int32(1)),
+            (["--no-filename", "-c", "needle", root.path("quiet-no-match.txt"), root.path("dense.txt")], Data("3\n".utf8), Int32(0)),
+            (["--count-matches", "needle", root.path("quiet-no-match.txt"), root.path("dense.txt")], Data("\(root.path("dense.txt")):5\n".utf8), Int32(0)),
             (["--count", "missing", root.path("quiet-no-match.txt")], Data(), Int32(1)),
             (["--count", "--include-zero", "missing", root.path("quiet-no-match.txt")], Data("0\n".utf8), Int32(1)),
             (["-c", "-m1", "needle", root.path("dense.txt")], Data("1\n".utf8), Int32(0)),

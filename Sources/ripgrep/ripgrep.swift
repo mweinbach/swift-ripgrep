@@ -1747,7 +1747,8 @@ struct RipgrepCommand {
         default:
             parsedPathOnlyMode = nil
         }
-        guard paths.count == 1 || parsedQuiet else {
+        let parsedCountStyleOutput = parsedPrintMode == .count || parsedPrintMode == .countMatches
+        guard paths.count == 1 || parsedQuiet || parsedPathOnlyMode != nil || parsedCountStyleOutput else {
             return nil
         }
         let parsedDisplayPath = Self.preflightDisplayPathBytes(
@@ -1763,7 +1764,6 @@ struct RipgrepCommand {
         } else {
             []
         }
-        let parsedCountStyleOutput = parsedPrintMode == .count || parsedPrintMode == .countMatches
         let parsedCanEmitDefaultColoredCountPrefix = parsedColorMayEmit
             && parsedColorForcesANSI
             && !parsedColorSpecMayChangePath
@@ -2105,6 +2105,7 @@ struct RipgrepCommand {
         }
         if parsedStopOnNonmatch,
            parsedPrintMode == .count,
+           paths.count == 1,
            !parsedOnlyMatching,
            !parsedQuiet,
            !parsedByteOffset,
@@ -2775,6 +2776,7 @@ struct RipgrepCommand {
             && (parsedJson || parsedStats)
         if parsedJson || parsedStats,
            parsedSummaryPrintModeCanUseNoMatchPreflight,
+           paths.count == 1,
            !parsedInvertMatch,
            parsedMaxCount != 0,
            !parsedNullData,
@@ -2829,6 +2831,7 @@ struct RipgrepCommand {
             }
         }
         if parsedFilesWithoutMatchPrintModeCanUseNoMatchPreflight,
+           paths.count == 1,
            !parsedInvertMatch,
            parsedMaxCount != 0,
            !parsedNullData,
@@ -2891,6 +2894,7 @@ struct RipgrepCommand {
             }
         }
         if parsedCountIncludeZeroPrintModeCanUseNoMatchPreflight,
+           paths.count == 1,
            !parsedInvertMatch,
            parsedMaxCount != 0,
            !parsedNullData,
@@ -2924,6 +2928,7 @@ struct RipgrepCommand {
             }
         }
         if parsedStatsCountPrintModeCanUseMatchedStatsPreflight,
+           paths.count == 1,
            !parsedInvertMatch,
            parsedMaxCount == nil,
            !parsedNullData,
@@ -2966,6 +2971,7 @@ struct RipgrepCommand {
             }
         }
         if parsedJSONNoOutputPrintModeCanUseNoMatchPreflight,
+           paths.count == 1,
            !parsedInvertMatch,
            parsedMaxCount != 0,
            !parsedNullData,
@@ -2995,6 +3001,7 @@ struct RipgrepCommand {
             }
         }
         if parsedJSONCountPrintModeCanUseCountPreflight,
+           paths.count == 1,
            !parsedInvertMatch,
            parsedMaxCount != 0,
            !parsedNullData,
@@ -3147,6 +3154,7 @@ struct RipgrepCommand {
             }
         }
         if parsedJSONFilesWithMatchesPrintModeCanUseMatchedPathPreflight,
+           paths.count == 1,
            !parsedInvertMatch,
            parsedMaxCount != 0,
            !parsedNullData,
@@ -3225,12 +3233,15 @@ struct RipgrepCommand {
         }
 
         if paths.count > 1 {
-            guard parsedQuiet,
+            guard parsedQuiet || parsedPathOnlyMode != nil || parsedCountStyleOutput,
                   explicitRegexpPatterns.count <= 1,
                   parsedMaxCount != 0,
                   (patternCanStartWithDash || !pattern.hasPrefix("-")),
                   paths.allSatisfy({ $0 != "-" }),
-                  paths.allSatisfy(isReadableRegularFile) else {
+                  paths.allSatisfy(isReadableRegularFile),
+                  !parsedHeading,
+                  !parsedCanEmitDefaultColoredCountPrefix,
+                  !(parsedCountStyleOutput && parsedIncludeZero) else {
                 return nil
             }
             let multiPathASCIIBoundaryLiteralPattern = (fixedStrings || asciiCaseInsensitive) ? nil : asciiBoundaryLiteral(
@@ -3256,59 +3267,293 @@ struct RipgrepCommand {
                 return nil
             }
 
-            var sawNoMatch = false
-            for candidatePath in paths {
-                let exitCode: Int32?
+            func quietStatus(for candidatePath: String) -> Int32? {
                 if asciiCaseInsensitive {
                     if wordRegexp {
-                        exitCode = SwiftDarwinLiteralPreflight.asciiCaseInsensitiveWordQuietExitCode(
+                        return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveWordQuietExitCode(
                             path: candidatePath,
                             literal: literal
+                        )
+                    }
+                    if parsedLineRegexp {
+                        guard !parsedNullData,
+                              !parsedCrlf else {
+                            return nil
+                        }
+                        return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveExactLineQuietExitCode(
+                            path: candidatePath,
+                            literal: literal
+                        )
+                    }
+                    return SwiftDarwinLiteralPreflight.asciiCaseInsensitiveQuietExitCode(
+                        path: candidatePath,
+                        literal: literal
+                    )
+                }
+                if wordRegexp {
+                    return SwiftDarwinLiteralPreflight.wordQuietExitCode(
+                        path: candidatePath,
+                        literal: literal
+                    )
+                }
+                if parsedLineRegexp {
+                    guard !parsedNullData,
+                          !parsedCrlf else {
+                        return nil
+                    }
+                    return SwiftDarwinLiteralPreflight.exactLineQuietExitCode(
+                        path: candidatePath,
+                        literal: literal
+                    )
+                }
+                return SwiftDarwinLiteralPreflight.quietExitCode(
+                    path: candidatePath,
+                    literal: literal
+                )
+            }
+
+            func displayPathBytes(for candidatePath: String) -> [UInt8] {
+                Self.preflightDisplayPathBytes(candidatePath, pathSeparator: parsedPathSeparator)
+            }
+
+            func pathOnlyOutputPath(for candidatePath: String) -> [UInt8]? {
+                parsedPathSeparator == nil && candidatePath.utf8.allSatisfy { $0 < 0x80 }
+                    ? nil
+                    : displayPathBytes(for: candidatePath)
+            }
+
+            func countPrefix(for candidatePath: String) -> [UInt8] {
+                guard parsedWithFilename || !parsedNoFilename else {
+                    return []
+                }
+                return displayPathBytes(for: candidatePath)
+                    + (parsedNullPathTerminator ? [0] : [UInt8(ascii: ":")])
+            }
+
+            var statuses: [(path: String, status: Int32)] = []
+            statuses.reserveCapacity(paths.count)
+            for candidatePath in paths {
+                guard let status = quietStatus(for: candidatePath) else {
+                    return nil
+                }
+                statuses.append((candidatePath, status))
+            }
+
+            if parsedQuiet {
+                return statuses.contains { $0.status == 0 } ? 0 : 1
+            }
+
+            if let parsedPathOnlyMode {
+                let printWhenMatched = parsedPathOnlyMode == .matching
+                var printed = false
+                for (candidatePath, status) in statuses
+                    where (status == 0) == printWhenMatched {
+                    let outputPath = pathOnlyOutputPath(for: candidatePath)
+                    let exitCode: Int32?
+                    if asciiCaseInsensitive {
+                        if wordRegexp {
+                            exitCode = SwiftDarwinLiteralPreflight.asciiCaseInsensitiveWordPathOnlyExitCode(
+                                path: candidatePath,
+                                literal: literal,
+                                printWhenMatched: printWhenMatched,
+                                nullTerminated: parsedNullPathTerminator,
+                                crlfTerminated: parsedCrlf,
+                                outputPath: outputPath
+                            )
+                        } else if parsedLineRegexp {
+                            guard !parsedNullData,
+                                  !parsedCrlf else {
+                                return nil
+                            }
+                            exitCode = SwiftDarwinLiteralPreflight.asciiCaseInsensitiveExactLinePathOnlyExitCode(
+                                path: candidatePath,
+                                literal: literal,
+                                printWhenMatched: printWhenMatched,
+                                nullTerminated: parsedNullPathTerminator,
+                                crlfTerminated: parsedCrlf,
+                                outputPath: outputPath
+                            )
+                        } else {
+                            exitCode = SwiftDarwinLiteralPreflight.asciiCaseInsensitivePathOnlyExitCode(
+                                path: candidatePath,
+                                literal: literal,
+                                printWhenMatched: printWhenMatched,
+                                nullTerminated: parsedNullPathTerminator,
+                                crlfTerminated: parsedCrlf,
+                                outputPath: outputPath
+                            )
+                        }
+                    } else if wordRegexp {
+                        exitCode = SwiftDarwinLiteralPreflight.wordPathOnlyExitCode(
+                            path: candidatePath,
+                            literal: literal,
+                            printWhenMatched: printWhenMatched,
+                            nullTerminated: parsedNullPathTerminator,
+                            crlfTerminated: parsedCrlf,
+                            outputPath: outputPath
                         )
                     } else if parsedLineRegexp {
                         guard !parsedNullData,
                               !parsedCrlf else {
                             return nil
                         }
-                        exitCode = SwiftDarwinLiteralPreflight.asciiCaseInsensitiveExactLineQuietExitCode(
+                        exitCode = SwiftDarwinLiteralPreflight.exactLinePathOnlyExitCode(
                             path: candidatePath,
-                            literal: literal
+                            literal: literal,
+                            printWhenMatched: printWhenMatched,
+                            nullTerminated: parsedNullPathTerminator,
+                            crlfTerminated: parsedCrlf,
+                            outputPath: outputPath
                         )
                     } else {
-                        exitCode = SwiftDarwinLiteralPreflight.asciiCaseInsensitiveQuietExitCode(
+                        exitCode = SwiftDarwinLiteralPreflight.pathOnlyExitCode(
                             path: candidatePath,
-                            literal: literal
+                            literal: literal,
+                            printWhenMatched: printWhenMatched,
+                            nullTerminated: parsedNullPathTerminator,
+                            crlfTerminated: parsedCrlf,
+                            outputPath: outputPath
+                        )
+                    }
+                    guard exitCode == 0 else {
+                        return nil
+                    }
+                    printed = true
+                }
+                return printed ? 0 : 1
+            }
+
+            var matchedAny = false
+            for (candidatePath, status) in statuses {
+                if status != 0 && !parsedIncludeZero {
+                    continue
+                }
+                let prefix = countPrefix(for: candidatePath)
+                let exitCode: Int32?
+                if parsedPrintMode == .countMatches {
+                    guard !parsedLineRegexp else {
+                        return nil
+                    }
+                    if wordRegexp {
+                        if asciiCaseInsensitive {
+                            exitCode = SwiftDarwinLiteralPreflight.asciiCaseInsensitiveWordCountMatchesExitCode(
+                                path: candidatePath,
+                                literal: literal,
+                                includeZero: parsedIncludeZero,
+                                maxCount: parsedMaxCount,
+                                countPrefix: prefix,
+                                crlfTerminated: parsedCrlf
+                            )
+                        } else {
+                            exitCode = SwiftDarwinLiteralPreflight.wordCountMatchesExitCode(
+                                path: candidatePath,
+                                literal: literal,
+                                includeZero: parsedIncludeZero,
+                                maxCount: parsedMaxCount,
+                                countPrefix: prefix,
+                                crlfTerminated: parsedCrlf
+                            )
+                        }
+                    } else if asciiCaseInsensitive {
+                        exitCode = SwiftDarwinLiteralPreflight.asciiCaseInsensitiveCountMatchesExitCode(
+                            path: candidatePath,
+                            literal: literal,
+                            includeZero: parsedIncludeZero,
+                            maxCount: parsedMaxCount,
+                            countPrefix: prefix,
+                            crlfTerminated: parsedCrlf
+                        )
+                    } else {
+                        exitCode = SwiftDarwinLiteralPreflight.countMatchesExitCode(
+                            path: candidatePath,
+                            literal: literal,
+                            includeZero: parsedIncludeZero,
+                            maxCount: parsedMaxCount,
+                            countPrefix: prefix,
+                            crlfTerminated: parsedCrlf
                         )
                     }
                 } else if wordRegexp {
-                    exitCode = SwiftDarwinLiteralPreflight.wordQuietExitCode(
-                        path: candidatePath,
-                        literal: literal
-                    )
+                    guard !parsedLineRegexp else {
+                        return nil
+                    }
+                    if asciiCaseInsensitive {
+                        exitCode = SwiftDarwinLiteralPreflight.asciiCaseInsensitiveWordCountLineExitCode(
+                            path: candidatePath,
+                            literal: literal,
+                            includeZero: parsedIncludeZero,
+                            maxCount: parsedMaxCount,
+                            countPrefix: prefix,
+                            crlfTerminated: parsedCrlf
+                        )
+                    } else {
+                        exitCode = SwiftDarwinLiteralPreflight.wordCountLineExitCode(
+                            path: candidatePath,
+                            literal: literal,
+                            includeZero: parsedIncludeZero,
+                            maxCount: parsedMaxCount,
+                            countPrefix: prefix,
+                            crlfTerminated: parsedCrlf
+                        )
+                    }
+                } else if asciiCaseInsensitive {
+                    if parsedLineRegexp {
+                        guard !parsedNullData,
+                              !parsedCrlf else {
+                            return nil
+                        }
+                        exitCode = SwiftDarwinLiteralPreflight.asciiCaseInsensitiveExactLineCountExitCode(
+                            path: candidatePath,
+                            literal: literal,
+                            includeZero: parsedIncludeZero,
+                            maxCount: parsedMaxCount,
+                            countPrefix: prefix,
+                            crlfTerminated: parsedCrlf
+                        )
+                    } else {
+                        exitCode = SwiftDarwinLiteralPreflight.asciiCaseInsensitiveMultiLiteralCountLineExitCode(
+                            path: candidatePath,
+                            literals: [literal],
+                            includeZero: parsedIncludeZero,
+                            maxCount: parsedMaxCount,
+                            countPrefix: prefix,
+                            crlfTerminated: parsedCrlf
+                        )
+                    }
                 } else if parsedLineRegexp {
                     guard !parsedNullData,
                           !parsedCrlf else {
                         return nil
                     }
-                    exitCode = SwiftDarwinLiteralPreflight.exactLineQuietExitCode(
+                    exitCode = SwiftDarwinLiteralPreflight.exactLineCountExitCode(
                         path: candidatePath,
-                        literal: literal
+                        literal: literal,
+                        includeZero: parsedIncludeZero,
+                        maxCount: parsedMaxCount,
+                        countPrefix: prefix,
+                        crlfTerminated: parsedCrlf
                     )
                 } else {
-                    exitCode = SwiftDarwinLiteralPreflight.quietExitCode(
+                    exitCode = SwiftDarwinLiteralPreflight.countLineExitCode(
                         path: candidatePath,
-                        literal: literal
+                        literal: literal,
+                        includeZero: parsedIncludeZero,
+                        maxCount: parsedMaxCount,
+                        countPrefix: prefix,
+                        crlfTerminated: parsedCrlf
                     )
                 }
                 guard let exitCode else {
                     return nil
                 }
                 if exitCode == 0 {
-                    return 0
+                    matchedAny = true
                 }
-                sawNoMatch = true
             }
-            return sawNoMatch ? 1 : nil
+            if matchedAny {
+                return 0
+            }
+            return 1
         }
 
         if explicitRegexpPatterns.count > 1 {

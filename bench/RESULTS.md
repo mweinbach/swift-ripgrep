@@ -167,6 +167,22 @@ multi-file quiet cases. A 100-run A/B on the Linux corpus block files measured
 versus 29.6 ms before and 4.23 ms for Rust, no-match at 4.50 ms versus
 37.8 ms before, and single-file quiet flat at 2.63 ms versus 2.64 ms before.
 
+The same executable literal preflight now handles multiple explicit
+regular-file operands for path-only and count-style output when the mode has
+stable byte-for-byte parity with both the previous Swift binary and Rust rg.
+This covers `-l`, `--files-without-match`, `--files-with-matches --null`, `-c`,
+`--no-filename -c`, and `--count-matches`; alternation, repeated `-e`, heading,
+and `--include-zero` count cases still fall back. Direct stdout/stderr/status
+checks matched the previous Swift binary and Rust for the accepted modes. An
+80-run A/B on the Linux corpus block files measured:
+
+| Command | Previous Swift | Current Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `-l EXPORT_SYMBOL bfq-iosched.c bsg.c` | 35.34 ms | 4.99 ms | 6.27 ms |
+| `--files-without-match EXPORT_SYMBOL bfq-iosched.c bsg.c` | 31.30 ms | 4.56 ms | 6.47 ms |
+| `-c EXPORT_SYMBOL bfq-iosched.c bsg.c` | 31.10 ms | 4.94 ms | 6.47 ms |
+| `--count-matches EXPORT_SYMBOL bfq-iosched.c bsg.c` | 33.43 ms | 4.46 ms | 6.49 ms |
+
 `GlobMatcher.excludesOnlyHiddenPaths` is now computed only when the global-ignore
 setup asks for it, instead of classifying every rule in every directory-local
 ignore matcher during construction. Exact Swift output matched the previous
