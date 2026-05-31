@@ -8,6 +8,27 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Larger stdout block buffer for bulk file lists — 2026-05-31
+
+Non-tty stdout now uses a 256 KiB stdio block buffer instead of 64 KiB. This is
+a runtime-level Swift/Darwin tuning change: it does not alter traversal,
+filtering, path formatting, or search semantics, but reduces flush churn for
+large `--files` style outputs.
+
+Validation:
+
+- `xcrun swift build -c release` passed before benchmarking.
+- Current Swift `--files` output stayed path-set equivalent to Rust on the
+  Linux benchmark tree; this repo already tracks sorted parity for file lists
+  because raw traversal order differs.
+
+On the Linux tree under `/tmp/swift-rg-bench`, 40 timed runs with 5 warmups:
+
+| Command | Current Swift | Previous Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--files linux` | 81.3 ms | 91.7 ms | 73.1 ms |
+| `--no-ignore --files linux` | 63.5 ms | 80.8 ms | 67.5 ms |
+
 ## Overlapping repeated-literal count/stat parity — 2026-05-31
 
 Overlapping repeated `-e` count paths now reuse the existing Swift multi-literal

@@ -314,7 +314,7 @@ public enum RipgrepCLI {
         case .line:
             setvbuf(Darwin.stdout, nil, _IOLBF, 0)
         case .block:
-            setvbuf(Darwin.stdout, nil, _IOFBF, 65_536)
+            setvbuf(Darwin.stdout, nil, _IOFBF, 262_144)
         case .automatic:
             break
         }
