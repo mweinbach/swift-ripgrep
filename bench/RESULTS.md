@@ -8,6 +8,41 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Utility-mode preflight bypass — 2026-05-31
+
+The Swift executable now bypasses the Darwin literal preflight parser for
+first-argument utility modes (`-h`, `--help`, version flags, and
+`--generate`). Those modes cannot use the single-file literal preflight, and
+stdin readability cannot affect their output, so the entry point also skips the
+`fstat(stdin)` readability probe for the same commands.
+
+Validation:
+
+- Current Swift output matched the saved previous Swift binary byte-for-byte for
+  default, hidden, `--no-ignore-vcs`, `--no-ignore`, and NUL-terminated
+  file-listing controls on `/tmp/swift-rg-bench/linux`.
+- Current Swift output matched the saved previous Swift binary byte-for-byte for
+  `--help`, `-h`, `--version`, `--pcre2-version`, `--generate man`, recursive
+  `PM_RESUME`, `-i pm_resume`, and dash-looking `-e --files` / `-e --help`
+  pattern controls.
+- Sorted current Swift output matched Rust for default, hidden, and no-vcs
+  file-listing controls on the same tree.
+
+An alternating 120-pair process-level harness measured:
+
+| Command | Current Swift | Previous Swift | Delta |
+| --- | ---: | ---: | ---: |
+| `--files linux` | 83.51 ms mean / 81.32 ms median | 82.08 ms / 81.25 ms | +1.43 ms / +0.07 ms |
+| `--no-ignore --files linux` | 64.41 ms / 63.85 ms | 64.61 ms / 64.18 ms | -0.20 ms / -0.33 ms |
+| `--help` | 6.25 ms / 6.21 ms | 9.49 ms / 9.47 ms | -3.24 ms / -3.26 ms |
+| `-h` | 6.09 ms / 6.08 ms | 9.31 ms / 9.27 ms | -3.22 ms / -3.20 ms |
+| `--version` | 3.67 ms / 3.64 ms | 3.64 ms / 3.62 ms | +0.03 ms / +0.02 ms |
+| `--generate man` | 6.14 ms / 6.13 ms | 9.40 ms / 9.35 ms | -3.27 ms / -3.22 ms |
+
+A broader pre-scan that also rejected `--files` was backed out: it preserved
+output parity but added measurable overhead to the default file-list path. The
+retained check only looks at the first argument and only skips utility modes.
+
 ## Hoisted executable argument snapshot — 2026-05-31
 
 The Swift executable entry point now materializes

@@ -18,20 +18,23 @@ import CRT
 struct RipgrepCommand {
     static func main() {
         let arguments = Array(CommandLine.arguments.dropFirst())
+        var utilityModeSkipsSwiftPreflight = false
         #if canImport(Darwin) && canImport(CRipgrepPlatform)
         if let exitCode = runDarwinLiteralPreflight(arguments: arguments) {
             exit(exitCode)
         }
         #endif
         #if canImport(Darwin) && !canImport(CRipgrepPlatform)
-        if let exitCode = runSwiftDarwinLiteralPreflight(arguments: arguments) {
+        utilityModeSkipsSwiftPreflight = swiftDarwinUtilityModeSkipsPreflight(arguments.first)
+        if !utilityModeSkipsSwiftPreflight,
+           let exitCode = runSwiftDarwinLiteralPreflight(arguments: arguments) {
             exit(exitCode)
         }
         #endif
 
         let exitCode = RipgrepCLI.run(
             arguments: arguments,
-            standardInputIsReadable: standardInputIsReadable()
+            standardInputIsReadable: utilityModeSkipsSwiftPreflight ? false : standardInputIsReadable()
         )
         exit(exitCode)
     }
@@ -5633,6 +5636,23 @@ struct RipgrepCommand {
             linePrefix: parsedLinePrefix,
             headingPrefix: parsedHeadingPrefix
         )
+    }
+
+    private static func swiftDarwinUtilityModeSkipsPreflight(_ argument: String?) -> Bool {
+        guard let argument else {
+            return false
+        }
+        switch argument {
+        case "-h",
+             "--help",
+             "-V",
+             "--version",
+             "--pcre2-version",
+             "--generate":
+            return true
+        default:
+            return argument.hasPrefix("--generate=")
+        }
     }
 
     private static func leadingArgumentsDisableConfigForPreflight(_ arguments: [String]) -> Bool {
