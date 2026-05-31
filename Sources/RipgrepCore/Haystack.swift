@@ -1944,7 +1944,7 @@ public struct FileWalker: @unchecked Sendable {
                 }
             } else if child.kind.isFile {
                 let haystack = Haystack(
-                    url: URL(fileURLWithPath: directoryPathPrefix + child.name),
+                    url: URL(fileURLWithPath: directoryPathPrefix + child.name, isDirectory: false),
                     isExplicit: false,
                     overridePath: outputPath(
                         logicalDirectoryPathPrefix: logicalDirectoryPathPrefix,

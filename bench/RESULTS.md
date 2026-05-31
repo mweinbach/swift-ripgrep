@@ -8,6 +8,32 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Fast quiet file-URL directory hint — 2026-05-31
+
+The fast quiet fallback walker now constructs known-file haystack URLs with
+`URL(fileURLWithPath:isDirectory: false)`. The walker already filtered the
+entry as a regular file, so giving Foundation the directory hint avoids the
+extra file-type probe visible in samples of the fast quiet fallback walk.
+
+Validation:
+
+- Current Swift output matched the saved pre-fast-fallback Swift binary
+  byte-for-byte for recursive quiet hit/miss, early quiet hit, ignore-case
+  quiet, and regex-suffix quiet controls; Rust statuses matched.
+- Sampling `-q PM_RESUME /tmp/swift-rg-bench/linux` after the change no longer
+  showed the prior prominent per-file `lstat` stack under file URL creation.
+- `xcrun swift build -c release` passed before benchmarking.
+
+An alternating process-level A/B against checkpoint `696835d` measured:
+
+| Command | Current Swift | Previous Swift |
+| --- | ---: | ---: |
+| `-q PM_RESUME linux` | 380.72 ms mean / 377.90 ms median | 613.78 ms / 593.06 ms |
+| `-q ABSENT_NEEDLE_DOES_NOT_EXIST linux` | 1046.94 ms / 1045.24 ms | 1248.27 ms / 1251.67 ms |
+| `-q -i pm_resume linux` | 240.70 ms / 237.06 ms | 467.78 ms / 452.23 ms |
+| `-q '[A-Z]+_RESUME' linux` | 242.38 ms / 241.91 ms | 461.83 ms / 459.52 ms |
+| `-q EXPORT_SYMBOL linux` | 5.96 ms / 5.95 ms | 6.09 ms / 6.02 ms |
+
 ## Fast quiet fallback haystack walk — 2026-05-31
 
 Recursive quiet search now reuses the existing Darwin fast search-file walker
