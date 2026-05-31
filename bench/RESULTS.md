@@ -293,6 +293,15 @@ because they did not improve the current checkpoint:
   Linux Unicode category bench. A 12-pair process A/B measured `-n \p{Greek}`
   at 1948.7 ms versus 1946.9 ms baseline and `-n -i \p{Greek}` at 1949.6 ms
   versus 1938.6 ms baseline, so the existing `Data` decode path stayed.
+- Suppressing the internal 64 KiB flushes while the parallel no-ignore
+  file-list writer is already collecting each ordered subtree chunk preserved
+  exact Swift output and sorted Rust parity, but the main no-ignore controls
+  were flat. A 160-pair A/B measured `--no-ignore --files` at 64.75 ms versus
+  65.19 ms baseline by mean but 64.07 ms versus 63.98 ms by median, hidden
+  no-ignore at 70.47 ms versus 70.49 ms by mean but 71.34 ms versus 71.17 ms
+  by median, NUL no-ignore mildly faster at 75.91 ms versus 76.09 ms median,
+  and the all-ignore-disabled spelling flat at 64.38 ms versus 64.29 ms median.
+  The existing flush-and-collect structure stayed.
 
 ## Visible line stats preflight — 2026-05-31
 
