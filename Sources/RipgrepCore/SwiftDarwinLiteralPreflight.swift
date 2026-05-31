@@ -3778,6 +3778,9 @@ public enum SwiftDarwinLiteralPreflight {
               data.count >= foldedLiteral.count else {
             return false
         }
+        if foldedLiteral.count == 1 {
+            return dataContainsASCIICaseInsensitiveByte(data, foldedByte: foldedLiteral[0])
+        }
         return data.withUnsafeBytes { rawData in
             guard let rawBase = rawData.baseAddress else {
                 return false
@@ -3793,6 +3796,33 @@ public enum SwiftDarwinLiteralPreflight {
                     literalBase,
                     literalBuffer.count,
                     nil
+                ) != nil
+            }
+        }
+    }
+
+    private static func dataContainsASCIICaseInsensitiveByte(
+        _ data: Data,
+        foldedByte: UInt8
+    ) -> Bool {
+        let needles: [UInt8]
+        if foldedByte >= UInt8(ascii: "a"),
+           foldedByte <= UInt8(ascii: "z") {
+            needles = [foldedByte, foldedByte - (UInt8(ascii: "a") - UInt8(ascii: "A"))]
+        } else {
+            needles = [foldedByte]
+        }
+        return data.withUnsafeBytes { rawData in
+            guard let rawBase = rawData.baseAddress else {
+                return false
+            }
+            let base = rawBase.assumingMemoryBound(to: UInt8.self)
+            return needles.withUnsafeBufferPointer { needleBuffer in
+                rg_memchr_any_bytes(
+                    base,
+                    data.count,
+                    needleBuffer.baseAddress,
+                    needleBuffer.count
                 ) != nil
             }
         }

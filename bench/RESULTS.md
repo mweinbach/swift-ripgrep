@@ -532,6 +532,15 @@ sorted Rust-output checks:
   while an order-flipped 120-run pass put default nearly flat at 79.3 ms versus
   79.5 ms before and hidden slightly worse at 81.0 ms versus 80.8 ms before.
   The existing direct `opendir(path)` calls stayed.
+- Dropping scoped-path checks for ignore matchers whose rules are all
+  unanchored basename-only was rejected. The probe kept the public `GlobMatcher`
+  semantics unchanged by making the scope drop opt-in from ignore loading, and
+  exact Swift output matched the previous binary for default, hidden, no-vcs,
+  no-global, and `--debug --files`; sorted output matched Rust for the
+  non-debug file-list controls. The code shape still regressed default
+  `--files` to 79.6 ms versus 78.6 ms before and no-vcs to 64.3 ms versus
+  63.6 ms before in a 100-run A/B, while hidden was neutral at 80.8 ms versus
+  80.9 ms. The existing scoped matcher path stayed.
 
 A fresh three-run Linux benchsuite scan kept recursive search ahead of Rust on
 all captured rows, so the active gap remains ignore-aware file listing rather
@@ -630,6 +639,18 @@ file controls. On a 46 MiB ASCII file, a 40-run A/B measured
 baseline. The order-flipped 60-run confirmation measured `-i -q` at 9.5 ms
 probe versus 34.4 ms baseline and `-i -l` at 9.4 ms probe versus 33.5 ms
 baseline, with Rust `-i -q` at 9.7 ms.
+
+Single-byte ASCII case-insensitive containment now reuses the existing Swift
+byte-set search helper instead of the generic folded literal scanner. This keeps
+Unicode haystacks on the conservative fallback when no ASCII byte proves a
+match, while avoiding the scalar one-byte fold loop for large ASCII misses.
+Targeted stdout/stderr/status checks matched the previous Swift binary and Rust
+for `-q`, `-l`, and `--files-without-match` match/no-match cases plus a Unicode
+fallback fixture. On a 48 MiB ASCII exact-line fixture, a 40-run A/B measured
+`-q -i Z` at 9.4 ms versus 26.6 ms before and 5.5 ms for Rust; `-l -i Z`
+measured 7.1 ms versus 25.3 ms before and 5.6 ms for Rust. The order-flipped
+confirmation measured `-q -i Z` at 7.2 ms versus 28.1 ms before and `-l -i Z`
+at 6.9 ms versus 24.9 ms before.
 
 Word-regexp quiet/path-only existence checks now reuse the existing Swift byte
 scanner and ASCII boundary helper instead of `Data.range(of:)`. This preserves
