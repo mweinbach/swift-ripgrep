@@ -429,6 +429,13 @@ public enum SwiftDarwinLiteralPreflight {
         paths: [String],
         literals rawLiterals: [[UInt8]]
     ) -> Int32? {
+        if let existingScannerResult = existingScannerOverlappingMultiLiteralNoMatchQuietStatsExitCode(
+            paths: paths,
+            literals: rawLiterals
+        ) {
+            return existingScannerResult
+        }
+
         let rawLiteralData = rawLiterals.map { Data($0) }
 
         let processorCount = max(1, ProcessInfo.processInfo.processorCount)
@@ -451,6 +458,42 @@ public enum SwiftDarwinLiteralPreflight {
             }
             let matched = dataContainsAnyLiteralUsingFoundation(data, literals: rawLiteralData)
             accumulator.record(bytes: data.count, matched: matched)
+        }
+
+        let result = accumulator.snapshot()
+        guard !result.failed,
+              !result.hasMatch else {
+            return nil
+        }
+        return writeStatsSummary(
+            totalMatches: 0,
+            matchedLines: 0,
+            filesWithMatches: 0,
+            filesSearched: paths.count,
+            bytesSearched: result.bytesSearched,
+            exitCode: 1
+        )
+    }
+
+    private static func existingScannerOverlappingMultiLiteralNoMatchQuietStatsExitCode(
+        paths: [String],
+        literals rawLiterals: [[UInt8]]
+    ) -> Int32? {
+        let accumulator = QuietStatsProbeAccumulator()
+        DispatchQueue.concurrentPerform(iterations: paths.count) { index in
+            guard let result = multiLiteralResult(
+                path: paths[index],
+                literals: rawLiterals,
+                maxCount: 1,
+                emitLines: false
+            ), result.status >= 0 else {
+                accumulator.recordFailure()
+                return
+            }
+            accumulator.record(
+                bytes: result.bytes_searched,
+                matched: result.matched_line_count > 0
+            )
         }
 
         let result = accumulator.snapshot()
