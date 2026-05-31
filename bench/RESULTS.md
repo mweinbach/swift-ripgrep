@@ -360,6 +360,17 @@ sorted Rust-output checks:
   63.5 ms versus 63.2 ms before; the order-flipped 120-run confirmation
   regressed default to 78.9 ms versus 78.1 ms before and no-vcs to 63.8 ms
   versus 63.1 ms before, so the unconditional lookup stayed.
+- Quiet literal search probes outside the file-list path also stayed rejected.
+  Raising the recursive raw-literal probe window to 1024 files / 128 MiB
+  preserved quiet stdout/stderr/status but slowed `EXPORT_SYMBOL -q` on the
+  Linux tree to 33.6 ms versus 25.9 ms before and slowed the no-match quiet
+  control to 1.647 s versus 1.581 s before. Disabling that probe entirely made
+  recursive `EXPORT_SYMBOL -q` fall back to the generic full search and regress
+  to 923.1 ms. Avoiding quiet haystack override-path formatting was only
+  noise-positive in the first order and then regressed no-match quiet and
+  `--quiet --files` in the flipped order. A narrow multiple-explicit-file quiet
+  shortcut preserved output/status but did not improve the two-file match or
+  no-match controls. The existing quiet first-match route stayed.
 
 ### Continuation probes — 2026-05-29
 
