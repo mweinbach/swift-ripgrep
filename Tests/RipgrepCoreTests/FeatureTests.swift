@@ -3793,6 +3793,30 @@ struct FeatureTests {
         #expect(directResults?.count == streamedResults?.count)
         #expect(directLines == streamedLines)
 
+        guard case .run(let nullOptions) = RipgrepArgumentParser.parse([
+            "--hidden",
+            "--null",
+            "--files",
+            parallelRoot.url.path,
+        ]) else {
+            Issue.record("expected null file-list arguments to parse")
+            return
+        }
+        var directNullBytes = Data()
+        let directNullResults = try FileWalker().writeDarwinFilePathsWithMessages(
+            for: nullOptions,
+            writeBytes: { bytes in
+                directNullBytes.append(bytes.bindMemory(to: UInt8.self))
+            }
+        )
+        let directNullLines = String(decoding: directNullBytes, as: UTF8.self)
+            .split(separator: "\0", omittingEmptySubsequences: true)
+            .map(String.init)
+            .sorted()
+        #expect(directNullResults?.count == 3)
+        #expect(directNullBytes.last == 0)
+        #expect(directNullLines == streamedLines.sorted())
+
         let implicitRoot = try TemporaryDirectory()
         try implicitRoot.write("root\n", to: "keep.txt")
         try implicitRoot.write("nested\n", to: "nested/ok.txt")

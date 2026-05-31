@@ -413,7 +413,7 @@ public struct FileWalker: @unchecked Sendable {
         writeBytes: (UnsafeRawBufferPointer) -> Void
     ) throws -> FilePathStreamResults? {
         #if canImport(Darwin)
-        guard canFastWalkFilePaths(options: options),
+        guard canFastWalkFilePaths(options: options, allowNullPathTerminator: true),
               options.effectiveRoots.count == 1,
               !stopAfterFirst else {
             return nil
@@ -437,6 +437,7 @@ public struct FileWalker: @unchecked Sendable {
             return nil
         }
 
+        let terminator = options.nullPathTerminator ? UInt8(0) : UInt8(ascii: "\n")
         var emittedCount = 0
         var directoryPathBytes = Array(rootPlan.rootURL.path.utf8)
         var logicalPathBytes = rootPlan.logicalPathBytes
@@ -445,6 +446,7 @@ public struct FileWalker: @unchecked Sendable {
             logicalPathBytes: logicalPathBytes,
             logicalPathIsASCII: rootPlan.logicalPathIsASCII,
             includeHidden: options.hidden,
+            terminator: terminator,
             writeBytes: writeBytes
         ) {
             return FilePathStreamResults(
@@ -460,6 +462,7 @@ public struct FileWalker: @unchecked Sendable {
             logicalPathBytes: &logicalPathBytes,
             logicalPathIsASCII: rootPlan.logicalPathIsASCII,
             includeHidden: options.hidden,
+            terminator: terminator,
             emittedCount: &emittedCount,
             outputBuffer: &outputBuffer,
             writeBytes: writeBytes
@@ -841,11 +844,15 @@ public struct FileWalker: @unchecked Sendable {
     }
 
     #if canImport(Darwin)
-    private func canFastWalkFilePaths(options: RipgrepOptions, allowPathSort: Bool = false) -> Bool {
+    private func canFastWalkFilePaths(
+        options: RipgrepOptions,
+        allowPathSort: Bool = false,
+        allowNullPathTerminator: Bool = false
+    ) -> Bool {
         let canSort = options.sortMode == nil || (allowPathSort && options.sortMode?.kind == .path)
         return options.mode == .files
             && !options.useStdin
-            && !options.nullPathTerminator
+            && (allowNullPathTerminator || !options.nullPathTerminator)
             && canSort
             && options.pathSeparator == nil
             && options.colorMode != .always
@@ -1213,7 +1220,8 @@ public struct FileWalker: @unchecked Sendable {
                     logicalPathIsASCII: rootLogicalPathIsASCII,
                     childName: child.name,
                     childNameIsASCII: child.isASCII,
-                    outputBuffer: &output
+                    outputBuffer: &output,
+                    terminator: options.nullPathTerminator ? UInt8(0) : UInt8(ascii: "\n")
                 )
                 store.store(
                     .success(DarwinFilePathDataChunk(
@@ -1402,7 +1410,8 @@ public struct FileWalker: @unchecked Sendable {
                         logicalPathIsASCII: logicalDirectoryPathIsASCII,
                         childName: child.name,
                         childNameIsASCII: child.isASCII,
-                        outputBuffer: &outputBuffer
+                        outputBuffer: &outputBuffer,
+                        terminator: options.nullPathTerminator ? UInt8(0) : UInt8(ascii: "\n")
                     )
                 }
             }
@@ -1453,7 +1462,8 @@ public struct FileWalker: @unchecked Sendable {
                     logicalPathIsASCII: logicalDirectoryPathIsASCII,
                     childName: child.name,
                     childNameIsASCII: child.isASCII,
-                    outputBuffer: &outputBuffer
+                    outputBuffer: &outputBuffer,
+                    terminator: options.nullPathTerminator ? UInt8(0) : UInt8(ascii: "\n")
                 )
             }
         }
@@ -1917,6 +1927,7 @@ public struct FileWalker: @unchecked Sendable {
         logicalPathBytes: [UInt8],
         logicalPathIsASCII: Bool,
         includeHidden: Bool,
+        terminator: UInt8,
         writeBytes: (UnsafeRawBufferPointer) -> Void
     ) throws -> Int? {
         var rootDirectoryPathBytes = directoryPathBytes
@@ -1955,7 +1966,8 @@ public struct FileWalker: @unchecked Sendable {
                     logicalPathIsASCII: logicalPathIsASCII,
                     childNameBytes: child.nameBytes,
                     childNameIsASCII: child.isASCII,
-                    outputBuffer: &output
+                    outputBuffer: &output,
+                    terminator: terminator
                 )
                 store.store(.success(DarwinNoIgnoreFilePathChunk(data: output, count: 1)), at: index)
                 continue
@@ -1987,6 +1999,7 @@ public struct FileWalker: @unchecked Sendable {
                         logicalPathBytes: &logicalPathBytes,
                         logicalPathIsASCII: childLogicalPathIsASCII,
                         includeHidden: includeHidden,
+                        terminator: terminator,
                         emittedCount: &emittedCount,
                         outputBuffer: &output,
                         writeBytes: { bytes in
@@ -2024,6 +2037,7 @@ public struct FileWalker: @unchecked Sendable {
         logicalPathBytes: inout [UInt8],
         logicalPathIsASCII: Bool,
         includeHidden: Bool,
+        terminator: UInt8,
         emittedCount: inout Int,
         outputBuffer: inout Data,
         writeBytes: (UnsafeRawBufferPointer) -> Void
@@ -2048,6 +2062,7 @@ public struct FileWalker: @unchecked Sendable {
                     logicalPathBytes: &logicalPathBytes,
                     logicalPathIsASCII: logicalPathIsASCII && child.isASCII,
                     includeHidden: includeHidden,
+                    terminator: terminator,
                     emittedCount: &emittedCount,
                     outputBuffer: &outputBuffer,
                     writeBytes: writeBytes
@@ -2061,7 +2076,8 @@ public struct FileWalker: @unchecked Sendable {
                     logicalPathIsASCII: logicalPathIsASCII,
                     childNameBytes: child.nameBytes,
                     childNameIsASCII: child.isASCII,
-                    outputBuffer: &outputBuffer
+                    outputBuffer: &outputBuffer,
+                    terminator: terminator
                 )
                 if outputBuffer.count >= 64 * 1024 {
                     flushDarwinFilePathOutputBuffer(&outputBuffer, writeBytes: writeBytes)
@@ -2075,7 +2091,8 @@ public struct FileWalker: @unchecked Sendable {
         logicalPathIsASCII: Bool,
         childName: String,
         childNameIsASCII: Bool,
-        outputBuffer: inout Data
+        outputBuffer: inout Data,
+        terminator: UInt8
     ) {
         if logicalPathIsASCII && childNameIsASCII {
             appendBytes(logicalPathBytes, to: &outputBuffer)
@@ -2083,7 +2100,7 @@ public struct FileWalker: @unchecked Sendable {
                 outputBuffer.append(UInt8(ascii: "/"))
             }
             appendUTF8(childName, to: &outputBuffer)
-            outputBuffer.append(UInt8(ascii: "\n"))
+            outputBuffer.append(terminator)
             return
         }
 
@@ -2091,7 +2108,7 @@ public struct FileWalker: @unchecked Sendable {
         appendPathComponent(childName, to: &pathBytes)
         let path = String(decoding: pathBytes, as: UTF8.self).precomposedStringWithCanonicalMapping
         appendUTF8(path, to: &outputBuffer)
-        outputBuffer.append(UInt8(ascii: "\n"))
+        outputBuffer.append(terminator)
     }
 
     private func appendDarwinFilePathLine(
@@ -2099,7 +2116,8 @@ public struct FileWalker: @unchecked Sendable {
         logicalPathIsASCII: Bool,
         childNameBytes: [UInt8],
         childNameIsASCII: Bool,
-        outputBuffer: inout Data
+        outputBuffer: inout Data,
+        terminator: UInt8
     ) {
         if logicalPathIsASCII && childNameIsASCII {
             appendBytes(logicalPathBytes, to: &outputBuffer)
@@ -2107,7 +2125,7 @@ public struct FileWalker: @unchecked Sendable {
                 outputBuffer.append(UInt8(ascii: "/"))
             }
             appendBytes(childNameBytes, to: &outputBuffer)
-            outputBuffer.append(UInt8(ascii: "\n"))
+            outputBuffer.append(terminator)
             return
         }
 
@@ -2115,7 +2133,7 @@ public struct FileWalker: @unchecked Sendable {
         appendPathComponent(childNameBytes, to: &pathBytes)
         let path = String(decoding: pathBytes, as: UTF8.self).precomposedStringWithCanonicalMapping
         appendUTF8(path, to: &outputBuffer)
-        outputBuffer.append(UInt8(ascii: "\n"))
+        outputBuffer.append(terminator)
     }
 
     private func appendBytes(_ bytes: [UInt8], to data: inout Data) {

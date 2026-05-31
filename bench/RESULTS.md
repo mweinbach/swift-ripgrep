@@ -8,6 +8,32 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## NUL-terminated file-list direct writer — 2026-05-31
+
+The Darwin file-list direct writer now supports `-0`/`--null` by threading the
+path terminator byte through the existing ignore-aware and no-ignore data
+writers. This keeps NUL-terminated `--files` output on the same Swift-first
+parallel writer as newline-terminated file lists instead of falling back to the
+generic URL/string path.
+
+Validation:
+
+- `--null --files /tmp/swift-rg-bench/linux` output matched the saved previous
+  Swift binary byte-for-byte.
+- Splitting NUL-delimited probe output and sorting paths matched Rust on the
+  same tree.
+- Regular `--files` output still matched the previous Swift binary
+  byte-for-byte, and sorted output matched Rust.
+
+On `/tmp/swift-rg-bench/linux`, 80 timed runs with 5 warmups:
+
+| Command | Current Swift | Previous Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--null --files linux` | 82.4 ms | 945.8 ms | 73.5 ms |
+
+Regular `--files` stayed in the same band in a guard run: current Swift
+80.4 ms, previous Swift 83.0 ms, Rust 74.9 ms.
+
 ## Hidden-path ignore short-circuit — 2026-05-31
 
 The ignore-aware Darwin file-listing writer now skips the recursive ignore
