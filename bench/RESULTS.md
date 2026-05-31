@@ -150,6 +150,11 @@ Two fresh Swift-only probes were parity-clean but not retained:
   status for quiet hit/miss, `--no-mmap`, JSON quiet, and stats quiet controls,
   but regressed default recursive `-q EXPORT_SYMBOL` from 30.7 ms to 35.6 ms in
   an 80-run A/B. The existing reader route stayed.
+- Splitting the recursive quiet literal search across top-level root children
+  preserved quiet hit/miss output versus the previous Swift binary and Rust, but
+  regressed `-q EXPORT_SYMBOL` from 33.4 ms to 37.0 ms and no-match quiet from
+  1.574 s to 3.017 s in an 80-run A/B. The extra GCD scheduling and duplicated
+  directory work doubled miss time, so the ordered quiet walker stayed.
 
 `GlobMatcher.excludesOnlyHiddenPaths` is now computed only when the global-ignore
 setup asks for it, instead of classifying every rule in every directory-local
