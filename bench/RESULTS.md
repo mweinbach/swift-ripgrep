@@ -303,6 +303,13 @@ sorted Rust-output checks:
   versus 79.3 ms before, but the order-flipped 120-run pass put default slower
   at 78.7 ms versus 77.8 ms and no-vcs slower at 63.9 ms versus 63.0 ms.
   The original slash-then-final-byte ordering stayed.
+- Replacing the indexed basename prefix/suffix checks with direct Swift UTF-8
+  buffer comparisons also stayed rejected. It preserved exact Swift output and
+  sorted Rust parity for default, hidden, no-vcs, and no-global file listing,
+  but both 80-run A/B orders raised ignore-heavy user CPU: default moved from
+  95.4 ms before to 97.5 ms after in the first pass and from 94.3 ms before to
+  96.8 ms after in the flipped pass; hidden moved from 102.0/101.5 ms before to
+  103.6/103.8 ms after. The standard `String.hasPrefix`/`hasSuffix` path stayed.
 
 ### Continuation probes — 2026-05-29
 
