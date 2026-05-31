@@ -35,6 +35,40 @@ Validation:
 | `--hidden --files` | 81.5 ms ± 3.1 ms | 82.2 ms ± 5.7 ms | not rerun |
 | `--no-ignore-vcs --files` | 64.3 ms ± 2.9 ms | 65.5 ms ± 5.6 ms | not rerun |
 
+### Continuation probes — 2026-05-31
+
+A fresh 15-row Linux recursive-search scan after the root setup checkpoint kept
+the default Swift-first/no-C-shim build ahead of Rust on every measured search
+row, including literal, word, Greek, no-literal, and alternation workloads. The
+active remaining gap is still ignore-aware file listing. An 80-run refresh
+measured Rust `--files` at 74.5 ms and Swift at 79.8 ms, Rust
+`--hidden --files` at 73.4 ms and Swift at 82.0 ms, while
+`--no-ignore-vcs --files` stayed a Swift win at 65.4 ms versus Rust at 66.5 ms.
+
+Additional Swift-only file-list probes from this checkpoint were parity-clean
+but not retained:
+
+- Raising `fastDirectoryContents` child reserve capacity from 64 to 128 was
+  mixed-to-slower: default `--files` measured 82.4 ms versus 81.7 ms before,
+  hidden was 83.4 ms versus 84.1 ms, and `--no-ignore-vcs` regressed to 67.3 ms
+  versus 65.4 ms.
+- Moving root existence checks behind the fast root planner improved sorted
+  file-listing in one order, but did not hold on default/hidden controls. The
+  flipped 120-run pass measured default at 80.0 ms versus 79.7 ms before and
+  hidden at 83.9 ms versus 82.5 ms before.
+- Bypassing root-argument standardization for simple or exact absolute paths was
+  also rejected. The simple-path probe measured default `--files` at 81.5 ms
+  versus 79.6 ms before; the exact-path variant measured 80.6 ms versus 79.9 ms
+  and `--no-ignore-vcs` at 64.6 ms versus 64.1 ms.
+- Loading marker-known local ignore files by string path instead of child `URL`
+  construction preserved output but stayed neutral-to-worse. The flipped pass
+  measured default at 80.4 ms versus 79.7 ms before, hidden at 81.6 ms versus
+  81.4 ms, and no-vcs at 64.7 ms versus 64.5 ms.
+- Replacing the bridged `NSString.isAbsolutePath` root flag with a direct
+  leading-slash check preserved absolute, trailing-slash, and relative-root
+  output, but the order-flipped timing reversed the apparent win: default moved
+  to 80.6 ms versus 79.8 ms before and hidden to 82.4 ms versus 81.7 ms before.
+
 ## Swift-first files-mode checkpoint — 2026-05-29
 
 `--files` startup/traversal now avoids building the default file-type registry
