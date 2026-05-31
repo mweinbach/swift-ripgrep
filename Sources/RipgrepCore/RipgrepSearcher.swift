@@ -9726,23 +9726,26 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
 
         let literalStorage: [UInt8]
-        var caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
+        let caseInsensitiveShifts: [Int]?
         if fastPath.caseInsensitiveASCII {
             literalStorage = literal.map(asciiLowercase)
+            var shifts = [Int](repeating: literalStorage.count, count: 256)
             if literalStorage.count > 1 {
                 for index in 0..<(literalStorage.count - 1) {
-                    caseInsensitiveShifts[Int(literalStorage[index])] = literalStorage.count - 1 - index
+                    shifts[Int(literalStorage[index])] = literalStorage.count - 1 - index
                 }
             }
+            caseInsensitiveShifts = shifts
         } else {
             literalStorage = literal
+            caseInsensitiveShifts = nil
         }
 
         func firstMatch(from offset: Int, literalBaseAddress: UnsafePointer<UInt8>) -> UnsafePointer<UInt8>? {
             guard offset < data.count else {
                 return nil
             }
-            if fastPath.caseInsensitiveASCII {
+            if let caseInsensitiveShifts {
                 return caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
                     rg_memcasemem_ascii_prepared(
                         baseAddress.advanced(by: offset),

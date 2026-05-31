@@ -8,6 +8,32 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Suppressed literal exact-path allocation cleanup — 2026-05-31
+
+The suppressed literal-output path now builds the prepared ASCII
+case-insensitive shift table only for case-insensitive literals. Plain exact
+literal quiet/path/summary searches continue to reuse the original literal
+buffer, avoiding one small per-file allocation in late-hit and miss walks.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint `0684746` and Rust for
+  quiet exact hit/miss, quiet ignore-case hit, `--stats -q` exact and
+  ignore-case hits, and `--json -q` exact and ignore-case hits after
+  normalizing only elapsed timing fields.
+- Current Swift path-only `-l EXPORT_SYMBOL` output matched checkpoint
+  `0684746` byte-for-byte.
+- `xcrun swift build -c release` passed before benchmarking.
+
+A/B checks against checkpoint `0684746` measured:
+
+| Command | Current Swift | Previous Swift |
+| --- | ---: | ---: |
+| `-q PM_RESUME linux` | 353.36 ms mean / 353.38 ms median | 360.15 ms / 356.65 ms |
+| `-q ABSENT_NEEDLE_DOES_NOT_EXIST linux` | 919.08 ms / 912.09 ms | 913.17 ms / 912.10 ms |
+| `-q -i pm_resume linux` | 7.46 ms / 7.45 ms | 8.80 ms / 8.51 ms |
+| `-q EXPORT_SYMBOL linux` | 6.00 ms / 6.00 ms | 5.95 ms / 5.93 ms |
+
 ## ASCII ignore-case quiet probe budget — 2026-05-31
 
 The bounded quiet byte-literal first-match probe now admits safe ASCII
