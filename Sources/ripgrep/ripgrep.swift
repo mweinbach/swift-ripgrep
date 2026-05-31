@@ -5648,6 +5648,7 @@ struct RipgrepCommand {
              "-V",
              "--version",
              "--pcre2-version",
+             "--files",
              "--generate":
             return true
         default:

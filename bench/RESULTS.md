@@ -11,10 +11,10 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 ## Utility-mode preflight bypass — 2026-05-31
 
 The Swift executable now bypasses the Darwin literal preflight parser for
-first-argument utility modes (`-h`, `--help`, version flags, and
-`--generate`). Those modes cannot use the single-file literal preflight, and
-stdin readability cannot affect their output, so the entry point also skips the
-`fstat(stdin)` readability probe for the same commands.
+first-argument utility/file-listing modes (`-h`, `--help`, version flags,
+`--generate`, and `--files`). Those modes cannot use the single-file literal
+preflight, and stdin readability cannot affect their output, so the entry point
+also skips the `fstat(stdin)` readability probe for the same commands.
 
 Validation:
 
@@ -28,20 +28,33 @@ Validation:
 - Sorted current Swift output matched Rust for default, hidden, and no-vcs
   file-listing controls on the same tree.
 
-An alternating 120-pair process-level harness measured:
+An isolated alternating 240-pair process-level harness against the prior
+checkpoint measured the first-argument `--files` addition as neutral for file
+listing:
 
 | Command | Current Swift | Previous Swift | Delta |
 | --- | ---: | ---: | ---: |
-| `--files linux` | 83.51 ms mean / 81.32 ms median | 82.08 ms / 81.25 ms | +1.43 ms / +0.07 ms |
-| `--no-ignore --files linux` | 64.41 ms / 63.85 ms | 64.61 ms / 64.18 ms | -0.20 ms / -0.33 ms |
-| `--help` | 6.25 ms / 6.21 ms | 9.49 ms / 9.47 ms | -3.24 ms / -3.26 ms |
-| `-h` | 6.09 ms / 6.08 ms | 9.31 ms / 9.27 ms | -3.22 ms / -3.20 ms |
-| `--version` | 3.67 ms / 3.64 ms | 3.64 ms / 3.62 ms | +0.03 ms / +0.02 ms |
-| `--generate man` | 6.14 ms / 6.13 ms | 9.40 ms / 9.35 ms | -3.27 ms / -3.22 ms |
+| `--files linux` | 81.83 ms mean / 81.38 ms median | 82.00 ms / 81.40 ms | -0.17 ms / -0.02 ms |
+| `--hidden --files linux` | 89.98 ms / 87.14 ms | 89.51 ms / 86.66 ms | +0.47 ms / +0.48 ms |
+| `--no-ignore-vcs --files linux` | 73.64 ms / 74.27 ms | 73.18 ms / 73.88 ms | +0.46 ms / +0.39 ms |
+| `--no-ignore --files linux` | 66.56 ms / 64.58 ms | 66.34 ms / 64.66 ms | +0.22 ms / -0.08 ms |
 
-A broader pre-scan that also rejected `--files` was backed out: it preserved
-output parity but added measurable overhead to the default file-list path. The
-retained check only looks at the first argument and only skips utility modes.
+The same probe stabilized the utility classifier fast path. An alternating
+300-pair process-level harness measured:
+
+| Command | Current Swift | Previous Swift | Delta |
+| --- | ---: | ---: | ---: |
+| `--help` | 6.36 ms mean / 6.13 ms median | 9.77 ms / 9.35 ms | -3.41 ms / -3.22 ms |
+| `-h` | 6.06 ms / 6.06 ms | 9.29 ms / 9.27 ms | -3.23 ms / -3.22 ms |
+| `--version` | 3.70 ms / 3.66 ms | 3.67 ms / 3.63 ms | +0.03 ms / +0.03 ms |
+| `--pcre2-version` | 3.65 ms / 3.63 ms | 3.62 ms / 3.60 ms | +0.03 ms / +0.03 ms |
+| `--generate man` | 6.13 ms / 6.13 ms | 9.38 ms / 9.34 ms | -3.25 ms / -3.21 ms |
+| `--generate=man` | 6.17 ms / 6.16 ms | 9.46 ms / 9.40 ms | -3.28 ms / -3.24 ms |
+
+A broader pre-scan that rejected `--files` anywhere in the argument vector was
+backed out: it preserved output parity but added measurable overhead to the
+default file-list path. The retained check only looks at the first argument and
+only skips modes whose output is independent of stdin readability.
 
 ## Hoisted executable argument snapshot — 2026-05-31
 
