@@ -177,6 +177,19 @@ versus 82.4 ms before, while no-vcs was noise-level. A focused 150-run pass
 measured default at 77.4 ms versus 78.2 ms before, with hidden neutral at
 80.0 ms versus 79.7 ms and no-vcs noise-dominated at 64.9 ms versus 65.5 ms.
 
+The default file-list global-ignore skip now classifies hidden-only global
+ignore files before constructing a `GlobMatcher`. This preserves the existing
+guard that only applies when `--files` is non-hidden, logging is off, and no
+earlier ignore source can include hidden paths, but avoids compiling a matcher
+just to throw it away. Exact Swift output matched the previous binary for
+default, hidden, no-vcs, and no-global file listing; sorted output matched Rust
+for the same controls. An 80-run A/B measured default at 77.7 ms versus
+78.1 ms before, hidden at 80.9 ms versus 79.9 ms before, and no-vcs at
+63.1 ms versus 63.7 ms before. The order-flipped 100-run confirmation was
+wall-time neutral at default 78.0 ms versus 77.9 ms before, hidden 79.9 ms
+versus 80.2 ms before, and no-vcs 63.1 ms versus 62.9 ms before; default user
+CPU moved from 94.2 ms before to 92.7 ms after.
+
 Several plausible Swift-only probes were rejected after exact Swift-output and
 sorted Rust-output checks:
 

@@ -3508,6 +3508,13 @@ public struct FileWalker: @unchecked Sendable {
               let globalIgnoreFile = globalGitIgnoreFile() else {
             return
         }
+        if options.mode == .files,
+           !options.hidden,
+           options.loggingMode == nil,
+           !ignoreStack.canIncludePaths,
+           globalIgnoreFileExcludesOnlyHiddenPaths(globalIgnoreFile) {
+            return
+        }
         let loaded = loadMatcher(
             from: globalIgnoreFile,
             rootBase: nil,
@@ -3526,6 +3533,17 @@ public struct FileWalker: @unchecked Sendable {
         if !options.noIgnoreMessages {
             warnings.append(contentsOf: loaded.messages)
         }
+    }
+
+    private func globalIgnoreFileExcludesOnlyHiddenPaths(_ fileURL: URL) -> Bool {
+        guard let contents = try? String(contentsOfFile: fileURL.path, encoding: .utf8) else {
+            return false
+        }
+        let parsed = parseIgnorePatterns(contents, fileURL: fileURL)
+        guard parsed.messages.isEmpty else {
+            return false
+        }
+        return GlobMatcher.parsedPatternsExcludeOnlyHiddenPaths(parsed.patterns)
     }
 
     private func appendExplicitIgnoreFiles(

@@ -321,6 +321,27 @@ public struct GlobMatcher: Equatable {
         }
     }
 
+    static func parsedPatternsExcludeOnlyHiddenPaths(_ patterns: [String]) -> Bool {
+        var sawRule = false
+        for raw in patterns {
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else {
+                continue
+            }
+
+            let normalized = Self.unescapeLeadingCommentOrNegation(trimmed)
+            let isNegated = !normalized.wasEscaped && normalized.pattern.hasPrefix("!")
+            if isNegated {
+                return false
+            }
+            if !Self.patternMatchesOnlyHiddenPaths(normalized.pattern) {
+                return false
+            }
+            sawRule = true
+        }
+        return sawRule
+    }
+
     private static func unescapeLeadingCommentOrNegation(_ pattern: String) -> (pattern: String, wasEscaped: Bool) {
         guard pattern.hasPrefix("\\#") || pattern.hasPrefix("\\!") else {
             return (pattern, false)
