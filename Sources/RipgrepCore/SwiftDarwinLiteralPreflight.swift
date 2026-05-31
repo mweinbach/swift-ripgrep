@@ -4989,10 +4989,27 @@ public enum SwiftDarwinLiteralPreflight {
         defer {
             Darwin.munmap(mapped, haystackLength)
         }
+        let base = UnsafeRawPointer(mapped).assumingMemoryBound(to: UInt8.self)
+        if asciiCaseInsensitive,
+           asciiBoundary,
+           !emitLines,
+           literal.count == 1,
+           rgSwiftDarwinFindASCIICaseInsensitiveByte(
+            base,
+            haystackLength: haystackLength,
+            foldedByte: rgSwiftASCIILower(literal[0])
+           ) == nil {
+            if requireASCIIHaystack,
+               (memchr(base, 0, haystackLength) != nil
+                || rgSwiftContainsNonASCIIByte(base, count: haystackLength)) {
+                return nil
+            }
+            return 0
+        }
 
         return literal.withUnsafeBufferPointer { literalBuffer in
             rgSwiftDarwinWriteLiteralBytes(
-                UnsafeRawPointer(mapped).assumingMemoryBound(to: UInt8.self),
+                base,
                 haystackLength: haystackLength,
                 literal: literalBuffer,
                 asciiCaseInsensitive: asciiCaseInsensitive,
@@ -7782,6 +7799,15 @@ private func countASCIIWordMatches(
                 return 0
             }
             let foldedLiteral = asciiCaseInsensitive ? literal.map(rgSwiftASCIILower) : []
+            if asciiCaseInsensitive,
+               literal.count == 1,
+               rgSwiftDarwinFindASCIICaseInsensitiveByte(
+                base,
+                haystackLength: data.count,
+                foldedByte: foldedLiteral[0]
+               ) == nil {
+                return 0
+            }
             var caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
             if asciiCaseInsensitive, foldedLiteral.count > 1 {
                 for index in 0..<(foldedLiteral.count - 1) {
@@ -7944,6 +7970,16 @@ private func countASCIIWordMatchedLines(
             return 0
         }
         let base = rawBase.assumingMemoryBound(to: UInt8.self)
+        if asciiCaseInsensitive,
+           searchLiterals.count == 1,
+           searchLiterals[0].count == 1,
+           rgSwiftDarwinFindASCIICaseInsensitiveByte(
+            base,
+            haystackLength: data.count,
+            foldedByte: searchLiterals[0][0]
+           ) == nil {
+            return 0
+        }
         var searchOffset = 0
         var matchedLineCount = 0
         var rejectedBoundaryCandidates = 0
@@ -8556,6 +8592,28 @@ private func rgSwiftContainsNonASCIIByte(_ base: UnsafePointer<UInt8>, count: In
     return false
 }
 
+private func rgSwiftDarwinFindASCIICaseInsensitiveByte(
+    _ base: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    foldedByte: UInt8
+) -> UnsafePointer<UInt8>? {
+    let needles: [UInt8]
+    if foldedByte >= UInt8(ascii: "a"),
+       foldedByte <= UInt8(ascii: "z") {
+        needles = [foldedByte, foldedByte - (UInt8(ascii: "a") - UInt8(ascii: "A"))]
+    } else {
+        needles = [foldedByte]
+    }
+    return needles.withUnsafeBufferPointer { needleBuffer in
+        rg_memchr_any_bytes(
+            base,
+            haystackLength,
+            needleBuffer.baseAddress,
+            needleBuffer.count
+        )
+    }
+}
+
 private func rgSwiftDarwinContainsASCIICaseInsensitiveWord(
     _ base: UnsafePointer<UInt8>,
     haystackLength: Int,
@@ -8577,6 +8635,46 @@ private func rgSwiftDarwinContainsASCIICaseInsensitiveWord(
         return nil
     }
     let foldedLiteral = (0..<literal.count).map { rgSwiftASCIILower(literalBase[$0]) }
+    if foldedLiteral.count == 1 {
+        var searchOffset = 0
+        var rejectedBoundaryCandidates = 0
+        let maxRejectedBoundaryCandidates = 128
+        while searchOffset < haystackLength {
+            guard let found = rgSwiftDarwinFindASCIICaseInsensitiveByte(
+                base.advanced(by: searchOffset),
+                haystackLength: haystackLength - searchOffset,
+                foldedByte: foldedLiteral[0]
+            ) else {
+                if memchr(base, 0, haystackLength) != nil
+                    || rgSwiftContainsNonASCIIByte(base, count: haystackLength) {
+                    return nil
+                }
+                return false
+            }
+            let matchStart = base.distance(to: found)
+            guard let bounded = isASCIIWordBoundaryMatch(
+                base: base,
+                dataCount: haystackLength,
+                matchStart: matchStart,
+                matchEnd: matchStart + 1
+            ) else {
+                return nil
+            }
+            if bounded {
+                return true
+            }
+            rejectedBoundaryCandidates += 1
+            guard rejectedBoundaryCandidates <= maxRejectedBoundaryCandidates else {
+                return nil
+            }
+            searchOffset = matchStart + 1
+        }
+        if memchr(base, 0, haystackLength) != nil
+            || rgSwiftContainsNonASCIIByte(base, count: haystackLength) {
+            return nil
+        }
+        return false
+    }
     var caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
     if foldedLiteral.count > 1 {
         for index in 0..<(foldedLiteral.count - 1) {

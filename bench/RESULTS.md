@@ -680,6 +680,21 @@ versus 19.0 ms baseline. The order-flipped 60-run confirmation measured
 versus 19.0 ms baseline, with Rust `-w -q` at 6.3 ms. The early-match
 `-w -q needle` control stayed flat at 2.8 ms for both binaries.
 
+Single-byte ASCII ignore-case word searches now take the same byte-set absence
+shortcut before the heavier word-boundary scanner. Quiet/path-only mode still
+checks every found byte for ASCII word boundaries, and no-match paths still
+fall back on NUL or non-ASCII haystacks before proving absence. Count-line and
+count-matches modes use the shortcut only to prove zero matches; positive cases
+stay on the existing boundary counters. Targeted stdout/stderr/status checks
+matched the previous Swift binary and Rust for quiet, path-only,
+files-without-match, count, count-matches, include-zero, bounded word hits, and
+Unicode fallback controls. On the 48 MiB exact-line fixture, a 40-run A/B
+measured `-q -w -i Z` at 10.5 ms versus 27.6 ms before and 5.7 ms for Rust;
+`-c -w -i Z` at 8.1 ms versus 26.3 ms before and 5.6 ms for Rust; and
+`--count-matches -w -i Z` at 7.2 ms versus 25.3 ms before and 6.3 ms for Rust.
+The order-flipped confirmation measured 7.7 ms versus 28.9 ms, 7.9 ms versus
+26.0 ms, and 7.1 ms versus 25.1 ms for those same three forms.
+
 JSON/stats summary-only no-matches now get a narrow executable preflight for
 simple single-file literal searches. When the literal is absent and the mapped
 file has no binary prefix, Swift emits the same zero-match JSON or stats summary
