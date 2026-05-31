@@ -419,6 +419,39 @@ sorted Rust-output checks:
   both, but sorted `--files` regressed to 152.6 ms versus 151.8 ms and recursive
   `EXPORT_SYMBOL` line output regressed to 1.687 s versus 1.679 s. The 64 KiB
   stdout buffer stayed.
+- A small multi-explicit-file quiet literal route that directly scanned two to
+  eight existing file operands also stayed rejected. It preserved exact
+  stdout/stderr/status versus the previous Swift binary and Rust for two-file
+  match, reversed match, no-match, three-file match, missing-file fallback,
+  directory fallback, binary-NUL fallback, UTF-8 BOM fallback, explicit
+  `--ignore-file` fallback, and recursive quiet controls. But the 120-run A/B
+  was wall-time flat-to-slower: two-file match moved to 34.5 ms versus 32.3 ms
+  before, reversed stayed neutral at 35.0 ms versus 34.8 ms, no-match stayed
+  neutral at 34.3 ms versus 33.7 ms, and the three-file synthetic match
+  regressed to 36.4 ms versus 31.4 ms. The existing parallel generic explicit
+  search path stayed despite its higher user CPU. A retried version inside the
+  quiet walker, including a variant that skipped the helper's extra
+  `FileManager.attributesOfItem` precheck for explicit operands, also failed to
+  move wall time toward Rust: the 100-run retry left two-file match in the
+  42 ms band, reversed match around 32 ms, and no-match worse at 53 ms, so no
+  source change was retained.
+- Routing single-file `--stats -l` and `--stats --files-without-match` through
+  the direct Swift literal writer was also rejected. It preserved stdout,
+  stderr, and status versus the previous Swift binary and Rust after normalizing
+  Rust's elapsed timing lines for match, no-match, binary-NUL, UTF-8 BOM,
+  explicit `--ignore-file`, ignore-case, and word-regexp controls. But the
+  80-run A/B was flat-to-slower: matching `--stats -l` measured 31.2 ms versus
+  30.0 ms before and Rust at 20.0 ms, no-match measured 4.34 ms versus
+  4.26 ms before, and matching `--stats --files-without-match` stayed neutral
+  at 9.18 ms versus 9.12 ms. The generic stats path stayed.
+- Adding a second-last-byte guard before basename suffix-rule `hasSuffix`
+  checks was rejected. Exact output matched the previous Swift binary for
+  default, hidden, no-vcs, and no-global file listing, and sorted output matched
+  Rust. The first 100-run A/B was mixed: default `--files` regressed to
+  79.9 ms versus 78.6 ms before, hidden improved to 80.6 ms versus a noisy
+  83.0 ms before, and no-vcs was neutral. The order-flipped 120-run
+  confirmation still had default slower at 78.9 ms versus 78.4 ms before and
+  no-vcs flat, so the single last-byte suffix bucket stayed.
 
 ### Continuation probes — 2026-05-29
 
