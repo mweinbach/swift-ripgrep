@@ -310,6 +310,13 @@ because they did not improve the current checkpoint:
   (`--help` and `--generate man` about 3.3 ms faster) but regressed primary
   file-list medians by 0.20-0.60 ms, so the original optional first-argument
   classifier stayed.
+- Removing the direct Darwin file-list writer's duplicate
+  `FileManager.fileExists` root probe was also rejected. `fastFilePathRootPlan`
+  already performs an `lstat`, and the fallback path preserved exact Swift
+  output for existing/missing roots plus sorted Rust parity, but the 180-pair
+  A/B regressed default `--files` by 0.22 ms median, hidden by 0.71 ms, no-vcs
+  by 0.06 ms, no-ignore by 0.20 ms, and NUL by 0.23 ms. Quiet stayed flat at
+  4.95 ms versus 4.93 ms, so the explicit root-existence branch stayed.
 
 ## Visible line stats preflight — 2026-05-31
 
