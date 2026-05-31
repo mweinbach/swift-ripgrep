@@ -344,6 +344,14 @@ sorted Rust-output checks:
   orders were neutral-to-slower: default measured 78.0 ms versus 77.9 ms before
   in the first pass and 78.3 ms versus 77.5 ms before in the flipped pass, with
   no-vcs likewise neutral/slower. The simpler existing setup order stayed.
+- Short-circuiting hidden file-list entries before asking the ignore stack when
+  no ignore file can include hidden paths also stayed rejected. It preserved
+  exact stdout and stderr versus the previous Swift binary for default, hidden,
+  no-vcs, no-global, and `--debug --files`, and sorted output matched Rust for
+  the same file-list controls. The first 80-run A/B looked positive for default
+  at 79.0 ms versus 81.3 ms before, but the order-flipped 100-run confirmation
+  flattened default to 78.6 ms versus 78.5 ms before and made no-vcs slightly
+  worse at 63.6 ms versus 63.2 ms, so the shared helper stayed unchanged.
 
 ### Continuation probes — 2026-05-29
 
