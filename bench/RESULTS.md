@@ -8,6 +8,33 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Multi-file word repeated-regexp path preflight checkpoint — 2026-05-31
+
+Explicit regular-file repeated-`-e` searches with `-w` now keep multi-file
+quiet and path-only modes on Swift Darwin word-boundary multi-literal helpers.
+The helpers use the existing ASCII word-boundary scanner with `maxCount: 1`, so
+they can stop after the first matching line for `-q`/`-l` and still fall back for
+binary or ambiguous Unicode-boundary cases. Count output stays on the generic
+route for this slice because full match-heavy count-line scans were measured as
+a regression.
+
+Validation:
+
+- Current Swift output matched the saved pre-change Swift binary and Rust
+  byte-for-byte for `-q -w`, `-l -w`, `--files-without-match -w`, the
+  corresponding `-i -w` forms, and the rejected `-w -c` count control.
+- Coverage was added for repeated-`-e` word and ignore-case word multi-file
+  quiet, files-with-matches, and files-without-match forms.
+
+On two 46 MiB explicit files under `/tmp/swift-rg-bench`, 40 timed runs with
+5 warmups:
+
+| Command | Current Swift | Previous Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `-q -w -e missingliteral -e absentliteral no-match-ascii-46m.txt match-ascii-46m.txt` | 16.0 ms | 626.6 ms | 9.9 ms |
+| `-l -w -e missingliteral -e absentliteral no-match-ascii-46m.txt match-ascii-46m.txt` | 16.7 ms | 352.6 ms | 12.4 ms |
+| `--files-without-match -i -w -e MISSINGLITERAL -e ABSENTLITERAL no-match-ascii-46m.txt match-ascii-46m.txt` | 23.1 ms | 369.9 ms | 78.2 ms |
+
 ## Multi-file ignore-case repeated-regexp path preflight checkpoint — 2026-05-31
 
 Explicit regular-file repeated-`-e` searches with `-i` now keep multi-file

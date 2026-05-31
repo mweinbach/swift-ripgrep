@@ -1256,6 +1256,41 @@ public enum SwiftDarwinLiteralPreflight {
         return matchedLineCount > 0 ? 0 : 1
     }
 
+    public static func multiLiteralWordQuietExitCode(
+        path: String,
+        literals: [[UInt8]]
+    ) -> Int32? {
+        guard let matched = containsAnyWordLiteral(path: path, literals: literals) else {
+            return nil
+        }
+        return matched ? 0 : 1
+    }
+
+    public static func multiLiteralWordPathOnlyExitCode(
+        path: String,
+        literals: [[UInt8]],
+        printWhenMatched: Bool,
+        nullTerminated: Bool,
+        crlfTerminated: Bool = false,
+        outputPath: [UInt8]? = nil
+    ) -> Int32? {
+        guard let matched = containsAnyWordLiteral(path: path, literals: literals) else {
+            return nil
+        }
+        guard matched == printWhenMatched else {
+            return 1
+        }
+        guard writePathOnlyOutput(
+            path: path,
+            outputPath: outputPath,
+            nullTerminated: nullTerminated,
+            crlfTerminated: crlfTerminated
+        ) else {
+            return nil
+        }
+        return 0
+    }
+
     public static func asciiCaseInsensitiveMultiLiteralWordCountLineExitCode(
         path: String,
         literals: [[UInt8]],
@@ -1289,6 +1324,41 @@ public enum SwiftDarwinLiteralPreflight {
             }
         }
         return matchedLineCount > 0 ? 0 : 1
+    }
+
+    public static func asciiCaseInsensitiveMultiLiteralWordQuietExitCode(
+        path: String,
+        literals: [[UInt8]]
+    ) -> Int32? {
+        guard let matched = containsAnyASCIICaseInsensitiveWordLiteral(path: path, literals: literals) else {
+            return nil
+        }
+        return matched ? 0 : 1
+    }
+
+    public static func asciiCaseInsensitiveMultiLiteralWordPathOnlyExitCode(
+        path: String,
+        literals: [[UInt8]],
+        printWhenMatched: Bool,
+        nullTerminated: Bool,
+        crlfTerminated: Bool = false,
+        outputPath: [UInt8]? = nil
+    ) -> Int32? {
+        guard let matched = containsAnyASCIICaseInsensitiveWordLiteral(path: path, literals: literals) else {
+            return nil
+        }
+        guard matched == printWhenMatched else {
+            return 1
+        }
+        guard writePathOnlyOutput(
+            path: path,
+            outputPath: outputPath,
+            nullTerminated: nullTerminated,
+            crlfTerminated: crlfTerminated
+        ) else {
+            return nil
+        }
+        return 0
     }
 
     public static func multiLiteralWordLineExitCode(
@@ -4857,6 +4927,47 @@ public enum SwiftDarwinLiteralPreflight {
         }
 
         return countASCIIWordMatchedLines(in: data, literal: literal, maxCount: 1).map { $0 > 0 }
+    }
+
+    private static func containsAnyWordLiteral(path: String, literals: [[UInt8]]) -> Bool? {
+        guard let literals = distinctASCIIWordLiterals(literals),
+              !literals.isEmpty,
+              let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return false
+        }
+        guard !hasBinaryDetectionPrefix(data) else {
+            return nil
+        }
+
+        return countASCIIWordMatchedLines(in: data, literals: literals, maxCount: 1).map { $0 > 0 }
+    }
+
+    private static func containsAnyASCIICaseInsensitiveWordLiteral(
+        path: String,
+        literals: [[UInt8]]
+    ) -> Bool? {
+        guard let literals = distinctASCIICaseInsensitiveWordLiterals(literals),
+              !literals.isEmpty,
+              let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return false
+        }
+        guard !hasBinaryDetectionPrefix(data),
+              !containsNonASCIIByte(data) else {
+            return nil
+        }
+
+        return countASCIIWordMatchedLines(
+            in: data,
+            literals: literals,
+            maxCount: 1,
+            asciiCaseInsensitive: true
+        ).map { $0 > 0 }
     }
 
     private static func isASCIIWordBoundaryMatch(

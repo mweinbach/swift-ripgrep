@@ -3351,6 +3351,83 @@ struct RipgrepCommand {
                     return matchedAny ? 0 : 1
                 }
 
+                if wordRegexp {
+                    guard parsedQuiet || parsedPathOnlyMode != nil,
+                          parsedMaxCount != 0,
+                          paths.allSatisfy({ $0 != "-" }),
+                          paths.allSatisfy(isReadableRegularFile),
+                          !parsedCanEmitDefaultColoredCountPrefix,
+                          let literals = explicitRegexpPatternLiterals(
+                            explicitRegexpPatterns,
+                            fixedStrings: fixedStrings,
+                            allowPCREQuotedLiterals: allowPCREQuotedLiterals
+                          ) else {
+                        return nil
+                    }
+
+                    func displayPathBytes(for candidatePath: String) -> [UInt8] {
+                        Self.preflightDisplayPathBytes(candidatePath, pathSeparator: parsedPathSeparator)
+                    }
+
+                    func pathOnlyOutputPath(for candidatePath: String) -> [UInt8]? {
+                        parsedPathSeparator == nil && candidatePath.utf8.allSatisfy { $0 < 0x80 }
+                            ? nil
+                            : displayPathBytes(for: candidatePath)
+                    }
+
+                    if parsedQuiet {
+                        for candidatePath in paths {
+                            let status = asciiCaseInsensitive
+                                ? SwiftDarwinLiteralPreflight.asciiCaseInsensitiveMultiLiteralWordQuietExitCode(
+                                    path: candidatePath,
+                                    literals: literals
+                                )
+                                : SwiftDarwinLiteralPreflight.multiLiteralWordQuietExitCode(
+                                    path: candidatePath,
+                                    literals: literals
+                                )
+                            guard let status else {
+                                return nil
+                            }
+                            if status == 0 {
+                                return 0
+                            }
+                        }
+                        return 1
+                    }
+
+                    if let parsedPathOnlyMode {
+                        let printWhenMatched = parsedPathOnlyMode == .matching
+                        var printed = false
+                        for candidatePath in paths {
+                            let exitCode = asciiCaseInsensitive
+                                ? SwiftDarwinLiteralPreflight.asciiCaseInsensitiveMultiLiteralWordPathOnlyExitCode(
+                                    path: candidatePath,
+                                    literals: literals,
+                                    printWhenMatched: printWhenMatched,
+                                    nullTerminated: parsedNullPathTerminator,
+                                    crlfTerminated: parsedCrlf,
+                                    outputPath: pathOnlyOutputPath(for: candidatePath)
+                                )
+                                : SwiftDarwinLiteralPreflight.multiLiteralWordPathOnlyExitCode(
+                                    path: candidatePath,
+                                    literals: literals,
+                                    printWhenMatched: printWhenMatched,
+                                    nullTerminated: parsedNullPathTerminator,
+                                    crlfTerminated: parsedCrlf,
+                                    outputPath: pathOnlyOutputPath(for: candidatePath)
+                                )
+                            guard let exitCode else {
+                                return nil
+                            }
+                            if exitCode == 0 {
+                                printed = true
+                            }
+                        }
+                        return printed ? 0 : 1
+                    }
+                }
+
                 guard parsedQuiet || parsedPathOnlyMode != nil || parsedCountStyleOutput,
                       parsedMaxCount != 0,
                       paths.allSatisfy({ $0 != "-" }),
