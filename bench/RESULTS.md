@@ -317,6 +317,14 @@ because they did not improve the current checkpoint:
   A/B regressed default `--files` by 0.22 ms median, hidden by 0.71 ms, no-vcs
   by 0.06 ms, no-ignore by 0.20 ms, and NUL by 0.23 ms. Quiet stayed flat at
   4.95 ms versus 4.93 ms, so the explicit root-existence branch stayed.
+- Routing sorted no-ignore file lists through the byte-oriented no-ignore
+  writer preserved exact Swift output and Rust ordered output, but did not
+  improve median timings. The key-array sorter measured `--sort path
+  --no-ignore --files` flat at 180.72 ms versus 180.74 ms baseline and regressed
+  all-ignore-disabled sorting to 163.29 ms versus 161.26 ms. A follow-up
+  in-place byte-slice comparator avoided per-path key allocation but stayed
+  flat on the primary case at 179.88 ms versus 179.83 ms and regressed reverse
+  sort to 181.39 ms versus 179.15 ms, so the existing string sorted path stayed.
 
 ## Visible line stats preflight — 2026-05-31
 
