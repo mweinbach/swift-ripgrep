@@ -481,11 +481,10 @@ public struct FileWalker: @unchecked Sendable {
     #if canImport(Darwin)
     private func fastFilePathRootPlan(root: URL, options: RipgrepOptions) -> DarwinFilePathRootPlan? {
         let rootURL = root.standardizedFileURL
-        let rootBase = rootBase(for: rootURL)
-        guard rootBase.standardizedFileURL.path == rootURL.path,
-              isDirectoryPath(rootURL.path) else {
+        guard isDirectoryPath(rootURL.path) else {
             return nil
         }
+        let rootBase = rootURL
 
         let rootArgument = options.rootPathArguments.first ?? ""
         let logicalPath: String

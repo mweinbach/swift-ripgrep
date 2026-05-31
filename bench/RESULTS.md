@@ -8,6 +8,33 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Files-mode root setup checkpoint — 2026-05-31
+
+The Darwin file-list root planner now proves the fast root is a directory before
+deriving the traversal base, then reuses that already-standardized directory as
+`rootBase` instead of asking Foundation to classify the URL again. This keeps
+the Swift-first fast path and avoids a startup-side `URL.resourceValues` lookup
+without adding C shims or custom low-level code.
+
+Validation:
+
+- Current Swift output matched the saved pre-change Swift binary byte-for-byte
+  for default, hidden, no-vcs, trailing-slash root, and symlink-root fallback
+  file listing.
+- Sorted current Swift output matched Rust for default, hidden, no-vcs, and
+  trailing-slash Linux corpus file listing.
+- A known-directory Git-context variant was rejected: it reduced some user CPU
+  in one order, but default `--files` wall time regressed in the current-first
+  confirmation.
+
+120 timed runs with 5 warmups on `/tmp/swift-rg-bench/linux`:
+
+| Command | Current Swift | Previous Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--files` | 80.4 ms ± 5.1 ms | 80.9 ms ± 5.1 ms | 75.3 ms ± 10.8 ms |
+| `--hidden --files` | 81.5 ms ± 3.1 ms | 82.2 ms ± 5.7 ms | not rerun |
+| `--no-ignore-vcs --files` | 64.3 ms ± 2.9 ms | 65.5 ms ± 5.6 ms | not rerun |
+
 ## Swift-first files-mode checkpoint — 2026-05-29
 
 `--files` startup/traversal now avoids building the default file-type registry
