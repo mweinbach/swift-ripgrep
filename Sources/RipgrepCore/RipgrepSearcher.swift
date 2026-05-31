@@ -405,8 +405,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
         var searchMessages: [String] = []
         var abandonedQuietByteLiteralProbe = false
         var quietByteLiteralProbeBytes = 0
-        let quietByteLiteralProbeFileLimit = 16
-        let quietByteLiteralProbeByteLimit = 16 * 1024 * 1024
+        let quietByteLiteralProbeFileLimit = 32
+        let quietByteLiteralProbeByteLimit = 64 * 1024 * 1024
         func visit(_ haystack: Haystack) -> Bool {
             if quietByteLiteralFastPath != nil,
                filesSearched >= quietByteLiteralProbeFileLimit
@@ -514,10 +514,12 @@ public struct RipgrepSearcher: @unchecked Sendable {
               options.replacement == nil,
               options.maxColumns == nil,
               let fastPath = matcher.byteLiteralFastPath(),
-              !fastPath.caseInsensitiveASCII,
               !fastPath.wordASCII,
               fastPath.literals.count == 1,
-              fastPath.literals.first?.isEmpty == false else {
+              fastPath.literals.first?.isEmpty == false,
+              !fastPath.caseInsensitiveASCII || fastPath.literals.allSatisfy({ literal in
+                literal.allSatisfy { $0 < 0x80 }
+              }) else {
             return nil
         }
         return fastPath
@@ -563,8 +565,39 @@ public struct RipgrepSearcher: @unchecked Sendable {
             guard let baseAddress = bytes.baseAddress else {
                 return SearchFileResult(fileURL: haystack.url, matches: [], bytesSearched: 0, searched: true)
             }
-            let foundPointer = literal.withUnsafeBufferPointer { needle in
-                rg_memmem_simple(baseAddress, data.count, needle.baseAddress, needle.count)
+            let foundPointer: UnsafePointer<UInt8>?
+            let searchedLiteralCount: Int
+            if fastPath.caseInsensitiveASCII {
+                let literalStorage = literal.map(asciiLowercase)
+                var caseInsensitiveShifts = [Int](repeating: literalStorage.count, count: 256)
+                if literalStorage.count > 1 {
+                    for index in 0..<(literalStorage.count - 1) {
+                        caseInsensitiveShifts[Int(literalStorage[index])] = literalStorage.count - 1 - index
+                    }
+                }
+                searchedLiteralCount = literalStorage.count
+                foundPointer = literalStorage.withUnsafeBufferPointer { needle -> UnsafePointer<UInt8>? in
+                    guard let base = needle.baseAddress else {
+                        return nil
+                    }
+                    return caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
+                        rg_memcasemem_ascii_prepared(
+                            baseAddress,
+                            data.count,
+                            base,
+                            literalStorage.count,
+                            shifts.baseAddress
+                        )
+                    }
+                }
+            } else {
+                searchedLiteralCount = literal.count
+                foundPointer = literal.withUnsafeBufferPointer { needle -> UnsafePointer<UInt8>? in
+                    guard let base = needle.baseAddress else {
+                        return nil
+                    }
+                    return rg_memmem_simple(baseAddress, data.count, base, literal.count)
+                }
             }
             guard let foundPointer else {
                 return SearchFileResult(
@@ -577,7 +610,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             return SearchFileResult(
                 fileURL: haystack.url,
                 matches: [],
-                bytesSearched: baseAddress.distance(to: foundPointer) + literal.count,
+                bytesSearched: baseAddress.distance(to: foundPointer) + searchedLiteralCount,
                 searched: true,
                 supplementalMatchedLines: 1,
                 supplementalMatches: 1

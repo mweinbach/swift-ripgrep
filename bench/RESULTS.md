@@ -8,6 +8,43 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## ASCII ignore-case quiet probe budget — 2026-05-31
+
+The bounded quiet byte-literal first-match probe now admits safe ASCII
+ignore-case literals. It folds the single literal once per probed file and uses
+the existing Swift fallback prepared ASCII scanner, while non-ASCII folded
+literals still fall back to the normal matcher. The probe budget is now 32
+searched files / 64 MiB, enough to catch the Linux-tree `pm_resume` hit at file
+26 without making late hits and misses pay for a long pre-scan before the fast
+quiet fallback walker takes over.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched the saved pre-fast-fallback Swift
+  binary and Rust for recursive quiet ignore-case hit/miss, late exact
+  hit/miss, early exact hit, explicit-file ignore-case hit/miss, and an
+  explicit README miss.
+- Current Swift matched the saved Swift binary and Rust for `--stats -q -i`
+  and `--json -q -i` hit/miss controls after normalizing only elapsed timing
+  fields.
+- `xcrun swift build -c release` passed before the final timing pass.
+
+A/B checks against checkpoint `b2c4af8` measured:
+
+| Command | Current Swift | Previous Swift |
+| --- | ---: | ---: |
+| `-q -i pm_resume linux` | 7.34 ms mean / 7.14 ms median | 241.21 ms / 235.95 ms |
+| `-q ABSENT_NEEDLE_DOES_NOT_EXIST linux` | 928.16 ms / 918.47 ms | 937.20 ms / 921.77 ms |
+| `-q PM_RESUME linux` | 354.88 ms / 353.62 ms | 356.56 ms / 352.49 ms |
+| `-q EXPORT_SYMBOL linux` | 5.62 ms / 5.63 ms | 6.93 ms / 6.88 ms |
+
+A direct 50-run Rust comparison for the target early ignore-case quiet hit
+measured Rust `rg -q -i pm_resume linux` at 5.86 ms mean / 5.89 ms median and
+current Swift at 7.41 ms / 6.86 ms. A broader probe that routed fixed-class
+regex suffixes through the fast walker was not retained: it did not improve the
+regex-suffix quiet case and regressed quiet miss / late exact / early exact
+controls.
+
 ## Known-regular quiet read and suppressed literal output — 2026-05-31
 
 Fast-walk haystacks now carry the existing known-regular-file signal through
