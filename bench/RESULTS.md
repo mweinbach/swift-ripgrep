@@ -156,6 +156,17 @@ Two fresh Swift-only probes were parity-clean but not retained:
   1.574 s to 3.017 s in an 80-run A/B. The extra GCD scheduling and duplicated
   directory work doubled miss time, so the ordered quiet walker stayed.
 
+The executable literal preflight now accepts multiple explicit regular-file
+operands for quiet mode while leaving the single-file branch on its previous
+straight-through path. Direct status/stdout/stderr checks matched the previous
+Swift binary and Rust for match-first, match-second, no-match, `-w`, and `-i`
+multi-file quiet cases. A 100-run A/B on the Linux corpus block files measured
+`-q EXPORT_SYMBOL bsg.c bfq-iosched.c` at 4.41 ms versus 30.7 ms before and
+4.58 ms for Rust; the reversed match measured 4.41 ms versus 32.6 ms before and
+2.75 ms for Rust. A final 80-run check measured the reversed match at 4.43 ms
+versus 29.6 ms before and 4.23 ms for Rust, no-match at 4.50 ms versus
+37.8 ms before, and single-file quiet flat at 2.63 ms versus 2.64 ms before.
+
 `GlobMatcher.excludesOnlyHiddenPaths` is now computed only when the global-ignore
 setup asks for it, instead of classifying every rule in every directory-local
 ignore matcher during construction. Exact Swift output matched the previous

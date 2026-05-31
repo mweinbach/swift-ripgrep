@@ -4422,6 +4422,11 @@ struct MiscTests {
 
         for (quietArguments, expectedStatus) in [
             (["-q", "needle", root.path("dense.txt")], Int32(0)),
+            (["-q", "needle", root.path("quiet-no-match.txt"), root.path("dense.txt")], Int32(0)),
+            (["-q", "needle", root.path("dense.txt"), root.path("quiet-no-match.txt")], Int32(0)),
+            (["-q", "needle", root.path("quiet-no-match.txt"), root.path("summary.txt")], Int32(1)),
+            (["-q", "missing|needle", root.path("quiet-no-match.txt"), root.path("dense.txt")], Int32(0)),
+            (["-q", "-e", "missing", "-e", "needle", root.path("quiet-no-match.txt"), root.path("dense.txt")], Int32(0)),
             (["--line-buffered", "-q", "needle", root.path("dense.txt")], Int32(0)),
             (["--quiet", "missing", root.path("quiet-no-match.txt")], Int32(1)),
             (["--replace", "X", "-q", "needle", root.path("dense.txt")], Int32(0)),

@@ -377,6 +377,7 @@ struct RipgrepCommand {
         let noMmap: Bool
         let pattern: String
         let path: String
+        let paths: ArraySlice<String>
         let wordRegexp: Bool
         let fixedStrings: Bool
         enum CaseMode {
@@ -1695,17 +1696,19 @@ struct RipgrepCommand {
         let explicitRegexpPatterns = parsedRegexpPatterns
         if parsedHasExplicitPatternSource {
             guard !explicitRegexpPatterns.isEmpty,
-                  valueArguments.count == 1 else {
+                  !valueArguments.isEmpty else {
                 return nil
             }
             pattern = explicitRegexpPatterns[0]
             path = valueArguments[0]
+            paths = valueArguments[...]
         } else {
-            guard valueArguments.count == 2 else {
+            guard valueArguments.count >= 2 else {
                 return nil
             }
             pattern = valueArguments[0]
             path = valueArguments[1]
+            paths = valueArguments.dropFirst()
         }
         if parsedIgnoreFilesEnabled {
             guard parsedIgnoreFilePaths.allSatisfy(isReadableRegularFile) else {
@@ -1743,6 +1746,9 @@ struct RipgrepCommand {
             parsedPathOnlyMode = .nonMatching
         default:
             parsedPathOnlyMode = nil
+        }
+        guard paths.count == 1 || parsedQuiet else {
+            return nil
         }
         let parsedDisplayPath = Self.preflightDisplayPathBytes(
             path,
@@ -3218,6 +3224,93 @@ struct RipgrepCommand {
             }
         }
 
+        if paths.count > 1 {
+            guard parsedQuiet,
+                  explicitRegexpPatterns.count <= 1,
+                  parsedMaxCount != 0,
+                  (patternCanStartWithDash || !pattern.hasPrefix("-")),
+                  paths.allSatisfy({ $0 != "-" }),
+                  paths.allSatisfy(isReadableRegularFile) else {
+                return nil
+            }
+            let multiPathASCIIBoundaryLiteralPattern = (fixedStrings || asciiCaseInsensitive) ? nil : asciiBoundaryLiteral(
+                pattern,
+                allowPCREQuotedLiterals: allowPCREQuotedLiterals
+            )
+            guard multiPathASCIIBoundaryLiteralPattern == nil else {
+                return nil
+            }
+            let multiPathLiteralPattern = fixedStrings
+                ? pattern
+                : RegexLiteralParser.literal(
+                    fromPlainRegexPattern: pattern,
+                    allowPCREQuotedLiterals: allowPCREQuotedLiterals
+                )
+            guard let multiPathLiteralPattern else {
+                return nil
+            }
+            let literal = Array(multiPathLiteralPattern.utf8)
+            guard !literal.isEmpty,
+                  !literal.contains(UInt8(ascii: "\n")),
+                  !asciiCaseInsensitive || literal.allSatisfy({ $0 < 0x80 }) else {
+                return nil
+            }
+
+            var sawNoMatch = false
+            for candidatePath in paths {
+                let exitCode: Int32?
+                if asciiCaseInsensitive {
+                    if wordRegexp {
+                        exitCode = SwiftDarwinLiteralPreflight.asciiCaseInsensitiveWordQuietExitCode(
+                            path: candidatePath,
+                            literal: literal
+                        )
+                    } else if parsedLineRegexp {
+                        guard !parsedNullData,
+                              !parsedCrlf else {
+                            return nil
+                        }
+                        exitCode = SwiftDarwinLiteralPreflight.asciiCaseInsensitiveExactLineQuietExitCode(
+                            path: candidatePath,
+                            literal: literal
+                        )
+                    } else {
+                        exitCode = SwiftDarwinLiteralPreflight.asciiCaseInsensitiveQuietExitCode(
+                            path: candidatePath,
+                            literal: literal
+                        )
+                    }
+                } else if wordRegexp {
+                    exitCode = SwiftDarwinLiteralPreflight.wordQuietExitCode(
+                        path: candidatePath,
+                        literal: literal
+                    )
+                } else if parsedLineRegexp {
+                    guard !parsedNullData,
+                          !parsedCrlf else {
+                        return nil
+                    }
+                    exitCode = SwiftDarwinLiteralPreflight.exactLineQuietExitCode(
+                        path: candidatePath,
+                        literal: literal
+                    )
+                } else {
+                    exitCode = SwiftDarwinLiteralPreflight.quietExitCode(
+                        path: candidatePath,
+                        literal: literal
+                    )
+                }
+                guard let exitCode else {
+                    return nil
+                }
+                if exitCode == 0 {
+                    return 0
+                }
+                sawNoMatch = true
+            }
+            return sawNoMatch ? 1 : nil
+        }
+
         if explicitRegexpPatterns.count > 1 {
             guard parsedMaxCount != 0,
                   path != "-",
@@ -4283,7 +4376,7 @@ struct RipgrepCommand {
         }
 
         guard (patternCanStartWithDash || !pattern.hasPrefix("-")),
-              path != "-",
+              paths.allSatisfy({ $0 != "-" }),
               let literalPattern = parsedLiteralPattern else {
             return nil
         }
