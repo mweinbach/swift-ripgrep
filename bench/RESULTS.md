@@ -329,6 +329,14 @@ sorted Rust-output checks:
   default regressed to 150.0 ms versus 79.8 ms before, hidden to 150.0 ms versus
   80.6 ms before, and system CPU jumped to about 2.9 s per run. The existing
   root-child parallel boundary stayed.
+- Skipping matcher construction for ignore files with no active patterns also
+  stayed rejected. It preserved exact stdout and stderr versus the previous
+  Swift binary for default, hidden, no-vcs, and `--debug --files`, and sorted
+  output matched Rust for the same file-list controls. But both 100-run A/B
+  orders raised ignore-heavy user CPU and hidden wall time: default user CPU
+  moved from 92.2/93.6 ms before to 97.1/96.4 ms after, while hidden moved from
+  80.7/80.6 ms before to 82.0/81.8 ms after. The existing empty matcher path
+  stayed.
 
 ### Continuation probes — 2026-05-29
 
