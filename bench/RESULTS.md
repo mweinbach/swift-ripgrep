@@ -56,6 +56,35 @@ backed out: it preserved output parity but added measurable overhead to the
 default file-list path. The retained check only looks at the first argument and
 only skips modes whose output is independent of stdin readability.
 
+## Common-prefix sorted file-list keys — 2026-05-31
+
+Sorted file-list output for a single explicit directory now builds sort keys
+from the suffix after the shared ASCII root path prefix. The emitted paths are
+unchanged; only the per-line key used for `--sort path` / `--sortr path`
+skips bytes that are identical for every candidate in the fast Darwin
+file-list route.
+
+Validation:
+
+- Current Swift output matched the saved previous Swift binary byte-for-byte for
+  sorted, reverse-sorted, hidden no-ignore, no-vcs, default ignore-aware, and
+  NUL sorted file-list controls on `/tmp/swift-rg-bench/linux`.
+- Current Swift output matched Rust ordered output byte-for-byte for sorted and
+  reverse-sorted no-ignore/default controls on the same tree.
+- A non-ASCII explicit root smoke matched the saved previous Swift binary and
+  kept prefix trimming disabled for non-ASCII root prefixes.
+
+An alternating 80-pair process-level harness measured:
+
+| Command | Current Swift | Previous Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--sort path --no-ignore --files linux` | 164.73 ms mean / 166.73 ms median | 197.59 ms / 199.31 ms | 145.60 ms / 146.39 ms |
+| `--sortr path --no-ignore --files linux` | 157.43 ms / 150.42 ms | 187.26 ms / 179.44 ms | 175.27 ms / 167.97 ms |
+| `--sort path --hidden --no-ignore --files linux` | 144.53 ms / 143.89 ms | 175.30 ms / 173.40 ms | 134.49 ms / 132.93 ms |
+| `--sort path --no-ignore-vcs --files linux` | 111.73 ms / 110.14 ms | 143.36 ms / 141.42 ms | 166.41 ms / 163.96 ms |
+| `--sort path --files linux` | 125.52 ms / 124.26 ms | 155.56 ms / 154.82 ms | 234.67 ms / 232.43 ms |
+| `--sortr path --files linux` | 125.32 ms / 123.78 ms | 156.02 ms / 153.73 ms | 272.37 ms / 269.64 ms |
+
 ## Hoisted executable argument snapshot — 2026-05-31
 
 The Swift executable entry point now materializes

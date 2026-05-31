@@ -26,8 +26,8 @@ enum PathSort {
         path.split(separator: "/", omittingEmptySubsequences: false)
     }
 
-    static func byteKey(forPath path: String) -> [UInt8] {
-        path.utf8.map { byte in
+    static func byteKey(forPath path: String, droppingFirstBytes droppedByteCount: Int = 0) -> [UInt8] {
+        path.utf8.dropFirst(droppedByteCount).map { byte in
             byte == UInt8(ascii: "/") ? 0 : byte
         }
     }

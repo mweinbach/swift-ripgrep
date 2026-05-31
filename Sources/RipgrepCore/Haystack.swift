@@ -271,6 +271,7 @@ public struct FileWalker: @unchecked Sendable {
         }
         let pathSortMode = options.sortMode?.kind == .path ? options.sortMode : nil
         var sortedFilePathLines: [String] = []
+        var sortedFilePathCommonPrefixByteCount = 0
         if pathSortMode != nil {
             sortedFilePathLines.reserveCapacity(1024)
         }
@@ -296,6 +297,11 @@ public struct FileWalker: @unchecked Sendable {
 
         guard let rootPlan = fastFilePathRootPlan(root: root, options: options) else {
             return nil
+        }
+        if pathSortMode != nil,
+           rootPlan.logicalPathIsASCII,
+           !rootPlan.logicalPathBytes.isEmpty {
+            sortedFilePathCommonPrefixByteCount = rootPlan.logicalPathBytes.count + 1
         }
 
         if stopAfterFirst, options.quiet, options.noIgnore, options.loggingMode == nil {
@@ -360,7 +366,12 @@ public struct FileWalker: @unchecked Sendable {
             diagnostics.append(contentsOf: parallelResults.diagnostics)
             filtered = filtered || parallelResults.filtered
             if let pathSortMode {
-                emitSortedFilePathLines(sortedFilePathLines, reverse: pathSortMode.reverse, emit: emit)
+                emitSortedFilePathLines(
+                    sortedFilePathLines,
+                    reverse: pathSortMode.reverse,
+                    commonPrefixByteCount: sortedFilePathCommonPrefixByteCount,
+                    emit: emit
+                )
             }
             return FilePathStreamResults(
                 count: parallelResults.count,
@@ -393,7 +404,12 @@ public struct FileWalker: @unchecked Sendable {
             emitOrCollect(path)
         }
         if let pathSortMode {
-            emitSortedFilePathLines(sortedFilePathLines, reverse: pathSortMode.reverse, emit: emit)
+            emitSortedFilePathLines(
+                sortedFilePathLines,
+                reverse: pathSortMode.reverse,
+                commonPrefixByteCount: sortedFilePathCommonPrefixByteCount,
+                emit: emit
+            )
         }
         return FilePathStreamResults(
             count: emittedCount,
@@ -888,9 +904,14 @@ public struct FileWalker: @unchecked Sendable {
             && !options.oneFileSystem
     }
 
-    private func emitSortedFilePathLines(_ lines: [String], reverse: Bool, emit: (String) -> Void) {
+    private func emitSortedFilePathLines(
+        _ lines: [String],
+        reverse: Bool,
+        commonPrefixByteCount: Int = 0,
+        emit: (String) -> Void
+    ) {
         let keyed = lines.map { line in
-            (line: line, key: PathSort.byteKey(forPath: line))
+            (line: line, key: PathSort.byteKey(forPath: line, droppingFirstBytes: commonPrefixByteCount))
         }
         for entry in keyed.sorted(by: { lhs, rhs in
             if reverse {
