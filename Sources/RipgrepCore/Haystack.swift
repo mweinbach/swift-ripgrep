@@ -2195,14 +2195,21 @@ public struct FileWalker: @unchecked Sendable {
         options: RipgrepOptions,
         filtered: inout Bool
     ) -> Bool {
+        if !options.hidden, child.isHidden {
+            guard ignoreStack.canIncludePaths else {
+                return false
+            }
+            return ignoreStack.decision(
+                relativePath: childRelativePath,
+                basename: child.name,
+                isDirectory: isDirectory
+            ) == .include
+        }
         let ignoreDecision = ignoreStack.decision(
             relativePath: childRelativePath,
             basename: child.name,
             isDirectory: isDirectory
         )
-        if !options.hidden, child.isHidden, ignoreDecision != .include {
-            return false
-        }
         if ignoreDecision == .exclude {
             filtered = true
             return false

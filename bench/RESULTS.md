@@ -8,6 +8,27 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Hidden-path ignore short-circuit — 2026-05-31
+
+The ignore-aware Darwin file-listing writer now skips the recursive ignore
+stack lookup for hidden children when the active stack has no include rules.
+That keeps default hidden filtering on the cheap path while preserving the
+single decision lookup needed when ignore rules can explicitly re-include a
+hidden path.
+
+Validation:
+
+- Current Swift `--files` output matched the saved probe byte-for-byte.
+- Sorted current Swift output matched Rust on `/tmp/swift-rg-bench/linux`.
+- `--no-ignore --files` remained in the same noisy band as Rust and does not use
+  this ignore-aware branch.
+
+On `/tmp/swift-rg-bench/linux`, 60 timed runs with 5 warmups:
+
+| Command | Current Swift | Previous Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--files linux` | 81.8 ms | 83.6 ms | 73.8 ms |
+
 ## Visible line stats preflight — 2026-05-31
 
 Single explicit-file `--stats` searches that emit normal matching lines now use
