@@ -17,6 +17,12 @@ public enum SwiftDarwinLiteralPreflight {
             lock.unlock()
         }
 
+        func recordMatch() {
+            lock.lock()
+            hasMatch = true
+            lock.unlock()
+        }
+
         func recordFailure() {
             lock.lock()
             failed = true
@@ -337,8 +343,18 @@ public enum SwiftDarwinLiteralPreflight {
         literals rawLiterals: [[UInt8]]
     ) -> Int32? {
         let rawLiteralData = rawLiterals.map { Data($0) }
-        let accumulator = QuietStatsProbeAccumulator()
 
+        let processorCount = max(1, ProcessInfo.processInfo.processorCount)
+        if rawLiteralData.count > 1,
+           paths.count <= processorCount,
+           paths.count * rawLiteralData.count <= processorCount * 4 {
+            return flattenedOverlappingMultiLiteralNoMatchQuietStatsExitCode(
+                paths: paths,
+                literals: rawLiteralData
+            )
+        }
+
+        let accumulator = QuietStatsProbeAccumulator()
         DispatchQueue.concurrentPerform(iterations: paths.count) { index in
             guard let data = mappedPreflightData(path: paths[index]),
                   !hasBinaryDetectionPrefix(data),
@@ -361,6 +377,47 @@ public enum SwiftDarwinLiteralPreflight {
             filesWithMatches: 0,
             filesSearched: paths.count,
             bytesSearched: result.bytesSearched,
+            exitCode: 1
+        )
+    }
+
+    private static func flattenedOverlappingMultiLiteralNoMatchQuietStatsExitCode(
+        paths: [String],
+        literals rawLiteralData: [Data]
+    ) -> Int32? {
+        var mappedData: [Data] = []
+        mappedData.reserveCapacity(paths.count)
+        var bytesSearched = 0
+        for path in paths {
+            guard let data = mappedPreflightData(path: path),
+                  !hasBinaryDetectionPrefix(data),
+                  !containsNULByte(data) else {
+                return nil
+            }
+            bytesSearched += data.count
+            mappedData.append(data)
+        }
+
+        let mappedFiles = mappedData
+        let accumulator = QuietStatsProbeAccumulator()
+        let literalCount = rawLiteralData.count
+        DispatchQueue.concurrentPerform(iterations: mappedFiles.count * literalCount) { index in
+            let fileIndex = index / literalCount
+            let literalIndex = index % literalCount
+            if mappedFiles[fileIndex].range(of: rawLiteralData[literalIndex]) != nil {
+                accumulator.recordMatch()
+            }
+        }
+
+        guard !accumulator.snapshot().hasMatch else {
+            return nil
+        }
+        return writeStatsSummary(
+            totalMatches: 0,
+            matchedLines: 0,
+            filesWithMatches: 0,
+            filesSearched: paths.count,
+            bytesSearched: bytesSearched,
             exitCode: 1
         )
     }
