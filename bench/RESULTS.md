@@ -368,6 +368,14 @@ because they did not improve the current checkpoint:
   in-place byte-slice comparator avoided per-path key allocation but stayed
   flat on the primary case at 179.88 ms versus 179.83 ms and regressed reverse
   sort to 181.39 ms versus 179.15 ms, so the existing string sorted path stayed.
+- Raising the sorted file-list collector's initial reserve from 1,024 to 16,384
+  entries preserved exact Swift output and Rust ordered output, but was flat to
+  slower in an 80-pair A/B against checkpoint `59c9294`: `--sort path
+  --no-ignore --files` measured 149.92 ms median versus 150.07 ms baseline,
+  reverse no-ignore 166.13 ms versus 166.04 ms, hidden no-ignore 142.49 ms
+  versus 142.31 ms, no-vcs 108.17 ms versus 108.04 ms, default 122.17 ms
+  versus 121.69 ms, and reverse default 122.64 ms versus 121.66 ms. The 1,024
+  reserve stayed.
 
 ## Visible line stats preflight — 2026-05-31
 
