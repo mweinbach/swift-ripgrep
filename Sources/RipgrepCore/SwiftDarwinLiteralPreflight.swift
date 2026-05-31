@@ -172,6 +172,12 @@ public enum SwiftDarwinLiteralPreflight {
     private static let statsElapsedSuffix = Array(
         "0.000000 seconds spent searching\n0.000000 seconds total\n".utf8
     )
+    private static let jsonNoMatchSummaryPrefix = Array(
+        #"{"data":{"elapsed_total":{"human":"0.000000s","nanos":0,"secs":0},"stats":{"bytes_printed":0,"bytes_searched":"#.utf8
+    )
+    private static let jsonNoMatchSummarySuffix = Array(
+        #","elapsed":{"human":"0.000000s","nanos":0,"secs":0},"matched_lines":0,"matches":0,"searches":1,"searches_with_match":0}},"type":"summary"}"#.utf8
+    )
 
     public static func zeroCountOutputExitCode(
         countPrefix: [UInt8],
@@ -834,8 +840,7 @@ public enum SwiftDarwinLiteralPreflight {
 
     private static func writeNoMatchSummary(bytesSearched: Int, json: Bool, exitCode: Int32 = 1) -> Int32 {
         if json {
-            let line = #"{"data":{"elapsed_total":{"human":"0.000000s","nanos":0,"secs":0},"stats":{"bytes_printed":0,"bytes_searched":\#(bytesSearched),"elapsed":{"human":"0.000000s","nanos":0,"secs":0},"matched_lines":0,"matches":0,"searches":1,"searches_with_match":0}},"type":"summary"}"#
-            FileHandle.standardOutput.write(Data((line + "\n").utf8))
+            writeNoMatchJSONSummary(bytesSearched: bytesSearched)
         } else {
             return writeStatsSummary(
                 totalMatches: 0,
@@ -847,6 +852,26 @@ public enum SwiftDarwinLiteralPreflight {
             )
         }
         return exitCode
+    }
+
+    @discardableResult
+    private static func writeNoMatchJSONSummary(bytesSearched: Int) -> Bool {
+        guard var output = rgSwiftStdoutBuffer(capacity: 384) else {
+            return false
+        }
+        defer {
+            output.deallocate()
+        }
+        guard output.writeBytes(jsonNoMatchSummaryPrefix),
+              output.writeLineNumberPrefix(
+                bytesSearched,
+                fieldSeparator: jsonNoMatchSummarySuffix
+              ),
+              output.writeByte(UInt8(ascii: "\n")),
+              output.flush() else {
+            return false
+        }
+        return true
     }
 
     private static func writeStatsSummary(

@@ -8,6 +8,28 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Direct JSON summary writer — 2026-05-31
+
+JSON no-match summaries now share the same direct Swift stdout buffer path as
+text stats summaries: the writer emits the fixed JSON prefix, decimal
+`bytes_searched`, and fixed suffix without allocating an interpolated
+`String`/`Data` payload.
+
+Validation:
+
+- Current Swift output matched the saved previous Swift binary byte-for-byte for
+  `--json`, `--json -q`, `--json -i`, and `--json --files-without-match`
+  no-match/match controls on the 46 MiB ASCII fixture.
+- Current Swift output matched Rust for `--json`, `--json -q`, and `--json -i`
+  no-match summaries after normalizing only JSON elapsed-time fields.
+
+On `/tmp/swift-rg-bench/match-ascii-46m.txt`, 200 timed runs with 10 warmups:
+
+| Command | Current Swift | Previous Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--json absentliteral` | 7.7 ms | 8.9 ms | 7.8 ms |
+| `--json -q absentliteral` | 7.5 ms | 8.6 ms | 6.9 ms |
+
 ## Direct stats summary writer — 2026-05-31
 
 Single-file Darwin preflight stats summaries now use the existing Swift stdout
