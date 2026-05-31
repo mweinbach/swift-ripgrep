@@ -219,6 +219,14 @@ sorted Rust-output checks:
   instead of only large mapped files, preserved the Unicode and ASCII
   no-literal output but was neutral-to-slower: the ASCII row measured 2.182 s
   versus 2.162 s before in a seven-run A/B.
+- Forcing `@inline(__always)` on the ASCII word/whitespace byte classifiers
+  used by the no-literal scanner preserved exact Swift output and sorted Rust
+  parity for the Linux five-group Unicode (721 lines) and `(?-u)` ASCII
+  (720 lines) patterns, but did not hold an order-flipped timing win. The first
+  seven-run A/B looked slightly positive at Unicode 2.199 s versus 2.226 s
+  before and ASCII 2.126 s versus 2.150 s before; the current-first 10-run
+  confirmation reversed that to Unicode 2.277 s versus 2.196 s before and ASCII
+  2.284 s versus 2.131 s before, so the plain helpers stay.
 - Follow-up VCS-ignore file-list probes on 2026-05-30 also preserved exact
   Swift output and sorted Rust parity but did not retain a measurable win:
   URL `isDirectory` hints for known ignore/config file appends were mixed
