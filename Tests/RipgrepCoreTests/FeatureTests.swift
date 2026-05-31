@@ -3902,6 +3902,18 @@ struct FeatureTests {
         )
         #expect(parallelResults?.count == sequentialResults?.count)
         #expect(parallelLines == sequentialLines)
+        var parallelDirectBytes = Data()
+        let parallelDirectResults = try FileWalker().writeDarwinFilePathsWithMessages(
+            for: parallelOptions,
+            writeBytes: { bytes in
+                parallelDirectBytes.append(bytes.bindMemory(to: UInt8.self))
+            }
+        )
+        let parallelDirectLines = String(decoding: parallelDirectBytes, as: UTF8.self)
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .map(String.init)
+        #expect(parallelDirectResults?.count == parallelResults?.count)
+        #expect(parallelDirectLines == parallelLines)
 
         let noVCSIgnoreRoot = try TemporaryDirectory()
         try noVCSIgnoreRoot.createDirectory(".git")

@@ -1150,7 +1150,7 @@ public struct FileWalker: @unchecked Sendable {
         orderedChildren.reserveCapacity(contents.children.count)
         var directoryCount = 0
         var rootFiltered = false
-        if options.noIgnoreVCS && directoryIgnoreStack.isEmpty {
+        if directoryIgnoreStack.isEmpty {
             for child in contents.children.reversed() {
                 if child.kind == .symbolicLink || (!options.hidden && child.isHidden) {
                     continue
@@ -1367,7 +1367,7 @@ public struct FileWalker: @unchecked Sendable {
 
         let directoryPathPrefix = directoryPath + "/"
         let relativePathPrefix = relativePath.isEmpty ? "" : relativePath + "/"
-        if options.noIgnoreVCS && directoryIgnoreStack.isEmpty {
+        if directoryIgnoreStack.isEmpty {
             for child in contents.children.reversed() {
                 if child.kind == .symbolicLink || (!options.hidden && child.isHidden) {
                     continue

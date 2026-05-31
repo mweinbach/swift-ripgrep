@@ -29,6 +29,25 @@ On `/tmp/swift-rg-bench/linux`, 60 timed runs with 5 warmups:
 | --- | ---: | ---: | ---: |
 | `--files linux` | 81.8 ms | 83.6 ms | 73.8 ms |
 
+## Empty ignore-stack file-list branch — 2026-05-31
+
+The ignore-aware Darwin file-listing data writer now skips per-child inherited
+ignore decisions whenever the current directory's ignore stack is empty. It
+still recurses normally, so child directories continue to load their own
+`.ignore`/`.gitignore` files before filtering descendants.
+
+Validation:
+
+- Probe output matched the saved current Swift binary byte-for-byte for
+  `--files /tmp/swift-rg-bench/linux`.
+- Sorted probe output matched Rust on the same tree.
+
+On `/tmp/swift-rg-bench/linux`, 80 timed runs with 5 warmups:
+
+| Command | Current Swift | Previous Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--files linux` | 82.6 ms | 85.1 ms | 75.8 ms |
+
 ## Visible line stats preflight — 2026-05-31
 
 Single explicit-file `--stats` searches that emit normal matching lines now use
