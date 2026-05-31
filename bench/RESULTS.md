@@ -287,6 +287,12 @@ because they did not improve the current checkpoint:
   versus 84.37 ms, `--no-ignore-vcs` at 66.87 ms versus 67.16 ms, and
   `--no-ignore` at 65.28 ms versus 65.15 ms. The original 64-entry reserve
   stayed.
+- Decoding raw Greek-script candidate lines from an
+  `UnsafeBufferPointer<UInt8>` instead of copying them into temporary `Data`
+  preserved exact Swift output and sorted Rust parity, but did not improve the
+  Linux Unicode category bench. A 12-pair process A/B measured `-n \p{Greek}`
+  at 1948.7 ms versus 1946.9 ms baseline and `-n -i \p{Greek}` at 1949.6 ms
+  versus 1938.6 ms baseline, so the existing `Data` decode path stayed.
 
 ## Visible line stats preflight — 2026-05-31
 
