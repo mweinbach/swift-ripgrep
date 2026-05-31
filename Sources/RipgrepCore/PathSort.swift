@@ -27,9 +27,19 @@ enum PathSort {
     }
 
     static func byteKey(forPath path: String, droppingFirstBytes droppedByteCount: Int = 0) -> [UInt8] {
-        path.utf8.dropFirst(droppedByteCount).map { byte in
-            byte == UInt8(ascii: "/") ? 0 : byte
+        var key: [UInt8] = []
+        var path = path
+        path.withUTF8 { bytes in
+            let start = min(droppedByteCount, bytes.count)
+            key.reserveCapacity(bytes.count - start)
+            var index = start
+            while index < bytes.count {
+                let byte = bytes[index]
+                key.append(byte == UInt8(ascii: "/") ? 0 : byte)
+                index += 1
+            }
         }
+        return key
     }
 
     static func compare(_ lhsComponents: [Substring], _ rhsComponents: [Substring]) -> ComparisonResult {

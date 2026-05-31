@@ -62,7 +62,9 @@ Sorted file-list output for a single explicit directory now builds sort keys
 from the suffix after the shared ASCII root path prefix. The emitted paths are
 unchanged; only the per-line key used for `--sort path` / `--sortr path`
 skips bytes that are identical for every candidate in the fast Darwin
-file-list route.
+file-list route. The key builder also now fills a reserved byte array directly
+from `String.withUTF8`, avoiding the intermediate dropped UTF-8 view used by
+the prior implementation.
 
 Validation:
 
@@ -84,6 +86,18 @@ An alternating 80-pair process-level harness measured:
 | `--sort path --no-ignore-vcs --files linux` | 111.73 ms / 110.14 ms | 143.36 ms / 141.42 ms | 166.41 ms / 163.96 ms |
 | `--sort path --files linux` | 125.52 ms / 124.26 ms | 155.56 ms / 154.82 ms | 234.67 ms / 232.43 ms |
 | `--sortr path --files linux` | 125.32 ms / 123.78 ms | 156.02 ms / 153.73 ms | 272.37 ms / 269.64 ms |
+
+A follow-up alternating 100-pair harness against the common-prefix checkpoint
+measured the manual key builder:
+
+| Command | Current Swift | Previous Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--sort path --no-ignore --files linux` | 157.66 ms mean / 149.62 ms median | 159.30 ms / 150.43 ms | 141.62 ms / 135.60 ms |
+| `--sortr path --no-ignore --files linux` | 155.30 ms / 146.75 ms | 158.14 ms / 149.17 ms | 176.53 ms / 168.03 ms |
+| `--sort path --hidden --no-ignore --files linux` | 141.78 ms / 140.20 ms | 144.17 ms / 142.89 ms | 134.89 ms / 132.76 ms |
+| `--sort path --no-ignore-vcs --files linux` | 108.29 ms / 106.85 ms | 110.59 ms / 109.35 ms | 163.55 ms / 162.39 ms |
+| `--sort path --files linux` | 122.22 ms / 121.29 ms | 124.71 ms / 123.84 ms | 233.30 ms / 232.67 ms |
+| `--sortr path --files linux` | 125.02 ms / 122.44 ms | 129.52 ms / 125.26 ms | 274.85 ms / 270.45 ms |
 
 ## Hoisted executable argument snapshot — 2026-05-31
 
