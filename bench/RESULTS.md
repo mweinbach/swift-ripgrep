@@ -8,6 +8,28 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Multi-file exact repeated-regexp preflight checkpoint — 2026-05-31
+
+Explicit regular-file exact-line searches with more than one `-e` pattern now
+use the existing Swift Darwin exact-line multi-literal helpers for count,
+path-only, and quiet modes. The branch stays within Swift preflight code and
+continues to reject word-regexp, null-data, and CRLF combinations.
+
+Validation:
+
+- Current Swift output matched the saved pre-change Swift binary and Rust
+  byte-for-byte for the large mixed-file exact-line count target.
+- Coverage was added for exact repeated-`-e` multi-file count, ignore-case
+  count, include-zero count, count-matches, path-only, files-without-match, and
+  quiet forms.
+
+On two 46 MiB explicit files under `/tmp/swift-rg-bench`:
+
+| Command | Current Swift | Previous Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `-x -c -e "alpha beta theta zeta eta kappa rho tau missingliteral" -e absentliteral no-match-ascii-46m.txt match-ascii-46m.txt` | 23.49 ms | 14.238 s | 91.46 ms |
+| Current/Rust order-flipped confirmation | 20.70 ms | not rerun | 85.61 ms |
+
 ## Multi-file include-zero count checkpoint — 2026-05-31
 
 Explicit regular-file `--include-zero` count output now stays on the existing

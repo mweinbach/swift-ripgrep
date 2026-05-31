@@ -3234,6 +3234,123 @@ struct RipgrepCommand {
 
         if paths.count > 1 {
             if explicitRegexpPatterns.count > 1 {
+                if parsedLineRegexp {
+                    guard parsedQuiet || parsedPathOnlyMode != nil || parsedCountStyleOutput,
+                          parsedMaxCount != 0,
+                          paths.allSatisfy({ $0 != "-" }),
+                          paths.allSatisfy(isReadableRegularFile),
+                          !parsedCanEmitDefaultColoredCountPrefix,
+                          !wordRegexp,
+                          !parsedNullData,
+                          !parsedCrlf,
+                          let literals = explicitRegexpPatternLiterals(
+                            explicitRegexpPatterns,
+                            fixedStrings: fixedStrings,
+                            allowPCREQuotedLiterals: allowPCREQuotedLiterals
+                          ) else {
+                        return nil
+                    }
+
+                    func displayPathBytes(for candidatePath: String) -> [UInt8] {
+                        Self.preflightDisplayPathBytes(candidatePath, pathSeparator: parsedPathSeparator)
+                    }
+
+                    func pathOnlyOutputPath(for candidatePath: String) -> [UInt8]? {
+                        parsedPathSeparator == nil && candidatePath.utf8.allSatisfy { $0 < 0x80 }
+                            ? nil
+                            : displayPathBytes(for: candidatePath)
+                    }
+
+                    func countPrefix(for candidatePath: String) -> [UInt8] {
+                        guard parsedWithFilename || !parsedNoFilename else {
+                            return []
+                        }
+                        return displayPathBytes(for: candidatePath)
+                            + (parsedNullPathTerminator ? [0] : [UInt8(ascii: ":")])
+                    }
+
+                    if parsedQuiet {
+                        for candidatePath in paths {
+                            let status = asciiCaseInsensitive
+                                ? SwiftDarwinLiteralPreflight.asciiCaseInsensitiveExactLineQuietExitCode(
+                                    path: candidatePath,
+                                    literals: literals
+                                )
+                                : SwiftDarwinLiteralPreflight.multiLiteralExactLineQuietExitCode(
+                                    path: candidatePath,
+                                    literals: literals
+                                )
+                            guard let status else {
+                                return nil
+                            }
+                            if status == 0 {
+                                return 0
+                            }
+                        }
+                        return 1
+                    }
+
+                    if let parsedPathOnlyMode {
+                        let printWhenMatched = parsedPathOnlyMode == .matching
+                        var printed = false
+                        for candidatePath in paths {
+                            let exitCode = asciiCaseInsensitive
+                                ? SwiftDarwinLiteralPreflight.asciiCaseInsensitiveExactLinePathOnlyExitCode(
+                                    path: candidatePath,
+                                    literals: literals,
+                                    printWhenMatched: printWhenMatched,
+                                    nullTerminated: parsedNullPathTerminator,
+                                    crlfTerminated: parsedCrlf,
+                                    outputPath: pathOnlyOutputPath(for: candidatePath)
+                                )
+                                : SwiftDarwinLiteralPreflight.multiLiteralExactLinePathOnlyExitCode(
+                                    path: candidatePath,
+                                    literals: literals,
+                                    printWhenMatched: printWhenMatched,
+                                    nullTerminated: parsedNullPathTerminator,
+                                    crlfTerminated: parsedCrlf,
+                                    outputPath: pathOnlyOutputPath(for: candidatePath)
+                                )
+                            guard let exitCode else {
+                                return nil
+                            }
+                            if exitCode == 0 {
+                                printed = true
+                            }
+                        }
+                        return printed ? 0 : 1
+                    }
+
+                    var matchedAny = false
+                    for candidatePath in paths {
+                        let prefix = countPrefix(for: candidatePath)
+                        let exitCode = asciiCaseInsensitive
+                            ? SwiftDarwinLiteralPreflight.asciiCaseInsensitiveExactLineCountExitCode(
+                                path: candidatePath,
+                                literals: literals,
+                                includeZero: parsedIncludeZero,
+                                maxCount: parsedMaxCount,
+                                countPrefix: prefix,
+                                crlfTerminated: parsedCrlf
+                            )
+                            : SwiftDarwinLiteralPreflight.multiLiteralExactLineCountExitCode(
+                                path: candidatePath,
+                                literals: literals,
+                                includeZero: parsedIncludeZero,
+                                maxCount: parsedMaxCount,
+                                countPrefix: prefix,
+                                crlfTerminated: parsedCrlf
+                            )
+                        guard let exitCode else {
+                            return nil
+                        }
+                        if exitCode == 0 {
+                            matchedAny = true
+                        }
+                    }
+                    return matchedAny ? 0 : 1
+                }
+
                 guard parsedQuiet || parsedPathOnlyMode != nil || parsedCountStyleOutput,
                       parsedMaxCount != 0,
                       paths.allSatisfy({ $0 != "-" }),
