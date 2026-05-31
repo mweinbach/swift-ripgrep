@@ -8,6 +8,29 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Visible line stats preflight — 2026-05-31
+
+Single explicit-file `--stats` searches that emit normal matching lines now use
+the Swift Darwin literal preflight when the pattern is a safe literal or ASCII
+word literal and no formatting mode changes the visible line shape. The route
+computes the stats summary before writing output, then emits matching lines
+while tracking Rust-compatible `bytes printed`, including the no-final-newline
+case where the displayed synthetic newline is not counted in stats.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched Rust for plain `--stats`,
+  line-numbered `--stats -n`, prefixed `--stats -H`, `--stats --heading -H`,
+  and the no-match summary after normalizing only elapsed-time stats lines.
+- `xcrun swift test --filter MiscTests/darwinExecutableLiteralPreflightDenseLines`
+  passed with exact visible-stats summary coverage.
+
+On `/tmp/swift-rg-candidates/countm-big.txt`, 30 timed runs with 3 warmups:
+
+| Command | Current Swift | Preflight bypassed | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--stats needle countm-big.txt` | 20.7 ms | 2.197 s | 25.5 ms |
+
 ## Larger stdout block buffer for bulk file lists — 2026-05-31
 
 Non-tty stdout now uses a 256 KiB stdio block buffer instead of 64 KiB. This is

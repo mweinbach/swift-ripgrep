@@ -2308,6 +2308,19 @@ struct MiscTests {
             root.path("quiet-no-match.txt"),
             root.path("dense.txt"),
         ])
+        let statsVisibleLineSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "needle",
+            root.path("dense.txt"),
+        ])
+        let statsVisibleNumberedLineSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "-n",
+            "needle",
+            root.path("dense.txt"),
+        ])
 
         let expectedJsonNoMatchSummary = Data((#"{"data":{"elapsed_total":{"human":"0.000000s","nanos":0,"secs":0},"stats":{"bytes_printed":0,"bytes_searched":12,"elapsed":{"human":"0.000000s","nanos":0,"secs":0},"matched_lines":0,"matches":0,"searches":1,"searches_with_match":0}},"type":"summary"}"# + "\n").utf8)
         let expectedStatsNoMatchSummary = Data("""
@@ -2337,6 +2350,20 @@ struct MiscTests {
             1 files searched
             0 bytes printed
             40 bytes searched
+            0.000000 seconds spent searching
+            0.000000 seconds total
+
+            """.utf8)
+        }
+        func expectedVisibleStatsSummary(bytesPrinted: Int) -> Data {
+            Data("""
+
+            5 matches
+            3 matched lines
+            1 files contained matches
+            1 files searched
+            \(bytesPrinted) bytes printed
+            64 bytes searched
             0.000000 seconds spent searching
             0.000000 seconds total
 
@@ -2403,6 +2430,16 @@ struct MiscTests {
             #expect(result.stderr.isEmpty)
             #expect(result.stdout == expectedStatsNoMatchSummary)
         }
+        #expect(statsVisibleLineSummary.status == 0)
+        #expect(statsVisibleLineSummary.stderr.isEmpty)
+        #expect(statsVisibleLineSummary.stdout == Data(
+            "needle needle needle\nNEEDLE needle Needle\ntail needle\n".utf8
+        ) + expectedVisibleStatsSummary(bytesPrinted: 53))
+        #expect(statsVisibleNumberedLineSummary.status == 0)
+        #expect(statsVisibleNumberedLineSummary.stderr.isEmpty)
+        #expect(statsVisibleNumberedLineSummary.stdout == Data(
+            "1:needle needle needle\n3:NEEDLE needle Needle\n4:tail needle\n".utf8
+        ) + expectedVisibleStatsSummary(bytesPrinted: 59))
         for result in [
             jsonStatsCountIncludeZeroNoMatchSummary,
             statsCountIncludeZeroNoMatchSummary,

@@ -3236,6 +3236,65 @@ struct RipgrepCommand {
            ) {
             return exitCode
         }
+        if parsedStats,
+           !parsedJson,
+           !parsedQuiet,
+           parsedPrintMode == .matchingLines,
+           paths.count == 1,
+           !parsedLineRegexp,
+           !parsedOnlyMatching,
+           !parsedVimgrep,
+           parsedMaxCount == nil,
+           !parsedByteOffset,
+           !parsedColumn,
+           !parsedColorMayEmit,
+           parsedEncodingIsAutomatic,
+           parsedAfterContext == 0,
+           parsedBeforeContext == 0,
+           !parsedInvertMatch,
+           parsedMaxColumns == 0,
+           !parsedNullData,
+           !parsedPassthru,
+           !parsedReplacement,
+           !parsedSearchZipAffectsPreflight,
+           !parsedStopOnNonmatch,
+           !parsedTrim,
+           !parsedCrlf,
+           (patternCanStartWithDash || !pattern.hasPrefix("-")),
+           path != "-" {
+            let statsBoundaryLiteral = (fixedStrings || asciiCaseInsensitive) ? nil : asciiBoundaryLiteral(
+                pattern,
+                allowPCREQuotedLiterals: allowPCREQuotedLiterals
+            )
+            let statsLiteralPattern: String?
+            if fixedStrings {
+                statsLiteralPattern = pattern
+            } else if statsBoundaryLiteral == nil {
+                statsLiteralPattern = RegexLiteralParser.literal(
+                    fromPlainRegexPattern: pattern,
+                    allowPCREQuotedLiterals: allowPCREQuotedLiterals
+                )
+            } else {
+                statsLiteralPattern = nil
+            }
+            if let statsLiteralPattern {
+                let statsLiteral = Array(statsLiteralPattern.utf8)
+                if !statsLiteral.isEmpty,
+                   !statsLiteral.contains(UInt8(ascii: "\n")),
+                   let exitCode = SwiftDarwinLiteralPreflight.literalLineStatsExitCode(
+                    path: path,
+                    literal: statsLiteral,
+                    asciiCaseInsensitive: asciiCaseInsensitive,
+                    wordRegexp: wordRegexp,
+                    lineNumber: lineNumber,
+                    lineNumberFieldSeparator: parsedFieldMatchSeparator,
+                    linePrefix: parsedLinePrefix,
+                    headingPrefix: parsedHeadingPrefix
+                   ) {
+                    return exitCode
+                }
+            }
+        }
         guard !(parsedLineRegexp && wordRegexp) else {
             return nil
         }

@@ -844,6 +844,7 @@ public enum SwiftDarwinLiteralPreflight {
         matchedLines: Int,
         filesWithMatches: Int,
         filesSearched: Int,
+        bytesPrinted: Int = 0,
         bytesSearched: Int,
         exitCode: Int32
     ) -> Int32 {
@@ -853,7 +854,7 @@ public enum SwiftDarwinLiteralPreflight {
         \(matchedLines) matched lines
         \(filesWithMatches) files contained matches
         \(filesSearched) files searched
-        0 bytes printed
+        \(bytesPrinted) bytes printed
         \(bytesSearched) bytes searched
         0.000000 seconds spent searching
         0.000000 seconds total
@@ -5459,7 +5460,7 @@ public enum SwiftDarwinLiteralPreflight {
             return 0
         }
 
-        return literal.withUnsafeBufferPointer { literalBuffer in
+        let stats = literal.withUnsafeBufferPointer { literalBuffer in
             rgSwiftDarwinWriteLiteralBytes(
                 base,
                 haystackLength: haystackLength,
@@ -5475,9 +5476,10 @@ public enum SwiftDarwinLiteralPreflight {
                 requireASCIIHaystack: requireASCIIHaystack
             )
         }
+        return stats?.matchedLines
     }
 
-    public static func exitCode(
+    private static func literalLineWriteStats(
         path: String,
         literal: [UInt8],
         asciiCaseInsensitive: Bool,
@@ -5486,7 +5488,7 @@ public enum SwiftDarwinLiteralPreflight {
         lineNumberFieldSeparator: [UInt8] = [58],
         linePrefix: [UInt8] = [],
         headingPrefix: [UInt8] = []
-    ) -> Int32? {
+    ) -> LiteralLineWriteStats? {
         guard !literal.isEmpty else {
             return nil
         }
@@ -5510,7 +5512,7 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         guard fileStat.st_size > 0 else {
-            return 1
+            return LiteralLineWriteStats(matchedLines: 0, bytesPrinted: 0)
         }
         guard UInt64(fileStat.st_size) <= UInt64(Int.max) else {
             return nil
@@ -5525,7 +5527,7 @@ public enum SwiftDarwinLiteralPreflight {
             Darwin.munmap(mapped, haystackLength)
         }
 
-        guard let matchedLineCount = literal.withUnsafeBufferPointer({ literalBuffer in
+        return literal.withUnsafeBufferPointer { literalBuffer in
             rgSwiftDarwinWriteLiteralBytes(
                 UnsafeRawPointer(mapped).assumingMemoryBound(to: UInt8.self),
                 haystackLength: haystackLength,
@@ -5537,10 +5539,78 @@ public enum SwiftDarwinLiteralPreflight {
                 linePrefix: linePrefix,
                 headingPrefix: headingPrefix
             )
-        }) else {
+        }
+    }
+
+    public static func exitCode(
+        path: String,
+        literal: [UInt8],
+        asciiCaseInsensitive: Bool,
+        lineNumber: Bool = false,
+        asciiBoundary: Bool = false,
+        lineNumberFieldSeparator: [UInt8] = [58],
+        linePrefix: [UInt8] = [],
+        headingPrefix: [UInt8] = []
+    ) -> Int32? {
+        guard let stats = literalLineWriteStats(
+            path: path,
+            literal: literal,
+            asciiCaseInsensitive: asciiCaseInsensitive,
+            lineNumber: lineNumber,
+            asciiBoundary: asciiBoundary,
+            lineNumberFieldSeparator: lineNumberFieldSeparator,
+            linePrefix: linePrefix,
+            headingPrefix: headingPrefix
+        ) else {
             return nil
         }
-        return matchedLineCount > 0 ? 0 : 1
+        return stats.matchedLines > 0 ? 0 : 1
+    }
+
+    public static func literalLineStatsExitCode(
+        path: String,
+        literal: [UInt8],
+        asciiCaseInsensitive: Bool,
+        wordRegexp: Bool,
+        lineNumber: Bool = false,
+        asciiBoundary: Bool = false,
+        lineNumberFieldSeparator: [UInt8] = [58],
+        linePrefix: [UInt8] = [],
+        headingPrefix: [UInt8] = []
+    ) -> Int32? {
+        guard !asciiBoundary,
+              let stats = matchedSummaryStats(
+                path: path,
+                literal: literal,
+                asciiCaseInsensitive: asciiCaseInsensitive,
+                wordRegexp: wordRegexp
+              ), stats.matchedLines > 0 else {
+            return nil
+        }
+        guard let lineStats = literalLineWriteStats(
+            path: path,
+            literal: literal,
+            asciiCaseInsensitive: asciiCaseInsensitive,
+            lineNumber: lineNumber,
+            asciiBoundary: false,
+            lineNumberFieldSeparator: lineNumberFieldSeparator,
+            linePrefix: linePrefix,
+            headingPrefix: headingPrefix
+        ), lineStats.matchedLines == stats.matchedLines else {
+            return nil
+        }
+        guard fflush(Darwin.stdout) == 0 else {
+            return nil
+        }
+        return writeStatsSummary(
+            totalMatches: stats.totalMatches,
+            matchedLines: stats.matchedLines,
+            filesWithMatches: 1,
+            filesSearched: 1,
+            bytesPrinted: lineStats.bytesPrinted,
+            bytesSearched: stats.bytesSearched,
+            exitCode: 0
+        )
     }
 
     public static func asciiCaseInsensitiveUTF8LineExitCode(
@@ -8043,6 +8113,11 @@ private func countLiteralMatchedLines(
     }
 }
 
+private struct LiteralLineWriteStats {
+    let matchedLines: Int
+    let bytesPrinted: Int
+}
+
 private struct LiteralMatchedLineAndMatchCounts {
     let matchedLines: Int
     let totalMatches: Int
@@ -9267,6 +9342,7 @@ private struct rgSwiftStdoutBuffer {
     private let storage: UnsafeMutablePointer<UInt8>
     private var length = 0
     private let capacity: Int
+    private(set) var statsBytesWritten = 0
 
     init?(capacity: Int) {
         guard capacity > 0 else {
@@ -9284,13 +9360,18 @@ private struct rgSwiftStdoutBuffer {
             guard flush() else {
                 return false
             }
-            return fwrite(bytes, 1, count, Darwin.stdout) == count
+            guard fwrite(bytes, 1, count, Darwin.stdout) == count else {
+                return false
+            }
+            statsBytesWritten += count
+            return true
         }
         if length + count > capacity, !flush() {
             return false
         }
         storage.advanced(by: length).update(from: bytes, count: count)
         length += count
+        statsBytesWritten += count
         return true
     }
 
@@ -9300,6 +9381,8 @@ private struct rgSwiftStdoutBuffer {
         }
         storage[length] = byte
         length += 1
+        // Rust stats do not count the synthesized line terminator added for
+        // matching files that do not end in a newline.
         return true
     }
 
@@ -9382,7 +9465,7 @@ private func rgSwiftDarwinWriteLiteralBytes(
     emitLines: Bool = true,
     maxCount: Int = Int.max,
     requireASCIIHaystack: Bool = false
-) -> Int? {
+) -> LiteralLineWriteStats? {
     guard let literalBase = literal.baseAddress,
           literal.count > 0,
           maxCount > 0 else {
@@ -9586,7 +9669,10 @@ private func rgSwiftDarwinWriteLiteralBytes(
             return nil
         }
     }
-    return matchedLineCount
+    return LiteralLineWriteStats(
+        matchedLines: matchedLineCount,
+        bytesPrinted: output?.statsBytesWritten ?? 0
+    )
 }
 
 private func rgSwiftDarwinWriteStopOnNonmatchLiteralLines(
