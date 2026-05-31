@@ -17,19 +17,20 @@ import CRT
 @main
 struct RipgrepCommand {
     static func main() {
+        let arguments = Array(CommandLine.arguments.dropFirst())
         #if canImport(Darwin) && canImport(CRipgrepPlatform)
-        if let exitCode = runDarwinLiteralPreflight(arguments: Array(CommandLine.arguments.dropFirst())) {
+        if let exitCode = runDarwinLiteralPreflight(arguments: arguments) {
             exit(exitCode)
         }
         #endif
         #if canImport(Darwin) && !canImport(CRipgrepPlatform)
-        if let exitCode = runSwiftDarwinLiteralPreflight(arguments: Array(CommandLine.arguments.dropFirst())) {
+        if let exitCode = runSwiftDarwinLiteralPreflight(arguments: arguments) {
             exit(exitCode)
         }
         #endif
 
         let exitCode = RipgrepCLI.run(
-            arguments: Array(CommandLine.arguments.dropFirst()),
+            arguments: arguments,
             standardInputIsReadable: standardInputIsReadable()
         )
         exit(exitCode)

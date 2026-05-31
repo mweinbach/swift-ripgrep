@@ -8,6 +8,33 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Hoisted executable argument snapshot — 2026-05-31
+
+The Swift executable entry point now materializes
+`Array(CommandLine.arguments.dropFirst())` once and reuses it for Darwin
+preflight checks and the normal `RipgrepCLI.run` path. This removes duplicate
+argument-array allocation on non-preflight commands without changing parsing,
+preflight eligibility, or exit behavior.
+
+Validation:
+
+- Current Swift output matched the saved previous Swift binary byte-for-byte for
+  default, hidden, `--no-ignore-vcs`, `--no-ignore`, and NUL-terminated
+  file-listing controls on `/tmp/swift-rg-bench/linux`.
+- Sorted current Swift output matched Rust for default, hidden, and no-vcs
+  file-listing controls on the same tree.
+- Current Swift output matched the saved previous Swift binary for recursive
+  `PM_RESUME`, `-i pm_resume`, and `--help` controls.
+
+An alternating 90-pair process-level harness measured:
+
+| Command | Current Swift | Previous Swift | Delta |
+| --- | ---: | ---: | ---: |
+| `--files linux` | 82.87 ms mean / 82.46 ms median | 83.60 ms / 81.97 ms | -0.72 ms / +0.49 ms |
+| `--hidden --files linux` | 84.25 ms / 83.41 ms | 85.14 ms / 84.08 ms | -0.89 ms / -0.67 ms |
+| `--no-ignore-vcs --files linux` | 66.29 ms / 65.61 ms | 66.80 ms / 65.57 ms | -0.51 ms / +0.04 ms |
+| `--help` | 6.17 ms / 6.16 ms | 9.44 ms / 9.40 ms | -3.28 ms / -3.24 ms |
+
 ## Buffered path-only preflight output — 2026-05-31
 
 Single-file Darwin path-only preflights now emit the display path and its
