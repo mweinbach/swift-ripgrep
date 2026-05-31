@@ -3239,7 +3239,6 @@ struct RipgrepCommand {
                   (patternCanStartWithDash || !pattern.hasPrefix("-")),
                   paths.allSatisfy({ $0 != "-" }),
                   paths.allSatisfy(isReadableRegularFile),
-                  !parsedHeading,
                   !parsedCanEmitDefaultColoredCountPrefix else {
                 return nil
             }

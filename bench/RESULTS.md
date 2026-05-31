@@ -35,6 +35,30 @@ On two 46 MiB explicit files under `/tmp/swift-rg-bench`, 40 timed runs with
 | `--include-zero -c missingliteral no-match-ascii-46m.txt match-ascii-46m.txt` | 23.84 ms | 307.42 ms | 24.96 ms |
 | Same command, order-flipped confirmation | 22.03 ms | 307.63 ms | 24.75 ms |
 
+## Multi-file heading-neutral preflight checkpoint — 2026-05-31
+
+Explicit regular-file `--heading` now remains eligible for the existing Swift
+Darwin literal preflight when the active output mode is count, path-only, or
+quiet. Heading formatting is silent in those modes, so the old multi-path gate
+was forcing a generic scan without changing observable output.
+
+Validation:
+
+- Current Swift output matched the saved pre-change Swift binary and Rust
+  byte-for-byte for multi-file `--heading -c`, `--heading --include-zero -c`,
+  `--heading -l`, `--heading --files-without-match`, and `--heading -q`
+  controls.
+- Coverage was added for heading-neutral multi-file count, include-zero count,
+  path-only, files-without-match, and quiet forms.
+
+On two 46 MiB explicit files under `/tmp/swift-rg-bench`, 40 timed runs with
+5 warmups:
+
+| Command | Current Swift | Previous Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--heading -c missingliteral no-match-ascii-46m.txt match-ascii-46m.txt` | 25.21 ms | 312.44 ms | 25.14 ms |
+| Same command, order-flipped confirmation | 21.78 ms | 310.91 ms | 24.83 ms |
+
 ## Files-mode root setup checkpoint — 2026-05-31
 
 The Darwin file-list root planner now proves the fast root is a directory before
