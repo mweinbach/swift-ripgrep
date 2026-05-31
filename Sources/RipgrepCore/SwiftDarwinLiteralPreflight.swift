@@ -85,6 +85,45 @@ public enum SwiftDarwinLiteralPreflight {
         }
     }
 
+    private final class QuietStatsSummaryAccumulator: @unchecked Sendable {
+        private let lock = NSLock()
+        private var totalMatches = 0
+        private var matchedLines = 0
+        private var filesWithMatches = 0
+        private var bytesSearched = 0
+        private var failed = false
+
+        func record(totalMatches: Int, matchedLines: Int, bytesSearched: Int) {
+            lock.lock()
+            self.totalMatches += totalMatches
+            self.matchedLines += matchedLines
+            self.bytesSearched += bytesSearched
+            if matchedLines > 0 {
+                filesWithMatches += 1
+            }
+            lock.unlock()
+        }
+
+        func recordFailure() {
+            lock.lock()
+            failed = true
+            lock.unlock()
+        }
+
+        func snapshot() -> (
+            totalMatches: Int,
+            matchedLines: Int,
+            filesWithMatches: Int,
+            bytesSearched: Int,
+            failed: Bool
+        ) {
+            lock.lock()
+            let snapshot = (totalMatches, matchedLines, filesWithMatches, bytesSearched, failed)
+            lock.unlock()
+            return snapshot
+        }
+    }
+
     private static func writePathTerminator(
         nullTerminated: Bool,
         crlfTerminated: Bool
@@ -475,45 +514,56 @@ public enum SwiftDarwinLiteralPreflight {
         literals: [[UInt8]]
     ) -> Int32? {
         let literalData = literals.map { Data($0) }
+        let accumulator = QuietStatsSummaryAccumulator()
 
-        var totalMatches = 0
-        var matchedLines = 0
-        var filesWithMatches = 0
-        var bytesSearched = 0
-
-        for path in paths {
-            guard let data = mappedPreflightData(path: path),
-                  !hasBinaryDetectionPrefix(data),
-                  !containsNULByte(data) else {
-                return nil
-            }
-            guard dataContainsAnyLiteralUsingFoundation(data, literals: literalData) else {
-                bytesSearched += data.count
-                continue
-            }
-            guard let summary = nonOverlappingMultiLiteralMatchedStats(
-                path: path,
-                data: data,
+        DispatchQueue.concurrentPerform(iterations: paths.count) { index in
+            guard let summary = nonOverlappingMultiLiteralFileStats(
+                path: paths[index],
+                literalData: literalData,
                 literals: literals
             ) else {
-                return nil
+                accumulator.recordFailure()
+                return
             }
+            accumulator.record(
+                totalMatches: summary.totalMatches,
+                matchedLines: summary.matchedLines,
+                bytesSearched: summary.bytesSearched
+            )
+        }
 
-            totalMatches += summary.totalMatches
-            matchedLines += summary.matchedLines
-            bytesSearched += summary.bytesSearched
-            if summary.matchedLines > 0 {
-                filesWithMatches += 1
-            }
+        let summary = accumulator.snapshot()
+        guard !summary.failed else {
+            return nil
         }
 
         return writeStatsSummary(
-            totalMatches: totalMatches,
-            matchedLines: matchedLines,
-            filesWithMatches: filesWithMatches,
+            totalMatches: summary.totalMatches,
+            matchedLines: summary.matchedLines,
+            filesWithMatches: summary.filesWithMatches,
             filesSearched: paths.count,
-            bytesSearched: bytesSearched,
-            exitCode: totalMatches > 0 ? 0 : 1
+            bytesSearched: summary.bytesSearched,
+            exitCode: summary.totalMatches > 0 ? 0 : 1
+        )
+    }
+
+    private static func nonOverlappingMultiLiteralFileStats(
+        path: String,
+        literalData: [Data],
+        literals: [[UInt8]]
+    ) -> (totalMatches: Int, matchedLines: Int, bytesSearched: Int)? {
+        guard let data = mappedPreflightData(path: path),
+              !hasBinaryDetectionPrefix(data),
+              !containsNULByte(data) else {
+            return nil
+        }
+        guard dataContainsAnyLiteralUsingFoundation(data, literals: literalData) else {
+            return (totalMatches: 0, matchedLines: 0, bytesSearched: data.count)
+        }
+        return nonOverlappingMultiLiteralMatchedStats(
+            path: path,
+            data: data,
+            literals: literals
         )
     }
 

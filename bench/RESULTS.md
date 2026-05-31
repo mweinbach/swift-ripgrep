@@ -8,6 +8,29 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Parallel repeated-literal stats file aggregation — 2026-05-31
+
+The non-overlapping repeated-`-e` `--stats -q` preflight now computes each
+explicit file summary in parallel and aggregates the deterministic totals after
+all file probes complete. This overlaps no-match containment checks with the
+matched-file line/count work added in the prior checkpoint, while keeping the
+same mapped `Data` guards, existing Swift scanner helpers, and fallback
+behavior.
+
+Validation:
+
+- Current Swift output matched the saved pre-change Swift binary byte-for-byte
+  for the mixed match/no-match repeated-`-e` stats target.
+- Current Swift output matched Rust after normalizing only elapsed-time stats
+  lines.
+
+On two 46 MiB explicit files under `/tmp/swift-rg-bench`, 20 timed runs with
+1 warmup:
+
+| Command | Current Swift | Previous Swift | Rust `rg` |
+| --- | ---: | ---: | ---: |
+| `--stats -q -e missingliteral -e absentliteral no-match-ascii-46m.txt match-ascii-46m.txt` | 44.7 ms | 77.7 ms | 52.2 ms |
+
 ## Parallel matched-file quiet-stats counts — 2026-05-31
 
 Matched files in the non-overlapping repeated-`-e` `--stats -q` preflight now
