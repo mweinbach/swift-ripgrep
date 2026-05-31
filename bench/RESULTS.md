@@ -396,6 +396,14 @@ because they did not improve the current checkpoint:
   sorting measured 145.86 ms median versus 144.77 ms baseline, hidden no-ignore
   reverse sorting 140.07 ms versus 139.23 ms, and default reverse sorting
   123.20 ms versus 121.87 ms. The dedicated reverse comparator stayed.
+- Copying the sorted path-key UTF-8 suffix into an array and then rewriting
+  slash bytes in place also stayed rejected. It preserved exact Swift output
+  and Rust ordered output, but an alternating 100-pair A/B against checkpoint
+  `9163edf` regressed no-ignore sorting to 146.00 ms median versus 145.62 ms,
+  reverse no-ignore to 146.24 ms versus 145.92 ms, hidden no-ignore to
+  147.33 ms versus 145.26 ms, and no-vcs to 109.16 ms versus 108.34 ms. The
+  default sorted medians were slightly faster, but not enough to offset the
+  broader sorted-control regressions, so the reserved append builder stayed.
 
 ## Visible line stats preflight — 2026-05-31
 
