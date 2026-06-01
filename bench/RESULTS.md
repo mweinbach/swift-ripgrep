@@ -8,6 +8,35 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Bounded ignore-aware file-list workers — 2026-06-01
+
+The ignore-aware Darwin `--files` data writer now runs top-level directory
+subtrees through a bounded Swift worker queue instead of scheduling one GCD work
+item per root child directory. Output is still stored by the original child
+index and drained in order, so natural ordering is unchanged; the cap reduces
+root fan-out and simultaneous filesystem pressure on the Linux tree without
+adding C shims or low-level code.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint `90daab1` byte-for-byte
+  for default, hidden, no-vcs, no-ignore, NUL, and debug file-listing.
+- Sorted current Swift paths matched Rust for default, hidden, and no-vcs
+  file-listing on `/tmp/swift-rg-bench/linux`.
+- A probe scan over 4, 8, 12, 16, and 26 workers found the 4-8 worker band best;
+  the retained cap is 8 to preserve the hidden-row win while still reducing
+  default/no-vcs fan-out.
+
+A 120-run interleaved process A/B against checkpoint `90daab1` measured:
+
+| Command | Current Swift | Previous Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `--files linux` | 83.47 ms mean / 80.36 ms median | 86.49 ms / 83.23 ms | 77.36 ms / 75.58 ms |
+| `--hidden --files linux` | 85.98 ms / 82.72 ms | 88.67 ms / 85.39 ms | 78.40 ms / 75.33 ms |
+| `--no-ignore-vcs --files linux` | 66.48 ms / 63.72 ms | 70.06 ms / 66.98 ms | 69.85 ms / 68.19 ms |
+| `--no-ignore --files linux` | 68.58 ms / 65.67 ms | 69.17 ms / 66.44 ms | 71.21 ms / 69.37 ms |
+| `--null --files linux` | 84.14 ms / 81.04 ms | 86.24 ms / 82.97 ms | 77.60 ms / 75.77 ms |
+
 ## Rejected file-list helper forced inlining — 2026-06-01
 
 A Swift-only probe forced `@inline(__always)` on the tiny private helpers used

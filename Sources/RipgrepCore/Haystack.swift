@@ -88,6 +88,8 @@ private struct WalkMetadata {
 }
 
 #if canImport(Darwin)
+private let darwinFilePathDataWorkerLimit = 8
+
 private struct FastDirectoryChild {
     let name: String
     let isASCII: Bool
@@ -151,6 +153,36 @@ private struct DarwinFilePathDataChunk: @unchecked Sendable {
     let warnings: [String]
     let diagnostics: [String]
     let filtered: Bool
+}
+
+private struct DarwinFilePathDataWorkItem: @unchecked Sendable {
+    let index: Int
+    let childName: String
+    let childIsASCII: Bool
+    let childLogicalPathBytes: [UInt8]
+}
+
+private final class DarwinFilePathDataWorkQueue: @unchecked Sendable {
+    private let items: [DarwinFilePathDataWorkItem]
+    private let lock = NSLock()
+    private var nextIndex = 0
+
+    init(items: [DarwinFilePathDataWorkItem]) {
+        self.items = items
+    }
+
+    func next() -> DarwinFilePathDataWorkItem? {
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
+        guard nextIndex < items.count else {
+            return nil
+        }
+        let item = items[nextIndex]
+        nextIndex += 1
+        return item
+    }
 }
 
 private struct DarwinFilePathRootPlan {
@@ -1249,6 +1281,8 @@ public struct FileWalker: @unchecked Sendable {
         let group = DispatchGroup()
         let queue = DispatchQueue.global(qos: .userInitiated)
         let parallelIgnoreStack = directoryIgnoreStack
+        var directoryWorkItems: [DarwinFilePathDataWorkItem] = []
+        directoryWorkItems.reserveCapacity(directoryCount)
 
         for (index, child) in orderedChildren.enumerated() {
             if child.kind.isFile {
@@ -1283,50 +1317,68 @@ public struct FileWalker: @unchecked Sendable {
                 appendPathComponent(child.name, to: &bytes)
                 return bytes
             }()
+            directoryWorkItems.append(DarwinFilePathDataWorkItem(
+                index: index,
+                childName: childName,
+                childIsASCII: childIsASCII,
+                childLogicalPathBytes: childLogicalPathBytes
+            ))
+        }
+
+        let workQueue = DarwinFilePathDataWorkQueue(items: directoryWorkItems)
+        let workerCount = min(directoryWorkItems.count, darwinFilePathDataWorkerLimit)
+
+        for _ in 0..<workerCount {
             group.enter()
             queue.async {
                 defer {
                     group.leave()
                 }
-                var output = Data()
-                output.reserveCapacity(64 * 1024)
-                var emittedCount = 0
-                var messages: [String] = []
-                var warnings: [String] = []
-                var diagnostics: [String] = []
-                var filtered = false
-                do {
-                    try walkFilePathsInOutputOrderData(
-                        directoryPath: directoryPathPrefix + childName,
-                        logicalPathBytes: childLogicalPathBytes,
-                        logicalDirectoryPathIsASCII: rootLogicalPathIsASCII && childIsASCII,
-                        relativePath: childName,
-                        rootBase: rootBase,
-                        rootDebugDisplayPath: rootDebugDisplayPath,
-                        rootArgumentIsAbsolute: rootLogicalPathBytes.first == UInt8(ascii: "/"),
-                        vcsContext: directoryVCSContext,
-                        messages: &messages,
-                        warnings: &warnings,
-                        diagnostics: &diagnostics,
-                        filtered: &filtered,
-                        ignoreStack: parallelIgnoreStack,
-                        options: options,
-                        emittedCount: &emittedCount,
-                        outputBuffer: &output
-                    )
-                    store.store(
-                        .success(DarwinFilePathDataChunk(
-                            data: output,
-                            count: emittedCount,
-                            messages: messages,
-                            warnings: warnings,
-                            diagnostics: diagnostics,
-                            filtered: filtered
-                        )),
-                        at: index
-                    )
-                } catch {
-                    store.store(.failure(error), at: index)
+                while true {
+                    guard let workItem = workQueue.next() else {
+                        return
+                    }
+
+                    var output = Data()
+                    output.reserveCapacity(64 * 1024)
+                    var emittedCount = 0
+                    var messages: [String] = []
+                    var warnings: [String] = []
+                    var diagnostics: [String] = []
+                    var filtered = false
+                    do {
+                        try walkFilePathsInOutputOrderData(
+                            directoryPath: directoryPathPrefix + workItem.childName,
+                            logicalPathBytes: workItem.childLogicalPathBytes,
+                            logicalDirectoryPathIsASCII: rootLogicalPathIsASCII && workItem.childIsASCII,
+                            relativePath: workItem.childName,
+                            rootBase: rootBase,
+                            rootDebugDisplayPath: rootDebugDisplayPath,
+                            rootArgumentIsAbsolute: rootLogicalPathBytes.first == UInt8(ascii: "/"),
+                            vcsContext: directoryVCSContext,
+                            messages: &messages,
+                            warnings: &warnings,
+                            diagnostics: &diagnostics,
+                            filtered: &filtered,
+                            ignoreStack: parallelIgnoreStack,
+                            options: options,
+                            emittedCount: &emittedCount,
+                            outputBuffer: &output
+                        )
+                        store.store(
+                            .success(DarwinFilePathDataChunk(
+                                data: output,
+                                count: emittedCount,
+                                messages: messages,
+                                warnings: warnings,
+                                diagnostics: diagnostics,
+                                filtered: filtered
+                            )),
+                            at: workItem.index
+                        )
+                    } catch {
+                        store.store(.failure(error), at: workItem.index)
+                    }
                 }
             }
         }
