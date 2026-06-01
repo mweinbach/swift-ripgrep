@@ -10374,6 +10374,28 @@ public struct RipgrepSearcher: @unchecked Sendable {
         return false
     }
 
+    private func containsNonASCIIByte(baseAddress: UnsafePointer<UInt8>, count: Int) -> Bool {
+        let highBit = SIMD16<UInt8>(repeating: 0x80)
+        var offset = 0
+        let vectorLimit = count >= 16 ? count - 15 : 0
+        while offset < vectorLimit {
+            let bytes = UnsafeRawPointer(baseAddress.advanced(by: offset))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let highMask = bytes .>= highBit
+            if highMask._storage.min() < 0 {
+                return true
+            }
+            offset += 16
+        }
+        while offset < count {
+            if baseAddress[offset] >= 0x80 {
+                return true
+            }
+            offset += 1
+        }
+        return false
+    }
+
     private func utf8LineString(
         baseAddress: UnsafePointer<UInt8>,
         lineStart: Int,
@@ -11064,7 +11086,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             return nil
         }
 
-        guard !bytes.contains(where: { $0 >= 0x80 }) else {
+        guard !containsNonASCIIByte(baseAddress: baseAddress, count: data.count) else {
             return nil
         }
 
