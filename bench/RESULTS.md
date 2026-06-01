@@ -8,6 +8,40 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Three-byte Swift memmem middle-byte candidate filter — 2026-06-01
+
+The default no-C-shim Swift memmem fallback now applies the middle-byte
+candidate filter to three-byte literals as well as longer literals. For a
+three-byte needle, matching first, middle, and final bytes fully proves the
+candidate, so the fallback also skips the redundant one-byte `memcmp` after the
+SIMD filter has accepted a lane. The same filter now covers
+`rg_memmem_count_byte_before`, which is used by the executable line-number
+preflight before normal line output.
+
+Validation:
+
+- Added a regression test where `exa` must not match nearby `eta`/`zeta` style
+  first/final-byte candidates, including `-n` and `--files-without-match`.
+- The official Linux subset still had Swift faster than Rust for alternates,
+  literals, literal mmap, ignore-case literals, no-literal, suffix, Greek, and
+  word rows.
+- The default build remains Swift-only; this changes only Swift fallback
+  scanner logic and adds no C shim or custom C code.
+
+A same-session 10-run hyperfine A/B against clean checkpoint `6c8ab9f`, with
+two warmups, measured:
+
+| Command | Current Swift | Checkpoint `6c8ab9f` | Rust |
+| --- | ---: | ---: | ---: |
+| `-n exa no-match-ascii-46m.txt` | 13.4 ms mean / 12.9-14.7 ms range | 40.6 ms / 38.7-42.7 ms | 9.4 ms / 8.8-10.6 ms |
+| `--stats --files-without-match exa no-match-ascii-46m.txt` | 9.8 ms / 9.1-11.1 ms | 36.2 ms / 34.7-39.6 ms | 7.1 ms / 5.3-8.3 ms |
+| `-n xyz no-match-ascii-46m.txt` guardrail | 11.0 ms / 10.2-12.5 ms | 11.5 ms / 9.5-13.7 ms | 6.5 ms / 6.0-8.1 ms |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/memmem-3byte-guard-1780336500.json`.
+The official subset summary is in
+`/tmp/swift-rg-bench/memmem-3byte-official-1780336523/summary.md`.
+
 ## Swift memmem middle-byte candidate filter — 2026-06-01
 
 The default no-C-shim Swift `rg_memmem_simple` fallback now checks a literal's
@@ -15,7 +49,7 @@ middle byte alongside its first and final bytes before running the full
 candidate comparison. This mirrors the existing ASCII case-insensitive scanner's
 candidate filter and cuts false candidates for short literals such as `needle`
 in English-ish no-match buffers, while preserving the same first/tail behavior
-for one-, two-, and three-byte literals.
+for one- and two-byte literals.
 
 Validation:
 

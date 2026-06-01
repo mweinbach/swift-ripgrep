@@ -44,6 +44,40 @@ struct MiscTests {
         #expect(missOutput.isEmpty)
     }
 
+    @Test("three-byte literal middle-byte candidates remain exact")
+    func threeByteLiteralMiddleByteCandidatesRemainExact() throws {
+        let root = try TemporaryDirectory()
+        try root.write("eta beta zeta theta\n", to: "miss.txt")
+        try root.write("eta beta zeta theta\nexa exact\n", to: "hit.txt")
+
+        let missLineOutput = try runExecutableData([
+            "-n",
+            "exa",
+            root.path("miss.txt"),
+        ], fixture: {})
+        #expect(missLineOutput.isEmpty)
+
+        let hitLineOutput = try runExecutableData([
+            "-n",
+            "exa",
+            root.path("hit.txt"),
+        ], fixture: {})
+        #expect(String(decoding: hitLineOutput, as: UTF8.self) == """
+        2:exa exact
+
+        """)
+
+        let filesWithoutMatchOutput = try runExecutableData([
+            "--files-without-match",
+            "exa",
+            root.url.path,
+        ], fixture: {})
+        #expect(String(decoding: filesWithoutMatchOutput, as: UTF8.self) == """
+        \(root.path("miss.txt"))
+
+        """)
+    }
+
     @Test("case-insensitive alternation preserves recursive line output")
     func caseInsensitiveAlternationPreservesRecursiveLineOutput() throws {
         let root = try TemporaryDirectory()
