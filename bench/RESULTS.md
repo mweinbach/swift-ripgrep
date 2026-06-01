@@ -8,6 +8,24 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected ordered file-list chunk drain — 2026-05-31
+
+A Swift-only probe let the ignore-aware Darwin `--files` data writer consume
+top-level chunks in output order as soon as each next chunk finished, rather
+than waiting for every parallel subtree before writing. This preserved output
+order by blocking on each ordered chunk, but the `NSCondition` coordination and
+earlier writes did not beat the existing `DispatchGroup` wait plus snapshot.
+The source change was backed out.
+
+An 80-run interleaved A/B against checkpoint `e7af0c5` was mixed, so an
+order-flipped 120-run confirmation was used for the decision:
+
+| Command | Probe Swift | Baseline Swift | Result |
+| --- | ---: | ---: | --- |
+| `--files linux` | 82.67 ms mean / 82.29 ms median | 82.06 ms / 81.80 ms | slower |
+| `--hidden --files linux` | 84.17 ms / 84.08 ms | 84.51 ms / 84.02 ms | flat |
+| `--no-ignore-vcs --files linux` | 70.20 ms / 67.19 ms | 66.14 ms / 66.08 ms | slower |
+
 ## Rejected parallel search work-item removal — 2026-05-31
 
 A Swift-only probe removed the transient `SearchWorkItem` array from the
