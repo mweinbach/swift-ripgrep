@@ -320,14 +320,12 @@ public struct FileWalker: @unchecked Sendable {
         var filtered = false
         var emittedCount = 0
         let root = options.effectiveRoots[0]
-        let rootExists = fileManager.fileExists(atPath: root.path)
-        guard rootExists else {
-            let displayPath = rootDisplayPath(at: 0, root: root, options: options)
-            messages.append(missingRootMessage(displayPath, options: options, hasExistingRoot: false))
-            return FilePathStreamResults(count: 0, messages: messages, warnings: warnings, diagnostics: diagnostics, filtered: false)
-        }
-
         guard let rootPlan = fastFilePathRootPlan(root: root, options: options) else {
+            if !fileManager.fileExists(atPath: root.path) {
+                let displayPath = rootDisplayPath(at: 0, root: root, options: options)
+                messages.append(missingRootMessage(displayPath, options: options, hasExistingRoot: false))
+                return FilePathStreamResults(count: 0, messages: messages, warnings: warnings, diagnostics: diagnostics, filtered: false)
+            }
             return nil
         }
         if pathSortMode != nil,
@@ -474,14 +472,12 @@ public struct FileWalker: @unchecked Sendable {
         outputBuffer.reserveCapacity(64 * 1024)
 
         let root = options.effectiveRoots[0]
-        let rootExists = fileManager.fileExists(atPath: root.path)
-        guard rootExists else {
-            let displayPath = rootDisplayPath(at: 0, root: root, options: options)
-            messages.append(missingRootMessage(displayPath, options: options, hasExistingRoot: false))
-            return FilePathStreamResults(count: 0, messages: messages, warnings: [], diagnostics: [], filtered: false)
-        }
-
         guard let rootPlan = fastFilePathRootPlan(root: root, options: options) else {
+            if !fileManager.fileExists(atPath: root.path) {
+                let displayPath = rootDisplayPath(at: 0, root: root, options: options)
+                messages.append(missingRootMessage(displayPath, options: options, hasExistingRoot: false))
+                return FilePathStreamResults(count: 0, messages: messages, warnings: [], diagnostics: [], filtered: false)
+            }
             return nil
         }
 
@@ -590,20 +586,18 @@ public struct FileWalker: @unchecked Sendable {
         var diagnostics: [String] = []
         var filtered = false
         let root = options.effectiveRoots[0]
-        let rootExists = fileManager.fileExists(atPath: root.path)
-        guard rootExists else {
-            let displayPath = rootDisplayPath(at: 0, root: root, options: options)
-            messages.append(missingRootMessage(displayPath, options: options, hasExistingRoot: false))
-            return FilePathStreamResults(
-                count: 0,
-                messages: messages,
-                warnings: warnings,
-                diagnostics: diagnostics,
-                filtered: false
-            )
-        }
-
         guard let rootPlan = fastFilePathRootPlan(root: root, options: options) else {
+            if !fileManager.fileExists(atPath: root.path) {
+                let displayPath = rootDisplayPath(at: 0, root: root, options: options)
+                messages.append(missingRootMessage(displayPath, options: options, hasExistingRoot: false))
+                return FilePathStreamResults(
+                    count: 0,
+                    messages: messages,
+                    warnings: warnings,
+                    diagnostics: diagnostics,
+                    filtered: false
+                )
+            }
             return nil
         }
 

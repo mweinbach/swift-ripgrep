@@ -8,6 +8,39 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## File-list root existence check deferral — 2026-06-01
+
+Darwin file-list fast paths now build the root plan before falling back to the
+FileManager existence check used only for missing-root diagnostics. Existing
+directory roots already need the root-plan `lstat`, so the common path avoids a
+redundant existence probe while preserving the previous missing-root message.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint `a1275a1` for default,
+  hidden, no-ignore, no-vcs, and missing-root `--files` controls.
+- Sorted current Swift output matched Rust for default and hidden Linux-tree
+  file-listing controls.
+- The default build remains Swift-only; this change adds no C shim or custom C
+  code.
+
+A 60-run hyperfine A/B against checkpoint `a1275a1`, with 5 warmups, measured:
+
+| Command | Current Swift | Checkpoint `a1275a1` | Rust |
+| --- | ---: | ---: | ---: |
+| `--files linux` | 77.68 ms mean / 76.67 ms median | 77.45 ms / 76.75 ms | 75.16 ms / 73.81 ms |
+| `--hidden --files linux` | 78.04 ms / 77.34 ms | 79.82 ms / 79.10 ms | not remeasured in this pass |
+| `--no-ignore --files linux` guardrail | 64.91 ms / 63.87 ms | 64.22 ms / 63.94 ms | not remeasured in this pass |
+| `--no-ignore-vcs --files linux` guardrail | 60.57 ms / 59.33 ms | 58.75 ms / 58.24 ms | not remeasured in this pass |
+
+A reversed-order 80-run confirmation measured default at 75.55 ms current /
+76.01 ms checkpoint, hidden at 78.83 ms / 78.43 ms, and no-vcs at 57.98 ms /
+59.03 ms.
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/files-rootplan-reorder-1780317543.json` and
+`/tmp/swift-rg-bench/files-rootplan-reorder-reversed-1780317604.json`.
+
 ## Quiet byte-literal known-regular raw search — 2026-06-01
 
 Recursive quiet searches for a single literal now reuse the file walker's
