@@ -282,6 +282,40 @@ struct MiscTests {
         """)
     }
 
+    @Test("nine-byte literal SIMD candidates remain exact")
+    func nineByteLiteralSIMDCandidatesRemainExact() throws {
+        let root = try TemporaryDirectory()
+        try root.write("alpha beta theta zeta\n", to: "miss.txt")
+        try root.write("alpha beta theta zeta\ntqetazqet exact\n", to: "hit.txt")
+
+        let missLineOutput = try runExecutableData([
+            "-n",
+            "tqetazqet",
+            root.path("miss.txt"),
+        ], fixture: {})
+        #expect(missLineOutput.isEmpty)
+
+        let hitLineOutput = try runExecutableData([
+            "-n",
+            "tqetazqet",
+            root.path("hit.txt"),
+        ], fixture: {})
+        #expect(String(decoding: hitLineOutput, as: UTF8.self) == """
+        2:tqetazqet exact
+
+        """)
+
+        let filesWithoutMatchOutput = try runExecutableData([
+            "--files-without-match",
+            "tqetazqet",
+            root.url.path,
+        ], fixture: {})
+        #expect(String(decoding: filesWithoutMatchOutput, as: UTF8.self) == """
+        \(root.path("miss.txt"))
+
+        """)
+    }
+
     @Test("case-insensitive alternation preserves recursive line output")
     func caseInsensitiveAlternationPreservesRecursiveLineOutput() throws {
         let root = try TemporaryDirectory()
