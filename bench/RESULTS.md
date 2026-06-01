@@ -8,6 +8,33 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Greek script lead-byte candidate scanner — 2026-06-01
+
+Exact `\p{Greek}` explicit-file searches now use a Greek-specific Swift SIMD
+lead-byte scanner for the whole-buffer candidate proof. This replaces the
+generic multi-needle helper for the UTF-8 lead bytes that can start Greek
+script scalars, while keeping the same scalar validation after a candidate is
+found.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint `f28d3b9` and Rust for
+  focused explicit-file Greek cases covering line output, ignore-case line
+  output, quiet first-match, files-with-matches, and ASCII no-match.
+- The default build remains Swift-only; this change uses Swift SIMD helpers
+  and does not add or enable any C shim.
+
+A 12-run hyperfine A/B against checkpoint `f28d3b9`, with 5 warmups, measured:
+
+| Command | Current Swift | Previous Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `-n '\p{Greek}' non-greek-unicode-64m.txt` | 39.59 ms mean / 40.19 ms median | 43.81 ms / 43.42 ms | 25.06 ms / 25.13 ms |
+| `-n -i '\p{Greek}' non-greek-unicode-64m.txt` | 48.54 ms / 48.77 ms | 52.55 ms / 52.29 ms | 25.37 ms / 25.09 ms |
+| `-q '\p{Greek}' early-greek-unicode-64m.txt` guardrail | 8.54 ms / 8.38 ms | 9.10 ms / 9.13 ms | not remeasured in this pass |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/greek-lead-byte-candidate-1780303151.json`.
+
 ## ASCII fixed-class sparse candidate jumps — 2026-06-01
 
 Exact ASCII fixed-class sequence scans now keep the existing no-candidate proof,
