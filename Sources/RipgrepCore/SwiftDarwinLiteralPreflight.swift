@@ -12966,37 +12966,43 @@ private func rgSwiftLiteralContextWindowStart(
     return lineStart
 }
 
-private func rgSwiftFirstMultiLiteralMatch(
+private struct RgSwiftMultiLiteralMatchInfo {
+    let firstMatch: UnsafePointer<UInt8>?
+    let presentLiterals: [[UInt8]]
+}
+
+private func rgSwiftMultiLiteralMatchInfo(
     base: UnsafePointer<UInt8>,
     haystackLength: Int,
     literals: [[UInt8]]
-) -> UnsafePointer<UInt8>? {
+) -> RgSwiftMultiLiteralMatchInfo {
     var firstMatch: UnsafePointer<UInt8>?
     var firstMatchOffset = haystackLength
+    var presentLiterals: [[UInt8]] = []
+    presentLiterals.reserveCapacity(literals.count)
+
     for literal in literals {
-        guard literal.count <= firstMatchOffset else {
-            continue
-        }
         let match = literal.withUnsafeBufferPointer { literalBuffer in
             rg_memmem_simple(
                 base,
-                firstMatchOffset,
+                haystackLength,
                 literalBuffer.baseAddress,
                 literalBuffer.count
             )
         }
         if let match {
+            presentLiterals.append(literal)
             let matchOffset = base.distance(to: match)
             if matchOffset < firstMatchOffset {
                 firstMatch = match
                 firstMatchOffset = matchOffset
-                if matchOffset == 0 {
-                    break
-                }
             }
         }
     }
-    return firstMatch
+    return RgSwiftMultiLiteralMatchInfo(
+        firstMatch: firstMatch,
+        presentLiterals: presentLiterals
+    )
 }
 
 private func rgSwiftDarwinWriteAfterContextLiteralLines(
@@ -13682,29 +13688,22 @@ private func rgSwiftDarwinWriteMultiLiteralContextLines(
         || base[0] == 0xFE && base[1] == 0xFF) {
         return nil
     }
-    let firstBytes: [UInt8] = {
-        var bytes: [UInt8] = []
-        bytes.reserveCapacity(literals.count)
-        for literal in literals where !bytes.contains(literal[0]) {
-            bytes.append(literal[0])
-        }
-        return bytes
-    }()
-    guard !firstBytes.isEmpty else {
-        return nil
-    }
+    let activeLiterals: [[UInt8]]
     let firstLiteralMatch: UnsafePointer<UInt8>?
     if asciiCaseInsensitive {
+        activeLiterals = literals
         firstLiteralMatch = nil
     } else {
-        firstLiteralMatch = rgSwiftFirstMultiLiteralMatch(
+        let matchInfo = rgSwiftMultiLiteralMatchInfo(
             base: base,
             haystackLength: haystackLength,
             literals: literals
         )
-        guard firstLiteralMatch != nil else {
+        guard let firstMatch = matchInfo.firstMatch else {
             return 0
         }
+        activeLiterals = matchInfo.presentLiterals
+        firstLiteralMatch = firstMatch
     }
     if memchr(base, 0, haystackLength) != nil {
         return nil
@@ -13725,8 +13724,16 @@ private func rgSwiftDarwinWriteMultiLiteralContextLines(
         output.deallocate()
     }
 
+    let firstBytes: [UInt8] = {
+        var bytes: [UInt8] = []
+        bytes.reserveCapacity(activeLiterals.count)
+        for literal in activeLiterals where !bytes.contains(literal[0]) {
+            bytes.append(literal[0])
+        }
+        return bytes
+    }()
     let foldedLiterals = asciiCaseInsensitive
-        ? literals.map { $0.map(rgSwiftASCIILower) }
+        ? activeLiterals.map { $0.map(rgSwiftASCIILower) }
         : []
     let caseInsensitiveFirstBytes: [UInt8] = if asciiCaseInsensitive {
         {
@@ -13859,7 +13866,7 @@ private func rgSwiftDarwinWriteMultiLiteralContextLines(
                 }
             } else {
                 let firstByte = base[matchStart]
-                for candidateLiteral in literals
+                for candidateLiteral in activeLiterals
                     where candidateLiteral[0] == firstByte
                         && literal(candidateLiteral, matchesAt: matchStart, lineEnd: lineEnd) {
                     return true
