@@ -392,16 +392,30 @@ public struct RipgrepSearcher: @unchecked Sendable {
     ) throws -> SearchResults? {
         let quietByteLiteralFastPath = quietByteLiteralFirstMatchFastPath(options: options, matcher: matcher)
         let hasASCIIFixedClassSequence = matcher.asciiFixedClassSequenceFastPath() != nil
+        let quietASCIIRunSuffixFastPath = options.quiet && !options.stats
+            ? asciiRunSuffixPattern(options: options)
+            : nil
         let quietRequiredLiteralProbe = !hasASCIIFixedClassSequence
             && quietByteLiteralFastPath == nil
+            && quietASCIIRunSuffixFastPath == nil
             && matcher.byteRequiredLiteralPrefilter() != nil
         guard options.mode == .search,
               options.sortMode == nil,
               !options.useStdin,
               !options.patternFileStdin,
               canStopSearchAfterFirstMatch(options: options),
-              (hasASCIIFixedClassSequence || quietByteLiteralFastPath != nil || quietRequiredLiteralProbe) else {
+              (hasASCIIFixedClassSequence
+                  || quietByteLiteralFastPath != nil
+                  || quietASCIIRunSuffixFastPath != nil
+                  || quietRequiredLiteralProbe) else {
             return nil
+        }
+        if let quietASCIIRunSuffixFastPath {
+            return try searchQuietRequiredLiteralFirstMatchByWalking(
+                options: options,
+                matcher: matcher,
+                asciiRunSuffixFastPath: quietASCIIRunSuffixFastPath
+            )
         }
         if quietRequiredLiteralProbe {
             return try searchQuietRequiredLiteralFirstMatchByWalking(options: options, matcher: matcher)
@@ -497,7 +511,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
 
     private func searchQuietRequiredLiteralFirstMatchByWalking(
         options: RipgrepOptions,
-        matcher: PatternMatcher
+        matcher: PatternMatcher,
+        asciiRunSuffixFastPath: ASCIIRunSuffixPattern? = nil
     ) throws -> SearchResults? {
         let quietRequiredLiteralProbeFileLimit = 160
         var filesSearched = 0
@@ -505,7 +520,17 @@ public struct RipgrepSearcher: @unchecked Sendable {
         var searchMessages: [String] = []
 
         func visit(_ haystack: Haystack) -> Bool {
-            let outcome = searchFile(haystack, matcher: matcher, options: options)
+            let outcome: FileSearchOutcome
+            if let asciiRunSuffixFastPath,
+               let fastResult = searchQuietASCIIRunSuffixFirstMatch(
+                haystack,
+                fastPath: asciiRunSuffixFastPath,
+                options: options
+               ) {
+                outcome = FileSearchOutcome(result: fastResult)
+            } else {
+                outcome = searchFile(haystack, matcher: matcher, options: options)
+            }
             if outcome.result.searched {
                 filesSearched += 1
             }
@@ -736,6 +761,43 @@ public struct RipgrepSearcher: @unchecked Sendable {
             )
         }
         #endif
+    }
+
+    private func searchQuietASCIIRunSuffixFirstMatch(
+        _ haystack: Haystack,
+        fastPath: ASCIIRunSuffixPattern,
+        options: RipgrepOptions
+    ) -> SearchFileResult? {
+        guard !shouldPreprocess(haystack, options: options),
+              decompressionCommand(for: haystack.url, options: options) == nil,
+              canUseBufferedRawLiteralSearch(haystack, options: options) else {
+            return nil
+        }
+
+        let data: Data
+        do {
+            data = try HaystackReader.read(haystack, options: options)
+        } catch {
+            return nil
+        }
+
+        guard !data.starts(with: [0xFF, 0xFE]),
+              !data.starts(with: [0xFE, 0xFF]) else {
+            return nil
+        }
+        if !options.disablesBinaryDetection,
+           shouldCheckBinary(data, options: options),
+           firstNulByteOffset(in: data) != nil {
+            return nil
+        }
+
+        return searchRawASCIIRunSuffixContents(
+            data,
+            fileURL: haystack.url,
+            options: options,
+            fastPath: fastPath,
+            firstMatchOnly: true
+        )
     }
 
     private func canStreamPlainMatchingLines(options: RipgrepOptions) -> Bool {
@@ -6924,7 +6986,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         ) {
             return FileSearchOutcome(result: fastResult)
         }
-        if let fastResult = searchRawASCIIRunSuffixStatsContents(
+        if let fastResult = searchRawASCIIRunSuffixContents(
             data,
             fileURL: fileURL,
             options: options
@@ -7871,7 +7933,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         var bytesSearched: Int
     }
 
-    private struct ASCIIRunSuffixStatsPattern {
+    private struct ASCIIRunSuffixPattern {
         enum Run {
             case uppercasePlus
             case exactUppercase(Int)
@@ -7882,13 +7944,15 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let suffix: [UInt8]
     }
 
-    private func searchRawASCIIRunSuffixStatsContents(
+    private func searchRawASCIIRunSuffixContents(
         _ data: Data,
         fileURL: URL,
         options: RipgrepOptions
     ) -> SearchFileResult? {
+        let firstMatchOnly = options.quiet && !options.stats
+        let statsOnly = options.quiet && options.stats
         guard options.quiet,
-              options.stats,
+              firstMatchOnly || statsOnly,
               options.printMode == .matchingLines,
               case .automatic = options.encodingMode,
               !options.json,
@@ -7914,9 +7978,25 @@ public struct RipgrepSearcher: @unchecked Sendable {
               options.maxCount == nil,
               !data.starts(with: [0xFF, 0xFE]),
               !data.starts(with: [0xFE, 0xFF]),
-              let fastPath = asciiRunSuffixStatsPattern(options: options) else {
+              let fastPath = asciiRunSuffixPattern(options: options) else {
             return nil
         }
+        return searchRawASCIIRunSuffixContents(
+            data,
+            fileURL: fileURL,
+            options: options,
+            fastPath: fastPath,
+            firstMatchOnly: firstMatchOnly
+        )
+    }
+
+    private func searchRawASCIIRunSuffixContents(
+        _ data: Data,
+        fileURL: URL,
+        options: RipgrepOptions,
+        fastPath: ASCIIRunSuffixPattern,
+        firstMatchOnly: Bool
+    ) -> SearchFileResult? {
         let suffix = fastPath.suffix
 
         let dataCount = data.count
@@ -8006,7 +8086,25 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     }
                 }
 
-                if matchStart != nil {
+                if let matchStart {
+                    if firstMatchOnly {
+                        return SearchFileResult(
+                            fileURL: fileURL,
+                            matches: [
+                                SearchMatch(
+                                    fileURL: fileURL,
+                                    lineNumber: 1,
+                                    column: nil,
+                                    line: "",
+                                    absoluteOffset: matchStart,
+                                    matchCount: 1,
+                                    spans: []
+                                ),
+                            ],
+                            bytesSearched: min(searchableCount, suffixStart + suffix.count - contentStart),
+                            searched: true
+                        )
+                    }
                     matches += 1
                     if lastMatchedLineStart != lineStart {
                         matchedLines += 1
@@ -10395,12 +10493,12 @@ public struct RipgrepSearcher: @unchecked Sendable {
         return Array(literal.utf8)
     }
 
-    private func asciiRunSuffixStatsPattern(options: RipgrepOptions) -> ASCIIRunSuffixStatsPattern? {
+    private func asciiRunSuffixPattern(options: RipgrepOptions) -> ASCIIRunSuffixPattern? {
         guard options.effectivePatterns.count == 1,
               var pattern = options.effectivePatterns.first else {
             return nil
         }
-        let run: ASCIIRunSuffixStatsPattern.Run
+        let run: ASCIIRunSuffixPattern.Run
         if pattern.hasPrefix("[A-Z]+") {
             pattern.removeFirst("[A-Z]+".count)
             run = .uppercasePlus
@@ -10440,7 +10538,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
               literal.utf8.allSatisfy({ $0 < 0x80 && $0 != UInt8(ascii: "\n") }) else {
             return nil
         }
-        return ASCIIRunSuffixStatsPattern(run: run, suffix: Array(literal.utf8))
+        return ASCIIRunSuffixPattern(run: run, suffix: Array(literal.utf8))
     }
 
     private func surroundingWordsLiteralPattern(options: RipgrepOptions) -> [UInt8]? {

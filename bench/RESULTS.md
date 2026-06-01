@@ -8,6 +8,39 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Quiet ASCII run-suffix first-match probe — 2026-06-01
+
+Recursive quiet searches for exact Unicode-mode regexes shaped like
+`[A-Z]+<literal>`, `[A-Z]{N}<literal>`, and uppercase singleton repeats like
+`[Z]{N}<literal>` now probe the first visited files with the existing Swift
+byte verifier directly instead of routing every candidate through the full
+file-search path first. The normal search path still handles preprocessing,
+decompression, UTF-16 BOMs, binary-containing files, and any full-tree
+fallback after the bounded probe, so behavior stays tied to the same matcher
+contracts as the stats counter.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint `bdf5ed4` and Rust for
+  recursive Linux quiet `[A-Z]+_RESUME` hit and `[A-Z]+_NEVERMATCHTOKEN` miss
+  cases.
+- A miss guardrail showed neutral performance, with the direct probe at
+  1.208 s mean / 1.191 s median versus checkpoint `bdf5ed4` at
+  1.201 s / 1.199 s.
+- The default build remains Swift-only; this change adds no C shim or custom C
+  code.
+
+An 80-run hyperfine A/B against checkpoint `bdf5ed4`, with 8 warmups,
+measured:
+
+| Command | Current Swift | Checkpoint `bdf5ed4` | Rust |
+| --- | ---: | ---: | ---: |
+| `-q '[A-Z]+_RESUME' linux` | 10.12 ms mean / 10.01 ms median | 11.84 ms / 11.38 ms | 7.51 ms / 6.75 ms |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/quiet-run-suffix-direct-param-hit-1780324574.json` and
+`/tmp/swift-rg-bench/quiet-run-suffix-direct-param-miss-1780324598.json`.
+
 ## Sparse ASCII fixed-class line collection — 2026-06-01
 
 Matching-line output for fixed-width ASCII class regexes now uses a

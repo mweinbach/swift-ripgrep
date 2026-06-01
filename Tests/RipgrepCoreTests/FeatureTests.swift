@@ -55,6 +55,17 @@ struct FeatureTests {
         output = []
         errors = []
         exitCode = RipgrepCLI.run(
+            arguments: ["-q", "[A-Z]{3}_RESUME", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(output.isEmpty)
+        #expect(errors.isEmpty)
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
             arguments: ["-q", "[A-Z]+_MISSING", root.url.path],
             stdout: { output.append($0) },
             stderr: { errors.append($0) }
