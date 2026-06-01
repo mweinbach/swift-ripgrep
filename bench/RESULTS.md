@@ -8,6 +8,43 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Four-byte Swift memmem fixed-shape SIMD helper — 2026-06-01
+
+The no-C-shim Swift memmem fallback now also routes four-byte exact literals
+through a fixed-shape SIMD16 helper. This avoids falling into the generic
+candidate verifier when first/middle/tail all match but the second byte does
+not. The paired count-before helper covers line-number and
+`--files-without-match --stats` paths.
+
+Validation:
+
+- Added a four-byte `btta` regression test where repeated `beta` lines are
+  rejected even though they share first, third, and final bytes with the
+  needle.
+- Current Swift stdout/stderr/status matched checkpoint
+  `/tmp/swift-rg-bench/baseline-df9f4cc-1780354809-ripgrep` and Rust for
+  four-byte, two-byte, three-byte, longer-literal, and quiet controls. The
+  stats case matched Rust after normalizing the two elapsed-time lines.
+- `swift build -c release` and the focused 2/3/4-byte scanner tests passed
+  before benchmarking.
+
+A same-session 30-run hyperfine A/B against checkpoint `df9f4cc`, with five
+warmups, measured:
+
+| Command | Current Swift | Checkpoint `df9f4cc` | Rust |
+| --- | ---: | ---: | ---: |
+| `-n btta no-match-ascii-46m.txt` | 11.1 ms mean / 10.0-12.5 ms range | 22.5 ms / 21.2-24.2 ms | 10.3 ms / 9.7-11.1 ms |
+| `--stats --files-without-match btta no-match-ascii-46m.txt` | 9.4 ms / 8.5-10.1 ms | 21.2 ms / 20.3-22.1 ms | 10.2 ms / 9.4-10.8 ms |
+| `-n zzzz no-match-ascii-46m.txt` guardrail | 11.2 ms / 10.1-12.1 ms | 11.6 ms / 10.9-12.6 ms | 9.2 ms / 8.4-9.7 ms |
+| `-n exa no-match-ascii-46m.txt` guardrail | 9.7 ms / 8.7-11.0 ms | 9.8 ms / 8.9-11.4 ms | not remeasured in this pass |
+| `-n qz no-match-ascii-46m.txt` guardrail | 9.3 ms / 8.3-9.8 ms | 10.0 ms / 9.2-10.7 ms | not remeasured in this pass |
+| `-n missingliteral match-ascii-46m.txt` guardrail | 72.7 ms / 71.3-74.1 ms | 72.8 ms / 70.8-84.9 ms | not remeasured in this pass |
+| `-q PM_RESUME linux` guardrail | 35.1 ms / 33.2-43.2 ms | 35.4 ms / 32.8-40.3 ms | not remeasured in this pass |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/fourbyte-specialized-probe-1780355000.json` and
+`/tmp/swift-rg-bench/fourbyte-specialized-guard-1780355200.json`.
+
 ## Short Swift memmem fixed-shape SIMD helpers — 2026-06-01
 
 The default no-C-shim Swift memmem fallback now routes two- and three-byte
