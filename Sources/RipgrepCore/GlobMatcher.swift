@@ -30,6 +30,7 @@ public struct GlobMatcher: Equatable {
         }
 
         let tokens: [Token]
+        let requiredLiteralByte: UInt8?
     }
 
     private struct FastMatcherPatternMeta {
@@ -1016,6 +1017,11 @@ public struct GlobMatcher: Equatable {
     }
 
     private func matchesSimpleGlob(_ glob: SimpleGlob, bytes: UnsafeBufferPointer<UInt8>) -> Bool {
+        if let requiredLiteralByte = glob.requiredLiteralByte,
+           !bytes.contains(requiredLiteralByte) {
+            return false
+        }
+
         let tokens = glob.tokens
         var tokenIndex = 0
         var byteIndex = 0
@@ -1105,7 +1111,41 @@ public struct GlobMatcher: Equatable {
                 index += 1
             }
         }
-        return sawSimpleGlobSyntax ? SimpleGlob(tokens: tokens) : nil
+        return sawSimpleGlobSyntax
+            ? SimpleGlob(
+                tokens: tokens,
+                requiredLiteralByte: requiredLiteralByte(in: tokens)
+            )
+            : nil
+    }
+
+    private static func requiredLiteralByte(in tokens: [SimpleGlob.Token]) -> UInt8? {
+        var bestByte: UInt8?
+        var bestScore = -1
+        for token in tokens {
+            guard case .literal(let byte) = token else {
+                continue
+            }
+            let score = requiredLiteralScore(byte)
+            if score >= bestScore {
+                bestByte = byte
+                bestScore = score
+            }
+        }
+        return bestByte
+    }
+
+    private static func requiredLiteralScore(_ byte: UInt8) -> Int {
+        switch byte {
+        case UInt8(ascii: "0")...UInt8(ascii: "9"):
+            return 5
+        case UInt8(ascii: "A")...UInt8(ascii: "Z"), UInt8(ascii: "a")...UInt8(ascii: "z"):
+            return 3
+        case UInt8(ascii: "."), UInt8(ascii: "_"), UInt8(ascii: "-"):
+            return 1
+        default:
+            return 4
+        }
     }
 
     private static func parseSimpleGlobClass(
