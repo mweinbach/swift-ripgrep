@@ -233,6 +233,70 @@ private func rgMemmem5SIMD16(
     return nil
 }
 
+private func rgMemmem6SIMD16(
+    haystack: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    needle: UnsafePointer<UInt8>
+) -> UnsafePointer<UInt8>? {
+    let first = needle[0]
+    let second = needle[1]
+    let third = needle[2]
+    let middle = needle[3]
+    let fifth = needle[4]
+    let tail = needle[5]
+    let firstVector = SIMD16<UInt8>(repeating: first)
+    let secondVector = SIMD16<UInt8>(repeating: second)
+    let thirdVector = SIMD16<UInt8>(repeating: third)
+    let middleVector = SIMD16<UInt8>(repeating: middle)
+    let fifthVector = SIMD16<UInt8>(repeating: fifth)
+    let tailVector = SIMD16<UInt8>(repeating: tail)
+
+    var cursor = 0
+    let vectorLimit = haystackLength >= 21 ? haystackLength - 20 : 0
+    while cursor < vectorLimit {
+        let firstBytes = UnsafeRawPointer(haystack.advanced(by: cursor))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let secondBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 1))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let thirdBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 2))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let middleBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 3))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let fifthBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 4))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let tailBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 5))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let candidateStorage = (
+            (firstBytes .== firstVector)
+                .& (secondBytes .== secondVector)
+                .& (thirdBytes .== thirdVector)
+                .& (middleBytes .== middleVector)
+                .& (fifthBytes .== fifthVector)
+                .& (tailBytes .== tailVector)
+        )._storage
+        if candidateStorage.min() < 0 {
+            for lane in 0..<16 where candidateStorage[lane] != 0 {
+                return haystack.advanced(by: cursor + lane)
+            }
+        }
+        cursor += 16
+    }
+
+    let maxStart = haystackLength - 5
+    while cursor < maxStart {
+        if haystack[cursor] == first,
+           haystack[cursor + 1] == second,
+           haystack[cursor + 2] == third,
+           haystack[cursor + 3] == middle,
+           haystack[cursor + 4] == fifth,
+           haystack[cursor + 5] == tail {
+            return haystack.advanced(by: cursor)
+        }
+        cursor += 1
+    }
+    return nil
+}
+
 private func rgMemmemSIMD16(
     haystack: UnsafePointer<UInt8>,
     haystackLength: Int,
@@ -250,6 +314,9 @@ private func rgMemmemSIMD16(
     }
     if needleLength == 5 {
         return rgMemmem5SIMD16(haystack: haystack, haystackLength: haystackLength, needle: needle)
+    }
+    if needleLength == 6 {
+        return rgMemmem6SIMD16(haystack: haystack, haystackLength: haystackLength, needle: needle)
     }
 
     let first = needle[0]
@@ -540,6 +607,80 @@ private func rgMemmem5CountByteBeforeSIMD16(
     return (nil, count)
 }
 
+private func rgMemmem6CountByteBeforeSIMD16(
+    haystack: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    needle: UnsafePointer<UInt8>,
+    byte: UInt8
+) -> (match: UnsafePointer<UInt8>?, count: Int) {
+    let first = needle[0]
+    let second = needle[1]
+    let third = needle[2]
+    let middle = needle[3]
+    let fifth = needle[4]
+    let tail = needle[5]
+    let firstVector = SIMD16<UInt8>(repeating: first)
+    let secondVector = SIMD16<UInt8>(repeating: second)
+    let thirdVector = SIMD16<UInt8>(repeating: third)
+    let middleVector = SIMD16<UInt8>(repeating: middle)
+    let fifthVector = SIMD16<UInt8>(repeating: fifth)
+    let tailVector = SIMD16<UInt8>(repeating: tail)
+    let countVector = SIMD16<UInt8>(repeating: byte)
+
+    var count = 0
+    var cursor = 0
+    let vectorLimit = haystackLength >= 21 ? haystackLength - 20 : 0
+    while cursor < vectorLimit {
+        let firstBytes = UnsafeRawPointer(haystack.advanced(by: cursor))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let secondBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 1))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let thirdBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 2))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let middleBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 3))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let fifthBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 4))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let tailBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 5))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let candidateStorage = (
+            (firstBytes .== firstVector)
+                .& (secondBytes .== secondVector)
+                .& (thirdBytes .== thirdVector)
+                .& (middleBytes .== middleVector)
+                .& (fifthBytes .== fifthVector)
+                .& (tailBytes .== tailVector)
+        )._storage
+        if candidateStorage.min() < 0 {
+            for lane in 0..<16 where candidateStorage[lane] != 0 {
+                for offset in 0..<lane where haystack[cursor + offset] == byte {
+                    count += 1
+                }
+                return (haystack.advanced(by: cursor + lane), count)
+            }
+        }
+        count -= Int((firstBytes .== countVector)._storage.wrappedSum())
+        cursor += 16
+    }
+
+    let maxStart = haystackLength - 5
+    while cursor < maxStart {
+        if haystack[cursor] == first,
+           haystack[cursor + 1] == second,
+           haystack[cursor + 2] == third,
+           haystack[cursor + 3] == middle,
+           haystack[cursor + 4] == fifth,
+           haystack[cursor + 5] == tail {
+            return (haystack.advanced(by: cursor), count)
+        }
+        if haystack[cursor] == byte {
+            count += 1
+        }
+        cursor += 1
+    }
+    return (nil, count)
+}
+
 func rg_memmem_count_byte_before(
     _ haystack: UnsafePointer<UInt8>?,
     _ haystackLength: Int,
@@ -566,6 +707,9 @@ func rg_memmem_count_byte_before(
     }
     if needleLength == 5 {
         return rgMemmem5CountByteBeforeSIMD16(haystack: haystack, haystackLength: haystackLength, needle: needle, byte: byte)
+    }
+    if needleLength == 6 {
+        return rgMemmem6CountByteBeforeSIMD16(haystack: haystack, haystackLength: haystackLength, needle: needle, byte: byte)
     }
 
     let first = needle[0]
