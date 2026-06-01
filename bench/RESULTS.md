@@ -8,6 +8,27 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected file-list helper forced inlining — 2026-06-01
+
+A Swift-only probe forced `@inline(__always)` on the tiny private helpers used
+inside the Darwin file-list hot loops: path-line appends, UTF-8/path-component
+appends, and the shared ignore-aware `shouldEmitFastFilePath` decision helper.
+The probe preserved Swift stdout/stderr byte-for-byte for default, hidden,
+no-vcs, no-ignore, and NUL file-listing, and kept sorted Rust path parity for
+default, hidden, and no-vcs controls. It was backed out because the current
+release optimizer's private-function inlining was already competitive and the
+forced attributes were neutral-to-slower on the broader control set.
+
+An 80-run interleaved process A/B against checkpoint `f439976` measured:
+
+| Command | Probe Swift | Baseline Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `--files linux` | 82.68 ms mean / 82.15 ms median | 82.79 ms / 82.26 ms | 75.66 ms / 75.11 ms |
+| `--hidden --files linux` | 85.33 ms / 84.64 ms | 84.90 ms / 84.20 ms | 75.36 ms / 75.08 ms |
+| `--no-ignore-vcs --files linux` | 67.17 ms / 66.47 ms | 67.04 ms / 66.44 ms | 69.08 ms / 67.88 ms |
+| `--no-ignore --files linux` | 66.06 ms / 65.19 ms | 65.31 ms / 64.67 ms | 69.31 ms / 68.46 ms |
+| `--null --files linux` | 82.70 ms / 82.49 ms | 82.64 ms / 81.94 ms | 75.30 ms / 75.15 ms |
+
 ## Rejected reversed-index file-list child walks — 2026-06-01
 
 A Swift-only probe replaced the hot ignore-aware Darwin `--files` data writer's
