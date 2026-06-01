@@ -8,6 +8,27 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected quiet fallback prefix skip after probe budget — 2026-06-01
+
+A Swift-only probe kept the quiet byte-literal first-match probe's current
+abandon behavior, then rebuilt the fast search-file list and skipped the files
+already scanned by the probe before entering the existing parallel quiet
+fallback. The intent was to avoid rereading the first 32 files / 64 MiB while
+preserving parallel miss behavior. It preserved Swift stdout/stderr/status
+against checkpoint `d1ee5c3` and Rust quiet statuses/stdout, but the extra
+filter/rebuild path was slower than simply restarting the established parallel
+fallback. The source change was backed out.
+
+A 40-run interleaved process A/B against checkpoint `d1ee5c3` measured:
+
+| Command | Probe Swift | Baseline Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `-q PM_RESUME linux` | 409.37 ms mean / 403.41 ms median | 380.45 ms / 381.44 ms | 224.23 ms / 165.07 ms |
+| `-q __swift_rg_missing_needle__ linux` | 985.62 ms / 966.11 ms | 955.79 ms / 934.61 ms | 2791.71 ms / 2723.17 ms |
+| `-q EXPORT_SYMBOL linux` | 8.18 ms / 8.10 ms | 8.21 ms / 8.24 ms | 6.34 ms / 6.15 ms |
+| `-q -i pm_resume linux` | 9.92 ms / 9.83 ms | 9.70 ms / 9.56 ms | 6.55 ms / 6.34 ms |
+| `-q '[A-Z]+_RESUME' linux` | 260.07 ms / 256.66 ms | 261.64 ms / 260.87 ms | 8.87 ms / 8.03 ms |
+
 ## Rejected quiet byte-literal continuation after probe budget — 2026-06-01
 
 A Swift-only probe changed recursive quiet byte-literal search so that, after
