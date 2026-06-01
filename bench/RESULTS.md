@@ -8,6 +8,23 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected fixed-PCRE first-match split — 2026-05-31
+
+A Swift-only probe split fixed-lookaround PCRE quiet/path-only searches out of
+the general line-tracking loop, so `-P -q` and `-P --files-with-matches` could
+return after the first verified byte match without initializing newline state.
+The probe preserved stdout/stderr/status for positive lookbehind path-only,
+quiet, no-match path-only, and a space-containing lookbehind prefix, but the
+extra loop shape was slower on the hot positive path and was backed out.
+
+A 120-run shell-free A/B against checkpoint `e7af0c5` measured:
+
+| Command | Probe Swift | Baseline Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `-P --files-with-matches '(?<=prefix)needle'` | 3.050 ms mean / 2.989 ms median | 2.720 ms / 2.714 ms | 2.506 ms / 2.504 ms |
+| `-P -q '(?<=prefix)needle'` | 2.740 ms / 2.735 ms | 2.726 ms / 2.702 ms | 2.949 ms / 2.807 ms |
+| `-P --files-without-match '(?<=prefix)needle'` | 2.701 ms / 2.684 ms | 2.803 ms / 2.715 ms | 8.146 ms / 8.116 ms |
+
 ## Rejected ordered file-list chunk drain — 2026-05-31
 
 A Swift-only probe let the ignore-aware Darwin `--files` data writer consume
