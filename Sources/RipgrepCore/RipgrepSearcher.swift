@@ -6924,7 +6924,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         ) {
             return FileSearchOutcome(result: fastResult)
         }
-        if let fastResult = searchRawASCIIUppercaseRunSuffixStatsContents(
+        if let fastResult = searchRawASCIIRunSuffixStatsContents(
             data,
             fileURL: fileURL,
             options: options
@@ -7857,7 +7857,18 @@ public struct RipgrepSearcher: @unchecked Sendable {
         var bytesSearched: Int
     }
 
-    private func searchRawASCIIUppercaseRunSuffixStatsContents(
+    private struct ASCIIRunSuffixStatsPattern {
+        enum Run {
+            case uppercasePlus
+            case exactUppercase(Int)
+            case exactByte(UInt8, Int)
+        }
+
+        let run: Run
+        let suffix: [UInt8]
+    }
+
+    private func searchRawASCIIRunSuffixStatsContents(
         _ data: Data,
         fileURL: URL,
         options: RipgrepOptions
@@ -7887,16 +7898,23 @@ public struct RipgrepSearcher: @unchecked Sendable {
               options.replacement == nil,
               options.maxColumns == nil,
               options.maxCount == nil,
-              !data.starts(with: [0xEF, 0xBB, 0xBF]),
               !data.starts(with: [0xFF, 0xFE]),
               !data.starts(with: [0xFE, 0xFF]),
-              let suffix = asciiUppercaseRunSuffixPattern(options: options) else {
+              let fastPath = asciiRunSuffixStatsPattern(options: options) else {
             return nil
         }
+        let suffix = fastPath.suffix
 
         let dataCount = data.count
-        guard dataCount > suffix.count else {
-            return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: dataCount, searched: true)
+        let contentStart = data.starts(with: [0xEF, 0xBB, 0xBF]) ? 3 : 0
+        let searchableCount = dataCount - contentStart
+        guard searchableCount > suffix.count else {
+            return SearchFileResult(
+                fileURL: fileURL,
+                matches: [],
+                bytesSearched: searchableCount,
+                searched: true
+            )
         }
 
         return data.withUnsafeBytes { rawBuffer -> SearchFileResult? in
@@ -7906,8 +7924,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
             }
 
             let newline = UInt8(ascii: "\n")
-            var searchOffset = 0
-            var lastMatchEnd = 0
+            var searchOffset = contentStart
+            var lastMatchEnd = contentStart
             var lastMatchedLineStart: Int?
             var matchedLines = 0
             var matches = 0
@@ -7930,33 +7948,51 @@ public struct RipgrepSearcher: @unchecked Sendable {
 
                 let suffixStart = baseAddress.distance(to: foundPointer)
                 var lineStart = suffixStart
-                while lineStart > 0, bytes[lineStart - 1] != newline {
+                while lineStart > contentStart, bytes[lineStart - 1] != newline {
                     lineStart -= 1
                 }
-                let newlinePointer = memchr(
-                    foundPointer,
-                    Int32(newline),
-                    dataCount - suffixStart
-                )
-                let lineEnd = newlinePointer.map {
-                    baseAddress.distance(to: $0.assumingMemoryBound(to: UInt8.self))
-                } ?? dataCount
 
-                var lineOffset = lineStart
-                while lineOffset < lineEnd {
-                    if bytes[lineOffset] >= 0x80 {
-                        return nil
+                let matchStart: Int?
+                switch fastPath.run {
+                case .uppercasePlus:
+                    var runStart = suffixStart
+                    while runStart > lineStart,
+                          isASCIIUppercase(bytes[runStart - 1]) {
+                        runStart -= 1
                     }
-                    lineOffset += 1
+                    let start = max(runStart, lastMatchEnd)
+                    matchStart = suffixStart > start ? start : nil
+                case .exactUppercase(let count):
+                    let start = suffixStart - count
+                    if start >= lineStart,
+                       start >= lastMatchEnd,
+                       asciiRunMatches(
+                        bytes: bytes,
+                        start: start,
+                        end: suffixStart,
+                        predicate: isASCIIUppercase
+                       ) {
+                        matchStart = start
+                    } else {
+                        matchStart = nil
+                    }
+                case .exactByte(let byte, let count):
+                    let start = suffixStart - count
+                    if start >= lineStart,
+                       start >= lastMatchEnd,
+                       asciiRunMatches(
+                        bytes: bytes,
+                        start: start,
+                        end: suffixStart,
+                        predicate: { $0 == byte }
+                       ) {
+                        matchStart = start
+                    } else {
+                        matchStart = nil
+                    }
                 }
 
-                var runStart = suffixStart
-                while runStart > lineStart,
-                      isASCIIUppercase(bytes[runStart - 1]) {
-                    runStart -= 1
-                }
-                let matchStart = max(runStart, lastMatchEnd)
-                if suffixStart > matchStart {
+                if matchStart != nil {
                     matches += 1
                     if lastMatchedLineStart != lineStart {
                         matchedLines += 1
@@ -7972,7 +8008,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             return SearchFileResult(
                 fileURL: fileURL,
                 matches: [],
-                bytesSearched: dataCount,
+                bytesSearched: searchableCount,
                 searched: true,
                 supplementalMatchedLines: matchedLines,
                 supplementalMatches: matches
@@ -10202,22 +10238,52 @@ public struct RipgrepSearcher: @unchecked Sendable {
         return Array(literal.utf8)
     }
 
-    private func asciiUppercaseRunSuffixPattern(options: RipgrepOptions) -> [UInt8]? {
+    private func asciiRunSuffixStatsPattern(options: RipgrepOptions) -> ASCIIRunSuffixStatsPattern? {
         guard options.effectivePatterns.count == 1,
               var pattern = options.effectivePatterns.first else {
             return nil
         }
-        let prefix = "[A-Z]+"
-        guard pattern.hasPrefix(prefix) else {
+        let run: ASCIIRunSuffixStatsPattern.Run
+        if pattern.hasPrefix("[A-Z]+") {
+            pattern.removeFirst("[A-Z]+".count)
+            run = .uppercasePlus
+        } else if pattern.hasPrefix("[A-Z]{") {
+            pattern.removeFirst("[A-Z]{".count)
+            guard let parsed = parsePositiveDecimalPrefix(from: &pattern),
+                  pattern.hasPrefix("}") else {
+                return nil
+            }
+            pattern.removeFirst()
+            run = .exactUppercase(parsed)
+        } else if pattern.utf8.count >= 5,
+                  pattern.hasPrefix("[") {
+            let bytes = Array(pattern.utf8)
+            guard bytes[0] == UInt8(ascii: "["),
+                  bytes[2] == UInt8(ascii: "]"),
+                  bytes[1] >= UInt8(ascii: "A"),
+                  bytes[1] <= UInt8(ascii: "Z") else {
+                return nil
+            }
+            pattern.removeFirst(3)
+            guard pattern.hasPrefix("{") else {
+                return nil
+            }
+            pattern.removeFirst()
+            guard let parsed = parsePositiveDecimalPrefix(from: &pattern),
+                  pattern.hasPrefix("}") else {
+                return nil
+            }
+            pattern.removeFirst()
+            run = .exactByte(bytes[1], parsed)
+        } else {
             return nil
         }
-        pattern.removeFirst(prefix.count)
         guard let literal = RegexLiteralParser.literal(fromPlainRegexPattern: pattern),
               !literal.isEmpty,
               literal.utf8.allSatisfy({ $0 < 0x80 && $0 != UInt8(ascii: "\n") }) else {
             return nil
         }
-        return Array(literal.utf8)
+        return ASCIIRunSuffixStatsPattern(run: run, suffix: Array(literal.utf8))
     }
 
     private func surroundingWordsLiteralPattern(options: RipgrepOptions) -> [UInt8]? {
@@ -10348,6 +10414,40 @@ public struct RipgrepSearcher: @unchecked Sendable {
 
     private func isASCIIUppercase(_ byte: UInt8) -> Bool {
         byte >= UInt8(ascii: "A") && byte <= UInt8(ascii: "Z")
+    }
+
+    private func asciiRunMatches(
+        bytes: UnsafeBufferPointer<UInt8>,
+        start: Int,
+        end: Int,
+        predicate: (UInt8) -> Bool
+    ) -> Bool {
+        guard start < end else {
+            return false
+        }
+        for index in start..<end where !predicate(bytes[index]) {
+            return false
+        }
+        return true
+    }
+
+    private func parsePositiveDecimalPrefix(from pattern: inout String) -> Int? {
+        var value = 0
+        var consumed = 0
+        while let first = pattern.utf8.first,
+              first >= UInt8(ascii: "0"),
+              first <= UInt8(ascii: "9") {
+            value = value * 10 + Int(first - UInt8(ascii: "0"))
+            guard value <= 1024 else {
+                return nil
+            }
+            pattern.removeFirst()
+            consumed += 1
+        }
+        guard consumed > 0, value > 0 else {
+            return nil
+        }
+        return value
     }
 
     private func streamingByteLiteralFastPath(
