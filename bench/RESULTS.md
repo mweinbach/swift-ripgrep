@@ -8,6 +8,53 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Utility fast path and direct generated-asset output — 2026-06-01
+
+Single-purpose utility invocations now bypass the normal parser/environment and
+search setup when their output cannot be affected by later flags:
+`-h`, `--help`, `-V`, `--version`, `--pcre2-version`, exact
+`--generate KIND`, and exact `--generate=KIND`. Generated help/man/completion
+assets are written as bundled `Data` on the executable path instead of being
+decoded to `String` and re-encoded to UTF-8. Regular search and file-listing
+commands first pass a small first-argument guard before entering the fast path,
+so non-utility commands avoid the utility dispatcher.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint `157dac5` for short and
+  long help, short and long version, `--pcre2-version`, all generated asset
+  modes, invalid/missing generate controls, `--generate man` followed by search
+  flags, `--no-config --version`, `--version extra`, `--help=foo`, and
+  `--files` guard output.
+- The default build remains Swift-only; the optional C target is still only
+  included when `SWIFT_RIPGREP_USE_C_SHIM=1` and
+  `SWIFT_RIPGREP_NO_C_SHIM` is not set.
+
+A 180-run hyperfine A/B against checkpoint `157dac5`, with 30 warmups,
+measured:
+
+| Command | Current Swift | Previous Swift |
+| --- | ---: | ---: |
+| `-h` | 5.35 ms mean / 5.30 ms median | 8.68 ms / 8.65 ms |
+| `--help` | 5.43 ms / 5.45 ms | 8.89 ms / 8.82 ms |
+| `--generate=man` | 5.50 ms / 5.45 ms | 9.41 ms / 8.71 ms |
+| `--generate complete-bash` | 5.71 ms / 5.66 ms | 8.57 ms / 8.47 ms |
+| `--version` | 3.03 ms / 3.01 ms | 3.16 ms / 3.14 ms |
+| `--files linux` guardrail | 75.20 ms / 74.71 ms | 76.59 ms / 75.75 ms |
+
+Rejected companion probes:
+
+- Removing the stdout buffer allocation from the multi-literal stats-only line
+  counter preserved output but was flat-to-slower. A 20-run A/B measured
+  overlapping mixed quiet stats at 81.1 ms for the probe versus 80.9 ms
+  baseline, and non-overlapping mixed quiet stats at 43.3 ms versus 42.7 ms.
+- Pre-checking overlapping quiet-stats files with Foundation literal searches
+  and then running the existing match-count and matched-line scans concurrently
+  preserved output, but over-scanned the all-absent guardrail and regressed the
+  target. A 24-run A/B measured the mixed overlap row at 124.0 ms versus
+  81.6 ms baseline, reversed literal order at 124.6 ms versus 82.2 ms, and the
+  all-absent overlap row at 47.5 ms versus 14.8 ms.
+
 ## Explicit-file Greek UTF-8 byte proof — 2026-06-01
 
 The raw `\p{Greek}` path now uses a validated UTF-8 byte-range proof only when

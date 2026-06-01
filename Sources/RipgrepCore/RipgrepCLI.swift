@@ -268,6 +268,48 @@ public enum RipgrepCLI {
         }
     }
 
+    public static func runUtilityFastPath(
+        arguments: [String],
+        stdout: ((String) -> Void)? = nil
+    ) -> Int32? {
+        if arguments.count == 2, arguments[0] == "--generate" {
+            guard let mode = GenerateMode(rawValue: arguments[1]) else {
+                return nil
+            }
+            emitGeneratedAsset(for: mode, stdout: stdout)
+            return 0
+        }
+        guard arguments.count == 1 else {
+            return nil
+        }
+        switch arguments[0] {
+        case "-h":
+            emitGeneratedAsset(named: "rg.help.short", stdout: stdout, fallback: usage())
+            return 0
+        case "--help":
+            emitGeneratedAsset(named: "rg.help.long", stdout: stdout, fallback: usage())
+            return 0
+        case "-V":
+            emitStdout("ripgrep \(version) (rev \(revision))", stdout: stdout)
+            return 0
+        case "--version":
+            emitStdoutVerbatim(longVersionOutput, stdout: stdout)
+            return 0
+        case "--pcre2-version":
+            emitStdout(PCRE2Backend.versionDescription, stdout: stdout)
+            return 0
+        case let value where value.hasPrefix("--generate="):
+            let raw = String(value.dropFirst("--generate=".count))
+            guard let mode = GenerateMode(rawValue: raw) else {
+                return nil
+            }
+            emitGeneratedAsset(for: mode, stdout: stdout)
+            return 0
+        default:
+            return nil
+        }
+    }
+
     private static func appendUTF8(_ string: String, to data: inout Data) {
         var string = string
         string.withUTF8 { bytes in
@@ -301,6 +343,29 @@ public enum RipgrepCLI {
             return
         }
         writeStdout(Data(output.utf8))
+    }
+
+    private static func emitGeneratedAsset(
+        for mode: GenerateMode,
+        stdout: ((String) -> Void)?
+    ) {
+        if stdout == nil, let data = generatedAssetData(for: mode) {
+            writeStdout(data)
+            return
+        }
+        emitStdoutVerbatim(generate(mode), stdout: stdout)
+    }
+
+    private static func emitGeneratedAsset(
+        named resourceName: String,
+        stdout: ((String) -> Void)?,
+        fallback: @autoclosure () -> String
+    ) {
+        if stdout == nil, let data = generatedAssetData(named: resourceName) {
+            writeStdout(data)
+            return
+        }
+        emitStdoutVerbatim(generatedAsset(named: resourceName) ?? fallback(), stdout: stdout)
     }
 
     private static func configureStdoutBuffering(
@@ -585,6 +650,13 @@ public enum RipgrepCLI {
     }
 
     private static func generatedAsset(for mode: GenerateMode) -> String? {
+        guard let data = generatedAssetData(for: mode) else {
+            return nil
+        }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private static func generatedAssetData(for mode: GenerateMode) -> Data? {
         let resourceName: String
         switch mode {
         case .man:
@@ -598,14 +670,21 @@ public enum RipgrepCLI {
         case .completePowerShell:
             resourceName = "_rg.ps1"
         }
-        return generatedAsset(named: resourceName)
+        return generatedAssetData(named: resourceName)
     }
 
     private static func generatedAsset(named resourceName: String) -> String? {
+        guard let data = generatedAssetData(named: resourceName) else {
+            return nil
+        }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private static func generatedAssetData(named resourceName: String) -> Data? {
         guard let url = Bundle.module.url(forResource: resourceName, withExtension: nil) else {
             return nil
         }
-        return try? String(contentsOf: url, encoding: .utf8)
+        return try? Data(contentsOf: url)
     }
 
     private static let completionWords = [

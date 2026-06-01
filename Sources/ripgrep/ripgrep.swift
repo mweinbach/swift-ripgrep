@@ -18,6 +18,10 @@ import CRT
 struct RipgrepCommand {
     static func main() {
         let arguments = Array(CommandLine.arguments.dropFirst())
+        if arguments.first.map(mayUseUtilityFastPath) == true,
+           let exitCode = RipgrepCLI.runUtilityFastPath(arguments: arguments) {
+            exit(exitCode)
+        }
         var utilityModeSkipsSwiftPreflight = false
         #if canImport(Darwin) && canImport(CRipgrepPlatform)
         if let exitCode = runDarwinLiteralPreflight(arguments: arguments) {
@@ -37,6 +41,15 @@ struct RipgrepCommand {
             standardInputIsReadable: utilityModeSkipsSwiftPreflight ? false : standardInputIsReadable()
         )
         exit(exitCode)
+    }
+
+    private static func mayUseUtilityFastPath(_ argument: String) -> Bool {
+        switch argument {
+        case "-h", "--help", "-V", "--version", "--pcre2-version", "--generate":
+            return true
+        default:
+            return argument.hasPrefix("--generate=")
+        }
     }
 
     private static func standardInputIsReadable() -> Bool {
