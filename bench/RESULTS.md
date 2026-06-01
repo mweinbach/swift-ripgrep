@@ -8,6 +8,38 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Quiet-stats uppercase-run suffix counter — 2026-06-01
+
+Quiet stats searches for exact Unicode-mode regexes shaped like
+`[A-Z]+<literal>` now use a Swift byte counter that scans suffix occurrences
+and verifies the preceding uppercase run without decoding every candidate line.
+The path is deliberately stats-only and declines byte-semantics/no-unicode,
+BOM, non-ASCII candidate-line, max-count, JSON, context, replacement, and
+formatting modes back to the existing matcher.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint `6b80072` and Rust for
+  recursive Linux `--stats -q '[A-Z]+_RESUME'` and the `[Z]{3}_RESUME` miss
+  after normalizing stats elapsed-time lines.
+- Focused small-fixture parity covered adjacent suffixes, overlapping-looking
+  suffixes, a non-ASCII candidate line fallback, and UTF-8 BOM byte accounting.
+- Added a Swift regression test for recursive quiet stats counts and no-match
+  summaries.
+- The default build remains Swift-only; this change adds no C shim or custom C
+  code.
+
+A 2-run hyperfine A/B against checkpoint `6b80072`, with 1 warmup, measured:
+
+| Command | Current Swift | Previous Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `--stats -q '[A-Z]+_RESUME' linux` | 1.662 s mean / 1.662 s median | 18.831 s / 18.831 s | 2.648 s / 2.648 s |
+| `--stats -q '[Z]{3}_RESUME' linux` guardrail | 17.861 s / 17.861 s | 17.809 s / 17.809 s | 2.860 s / 2.860 s |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/uppercase-run-suffix-stats-positive-1780312968.json` and
+`/tmp/swift-rg-bench/uppercase-run-suffix-stats-miss-1780313052.json`.
+
 ## Greek script large-buffer candidate proof — 2026-06-01
 
 Recursive exact `\p{Greek}` searches now use the Swift lead-byte candidate

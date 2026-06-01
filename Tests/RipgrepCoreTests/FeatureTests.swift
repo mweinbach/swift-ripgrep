@@ -64,6 +64,36 @@ struct FeatureTests {
         #expect(errors.isEmpty)
     }
 
+    @Test("quiet stats uppercase run suffix regex counts recursively")
+    func quietStatsUppercaseRunSuffixRegexCountsRecursively() throws {
+        let root = try TemporaryDirectory()
+        try root.write("""
+        ABC_RESUME x
+        ABC_RESUMEDEF_RESUME
+        ABC_RESUME_RESUME
+        no
+        """, to: "a.txt")
+        try root.write("é ABC_RESUME\nXYZ_RESUME\n", to: "nested/nonascii.txt")
+        try root.write(Data([0xEF, 0xBB, 0xBF] + Array("ABC_RESUME\n".utf8)), to: "nested/bom.txt")
+
+        let statsQuiet = try run(["--stats", "-q", "[A-Z]+_RESUME", root.url.path])
+        #expect(statsQuiet.contains("7 matches"))
+        #expect(statsQuiet.contains("6 matched lines"))
+        #expect(statsQuiet.contains("3 files contained matches"))
+        #expect(statsQuiet.contains("3 files searched"))
+        #expect(statsQuiet.contains("0 bytes printed"))
+        #expect(statsQuiet.contains("90 bytes searched"))
+
+        let missStatsQuiet = runWithExitCode(
+            ["--stats", "-q", "[Z]{3}_RESUME", root.url.path],
+            expectedExitCode: 1
+        )
+        #expect(missStatsQuiet.contains("0 matches"))
+        #expect(missStatsQuiet.contains("0 matched lines"))
+        #expect(missStatsQuiet.contains("0 files contained matches"))
+        #expect(missStatsQuiet.contains("3 files searched"))
+    }
+
     @Test("quiet literal recursive summaries count exact matches")
     func quietLiteralRecursiveSummariesCountExactMatches() throws {
         let root = try TemporaryDirectory()
