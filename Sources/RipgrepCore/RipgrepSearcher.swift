@@ -8585,10 +8585,25 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     }
                     if isGreekScriptScalarValue(scalar) {
                         hasMatch = true
+                        break
                     }
                     offset += length
                 }
                 return (hasMatch, true)
+            }
+
+            let bufferStatus = greekScriptLineStatus(start: 0, end: dataCount)
+            if bufferStatus.validUTF8, !bufferStatus.hasMatch {
+                return SearchFileResult(
+                    fileURL: fileURL,
+                    matches: [],
+                    bytesSearched: data.count,
+                    searched: true
+                )
+            }
+            guard bufferStatus.validUTF8 else {
+                failedDecode = true
+                return nil
             }
 
             func scanLine(end lineEnd: Int, outputEnd: Int, terminator: String) -> Bool {

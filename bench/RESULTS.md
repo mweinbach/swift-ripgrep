@@ -8,6 +8,49 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Greek-script whole-buffer absence proof — 2026-06-01
+
+The Darwin raw `\p{Greek}` path now reuses the UTF-8 scalar scan as a
+whole-buffer absence proof before the per-line matcher loop. Valid UTF-8 files
+with no Greek scalar return immediately, and files with an early Greek scalar
+fall into the existing line loop as soon as that scalar is found. This keeps the
+invalid UTF-8 fallback and uses only Swift byte/scalar processing.
+
+Validation:
+
+- Current Swift output/status matched checkpoint `5319f7d` and Rust for sorted
+  Linux `-n`, `-n -i`, `-l`, `--stats -l`, and `--json -q` after normalizing
+  timing fields.
+- Current Swift output/status matched checkpoint `5319f7d` and Rust for
+  64 MiB non-Greek Unicode no-match, 64 MiB early-Greek Unicode first-match,
+  and a small invalid-UTF8 Greek edge across matching-lines, quiet, path-only,
+  and stats controls.
+
+A 12-run hyperfine A/B on the 64 MiB non-Greek Unicode no-match fixture
+measured:
+
+| Command | Current Swift | Previous Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `-n '\p{Greek}' non-greek-unicode-64m.txt` | 134.0 ms mean / 111.1-149.9 ms range | 151.7 ms / 145.7-157.9 ms | 29.1 ms / 28.7-29.6 ms |
+| `-n -i '\p{Greek}' non-greek-unicode-64m.txt` | 134.5 ms / 127.6-143.8 ms | 152.6 ms / 142.1-165.4 ms | 28.9 ms / 28.7-29.7 ms |
+
+Linux corpus guardrails also improved because non-matching files bypass the line
+loop:
+
+| Command | Current Swift | Previous Swift |
+| --- | ---: | ---: |
+| `-n '\p{Greek}' linux` | 2.094 s mean / user 1.385 s | 2.255 s / user 2.071 s |
+| `-n -i '\p{Greek}' linux` | 2.165 s / user 1.411 s | 2.468 s / user 2.165 s |
+| `-l '\p{Greek}' linux` | 2.209 s | 2.280 s |
+
+On a 64 MiB fixture with an early Greek scalar, the same early scalar break
+removes the old full-line scan cost for first-match modes:
+
+| Command | Current Swift | Previous Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `-q '\p{Greek}' early-greek-unicode-64m.txt` | 12.4 ms mean / 11.5-14.6 ms range | 10.993 s / 10.882-11.214 s | 4.1 ms / 3.3-5.2 ms |
+| `-l '\p{Greek}' early-greek-unicode-64m.txt` | 39.9 ms / 35.0-55.4 ms | 11.043 s / 10.917-11.441 s | 4.3 ms / 3.6-5.3 ms |
+
 ## Greek-script Unicode rejection prefilter — 2026-06-01
 
 The Darwin raw `\p{Greek}` / `-i \p{Greek}` path now validates UTF-8 and scans
