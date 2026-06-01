@@ -503,24 +503,19 @@ public enum SwiftDarwinLiteralPreflight {
         guard let data = mappedPreflightData(path: path),
               !hasBinaryDetectionPrefix(data),
               !containsNULByte(data),
-              let totalMatches = countMultiLiteralOnlyMatches(in: data, literals: rawLiterals) else {
+              let counts = countMultiLiteralOnlyMatchCounts(in: data, literals: rawLiterals) else {
             return nil
         }
-        guard totalMatches > 0 else {
+        guard counts.totalMatches > 0 else {
             return (totalMatches: 0, matchedLines: 0, bytesSearched: data.count)
         }
-        guard let result = multiLiteralResult(
-            path: path,
-            literals: rawLiterals,
-            maxCount: nil,
-            emitLines: false
-        ), result.status >= 0 else {
+        guard !hasTextEncodingBOM(data) else {
             return nil
         }
         return (
-            totalMatches: totalMatches,
-            matchedLines: result.matched_line_count,
-            bytesSearched: result.bytes_searched
+            totalMatches: counts.totalMatches,
+            matchedLines: counts.matchedLines,
+            bytesSearched: data.count
         )
     }
 
@@ -4079,6 +4074,23 @@ public enum SwiftDarwinLiteralPreflight {
         }
     }
 
+    private static func hasTextEncodingBOM(_ data: Data) -> Bool {
+        if data.count >= 3,
+           data[data.startIndex] == 0xEF,
+           data[data.index(data.startIndex, offsetBy: 1)] == 0xBB,
+           data[data.index(data.startIndex, offsetBy: 2)] == 0xBF {
+            return true
+        }
+        if data.count >= 2 {
+            let second = data[data.index(data.startIndex, offsetBy: 1)]
+            if data[data.startIndex] == 0xFF && second == 0xFE
+                || data[data.startIndex] == 0xFE && second == 0xFF {
+                return true
+            }
+        }
+        return false
+    }
+
     private static func containsNonASCIIByte(_ data: Data) -> Bool {
         return data.withUnsafeBytes { (rawData: UnsafeRawBufferPointer) -> Bool in
             guard let rawBase = rawData.baseAddress else {
@@ -7123,6 +7135,13 @@ public enum SwiftDarwinLiteralPreflight {
             guard let rawBase = rawData.baseAddress else {
                 return 0
             }
+            if maxCount == nil {
+                return rgSwiftDarwinCountMultiLiteralOnlyMatches(
+                    rawBase.assumingMemoryBound(to: UInt8.self),
+                    haystackLength: data.count,
+                    literals: literals
+                )
+            }
             return rgSwiftDarwinWriteMultiLiteralOnlyMatches(
                 rawBase.assumingMemoryBound(to: UInt8.self),
                 haystackLength: data.count,
@@ -7135,6 +7154,32 @@ public enum SwiftDarwinLiteralPreflight {
                 linePrefix: [],
                 headingPrefix: [],
                 emitMatches: false
+            )
+        }
+    }
+
+    private static func countMultiLiteralOnlyMatchCounts(
+        in data: Data,
+        literals rawLiterals: [[UInt8]],
+        maxCount: Int? = nil
+    ) -> LiteralMatchedLineAndMatchCounts? {
+        guard let literals = distinctExactLineLiterals(rawLiterals),
+              !literals.isEmpty,
+              maxCount.map({ $0 > 0 }) ?? true else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return LiteralMatchedLineAndMatchCounts(matchedLines: 0, totalMatches: 0)
+        }
+        return data.withUnsafeBytes { rawData -> LiteralMatchedLineAndMatchCounts? in
+            guard let rawBase = rawData.baseAddress else {
+                return LiteralMatchedLineAndMatchCounts(matchedLines: 0, totalMatches: 0)
+            }
+            return rgSwiftDarwinCountMultiLiteralOnlyMatchesAndLines(
+                rawBase.assumingMemoryBound(to: UInt8.self),
+                haystackLength: data.count,
+                literals: literals,
+                maxCount: maxCount ?? Int.max
             )
         }
     }
@@ -10662,6 +10707,154 @@ private func rgSwiftDarwinWriteMultiLiteralOnlyMatches(
             return nil
         }
     }
+    return matchCount
+}
+
+private func rgSwiftDarwinCountMultiLiteralOnlyMatchesAndLines(
+    _ base: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    literals: [[UInt8]],
+    maxCount: Int
+) -> LiteralMatchedLineAndMatchCounts? {
+    guard maxCount > 0 else {
+        return nil
+    }
+    guard !literals.isEmpty else {
+        return LiteralMatchedLineAndMatchCounts(matchedLines: 0, totalMatches: 0)
+    }
+
+    func nextCandidate(literalIndex: Int, from offset: Int) -> (start: Int, literalIndex: Int) {
+        let safeOffset = min(offset, haystackLength)
+        let literal = literals[literalIndex]
+        guard literal.count <= haystackLength - safeOffset else {
+            return (Int.max, literalIndex)
+        }
+        let found = literal.withUnsafeBufferPointer { literalBuffer in
+            rg_memmem_simple(
+                base.advanced(by: safeOffset),
+                haystackLength - safeOffset,
+                literalBuffer.baseAddress,
+                literalBuffer.count
+            )
+        }
+        guard let found else {
+            return (Int.max, literalIndex)
+        }
+        return (base.distance(to: found), literalIndex)
+    }
+
+    func earliestCandidateIndex(in candidates: [(start: Int, literalIndex: Int)]) -> Int? {
+        var selectedIndex: Int?
+        var selectedStart = Int.max
+        for index in candidates.indices where candidates[index].start < selectedStart {
+            selectedStart = candidates[index].start
+            selectedIndex = index
+        }
+        return selectedStart == Int.max ? nil : selectedIndex
+    }
+
+    var candidates = literals.indices.map {
+        nextCandidate(literalIndex: $0, from: 0)
+    }
+    var matchCount = 0
+    var matchedLineCount = 0
+    var selectedLineEnd = -1
+
+    while let candidateIndex = earliestCandidateIndex(in: candidates) {
+        let matchStart = candidates[candidateIndex].start
+        guard matchStart < haystackLength else {
+            break
+        }
+        let literalLength = literals[candidates[candidateIndex].literalIndex].count
+        let nextSearchOffset = matchStart + literalLength
+        if matchStart >= selectedLineEnd {
+            guard matchedLineCount < maxCount else {
+                break
+            }
+            matchedLineCount += 1
+            selectedLineEnd = rgSwiftDarwinNextLineStart(
+                base: base,
+                haystackLength: haystackLength,
+                from: matchStart
+            )
+        }
+        matchCount += 1
+
+        for index in candidates.indices where candidates[index].start < nextSearchOffset {
+            candidates[index] = nextCandidate(
+                literalIndex: candidates[index].literalIndex,
+                from: nextSearchOffset
+            )
+        }
+    }
+
+    return LiteralMatchedLineAndMatchCounts(
+        matchedLines: matchedLineCount,
+        totalMatches: matchCount
+    )
+}
+
+private func rgSwiftDarwinCountMultiLiteralOnlyMatches(
+    _ base: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    literals: [[UInt8]]
+) -> Int? {
+    guard !literals.isEmpty else {
+        return 0
+    }
+
+    func nextCandidate(literalIndex: Int, from offset: Int) -> (start: Int, literalIndex: Int) {
+        let safeOffset = min(offset, haystackLength)
+        let literal = literals[literalIndex]
+        guard literal.count <= haystackLength - safeOffset else {
+            return (Int.max, literalIndex)
+        }
+        let found = literal.withUnsafeBufferPointer { literalBuffer in
+            rg_memmem_simple(
+                base.advanced(by: safeOffset),
+                haystackLength - safeOffset,
+                literalBuffer.baseAddress,
+                literalBuffer.count
+            )
+        }
+        guard let found else {
+            return (Int.max, literalIndex)
+        }
+        return (base.distance(to: found), literalIndex)
+    }
+
+    func earliestCandidateIndex(in candidates: [(start: Int, literalIndex: Int)]) -> Int? {
+        var selectedIndex: Int?
+        var selectedStart = Int.max
+        for index in candidates.indices where candidates[index].start < selectedStart {
+            selectedStart = candidates[index].start
+            selectedIndex = index
+        }
+        return selectedStart == Int.max ? nil : selectedIndex
+    }
+
+    var candidates = literals.indices.map {
+        nextCandidate(literalIndex: $0, from: 0)
+    }
+    var matchCount = 0
+
+    while let candidateIndex = earliestCandidateIndex(in: candidates) {
+        let matchStart = candidates[candidateIndex].start
+        guard matchStart < haystackLength else {
+            break
+        }
+        let literalLength = literals[candidates[candidateIndex].literalIndex].count
+        let nextSearchOffset = matchStart + literalLength
+        matchCount += 1
+
+        for index in candidates.indices where candidates[index].start < nextSearchOffset {
+            candidates[index] = nextCandidate(
+                literalIndex: candidates[index].literalIndex,
+                from: nextSearchOffset
+            )
+        }
+    }
+
     return matchCount
 }
 

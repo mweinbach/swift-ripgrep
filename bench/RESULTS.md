@@ -8,6 +8,40 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Overlapping repeated-literal quiet-stats single-pass counts — 2026-06-01
+
+Overlapping repeated-`-e` `--stats -q` explicit-file summaries now collect
+leftmost-only-match totals and matched-line totals in one mapped-file pass. The
+previous path counted leftmost visible matches, then reopened/remapped matched
+files through the line-emitting multi-literal helper solely to recover the
+matched-line count. Unlimited overlapping `--count-matches` keeps a
+count-only pass so it does not pay for line-boundary bookkeeping.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint `4b5044b` and Rust for
+  mixed overlapping `--stats -q`, reversed repeated-pattern order, all-absent
+  overlapping `--stats -q`, non-overlapping mixed `--stats -q`, overlapping
+  `--count-matches`, and bounded overlapping `-m2 --count-matches` after
+  normalizing only stats elapsed-time lines.
+- The default build remains Swift-only; this change only reshapes existing
+  Swift mapped-data scanners and does not enable the optional C shim.
+
+An 80-run hyperfine A/B against checkpoint `4b5044b`, with 10 warmups,
+measured:
+
+| Command | Current Swift | Previous Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `--stats -q -e missingliteral -e literal no-match-ascii-46m.txt match-ascii-46m.txt` | 37.38 ms mean / 36.92 ms median | 79.47 ms / 79.11 ms | 51.60 ms / 51.54 ms |
+| `--stats -q -e absentliteral -e otherabsent ...` | 14.07 ms / 13.58 ms | 13.69 ms / 13.64 ms | not remeasured in this pass |
+| `--stats -q -e missingliteral -e absentliteral ...` | 44.00 ms / 43.20 ms | 41.79 ms / 41.63 ms | not remeasured in this pass |
+| `--count-matches -e missingliteral -e literal match-ascii-46m.txt` | 30.70 ms / 30.62 ms | 30.08 ms / 30.05 ms | 48.04 ms / 47.50 ms |
+
+An order-flipped 100-run guardrail pass measured non-overlapping mixed stats
+as flat: current 43.12 ms mean / 42.58 ms median versus previous 43.18 ms /
+42.89 ms. The same pass kept overlapping `--count-matches` close but slightly
+slower: current 31.02 ms / 30.89 ms versus previous 30.30 ms / 30.24 ms.
+
 ## Utility fast path and direct generated-asset output — 2026-06-01
 
 Single-purpose utility invocations now bypass the normal parser/environment and
