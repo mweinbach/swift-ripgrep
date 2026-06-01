@@ -6212,7 +6212,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         options: RipgrepOptions
     ) throws -> [SearchedHaystack] {
         let stopAfterFirstMatch = canStopSearchAfterFirstMatch(options: options)
-        let workerCount = effectiveWorkerCount(options: options)
+        let workerCount = effectiveWorkerCount(matcher: matcher, options: options)
         guard workerCount > 1, haystacks.count > 1 else {
             var results: [SearchedHaystack] = []
             results.reserveCapacity(stopAfterFirstMatch ? min(haystacks.count, 1) : haystacks.count)
@@ -6258,12 +6258,13 @@ public struct RipgrepSearcher: @unchecked Sendable {
             && options.maxCount == nil
     }
 
-    private func effectiveWorkerCount(options: RipgrepOptions) -> Int {
+    private func effectiveWorkerCount(matcher: PatternMatcher, options: RipgrepOptions) -> Int {
         if let requested = options.threadCount {
             return requested <= 1 ? 1 : requested
         }
         #if canImport(Darwin)
-        return max(1, min(ProcessInfo.processInfo.activeProcessorCount, 4))
+        let defaultCap = matcher.wordWhitespaceSequenceFastPath() != nil && !options.quiet ? 8 : 4
+        return max(1, min(ProcessInfo.processInfo.activeProcessorCount, defaultCap))
         #else
         return max(1, min(ProcessInfo.processInfo.activeProcessorCount, 12))
         #endif

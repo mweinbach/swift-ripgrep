@@ -8,6 +8,41 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Word-whitespace recursive worker cap — 2026-06-01
+
+Recursive searches using the exact no-literal `\w{5}\s+...` fast path now use
+up to 8 Darwin file-search workers by default while keeping the existing
+4-worker cap for other recursive searches. The word/whitespace scanner spends
+more time in per-file byte classification than the literal paths and benefits
+from the extra file-level parallelism; literal rows such as `PM_RESUME` stay on
+the old cap because higher worker counts increase system time there.
+
+Validation:
+
+- Current Swift output matched checkpoint `3d151cc` byte-for-byte for Unicode
+  and `(?-u)` ASCII five-group word/whitespace line output on
+  `/tmp/swift-rg-bench/linux`.
+- Sorted current Swift output matched Rust for the same Unicode and ASCII rows.
+- The default build remains Swift-only; this change adds no C shim or custom C
+  code.
+
+A current-first 12-run hyperfine A/B against checkpoint `3d151cc`, with two
+warmups, measured:
+
+| Command | Current Swift | Checkpoint `3d151cc` | Rust |
+| --- | ---: | ---: | ---: |
+| `-n '\w{5}\s+\w{5}\s+\w{5}\s+\w{5}\s+\w{5}' linux` | 2.451 s mean / 2.433 s median | 2.687 s / 2.708 s | 3.378 s / 3.411 s |
+| `-n PM_RESUME linux` guardrail | 2.128 s / 2.036 s | 2.215 s / 2.204 s | not measured |
+
+An adjacent 8-run pass also showed the ASCII word/whitespace form improving
+from 2.556 s / 2.580 s to 2.425 s / 2.455 s. The Unicode row in that pass was
+flat/noisy, so the retained evidence is the flipped 12-run confirmation above.
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/word-worker8-confirm-1780332571.json` and
+`/tmp/swift-rg-bench/word-worker8-default-1780332384.json`. Output comparison
+artifacts are under `/tmp/swift-rg-bench/word-worker8-parity-1780332725`.
+
 ## Darwin file-list worker fanout retune — 2026-06-01
 
 The Darwin ignore-aware `--files` byte-output walker now caps root-child
