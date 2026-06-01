@@ -8,6 +8,50 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Short Swift memmem fixed-shape SIMD helpers — 2026-06-01
+
+The default no-C-shim Swift memmem fallback now routes two- and three-byte
+case-sensitive literals through fixed-shape SIMD16 helpers before the generic
+first/middle/tail scanner. The helpers keep the same Swift-only SIMD filter,
+but remove dynamic `useMiddle` and short-needle proof branches from the hot
+loop. The count-before variant used by line-number and
+`--files-without-match --stats` paths uses the same fixed-shape helpers while
+preserving newline counting before the first match.
+
+Validation:
+
+- Added a two-byte regression test alongside the existing three-byte `exa`
+  scanner test; both focused tests passed.
+- Current Swift stdout/stderr/status matched checkpoint
+  `/tmp/swift-rg-bench/baseline-current-1780354005-ripgrep` for two-byte,
+  three-byte, longer-literal, stats, and quiet controls. Rust matched exactly
+  on non-stats controls; stats controls matched after normalizing the two
+  elapsed-time lines, as the parity harness does.
+- `SWIFT_RIPGREP_PARITY=1 xcrun swift test --filter ParityHarnessTests`
+  passed.
+- A six-row official Linux smoke kept Swift faster than Rust for literal,
+  literal mmap, ignore-case literal, ignore-case mmap, literal suffix, and word
+  rows.
+
+A same-session 30-run hyperfine A/B against checkpoint `5809772`, with five
+warmups, measured:
+
+| Command | Current Swift | Checkpoint `5809772` | Rust |
+| --- | ---: | ---: | ---: |
+| `-n exa no-match-ascii-46m.txt` | 10.1 ms mean / 8.8-12.1 ms range | 11.7 ms / 10.6-13.5 ms | 9.2 ms / 8.4-10.4 ms |
+| `--stats --files-without-match exa no-match-ascii-46m.txt` | 9.2 ms / 7.9-10.6 ms | 11.7 ms / 10.4-14.4 ms | 9.0 ms / 8.0-10.7 ms |
+| `-n qz no-match-ascii-46m.txt` | 10.0 ms / 9.0-11.3 ms | 11.1 ms / 10.1-12.6 ms | 9.0 ms / 8.3-10.2 ms |
+| `-n xyz no-match-ascii-46m.txt` guardrail | 10.6 ms / 8.9-14.7 ms | 12.7 ms / 11.6-14.8 ms | 10.2 ms / 8.9-14.1 ms |
+| `-n missingliteral match-ascii-46m.txt` guardrail | 75.7 ms / 73.3-79.6 ms | 75.8 ms / 70.7-117.2 ms | not remeasured in this pass |
+| `--stats --files-without-match needle match-ascii-46m.txt` guardrail | 10.7 ms / 9.0-12.7 ms | 11.8 ms / 9.9-15.7 ms | not remeasured in this pass |
+| `-q PM_RESUME linux` guardrail | 37.8 ms / 33.9-40.5 ms | 37.6 ms / 35.5-44.3 ms | not remeasured in this pass |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/shortlit-specialized-probe-1780354300.json` and
+`/tmp/swift-rg-bench/shortlit-specialized-guard-1780354500.json`.
+The official Linux smoke summary is in
+`/tmp/swift-rg-bench/shortlit-specialized-official-1780354600/summary.md`.
+
 ## Quiet byte-literal output-order prefix probe — 2026-06-01
 
 Recursive quiet byte-literal search now tries a two-file prefix in the fast
