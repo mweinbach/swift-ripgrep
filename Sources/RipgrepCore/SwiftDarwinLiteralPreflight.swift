@@ -9590,9 +9590,6 @@ private func rgSwiftDarwinWriteLiteralBytes(
         || base[0] == 0xFE && base[1] == 0xFF) {
         return nil
     }
-    if memchr(base, 0, haystackLength) != nil {
-        return nil
-    }
     if requireASCIIHaystack,
        rgSwiftContainsNonASCIIByte(base, count: haystackLength) {
         return nil
@@ -9623,6 +9620,19 @@ private func rgSwiftDarwinWriteLiteralBytes(
     var lastEmittedLineStart = -1
     var emittedHeading = false
     var writeFailed = false
+    var declinedFastPath = false
+    var confirmedTextHaystack = false
+
+    func ensureTextHaystack() -> Bool {
+        if confirmedTextHaystack {
+            return true
+        }
+        guard memchr(base, 0, haystackLength) == nil else {
+            return false
+        }
+        confirmedTextHaystack = true
+        return true
+    }
 
     @inline(__always)
     func isASCIIBoundaryMatch(matchStart: Int, lineStart: Int, lineEnd: Int) -> Bool {
@@ -9654,6 +9664,11 @@ private func rgSwiftDarwinWriteLiteralBytes(
             }
             searchOffset = max(matchStart + 1, searchOffset + 1)
             return true
+        }
+
+        guard ensureTextHaystack() else {
+            declinedFastPath = true
+            return false
         }
 
         if lineStart != lastEmittedLineStart {
@@ -9769,7 +9784,7 @@ private func rgSwiftDarwinWriteLiteralBytes(
         }
     }
 
-    guard !writeFailed else {
+    guard !writeFailed, !declinedFastPath else {
         return nil
     }
     if emitLines {

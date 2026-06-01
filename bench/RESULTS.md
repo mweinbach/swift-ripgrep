@@ -42,6 +42,43 @@ Raw hyperfine export:
 The official subset summary is in
 `/tmp/swift-rg-bench/memmem-3byte-official-1780336523/summary.md`.
 
+## Lazy binary NUL proof for literal line output — 2026-06-01
+
+The Darwin literal line writer no longer scans the whole haystack for NUL bytes
+before searching. It now searches first and only proves the file is text before
+the first line emit. No-match literal output can therefore avoid a full binary
+detection pass, while binary files that do contain a literal still decline the
+fast path and fall back to the existing binary-output behavior before anything
+is written.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint `18c328e` and Rust for
+  `-n exa`, `-n needle`, `--count needle`, plus binary no-match and binary
+  match guards.
+- `BinaryTests` passed, covering exact literal no-match over binary inputs and
+  binary literal-match warnings.
+- The official Linux subset still had Swift faster than Rust for alternates,
+  literals, literal mmap, ignore-case literals, no-literal, suffix, Greek, and
+  word rows.
+- The default build remains Swift-only; this changes only Swift fallback
+  preflight control flow and adds no C shim or custom C code.
+
+A same-session 30-run hyperfine A/B against checkpoint `18c328e`, with three
+warmups, measured:
+
+| Command | Current Swift | Checkpoint `18c328e` | Rust |
+| --- | ---: | ---: | ---: |
+| `-n exa no-match-ascii-46m.txt` | 11.9 ms mean / 10.6-15.2 ms range | 12.7 ms / 12.2-14.5 ms | 8.5 ms / 7.9-9.5 ms |
+| `-n needle match-ascii-46m.txt` | 10.7 ms / 10.2-11.6 ms | 12.7 ms / 12.3-13.3 ms | not remeasured in this pass |
+| `--count needle match-ascii-46m.txt` guardrail | 10.3 ms / 9.2-12.7 ms | 10.3 ms / 9.4-11.1 ms | not remeasured in this pass |
+| `-n missingliteral match-ascii-46m.txt` guardrail | 70.9 ms / 69.8-72.4 ms | 71.2 ms / 69.1-73.1 ms | not remeasured in this pass |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/lazy-nul-literal-lines-confirm-1780337963.json`.
+The official subset summary is in
+`/tmp/swift-rg-bench/lazy-nul-official-1780338013/summary.md`.
+
 ## Rejected lazy newline count for literal line-number search — 2026-06-01
 
 A Swift-only prototype changed `rg_memmem_count_byte_before` to defer newline
