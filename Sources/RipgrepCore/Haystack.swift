@@ -674,6 +674,34 @@ public struct FileWalker: @unchecked Sendable {
         }
     }
 
+    func firstVisitedFastSearchFilePrefixWithMessages(
+        for options: RipgrepOptions,
+        prefixLimit: Int,
+        visitHaystack: @escaping (Haystack) -> Bool
+    ) throws -> (results: FileWalkResults, exhausted: Bool)? {
+        var visited = 0
+        var exhausted = false
+        guard let results = try fastSearchFileWalkResults(
+            for: options,
+            lexicalOrder: false,
+            visitHaystack: { haystack, haystacks in
+                guard visited < prefixLimit else {
+                    exhausted = true
+                    return true
+                }
+                visited += 1
+                if visitHaystack(haystack) {
+                    haystacks.append(haystack)
+                    return true
+                }
+                return false
+            }
+        ) else {
+            return nil
+        }
+        return (results, exhausted)
+    }
+
     func fastSearchHaystacksWithPrefixVisitMessages(
         for options: RipgrepOptions,
         prefixLimit: Int,

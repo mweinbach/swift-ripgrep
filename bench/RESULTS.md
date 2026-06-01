@@ -8,6 +8,38 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Quiet byte-literal output-order prefix probe — 2026-06-01
+
+Recursive quiet byte-literal search now tries a two-file prefix in the fast
+output order before falling back to the existing lexical first-match probe. The
+prefix is isolated: if it misses, its file/byte counters are discarded so late
+lexical hits keep the previous budget; if it sees any user-visible walker or
+search message, it also falls back to the existing lexical route. This catches
+the Linux `EXPORT_SYMBOL` hit in `block/bsg.c` without regressing the
+`PM_RESUME` path that depends on lexical order.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint
+  `/tmp/swift-rg-bench/baseline-current-1780349200-ripgrep` and Rust for
+  recursive quiet `EXPORT_SYMBOL`, `PM_RESUME`, absent literal, ASCII
+  ignore-case, and `--no-mmap` literal hits.
+- `swift build -c release` passed before benchmarking.
+- A full normal-order first-match probe was rejected: it improved
+  `EXPORT_SYMBOL -q` but regressed `PM_RESUME -q` from about 30 ms to about
+  390 ms by missing the bounded lexical hit and falling back to the slow path.
+
+A same-session 30-run hyperfine confirmation, with five warmups, measured:
+
+| Command | Current Swift | Checkpoint | Rust |
+| --- | ---: | ---: | ---: |
+| `-q EXPORT_SYMBOL linux` | 5.1 ms mean / 4.7-6.3 ms range | 25.4 ms / 24.8-26.0 ms | 4.6 ms / 4.2-6.0 ms |
+| `-q PM_RESUME linux` guardrail | 30.3 ms / 29.6-32.1 ms | 29.5 ms / 29.0-30.1 ms | not remeasured in this pass |
+| `-q ABSENT_NEEDLE_DOES_NOT_EXIST linux` guardrail | 1.007 s / 0.983-1.041 s | 989.8 ms / 970.6-1082.4 ms | not remeasured in this pass |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/quiet-isolated-prefix-confirm-1780350830.json`.
+
 ## Three-byte Swift memmem middle-byte candidate filter — 2026-06-01
 
 The default no-C-shim Swift memmem fallback now applies the middle-byte

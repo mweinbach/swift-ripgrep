@@ -488,6 +488,56 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
 
         let fileWalker = FileWalker(fileManager: fileManager).withEnvironment(environment)
+        if let quietByteLiteralFastPath {
+            // Keep this prefix isolated so a miss does not spend the lexical probe budget.
+            var prefixFilesSearched = 0
+            var prefixProbeBytes = 0
+            var prefixSearchMessages: [String] = []
+            var prefixMatchedResult: SearchFileResult?
+            func visitOutputOrderPrefix(_ haystack: Haystack) -> Bool {
+                let outcome = searchQuietByteLiteralFirstMatch(
+                    haystack,
+                    fastPath: quietByteLiteralFastPath,
+                    options: options
+                ).map {
+                    FileSearchOutcome(result: $0)
+                } ?? searchFile(haystack, matcher: matcher, options: options)
+                if outcome.result.searched {
+                    prefixFilesSearched += 1
+                }
+                prefixProbeBytes += outcome.result.bytesSearched
+                if let message = outcome.message {
+                    prefixSearchMessages.append(message)
+                }
+                guard outcome.result.hasMatch else {
+                    return false
+                }
+                prefixMatchedResult = outcome.result
+                return true
+            }
+            if let prefixWalkResults = try fileWalker.firstVisitedFastSearchFilePrefixWithMessages(
+                for: options,
+                prefixLimit: 2,
+                visitHaystack: visitOutputOrderPrefix
+            ) {
+                let prefixHadVisibleOutput = !prefixWalkResults.results.messages.isEmpty
+                    || !prefixWalkResults.results.warnings.isEmpty
+                    || !prefixWalkResults.results.diagnostics.isEmpty
+                    || !prefixSearchMessages.isEmpty
+                if let prefixMatchedResult, !prefixHadVisibleOutput {
+                    filesSearched += prefixFilesSearched
+                    quietByteLiteralProbeBytes += prefixProbeBytes
+                    matchedResult = prefixMatchedResult
+                    return searchResults(walkResults: prefixWalkResults.results)
+                }
+                if !prefixWalkResults.exhausted {
+                    filesSearched += prefixFilesSearched
+                    quietByteLiteralProbeBytes += prefixProbeBytes
+                    searchMessages.append(contentsOf: prefixSearchMessages)
+                    return searchResults(walkResults: prefixWalkResults.results)
+                }
+            }
+        }
         if quietByteLiteralFastPath != nil,
            let fastWalkResults = try fileWalker.firstVisitedFastSearchFileWithMessages(
             for: options,
