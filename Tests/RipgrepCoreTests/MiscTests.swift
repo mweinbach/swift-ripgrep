@@ -318,6 +318,34 @@ struct MiscTests {
             noCandidateRoot.path("sparse.txt"),
         ], fixture: {})
         #expect(sparseCandidateNoMmapLineOutput.isEmpty)
+        try noCandidateRoot.write("""
+        alpha
+
+        one Z here
+        AAAAA BBBBB
+        lower
+        CCCCC
+        """, to: "numbered.txt")
+        let numberedLineOutput = try runExecutableData([
+            "-n",
+            "[A-Z]{5}",
+            noCandidateRoot.path("numbered.txt"),
+        ], fixture: {})
+        #expect(String(decoding: numberedLineOutput, as: UTF8.self) == """
+        4:AAAAA BBBBB
+        6:CCCCC
+
+        """)
+        let maxCountNumberedLineOutput = try runExecutableData([
+            "-n",
+            "-m1",
+            "[A-Z]{5}",
+            noCandidateRoot.path("numbered.txt"),
+        ], fixture: {})
+        #expect(String(decoding: maxCountNumberedLineOutput, as: UTF8.self) == """
+        4:AAAAA BBBBB
+
+        """)
         let redBold = "\u{1B}[1m\u{1B}[31m"
         let reset = "\u{1B}[0m"
         let colorOutput = try runExecutableData([

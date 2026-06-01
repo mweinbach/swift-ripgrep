@@ -7749,6 +7749,20 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 guard let baseAddress = bytes.baseAddress else {
                     return ASCIIFixedClassLineScan(matches: [], bytesSearched: 0)
                 }
+                if !includeSpans,
+                   asciiFixedClassShouldUseCandidateJumps(
+                       baseAddress: baseAddress,
+                       dataCount: data.count,
+                       byteClass: classes[0]
+                   ) {
+                    return asciiFixedClassLineMatchesWithoutSpans(
+                        baseAddress: baseAddress,
+                        dataCount: data.count,
+                        classes: classes,
+                        maxMatchedLines: maxMatchedLines,
+                        fileURL: fileURL
+                    )
+                }
                 return asciiFixedClassLineMatches(
                     baseAddress: baseAddress,
                     dataCount: data.count,
@@ -8209,6 +8223,113 @@ public struct RipgrepSearcher: @unchecked Sendable {
         return counts
     }
 
+    private func asciiFixedClassLineMatchesWithoutSpans(
+        baseAddress: UnsafePointer<UInt8>,
+        dataCount: Int,
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass],
+        maxMatchedLines: Int,
+        fileURL: URL
+    ) -> ASCIIFixedClassLineScan? {
+        let width = classes.count
+        guard width > 0, dataCount >= width else {
+            return ASCIIFixedClassLineScan(matches: [], bytesSearched: dataCount)
+        }
+        guard maxMatchedLines > 0 else {
+            return ASCIIFixedClassLineScan(matches: [], bytesSearched: 0)
+        }
+
+        let newline = UInt8(ascii: "\n")
+        var matches: [SearchMatch] = []
+        matches.reserveCapacity(min(maxMatchedLines, 32))
+        var searchOffset = 0
+        var lineStart = 0
+        var lineNumber = 1
+
+        func advanceLineStart(to matchOffset: Int) {
+            while lineStart < matchOffset {
+                let distance = matchOffset - lineStart
+                guard let newlinePointer = memchr(baseAddress.advanced(by: lineStart), Int32(newline), distance) else {
+                    return
+                }
+                let newlineOffset = baseAddress.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self))
+                lineNumber += 1
+                lineStart = newlineOffset + 1
+            }
+        }
+
+        while matches.count < maxMatchedLines,
+              let matchOffset = asciiFixedClassNextSequenceMatch(
+                  baseAddress: baseAddress,
+                  endExclusive: dataCount,
+                  classes: classes,
+                  from: searchOffset
+              ) {
+            advanceLineStart(to: matchOffset)
+
+            let lineEnd: Int
+            let terminator: String
+            let terminatorBytes: Int
+            if let newlinePointer = memchr(
+                baseAddress.advanced(by: matchOffset),
+                Int32(newline),
+                dataCount - matchOffset
+            ) {
+                lineEnd = baseAddress.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self))
+                terminator = "\n"
+                terminatorBytes = 1
+            } else {
+                lineEnd = dataCount
+                terminator = ""
+                terminatorBytes = 0
+            }
+
+            var lineMatchCount = 0
+            var candidateOffset = matchOffset
+            while let foundOffset = asciiFixedClassNextSequenceMatch(
+                baseAddress: baseAddress,
+                endExclusive: lineEnd,
+                classes: classes,
+                from: candidateOffset
+            ) {
+                lineMatchCount += 1
+                candidateOffset = foundOffset + width
+            }
+
+            let lineData = Data(
+                bytes: baseAddress.advanced(by: lineStart),
+                count: lineEnd - lineStart
+            )
+            guard let line = String(data: lineData, encoding: .utf8) else {
+                return nil
+            }
+            matches.append(SearchMatch(
+                fileURL: fileURL,
+                lineNumber: lineNumber,
+                column: nil,
+                line: line,
+                lineTerminator: terminator,
+                absoluteOffset: lineStart,
+                matchCount: lineMatchCount,
+                spans: []
+            ))
+            if matches.count == maxMatchedLines {
+                return ASCIIFixedClassLineScan(
+                    matches: matches,
+                    bytesSearched: lineEnd + terminatorBytes
+                )
+            }
+
+            searchOffset = lineEnd + terminatorBytes
+            if terminatorBytes == 0 {
+                break
+            }
+            lineNumber += 1
+            lineStart = searchOffset
+        }
+
+        return ASCIIFixedClassLineScan(matches: matches, bytesSearched: dataCount)
+    }
+
     private func asciiFixedClassLineMatches(
         baseAddress: UnsafePointer<UInt8>,
         dataCount: Int,
@@ -8452,6 +8573,42 @@ public struct RipgrepSearcher: @unchecked Sendable {
             offset += 1
         }
         return true
+    }
+
+    @inline(__always)
+    private func asciiFixedClassNextSequenceMatch(
+        baseAddress: UnsafePointer<UInt8>,
+        endExclusive: Int,
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass],
+        from startOffset: Int
+    ) -> Int? {
+        let width = classes.count
+        guard width > 0 else {
+            return nil
+        }
+        let lastStartExclusive = endExclusive - width + 1
+        guard lastStartExclusive > startOffset else {
+            return nil
+        }
+
+        var offset = startOffset
+        while let candidateOffset = asciiFixedClassNextCandidate(
+            baseAddress: baseAddress,
+            endExclusive: lastStartExclusive,
+            byteClass: classes[0],
+            from: offset
+        ) {
+            var classIndex = 1
+            while classIndex < width,
+                  byte(baseAddress[candidateOffset + classIndex], matches: classes[classIndex]) {
+                classIndex += 1
+            }
+            if classIndex == width {
+                return candidateOffset
+            }
+            offset = candidateOffset + 1
+        }
+        return nil
     }
 
     @inline(__always)

@@ -8,6 +8,46 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Sparse ASCII fixed-class line collection — 2026-06-01
+
+Matching-line output for fixed-width ASCII class regexes now uses a
+candidate-first collector when the first byte class is sparse enough for the
+existing SIMD candidate jump path. The old line-by-line scanner stays in place
+for dense first-byte classes and for span-heavy output modes such as color,
+columns, vimgrep, JSON, and only-matching. This avoids walking every newline in
+large sparse no-match buffers while keeping line numbers, `-m`, and duplicate
+matches-on-one-line behavior identical.
+
+Validation:
+
+- Focused current Swift output matched checkpoint `ee30fd1` and Rust for
+  normal and `-m1` `-n '[A-Z]{5}'` matching-line output on a fixture with blank
+  lines and multiple matches on one line.
+- Current Swift output for
+  `-n '[A-Z]{5}' late-uppercase-no-five-46m.txt` matched checkpoint `ee30fd1`
+  and Rust byte-for-byte; all commands correctly exited with no matches.
+- `swift build -c release`, `xcrun swift test`, and
+  `SWIFT_RIPGREP_PARITY=1 xcrun swift test --filter ParityHarnessTests`
+  passed.
+- The default build remains Swift-only; this change adds no C shim or custom C
+  code.
+
+A 30-run hyperfine A/B against checkpoint `ee30fd1`, with 5 warmups, measured:
+
+| Command | Current Swift | Checkpoint `ee30fd1` | Rust |
+| --- | ---: | ---: | ---: |
+| `-n '[A-Z]{5}' late-uppercase-no-five-46m.txt` | 39.37 ms mean / 41.45 ms median | 61.20 ms / 60.77 ms | 32.50 ms / 32.16 ms |
+| `-n '[A-Z]{5}' no-match-ascii-46m.txt` guardrail | 36.74 ms / 38.93 ms | 39.56 ms / 39.78 ms | 23.92 ms / 23.93 ms |
+
+The guardrail fixture contains no uppercase byte candidates and therefore
+returns from the pre-existing whole-buffer candidate proof before the new line
+collector runs; the small median movement was within the observed 4.9-5.8 ms
+standard-deviation band.
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/fixed-nospan-trimmed-1780322405.json` and
+`/tmp/swift-rg-bench/fixed-nospan-sparse-confirm-reversed-1780321302.json`.
+
 ## Case-insensitive alternation ASCII proof — 2026-06-01
 
 Recursive ASCII case-insensitive multi-literal line collection now keeps the
