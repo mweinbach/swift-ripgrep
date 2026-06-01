@@ -8,6 +8,25 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected reversed-index file-list child walks — 2026-06-01
+
+A Swift-only probe replaced the hot ignore-aware Darwin `--files` data writer's
+`children.reversed()` loops with explicit descending index loops. The probe kept
+the same root-child and recursive traversal order, preserved Swift stdout/stderr
+byte-for-byte for default, hidden, no-vcs, no-ignore, and NUL file-listing, and
+kept sorted Rust path parity for default, hidden, and no-vcs controls. It was
+backed out because the optimizer already handles the reversed collection shape
+well and the manual index form was flat-to-slower.
+
+An 80-run interleaved process A/B against checkpoint `d32f4f8` measured:
+
+| Command | Probe Swift | Baseline Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `--files linux` | 84.62 ms mean / 82.68 ms median | 83.56 ms / 82.45 ms | 77.77 ms / 75.15 ms |
+| `--hidden --files linux` | 86.21 ms / 85.52 ms | 86.09 ms / 84.73 ms | 76.78 ms / 75.16 ms |
+| `--no-ignore-vcs --files linux` | 67.96 ms / 67.11 ms | 67.42 ms / 66.43 ms | 67.69 ms / 67.16 ms |
+| `--no-ignore --files linux` | 67.04 ms / 65.01 ms | 65.77 ms / 64.78 ms | 70.85 ms / 67.96 ms |
+
 ## Rejected fixed-PCRE first-match split — 2026-05-31
 
 A Swift-only probe split fixed-lookaround PCRE quiet/path-only searches out of
