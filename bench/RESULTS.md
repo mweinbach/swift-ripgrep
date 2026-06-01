@@ -8,6 +8,34 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected quiet byte-literal prefix collect — 2026-06-01
+
+A Swift-only probe reused the required-literal prefix-visit walker for quiet
+byte-literal searches: the first 32 fast-walked haystacks were searched with
+the existing quiet byte-literal first-match path, then a no-hit prefix reused
+the collected haystack list for the normal parallel fallback instead of
+abandoning into a second traversal. This preserved the existing 32-file /
+64 MiB prefix budget and did not add C shims or custom scanner code. It was
+backed out because the target late-hit row was effectively flat and the miss
+and regex guardrails did not improve.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint `af7a81f` for quiet
+  late literal hit, early literal hit, quiet miss, ignore-case hit,
+  regex-required-literal hit, stats quiet, JSON quiet, visible literal output,
+  and files-with-matches controls.
+- Current Swift quiet statuses/stdout matched Rust for the quiet controls.
+
+A 30-run interleaved process A/B against checkpoint `af7a81f` measured:
+
+| Command | Probe Swift | Baseline Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `-q PM_RESUME linux` | 414.47 ms mean / 411.37 ms median / 427.83 ms p95 | 415.02 ms / 411.98 ms / 426.19 ms | 213.84 ms / 182.08 ms / 517.60 ms |
+| `-q __swift_rg_missing_needle__ linux` | 1167.06 ms / 1154.03 ms / 1240.74 ms | 1165.24 ms / 1160.71 ms / 1238.69 ms | 3531.84 ms / 3514.34 ms / 3799.58 ms |
+| `-q EXPORT_SYMBOL linux` | 8.42 ms / 7.86 ms / 9.86 ms | 8.68 ms / 8.79 ms / 9.43 ms | not remeasured in this A/B |
+| `-q '[A-Z]+_RESUME' linux` | 10.28 ms / 10.21 ms / 10.79 ms | 10.18 ms / 10.12 ms / 10.55 ms | not remeasured in this A/B |
+
 ## Quiet required-literal regex prefix probe — 2026-06-01
 
 Quiet recursive regex searches with an ASCII required literal now probe the
