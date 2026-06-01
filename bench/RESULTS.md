@@ -8,6 +8,45 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Darwin file-list worker fanout retune — 2026-06-01
+
+The Darwin ignore-aware `--files` byte-output walker now caps root-child
+directory workers at 8 instead of 6. Later matcher and file-list changes moved
+the local optimum back toward the earlier bounded-fanout value: in two fresh
+A/B passes against checkpoint `bdf5ed4`, default `--files` improved while
+`--hidden --files` stayed effectively neutral. The implementation remains
+Swift-only and keeps the existing ordered chunk store, so output order is still
+driven by the original child index rather than worker completion order.
+
+Validation:
+
+- Current Swift output matched checkpoint `bdf5ed4` byte-for-byte for default
+  and hidden file-listing on `/tmp/swift-rg-bench/linux`.
+- Sorted current Swift paths matched Rust for default and hidden file-listing
+  on the same tree. Raw Rust order differs from the saved Swift checkpoint for
+  this absolute-root command, so the Rust oracle here is the sorted file set.
+- The default build remains Swift-only; this change adds no C shim or custom C
+  code.
+
+An 80-run hyperfine A/B against checkpoint `bdf5ed4`, with 5 warmups and the
+current binary measured before the checkpoint, measured:
+
+| Command | Current Swift | Checkpoint `bdf5ed4` | Rust |
+| --- | ---: | ---: | ---: |
+| `--files linux` | 92.87 ms mean / 92.08 ms median | 93.43 ms / 92.52 ms | 80.54 ms / 80.16 ms |
+| `--hidden --files linux` | 95.02 ms / 94.50 ms | 95.12 ms / 94.70 ms | not measured |
+
+A checkpoint-first 50-run guardrail showed the same default-row direction:
+
+| Command | Current Swift | Checkpoint `bdf5ed4` | Rust |
+| --- | ---: | ---: | ---: |
+| `--files linux` | 92.76 ms mean / 92.43 ms median | 94.86 ms / 93.82 ms | 80.05 ms / 80.14 ms |
+| `--hidden --files linux` | 95.92 ms / 96.17 ms | 95.95 ms / 95.28 ms | not measured |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/files-worker8-confirm-1780326923.json` and
+`/tmp/swift-rg-bench/files-worker8-1780325599.json`.
+
 ## Quiet ASCII run-suffix first-match probe — 2026-06-01
 
 Recursive quiet searches for exact Unicode-mode regexes shaped like

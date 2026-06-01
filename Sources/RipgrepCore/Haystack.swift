@@ -88,7 +88,7 @@ private struct WalkMetadata {
 }
 
 #if canImport(Darwin)
-private let darwinFilePathDataWorkerLimit = 6
+private let darwinFilePathDataWorkerLimit = 8
 
 private struct FastDirectoryChild {
     let name: String
