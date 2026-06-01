@@ -247,7 +247,7 @@ struct FeatureTests {
         let root = try TemporaryDirectory()
         try root.write("latin\nπ alpha\n", to: "a.txt")
         try root.write("micro µ\nomega Ω\n", to: "nested/b.txt")
-        try root.write("plain\n", to: "nested/c.txt")
+        try root.write("plain\ncafé\nsnow ☃\n", to: "nested/c.txt")
 
         #expect(try run(["--sort", "path", "-n", #"\p{Greek}"#, root.url.path]) == [
             "\(root.path("a.txt")):2:π alpha",

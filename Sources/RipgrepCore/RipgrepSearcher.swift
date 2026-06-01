@@ -8460,7 +8460,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             && options.printMode == .matchingLines
         let firstMatchOutput = quietOutput || pathOnlyOutput
         let canIgnoreLineRenderingOptions = !lineOutput
-        guard matcher.greekScriptFastPath() != nil,
+        guard let fastPath = matcher.greekScriptFastPath(),
               case .automatic = options.encodingMode,
               !data.starts(with: [0xEF, 0xBB, 0xBF]),
               !data.starts(with: [0xFF, 0xFE]),
@@ -8514,33 +8514,112 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 )
             }
 
-            func lineHasNonASCII(start: Int, end: Int) -> Bool {
-                var offset = start
-                while offset < end {
-                    if bytes[offset] >= 0x80 {
-                        return true
-                    }
-                    offset += 1
+            func isGreekScriptScalarValue(_ value: UInt32) -> Bool {
+                switch value {
+                case 0x0370...0x0373,
+                     0x0375...0x0377,
+                     0x037A...0x037D,
+                     0x037F...0x037F,
+                     0x0384...0x038A,
+                     0x038C...0x038C,
+                     0x038E...0x03A1,
+                     0x03A3...0x03E1,
+                     0x03F0...0x03FF,
+                     0x1F00...0x1FFF,
+                     0x2126...0x2126,
+                     0x10140...0x1018F,
+                     0x101A0...0x101A0,
+                     0x1D200...0x1D24F:
+                    return true
+                case 0x00B5:
+                    return fastPath.caseInsensitive
+                default:
+                    return false
                 }
-                return false
+            }
+
+            func greekScriptLineStatus(start: Int, end: Int) -> (hasMatch: Bool, validUTF8: Bool) {
+                var offset = start
+                var hasMatch = false
+                while offset < end {
+                    let byte = bytes[offset]
+                    if byte < 0x80 {
+                        offset += 1
+                        continue
+                    }
+
+                    let length: Int
+                    let minimumScalar: UInt32
+                    var scalar: UInt32
+                    switch byte {
+                    case 0xC2...0xDF:
+                        length = 2
+                        minimumScalar = 0x80
+                        scalar = UInt32(byte & 0x1F)
+                    case 0xE0...0xEF:
+                        length = 3
+                        minimumScalar = 0x800
+                        scalar = UInt32(byte & 0x0F)
+                    case 0xF0...0xF4:
+                        length = 4
+                        minimumScalar = 0x10000
+                        scalar = UInt32(byte & 0x07)
+                    default:
+                        return (false, false)
+                    }
+
+                    guard offset + length <= end else {
+                        return (false, false)
+                    }
+                    for continuationOffset in (offset + 1)..<(offset + length) {
+                        let continuation = bytes[continuationOffset]
+                        guard (0x80...0xBF).contains(continuation) else {
+                            return (false, false)
+                        }
+                        scalar = (scalar << 6) | UInt32(continuation & 0x3F)
+                    }
+                    guard scalar >= minimumScalar,
+                          scalar <= 0x10FFFF,
+                          !(0xD800...0xDFFF).contains(scalar) else {
+                        return (false, false)
+                    }
+                    if isGreekScriptScalarValue(scalar) {
+                        hasMatch = true
+                    }
+                    offset += length
+                }
+                return (hasMatch, true)
             }
 
             func scanLine(end lineEnd: Int, outputEnd: Int, terminator: String) -> Bool {
-                guard matches.count < maxCount,
-                      lineHasNonASCII(start: lineStart, end: lineEnd) else {
+                guard matches.count < maxCount else {
                     return false
                 }
-                let lineData = Data(
-                    bytes: baseAddress.advanced(by: lineStart),
-                    count: lineEnd - lineStart
-                )
-                guard let line = String(data: lineData, encoding: .utf8) else {
+                let lineStatus = greekScriptLineStatus(start: lineStart, end: lineEnd)
+                guard lineStatus.validUTF8 else {
                     failedDecode = true
                     return true
                 }
-                let spans = matcher.spans(in: line)
-                guard !spans.isEmpty else {
+                guard lineStatus.hasMatch else {
                     return false
+                }
+                let line: String
+                let spans: [MatchSpan]
+                if firstMatchOutput {
+                    line = ""
+                    spans = []
+                } else {
+                    let lineData = Data(bytes: baseAddress.advanced(by: lineStart), count: lineEnd - lineStart)
+                    guard let decodedLine = String(data: lineData, encoding: .utf8) else {
+                        failedDecode = true
+                        return true
+                    }
+                    let decodedSpans = matcher.spans(in: decodedLine)
+                    guard !decodedSpans.isEmpty else {
+                        return false
+                    }
+                    line = decodedLine
+                    spans = decodedSpans
                 }
                 if countOutput || pathStatsOutput || quietStatsOutput || jsonQuietSummaryOutput {
                     supplementalMatchedLines += 1
@@ -8572,7 +8651,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     line: line,
                     lineTerminator: terminator,
                     absoluteOffset: lineStart,
-                    matchCount: spans.count,
+                    matchCount: firstMatchOutput ? 1 : spans.count,
                     spans: []
                 ))
                 if matches.count == maxCount {

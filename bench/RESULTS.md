@@ -8,6 +8,42 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Greek-script Unicode rejection prefilter — 2026-06-01
+
+The Darwin raw `\p{Greek}` / `-i \p{Greek}` path now validates UTF-8 and scans
+Unicode scalar values before decoding a candidate line. Lines with non-Greek
+Unicode are rejected without constructing `String` or calling the higher-level
+matcher, while invalid UTF-8 still falls back through the existing decoded path.
+First-match path-only and quiet modes can also stop after the scalar proof
+without decoding the matching line. This remains Swift-only and uses no C shim.
+
+Validation:
+
+- Current Swift output/status matched checkpoint `099d641` and Rust for sorted
+  Linux `-n`, `-n -i`, `-c`, `-c -i`, `--count-matches '\p{Greek}+'`, `-l`,
+  `--stats -l`, and `--json -q` after normalizing timing fields.
+- Current Swift output/status matched checkpoint `099d641` and Rust for a
+  64 MiB non-Greek Unicode no-match fixture across `-n`, `-n -i`, `-q`, `-l`,
+  and `--stats -l`.
+
+A 12-run hyperfine A/B on the 64 MiB non-Greek Unicode no-match fixture
+measured:
+
+| Command | Current Swift | Previous Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `-n '\p{Greek}' non-greek-unicode-64m.txt` | 158.6 ms mean / 153.7-163.1 ms range | 1.520 s / 1.491-1.567 s | 30.0 ms / 28.9-32.7 ms |
+| `-n -i '\p{Greek}' non-greek-unicode-64m.txt` | 154.3 ms / 141.3-162.3 ms | 1.569 s / 1.540-1.597 s | 31.8 ms / 30.4-42.6 ms |
+
+Linux corpus guardrails remained output-identical and effectively flat on wall
+time, with lower Swift user CPU in the matching-line rows:
+
+| Command | Current Swift | Previous Swift |
+| --- | ---: | ---: |
+| `-n '\p{Greek}' linux` | 2.251 s mean / user 2.064 s | 2.254 s / user 2.107 s |
+| `-n -i '\p{Greek}' linux` | 2.252 s / user 2.066 s | 2.253 s / user 2.123 s |
+| `-q '\p{Greek}' linux` | 276.1 ms | 276.7 ms |
+| `-l '\p{Greek}' linux` | 2.252 s | 2.276 s |
+
 ## Newline file-list chunk reserve retune — 2026-06-01
 
 The ignore-aware Darwin `--files` parallel path now reserves 128 KiB per

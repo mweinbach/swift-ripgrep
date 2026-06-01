@@ -397,7 +397,7 @@ private func featureParityCases() -> [ParityCase] {
     let greekScriptFixture: (URL) throws -> Void = { dir in
         try write("latin\nπ alpha\n", to: "a.txt", in: dir)
         try write("micro µ\nomega Ω\n", to: "nested/b.txt", in: dir)
-        try write("plain\n", to: "nested/c.txt", in: dir)
+        try write("plain\ncafé\nsnow ☃\n", to: "nested/c.txt", in: dir)
     }
     let trimSherlock = """
 zzz
