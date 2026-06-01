@@ -8,6 +8,27 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected required-literal quiet matched-file early stop — 2026-06-01
+
+A Swift-only probe changed the regex required-literal prefilter so quiet
+matching-line searches stopped scanning the current file after the first
+decoded candidate line that the regex verified. This kept the existing Swift
+required-literal scan and decoder path, avoided new C shims or custom scanner
+code, and preserved output/status against checkpoint `01a0029` for quiet regex
+hit/miss controls, visible regex output, path modes, and Rust quiet statuses.
+It was backed out because the target median did not improve and the miss and
+literal quiet guardrails regressed.
+
+A 50-run interleaved process A/B against checkpoint `01a0029` measured:
+
+| Command | Probe Swift | Baseline Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `-q '[A-Z]+_RESUME' linux` | 249.57 ms mean / 241.44 ms median / 274.87 ms p95 | 253.24 ms / 239.85 ms / 305.53 ms | 8.11 ms / 7.73 ms / 11.83 ms |
+| `-q '[Z]{3}_RESUME' linux` | 976.78 ms / 958.94 ms / 1128.06 ms | 970.10 ms / 955.45 ms / 1105.55 ms | 2780.56 ms / 2772.46 ms / 3165.15 ms |
+| `-q '.+_RESUME' linux` | 255.72 ms / 251.00 ms / 282.45 ms | 251.73 ms / 249.15 ms / 284.21 ms | 8.16 ms / 7.75 ms / 11.19 ms |
+| `-q PM_RESUME linux` | 378.61 ms / 364.04 ms / 443.67 ms | 370.32 ms / 362.02 ms / 413.52 ms | 245.65 ms / 187.24 ms / 673.92 ms |
+| `[A-Z]+_RESUME linux` | 1715.74 ms / 1684.93 ms / 1945.89 ms | 1716.88 ms / 1681.72 ms / 1972.70 ms | 2764.59 ms / 2751.75 ms / 3263.73 ms |
+
 ## Rejected GCD parallel search queue — 2026-06-01
 
 A Swift-only probe replaced the parallel search path's Swift-concurrency task
