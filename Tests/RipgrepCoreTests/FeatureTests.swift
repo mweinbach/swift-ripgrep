@@ -328,6 +328,10 @@ struct FeatureTests {
         #expect(jsonStatsQuietStats?["searches_with_match"] as? Int == 2)
         #expect(jsonStatsQuietStats?["searches"] as? Int == 3)
         #expect(jsonStatsQuietStats?["bytes_printed"] as? Int == 0)
+
+        try root.write(Data([0xFF]) + Data("abc\n".utf8), to: "invalid-no-greek.bin")
+        #expect(try run(["-n", #"\p{Greek}"#, root.path("invalid-no-greek.bin")]) == [])
+        #expect(try run(["-L", #"\p{Greek}"#, root.path("invalid-no-greek.bin")]) == [])
     }
 
     @Test("supports smart case and inverted matches")

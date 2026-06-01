@@ -8671,6 +8671,63 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 return (hasMatch, true)
             }
 
+            func greekScriptByteCandidateMatchOffset(start: Int, end: Int) -> Int? {
+                let needles = fastPath.caseInsensitive
+                    ? [UInt8(0xC2), 0xCD, 0xCE, 0xCF, 0xE1, 0xE2, 0xF0]
+                    : [UInt8(0xCD), 0xCE, 0xCF, 0xE1, 0xE2, 0xF0]
+                var offset = start
+                return needles.withUnsafeBufferPointer { needleBuffer -> Int? in
+                    while offset < end {
+                        let remaining = end - offset
+                        guard let found = rg_memchr_any_bytes(
+                            baseAddress.advanced(by: offset),
+                            remaining,
+                            needleBuffer.baseAddress,
+                            needleBuffer.count
+                        ) else {
+                            return nil
+                        }
+
+                        let candidate = baseAddress.distance(to: found)
+                        let first = bytes[candidate]
+                        if first == 0xC2 || first == 0xCD || first == 0xCE || first == 0xCF {
+                            if candidate + 2 <= end,
+                               isGreekScriptUTF8Scalar(
+                                   first: first,
+                                   second: bytes[candidate + 1],
+                                   length: 2
+                               ) {
+                                return candidate
+                            }
+                        } else if first == 0xE1 || first == 0xE2 {
+                            if candidate + 3 <= end,
+                               (0x80...0xBF).contains(bytes[candidate + 2]),
+                               isGreekScriptUTF8Scalar(
+                                   first: first,
+                                   second: bytes[candidate + 1],
+                                   third: bytes[candidate + 2],
+                                   length: 3
+                               ) {
+                                return candidate
+                            }
+                        } else if first == 0xF0 {
+                            if candidate + 4 <= end,
+                               isGreekScriptUTF8Scalar(
+                                   first: first,
+                                   second: bytes[candidate + 1],
+                                   third: bytes[candidate + 2],
+                                   fourth: bytes[candidate + 3],
+                                   length: 4
+                               ) {
+                                return candidate
+                            }
+                        }
+                        offset = candidate + 1
+                    }
+                    return nil
+                }
+            }
+
             func greekScriptLineStatus(start: Int, end: Int) -> (hasMatch: Bool, validUTF8: Bool) {
                 var offset = start
                 var hasMatch = false
@@ -8723,6 +8780,16 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     offset += length
                 }
                 return (hasMatch, true)
+            }
+
+            if useByteBufferProof,
+               greekScriptByteCandidateMatchOffset(start: 0, end: dataCount) == nil {
+                return SearchFileResult(
+                    fileURL: fileURL,
+                    matches: [],
+                    bytesSearched: data.count,
+                    searched: true
+                )
             }
 
             let bufferStatus = useByteBufferProof

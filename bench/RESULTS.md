@@ -8,6 +8,41 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Explicit Greek script no-match candidate proof — 2026-06-01
+
+Explicit-root `\p{Greek}` searches now run a Swift-only byte-candidate proof
+before the conservative UTF-8 validation pass. The proof reuses the existing
+Swift SIMD byte-search helper to jump between bytes that can start a Greek
+script scalar. If no candidate decodes to Greek, the file can return the same
+no-match result without validating every non-Greek scalar first. Positive
+candidate cases still fall through to the existing validator and line renderer,
+so matched output, stats, and invalid UTF-8 rendering stay conservative.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint `3afe814` and Rust for
+  15 focused Greek cases, including valid line/count/path outputs, 64 MiB
+  Unicode no-match and early quiet fixtures, invalid UTF-8 no-match, invalid
+  bytes before a later Greek match, invalid bytes on the matching line, and
+  stats output after normalizing only elapsed-time lines.
+- Added a regression test for explicit invalid UTF-8 no-Greek input and its
+  `-L` suppression behavior, which exercises the new no-candidate exit.
+- The default build remains Swift-only; this change reuses existing Swift
+  helper code and does not add or enable any C shim.
+
+A 20-run hyperfine A/B against checkpoint `3afe814`, with 5 warmups, measured:
+
+| Command | Current Swift | Previous Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `-n '\p{Greek}' non-greek-unicode-64m.txt` | 47.16 ms mean / 48.09 ms median | 76.17 ms / 75.20 ms | 25.13 ms / 25.13 ms |
+| `-q '\p{Greek}' early-greek-unicode-64m.txt` | 9.53 ms / 9.59 ms | 9.75 ms / 9.65 ms | 2.84 ms / 2.82 ms |
+| `-n '\p{Greek}' no-match-ascii-46m.txt` | 52.86 ms / 49.89 ms | 54.75 ms / 56.70 ms | 19.86 ms / 19.63 ms |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/greek-candidate-proof-nomatch-1780297132.json`,
+`/tmp/swift-rg-bench/greek-candidate-proof-early-1780297145.json`, and
+`/tmp/swift-rg-bench/greek-candidate-proof-ascii-nomatch-1780297318.json`.
+
 ## Overlapping repeated-literal quiet-stats single-pass counts — 2026-06-01
 
 Overlapping repeated-`-e` `--stats -q` explicit-file summaries now collect
