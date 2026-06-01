@@ -8,6 +8,40 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Swift memmem middle-byte candidate filter — 2026-06-01
+
+The default no-C-shim Swift `rg_memmem_simple` fallback now checks a literal's
+middle byte alongside its first and final bytes before running the full
+candidate comparison. This mirrors the existing ASCII case-insensitive scanner's
+candidate filter and cuts false candidates for short literals such as `needle`
+in English-ish no-match buffers, while preserving the same first/tail behavior
+for one-, two-, and three-byte literals.
+
+Validation:
+
+- `--stats --files-without-match` stdout/stderr/status matched Rust for
+  `needle`, `absentliteral`, and `missingliteral` on the 46 MiB ASCII fixture
+  after normalizing elapsed timing fields.
+- The official Linux subset still had Swift faster than Rust for literal,
+  literal mmap, ignore-case literal, no-literal, alternation, suffix, Greek,
+  and word rows.
+- The default build remains Swift-only; this only changes the Swift fallback
+  scanner and does not add or enable any C shim.
+
+A same-session 25-run hyperfine pass, with three warmups, measured:
+
+| Command | Swift | Rust |
+| --- | ---: | ---: |
+| `--stats --files-without-match needle match-ascii-46m.txt` | 8.6 ms mean / 8.3-9.1 ms range | 7.0 ms / 6.7-7.5 ms |
+| `--stats --files-without-match absentliteral match-ascii-46m.txt` | 9.7 ms / 8.1-11.8 ms | 6.5 ms / 6.3-7.3 ms |
+| `-n missingliteral match-ascii-46m.txt` guardrail | 65.0 ms / 63.5-69.1 ms | 68.6 ms / 66.9-74.8 ms |
+
+Immediately before the change in the same session, the `needle`
+`--stats --files-without-match` row measured 16.0 ms mean for Swift versus
+7.0 ms for Rust. Raw hyperfine exports:
+`/tmp/swift-rg-bench/memmem-middle-stats-fwm-1780335041.json` and
+`/tmp/swift-rg-bench/memmem-middle-official-1780335055`.
+
 ## Word-whitespace recursive worker cap — 2026-06-01
 
 Recursive searches using the exact no-literal `\w{5}\s+...` fast path now use
