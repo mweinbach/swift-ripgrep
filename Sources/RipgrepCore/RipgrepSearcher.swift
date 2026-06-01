@@ -391,19 +391,26 @@ public struct RipgrepSearcher: @unchecked Sendable {
         matcher: PatternMatcher
     ) throws -> SearchResults? {
         let quietByteLiteralFastPath = quietByteLiteralFirstMatchFastPath(options: options, matcher: matcher)
+        let hasASCIIFixedClassSequence = matcher.asciiFixedClassSequenceFastPath() != nil
+        let quietRequiredLiteralProbe = !hasASCIIFixedClassSequence
+            && quietByteLiteralFastPath == nil
+            && matcher.byteRequiredLiteralPrefilter() != nil
         guard options.mode == .search,
               options.sortMode == nil,
               !options.useStdin,
               !options.patternFileStdin,
               canStopSearchAfterFirstMatch(options: options),
-              (matcher.asciiFixedClassSequenceFastPath() != nil || quietByteLiteralFastPath != nil) else {
+              (hasASCIIFixedClassSequence || quietByteLiteralFastPath != nil || quietRequiredLiteralProbe) else {
             return nil
+        }
+        if quietRequiredLiteralProbe {
+            return try searchQuietRequiredLiteralFirstMatchByWalking(options: options, matcher: matcher)
         }
 
         var filesSearched = 0
         var matchedResult: SearchFileResult?
         var searchMessages: [String] = []
-        var abandonedQuietByteLiteralProbe = false
+        var abandonedQuietFirstMatchProbe = false
         var quietByteLiteralProbeBytes = 0
         let quietByteLiteralProbeFileLimit = 32
         let quietByteLiteralProbeByteLimit = 64 * 1024 * 1024
@@ -411,7 +418,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             if quietByteLiteralFastPath != nil,
                filesSearched >= quietByteLiteralProbeFileLimit
                 || quietByteLiteralProbeBytes >= quietByteLiteralProbeByteLimit {
-                abandonedQuietByteLiteralProbe = true
+                abandonedQuietFirstMatchProbe = true
                 return true
             }
             let outcome = quietByteLiteralFastPath.flatMap { fastPath in
@@ -472,7 +479,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             for: options,
             visitHaystack: visit
            ) {
-            if abandonedQuietByteLiteralProbe {
+            if abandonedQuietFirstMatchProbe {
                 return nil
             }
             return searchResults(walkResults: fastWalkResults)
@@ -482,10 +489,122 @@ public struct RipgrepSearcher: @unchecked Sendable {
             for: options,
             visitHaystack: visit
         )
-        if abandonedQuietByteLiteralProbe {
+        if abandonedQuietFirstMatchProbe {
             return nil
         }
         return searchResults(walkResults: walkResults)
+    }
+
+    private func searchQuietRequiredLiteralFirstMatchByWalking(
+        options: RipgrepOptions,
+        matcher: PatternMatcher
+    ) throws -> SearchResults? {
+        let quietRequiredLiteralProbeFileLimit = 160
+        var filesSearched = 0
+        var matchedResult: SearchFileResult?
+        var searchMessages: [String] = []
+
+        func visit(_ haystack: Haystack) -> Bool {
+            let outcome = searchFile(haystack, matcher: matcher, options: options)
+            if outcome.result.searched {
+                filesSearched += 1
+            }
+            if let message = outcome.message {
+                searchMessages.append(message)
+            }
+            guard outcome.result.hasMatch else {
+                return false
+            }
+            matchedResult = outcome.result
+            return true
+        }
+
+        func prefixSearchResults(walkResults: FileWalkResults) -> SearchResults {
+            let files = matchedResult.map { [$0] } ?? []
+            let matchedLines = matchedResult.map { result in
+                result.matches.reduce(0) { $0 + MatchedLineCounter.count($1, options: options) }
+                    + result.supplementalMatchedLines
+                    + (result.hasBinaryMatch ? 1 : 0)
+            } ?? 0
+            let totalMatches = matchedResult.map { result in
+                let matchCount = result.matches.reduce(0) { $0 + $1.matchCount }
+                return matchCount + result.supplementalMatches + (result.hasBinaryMatch && matchCount == 0 ? 1 : 0)
+            } ?? 0
+
+            return SearchResults(
+                files: files,
+                summary: SearchSummary(
+                    filesSearched: filesSearched,
+                    filesWithMatches: matchedResult == nil ? 0 : 1,
+                    matchedLines: matchedLines,
+                    totalMatches: totalMatches
+                ),
+                messages: walkResults.messages + searchMessages,
+                warnings: walkResults.warnings,
+                diagnostics: walkResults.diagnostics,
+                filtered: walkResults.filtered
+            )
+        }
+
+        func completeSearchResults(
+            walkResults: FileWalkResults,
+            searchedHaystacks: [SearchedHaystack]
+        ) -> SearchResults {
+            var messages = walkResults.messages
+            for haystack in searchedHaystacks {
+                if let message = haystack.message {
+                    messages.append(message)
+                }
+            }
+            let files = searchedHaystacks.map(\.result)
+            let matchedFiles = files.filter(\.hasMatch)
+            return SearchResults(
+                files: files,
+                summary: SearchSummary(
+                    filesSearched: files.filter(\.searched).count,
+                    filesWithMatches: matchedFiles.count,
+                    matchedLines: matchedFiles.reduce(0) { total, file in
+                        let matchedLines = file.matches.reduce(0) {
+                            $0 + MatchedLineCounter.count($1, options: options)
+                        }
+                        return total
+                            + (matchedLines == 0 && file.hasBinaryMatch ? 1 : matchedLines)
+                            + file.supplementalMatchedLines
+                    },
+                    totalMatches: matchedFiles.reduce(0) { total, file in
+                        let matchCount = file.matches.reduce(0) { $0 + $1.matchCount }
+                        let promotedBinaryMatch = matchCount == 0
+                            && file.hasBinaryMatch
+                            && !shouldPreserveZeroMultilineBinaryMatchCount(options: options)
+                        return total
+                            + (promotedBinaryMatch ? 1 : matchCount)
+                            + file.supplementalMatches
+                    }
+                ),
+                messages: messages,
+                warnings: walkResults.warnings,
+                diagnostics: walkResults.diagnostics,
+                filtered: walkResults.filtered
+            )
+        }
+
+        let fileWalker = FileWalker(fileManager: fileManager).withEnvironment(environment)
+        guard let fastWalkResults = try fileWalker.fastSearchHaystacksWithPrefixVisitMessages(
+            for: options,
+            prefixLimit: quietRequiredLiteralProbeFileLimit,
+            visitHaystack: visit
+        ) else {
+            return nil
+        }
+        if matchedResult != nil {
+            return prefixSearchResults(walkResults: fastWalkResults)
+        }
+        let searchedHaystacks = try searchHaystacks(
+            fastWalkResults.haystacks,
+            matcher: matcher,
+            options: options
+        )
+        return completeSearchResults(walkResults: fastWalkResults, searchedHaystacks: searchedHaystacks)
     }
 
     private func quietByteLiteralFirstMatchFastPath(

@@ -33,6 +33,37 @@ struct FeatureTests {
         #expect(errors.isEmpty)
     }
 
+    @Test("quiet required-literal regex recursive search returns only exit status")
+    func quietRequiredLiteralRegexRecursiveSearchReturnsOnlyExitStatus() throws {
+        let root = try TemporaryDirectory()
+        for index in 0..<170 {
+            try root.write("plain \(index)\n", to: String(format: "prefix/file-%03d.txt", index))
+        }
+        try root.write("task TWA_RESUME\n", to: "prefix/file-120.txt")
+
+        var output: [String] = []
+        var errors: [String] = []
+        var exitCode = RipgrepCLI.run(
+            arguments: ["-q", "[A-Z]+_RESUME", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(output.isEmpty)
+        #expect(errors.isEmpty)
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["-q", "[A-Z]+_MISSING", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 1)
+        #expect(output.isEmpty)
+        #expect(errors.isEmpty)
+    }
+
     @Test("quiet literal recursive summaries count exact matches")
     func quietLiteralRecursiveSummariesCountExactMatches() throws {
         let root = try TemporaryDirectory()

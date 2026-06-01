@@ -8,6 +8,35 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Quiet required-literal regex prefix probe — 2026-06-01
+
+Quiet recursive regex searches with an ASCII required literal now probe the
+first 160 fast-walked haystacks while traversal is already in progress. If a
+match is found in that prefix, search stops immediately; if not, the same
+collected haystack list continues through the normal parallel search path, so
+misses do not pay for a second tree walk. This keeps the Swift-only default,
+does not add C shims or custom scanner code, and leaves the existing quiet
+byte-literal probe budget unchanged.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint `b1ca792` for quiet
+  regex-required-literal hit, late literal hit, early literal hit, quiet miss,
+  ignore-case hit, stats quiet, JSON quiet, visible regex output, and
+  files-with-matches controls.
+- Current Swift quiet statuses/stdout matched Rust for the quiet controls.
+- A copied-binary process loop with comparable `/tmp` paths measured the tiny
+  early literal guardrail as flat: current 8.48 ms mean / 8.46 ms median /
+  8.95 ms p95, baseline 8.46 ms / 8.43 ms / 9.08 ms.
+
+A 30-run interleaved process A/B against checkpoint `b1ca792` measured:
+
+| Command | Current Swift | Previous Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `-q '[A-Z]+_RESUME' linux` | 12.93 ms mean / 11.94 ms median / 19.78 ms p95 | 273.38 ms / 269.25 ms / 293.39 ms | 7.20 ms / 6.72 ms / 9.44 ms |
+| `-q PM_RESUME linux` | 420.79 ms / 415.42 ms / 447.06 ms | 420.11 ms / 413.08 ms / 461.87 ms | not remeasured in this A/B |
+| `-q __swift_rg_missing_needle__ linux` | 1166.20 ms / 1161.12 ms / 1193.27 ms | 1163.78 ms / 1163.61 ms / 1191.73 ms | not remeasured in this A/B |
+
 ## Rejected required-literal quiet matched-file early stop — 2026-06-01
 
 A Swift-only probe changed the regex required-literal prefilter so quiet
