@@ -117,6 +117,40 @@ warmups, measured:
 Raw hyperfine export:
 `/tmp/swift-rg-bench/context-firstmatch-window-final-1780339534.json`.
 
+## Multi-literal context first-match proof — 2026-06-01
+
+The Darwin repeated-`-e`/alternation context writer now uses the existing
+Swift `rg_memmem_simple` scanner to find the earliest exact case-sensitive
+literal before the binary/NUL proof and line walk. Absent multi-literal
+context searches can return without visiting every line, while hit cases start
+from the first match's context window. Once an early match is known, later
+literals only search the prefix before that match, avoiding a whole-file
+positive-path tax.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint `024f336` and Rust for
+  repeated `-e` `-A`, `-B`, `-C`, line-numbered context, alternation context,
+  no-match, binary no-match, and binary literal-match guards.
+- `xcrun swift test` passed, including the repeated-`-e` context-output feature
+  test, and `SWIFT_RIPGREP_PARITY=1 xcrun swift test --filter ParityHarnessTests` passed.
+- The default build remains Swift-only; this changes only Swift fallback
+  preflight control flow and adds no C shim or custom C code.
+
+A same-session 20-run hyperfine A/B against checkpoint `024f336`, with three
+warmups, measured:
+
+| Command | Current Swift | Checkpoint `024f336` | Rust |
+| --- | ---: | ---: | ---: |
+| `-A1 -e exa -e xyz no-match-ascii-46m.txt` | 14.2 ms mean / 13.4-15.0 ms range | 44.7 ms / 43.3-46.0 ms | 10.4 ms / 9.9-10.8 ms |
+| `-B1 -e exa -e xyz no-match-ascii-46m.txt` | 14.0 ms / 13.2-15.3 ms | 47.6 ms / 45.9-54.7 ms | 11.3 ms / 10.4-12.7 ms |
+| `-C1 -e exa -e xyz no-match-ascii-46m.txt` | 13.9 ms / 13.1-15.6 ms | 46.2 ms / 45.0-48.2 ms | 10.7 ms / 10.3-11.9 ms |
+| `-A1 -e literal -e absent match-ascii-46m.txt` guardrail | 83.4 ms / 81.0-93.5 ms | 84.4 ms / 81.5-86.3 ms | 49.8 ms / 48.5-51.6 ms |
+| `-C1 -e literal -e absent match-ascii-46m.txt` guardrail | 88.2 ms / 86.1-90.6 ms | 89.1 ms / 87.0-90.9 ms | 50.0 ms / 48.4-51.4 ms |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/multiliteral-context-prefix-probe-1780340348.json`.
+
 ## Rejected lazy newline count for literal line-number search — 2026-06-01
 
 A Swift-only prototype changed `rg_memmem_count_byte_before` to defer newline
