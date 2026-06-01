@@ -8,6 +8,42 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Case-insensitive alternation ASCII proof — 2026-06-01
+
+Recursive ASCII case-insensitive multi-literal line collection now keeps the
+existing fallback-on-non-ASCII semantics but uses the same chunked Swift byte
+proof shape as the direct preflight paths instead of `UnsafeBufferPointer`
+closure scanning. This trims the whole-file ASCII proof cost on all-ASCII
+recursive corpora while still falling back before raw ASCII matching when a
+file contains non-ASCII bytes.
+
+Validation:
+
+- Current Swift output for
+  `-n -i 'ERR_SYS|PME_TURN_OFF|LINK_REQ_RST|CFG_BME_EVT' linux` matched
+  checkpoint `f1d132a` byte-for-byte.
+- Sorted current Swift output matched Rust `rg` exactly for the same 241-line
+  Linux-tree oracle.
+- `swift build -c release`, `scripts/check-no-external-deps.sh --skip-build`,
+  and `xcrun swift test` passed.
+- The default build remains Swift-only; this change adds no C shim or custom C
+  code.
+
+A seven-run hyperfine A/B against checkpoint `f1d132a`, with one warmup,
+measured:
+
+| Command | Current Swift | Checkpoint `f1d132a` | Rust |
+| --- | ---: | ---: | ---: |
+| `-n -i 'ERR_SYS|PME_TURN_OFF|LINK_REQ_RST|CFG_BME_EVT' linux` | 2.700 s mean / 2.693 s median | 2.793 s / 2.763 s | 3.122 s / 3.122 s |
+
+A separate five-run harness confirmation measured the focused upstream
+`linux_alternates_casei` row at 2.676 s Swift median versus 3.131 s Rust
+median, improving the previous 2.821 s Swift same-turn baseline.
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/casei-simd-ab-1780319610.json` and
+`/tmp/swift-rg-bench/probe-casei-simd-ascii-1780319543/summary.json`.
+
 ## File-list root existence check deferral — 2026-06-01
 
 Darwin file-list fast paths now build the root plan before falling back to the
