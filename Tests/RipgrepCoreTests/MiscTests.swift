@@ -23,6 +23,27 @@ struct MiscTests {
         ])
     }
 
+    @Test("quiet byte literal preserves recursive hit and miss output")
+    func quietByteLiteralPreservesRecursiveHitAndMissOutput() throws {
+        let root = try TemporaryDirectory()
+        try root.write("alpha\nquiet\n", to: "one.txt")
+        try root.createDirectory("drivers")
+        try root.write("quiet\nPM_RESUME reached\n", to: "drivers/power.c")
+        try root.write("quiet\n", to: "drivers/idle.c")
+
+        let hitOutput = runWithExitCode(["-q", "PM_RESUME", root.url.path], expectedExitCode: 0)
+        #expect(hitOutput.isEmpty)
+
+        let caseInsensitiveHitOutput = runWithExitCode(["-q", "-i", "pm_resume", root.url.path], expectedExitCode: 0)
+        #expect(caseInsensitiveHitOutput.isEmpty)
+
+        let noMmapHitOutput = runWithExitCode(["--no-mmap", "-q", "PM_RESUME", root.url.path], expectedExitCode: 0)
+        #expect(noMmapHitOutput.isEmpty)
+
+        let missOutput = runWithExitCode(["-q", "ABSENT_NEEDLE_DOES_NOT_EXIST", root.url.path], expectedExitCode: 1)
+        #expect(missOutput.isEmpty)
+    }
+
     @Test("case-insensitive alternation preserves recursive line output")
     func caseInsensitiveAlternationPreservesRecursiveLineOutput() throws {
         let root = try TemporaryDirectory()

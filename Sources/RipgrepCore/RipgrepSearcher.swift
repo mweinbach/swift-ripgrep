@@ -657,7 +657,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !literal.isEmpty,
               !shouldPreprocess(haystack, options: options),
               decompressionCommand(for: haystack.url, options: options) == nil,
-              canUseBufferedRawLiteralSearch(fileURL: haystack.url) else {
+              canUseBufferedRawLiteralSearch(haystack, options: options) else {
             return nil
         }
 
@@ -10584,6 +10584,17 @@ public struct RipgrepSearcher: @unchecked Sendable {
             return false
         }
         return size.intValue <= HaystackReader.defaultMaxBufferBytes
+    }
+
+    private func canUseBufferedRawLiteralSearch(_ haystack: Haystack, options: RipgrepOptions) -> Bool {
+        if let fileSize = haystack.fileSize {
+            return fileSize <= HaystackReader.defaultMaxBufferBytes
+        }
+        if haystack.isRegularFile == true,
+           options.mmapMode != .never {
+            return true
+        }
+        return canUseBufferedRawLiteralSearch(fileURL: haystack.url)
     }
 
     private func canOmitMatchSpans(options: RipgrepOptions) -> Bool {

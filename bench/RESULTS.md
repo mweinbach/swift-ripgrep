@@ -8,6 +8,35 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Quiet byte-literal known-regular raw search — 2026-06-01
+
+Recursive quiet searches for a single literal now reuse the file walker's
+known-regular-file signal when mmap is allowed. This avoids an extra
+FileManager attribute lookup before the existing Swift raw literal search reads
+the file. Buffered-only searches still keep the old size check, and mmap read
+failures still fall back to the normal search path.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint `1da8266` and Rust for
+  recursive Linux quiet literal hit, miss, and ASCII ignore-case hit cases.
+- Added a regression test for recursive quiet byte-literal hit, ASCII
+  ignore-case hit, `--no-mmap` hit, and miss output.
+- The default build remains Swift-only; this change adds no C shim or custom C
+  code.
+
+A 12-run hyperfine A/B against checkpoint `1da8266`, with 3 warmups, measured:
+
+| Command | Current Swift | Checkpoint `1da8266` | Rust |
+| --- | ---: | ---: | ---: |
+| `-q PM_RESUME linux` | 27.48 ms mean / 27.44 ms median | 84.86 ms / 82.27 ms | 111.63 ms / 53.55 ms |
+| `-q ABSENT_NEEDLE_DOES_NOT_EXIST linux` | 958.76 ms / 944.86 ms | 1.006 s / 1.006 s | not remeasured in this pass |
+| `-q -i pm_resume linux` | 28.15 ms / 28.02 ms | 85.28 ms / 84.04 ms | not remeasured in this pass |
+| `-q EXPORT_SYMBOL linux` guardrail | 23.60 ms / 23.61 ms | 67.64 ms / 67.60 ms | not remeasured in this pass |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/quiet-known-regular-raw-literal-1780316988.json`.
+
 ## Quiet-stats uppercase/fixed-run suffix counter — 2026-06-01
 
 Quiet stats searches for exact Unicode-mode regexes shaped like
