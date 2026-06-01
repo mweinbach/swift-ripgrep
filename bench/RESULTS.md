@@ -8,6 +8,30 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected GCD parallel search queue — 2026-06-01
+
+A Swift-only probe replaced the parallel search path's Swift-concurrency task
+group and actor-backed work handoff with a GCD worker group plus an `NSLock`
+queue/result store. The intent was to reduce per-file actor handoff overhead
+for recursive quiet fallback searches while preserving the same worker count,
+output ordering, and stop-after-first-match behavior. It preserved Swift
+stdout/stderr/status against checkpoint `6b7b51a` for quiet hit/miss, early
+hit, ignore-case hit, regex-suffix quiet, visible line output, path-only,
+count, and files-without-match controls, and kept Rust quiet status/stdout
+parity for the quiet controls. The source change was backed out because the
+lock/GCD shape was flat on late quiet hits and slower on misses and regex
+suffixes.
+
+A 40-run interleaved process A/B against checkpoint `6b7b51a` measured:
+
+| Command | Probe Swift | Baseline Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `-q PM_RESUME linux` | 372.45 ms mean / 366.10 ms median / 409.33 ms p95 | 372.44 ms / 367.18 ms / 409.73 ms | 290.90 ms / 282.91 ms / 742.05 ms |
+| `-q __swift_rg_missing_needle__ linux` | 964.38 ms / 963.64 ms / 1027.72 ms | 953.82 ms / 945.21 ms / 1016.22 ms | 2755.07 ms / 2767.15 ms / 3229.26 ms |
+| `-q EXPORT_SYMBOL linux` | 7.06 ms / 6.80 ms / 8.85 ms | 7.05 ms / 6.85 ms / 8.31 ms | 5.97 ms / 5.63 ms / 7.72 ms |
+| `-q -i pm_resume linux` | 8.51 ms / 8.39 ms / 9.49 ms | 8.43 ms / 8.18 ms / 9.58 ms | 5.86 ms / 5.67 ms / 7.56 ms |
+| `-q '[A-Z]+_RESUME' linux` | 249.09 ms / 241.85 ms / 272.42 ms | 246.40 ms / 240.00 ms / 269.58 ms | 7.84 ms / 7.42 ms / 10.24 ms |
+
 ## Rejected ignore-aware final chunk coalescing — 2026-06-01
 
 A Swift-only probe kept the current ignore-aware Darwin `--files` worker
