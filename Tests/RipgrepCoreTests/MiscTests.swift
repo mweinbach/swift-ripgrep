@@ -289,6 +289,14 @@ struct MiscTests {
             noCandidateRoot.url.path,
         ], fixture: {})
         #expect(noCandidateNoMmapLineOutput.isEmpty)
+        try noCandidateRoot.write("lowercase with one Z but not five uppercase letters\n", to: "sparse.txt")
+        let sparseCandidateNoMmapLineOutput = try runExecutableData([
+            "--no-mmap",
+            "-n",
+            "[A-Z]{5}",
+            noCandidateRoot.path("sparse.txt"),
+        ], fixture: {})
+        #expect(sparseCandidateNoMmapLineOutput.isEmpty)
         let redBold = "\u{1B}[1m\u{1B}[31m"
         let reset = "\u{1B}[0m"
         let colorOutput = try runExecutableData([

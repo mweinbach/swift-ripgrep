@@ -7773,21 +7773,46 @@ public struct RipgrepSearcher: @unchecked Sendable {
 
             let lastStart = data.count - width
             var offset = 0
-            while offset <= lastStart {
-                guard byte(baseAddress[offset], matches: classes[0]) else {
-                    offset += 1
-                    continue
-                }
+            let useCandidateJumps = asciiFixedClassShouldUseCandidateJumps(
+                baseAddress: baseAddress,
+                dataCount: data.count,
+                byteClass: classes[0]
+            )
+            guard useCandidateJumps else {
+                while offset <= lastStart {
+                    guard byte(baseAddress[offset], matches: classes[0]) else {
+                        offset += 1
+                        continue
+                    }
 
+                    var classIndex = 1
+                    while classIndex < width,
+                          byte(baseAddress[offset + classIndex], matches: classes[classIndex]) {
+                        classIndex += 1
+                    }
+                    if classIndex == width {
+                        return offset
+                    }
+                    offset += 1
+                }
+                return nil
+            }
+
+            while let candidateOffset = asciiFixedClassNextCandidate(
+                baseAddress: baseAddress,
+                endExclusive: lastStart + 1,
+                byteClass: classes[0],
+                from: offset
+            ) {
                 var classIndex = 1
                 while classIndex < width,
-                      byte(baseAddress[offset + classIndex], matches: classes[classIndex]) {
+                      byte(baseAddress[candidateOffset + classIndex], matches: classes[classIndex]) {
                     classIndex += 1
                 }
                 if classIndex == width {
-                    return offset
+                    return candidateOffset
                 }
-                offset += 1
+                offset = candidateOffset + 1
             }
             return nil
         }
@@ -7850,20 +7875,56 @@ public struct RipgrepSearcher: @unchecked Sendable {
         var counts = ASCIIFixedClassCounts(matchedLines: 0, matches: 0, bytesSearched: dataCount)
         var lineHasMatch = false
         var offset = 0
-        while offset <= lastStart {
-            if baseAddress[offset] == newline {
-                lineHasMatch = false
+        let useCandidateJumps = asciiFixedClassShouldUseCandidateJumps(
+            baseAddress: baseAddress,
+            dataCount: dataCount,
+            byteClass: classes[0]
+        )
+        guard useCandidateJumps else {
+            while offset <= lastStart {
+                if baseAddress[offset] == newline {
+                    lineHasMatch = false
+                    offset += 1
+                    continue
+                }
+                guard byte(baseAddress[offset], matches: classes[0]) else {
+                    offset += 1
+                    continue
+                }
+
+                var classIndex = 1
+                while classIndex < width,
+                      byte(baseAddress[offset + classIndex], matches: classes[classIndex]) {
+                    classIndex += 1
+                }
+                if classIndex == width {
+                    counts.matches += 1
+                    if !lineHasMatch {
+                        counts.matchedLines += 1
+                        lineHasMatch = true
+                    }
+                    offset += width
+                    continue
+                }
                 offset += 1
-                continue
             }
-            guard byte(baseAddress[offset], matches: classes[0]) else {
-                offset += 1
-                continue
+            return counts
+        }
+
+        while let candidateOffset = asciiFixedClassNextCandidate(
+            baseAddress: baseAddress,
+            endExclusive: lastStart + 1,
+            byteClass: classes[0],
+            from: offset
+        ) {
+            if candidateOffset > offset,
+               memchr(baseAddress.advanced(by: offset), Int32(newline), candidateOffset - offset) != nil {
+                lineHasMatch = false
             }
 
             var classIndex = 1
             while classIndex < width,
-                  byte(baseAddress[offset + classIndex], matches: classes[classIndex]) {
+                  byte(baseAddress[candidateOffset + classIndex], matches: classes[classIndex]) {
                 classIndex += 1
             }
             if classIndex == width {
@@ -7872,10 +7933,10 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     counts.matchedLines += 1
                     lineHasMatch = true
                 }
-                offset += width
+                offset = candidateOffset + width
                 continue
             }
-            offset += 1
+            offset = candidateOffset + 1
         }
         return counts
     }
@@ -7898,6 +7959,11 @@ public struct RipgrepSearcher: @unchecked Sendable {
         var counts = ASCIIFixedClassCounts(matchedLines: 0, matches: 0, bytesSearched: dataCount)
         var lineStart = 0
         var offset = 0
+        let useCandidateJumps = asciiFixedClassShouldUseCandidateJumps(
+            baseAddress: baseAddress,
+            dataCount: dataCount,
+            byteClass: classes[0]
+        )
 
         func scanLine(lineEnd: Int, terminatorBytes: Int) -> Bool {
             guard lineEnd - lineStart >= width else {
@@ -7907,23 +7973,44 @@ public struct RipgrepSearcher: @unchecked Sendable {
             let lastStart = lineEnd - width
             var lineMatchCount = 0
             var candidateOffset = lineStart
-            while candidateOffset <= lastStart {
-                guard byte(baseAddress[candidateOffset], matches: classes[0]) else {
-                    candidateOffset += 1
-                    continue
-                }
+            if !useCandidateJumps {
+                while candidateOffset <= lastStart {
+                    guard byte(baseAddress[candidateOffset], matches: classes[0]) else {
+                        candidateOffset += 1
+                        continue
+                    }
 
-                var classIndex = 1
-                while classIndex < width,
-                      byte(baseAddress[candidateOffset + classIndex], matches: classes[classIndex]) {
-                    classIndex += 1
+                    var classIndex = 1
+                    while classIndex < width,
+                          byte(baseAddress[candidateOffset + classIndex], matches: classes[classIndex]) {
+                        classIndex += 1
+                    }
+                    if classIndex == width {
+                        lineMatchCount += 1
+                        candidateOffset += width
+                        continue
+                    }
+                    candidateOffset += 1
                 }
-                if classIndex == width {
-                    lineMatchCount += 1
-                    candidateOffset += width
-                    continue
+            } else {
+                while let foundOffset = asciiFixedClassNextCandidate(
+                    baseAddress: baseAddress,
+                    endExclusive: lastStart + 1,
+                    byteClass: classes[0],
+                    from: candidateOffset
+                ) {
+                    var classIndex = 1
+                    while classIndex < width,
+                          byte(baseAddress[foundOffset + classIndex], matches: classes[classIndex]) {
+                        classIndex += 1
+                    }
+                    if classIndex == width {
+                        lineMatchCount += 1
+                        candidateOffset = foundOffset + width
+                        continue
+                    }
+                    candidateOffset = foundOffset + 1
                 }
-                candidateOffset += 1
             }
 
             guard lineMatchCount > 0 else {
@@ -7979,6 +8066,11 @@ public struct RipgrepSearcher: @unchecked Sendable {
         var offset = 0
         var reachedMaxCount = false
         var bytesSearchedThroughMaxCount: Int?
+        let useCandidateJumps = asciiFixedClassShouldUseCandidateJumps(
+            baseAddress: baseAddress,
+            dataCount: dataCount,
+            byteClass: classes[0]
+        )
 
         func scanLine(lineEnd: Int, terminator: String) -> Bool {
             guard lineEnd - lineStart >= width else {
@@ -7989,38 +8081,74 @@ public struct RipgrepSearcher: @unchecked Sendable {
             var lineMatchCount = 0
             var spans: [MatchSpan] = []
             var candidateOffset = lineStart
-            while candidateOffset <= lastStart {
-                guard byte(baseAddress[candidateOffset], matches: classes[0]) else {
-                    candidateOffset += 1
-                    continue
-                }
-
-                var classIndex = 1
-                while classIndex < width,
-                      byte(baseAddress[candidateOffset + classIndex], matches: classes[classIndex]) {
-                    classIndex += 1
-                }
-                if classIndex == width {
-                    lineMatchCount += 1
-                    if includeSpans {
-                        let startByte = candidateOffset - lineStart
-                        let endByte = startByte + width
-                        let textBytes = UnsafeBufferPointer(
-                            start: baseAddress.advanced(by: candidateOffset),
-                            count: width
-                        )
-                        spans.append(MatchSpan(
-                            startColumn: startByte + 1,
-                            endColumn: endByte + 1,
-                            startByte: startByte,
-                            endByte: endByte,
-                            text: String(decoding: textBytes, as: UTF8.self)
-                        ))
+            if !useCandidateJumps {
+                while candidateOffset <= lastStart {
+                    guard byte(baseAddress[candidateOffset], matches: classes[0]) else {
+                        candidateOffset += 1
+                        continue
                     }
-                    candidateOffset += width
-                    continue
+
+                    var classIndex = 1
+                    while classIndex < width,
+                          byte(baseAddress[candidateOffset + classIndex], matches: classes[classIndex]) {
+                        classIndex += 1
+                    }
+                    if classIndex == width {
+                        lineMatchCount += 1
+                        if includeSpans {
+                            let startByte = candidateOffset - lineStart
+                            let endByte = startByte + width
+                            let textBytes = UnsafeBufferPointer(
+                                start: baseAddress.advanced(by: candidateOffset),
+                                count: width
+                            )
+                            spans.append(MatchSpan(
+                                startColumn: startByte + 1,
+                                endColumn: endByte + 1,
+                                startByte: startByte,
+                                endByte: endByte,
+                                text: String(decoding: textBytes, as: UTF8.self)
+                            ))
+                        }
+                        candidateOffset += width
+                        continue
+                    }
+                    candidateOffset += 1
                 }
-                candidateOffset += 1
+            } else {
+                while let foundOffset = asciiFixedClassNextCandidate(
+                    baseAddress: baseAddress,
+                    endExclusive: lastStart + 1,
+                    byteClass: classes[0],
+                    from: candidateOffset
+                ) {
+                    var classIndex = 1
+                    while classIndex < width,
+                          byte(baseAddress[foundOffset + classIndex], matches: classes[classIndex]) {
+                        classIndex += 1
+                    }
+                    if classIndex == width {
+                        lineMatchCount += 1
+                        if includeSpans {
+                            let startByte = foundOffset - lineStart
+                            let endByte = startByte + width
+                            let textBytes = UnsafeBufferPointer(
+                                start: baseAddress.advanced(by: foundOffset),
+                                count: width
+                            )
+                            spans.append(MatchSpan(
+                                startColumn: startByte + 1,
+                                endColumn: endByte + 1,
+                                startByte: startByte,
+                                endByte: endByte,
+                                text: String(decoding: textBytes, as: UTF8.self)
+                            ))
+                        }
+                        candidateOffset = foundOffset + width
+                        continue
+                    }
+                    candidateOffset = foundOffset + 1
+                }
             }
 
             guard lineMatchCount > 0 else {
@@ -8087,6 +8215,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         )
     }
 
+    @inline(__always)
     private func asciiFixedClassContainsCandidate(
         baseAddress: UnsafePointer<UInt8>,
         dataCount: Int,
@@ -8133,6 +8262,83 @@ public struct RipgrepSearcher: @unchecked Sendable {
             cursor += 1
         }
         return false
+    }
+
+    @inline(__always)
+    private func asciiFixedClassShouldUseCandidateJumps(
+        baseAddress: UnsafePointer<UInt8>,
+        dataCount: Int,
+        byteClass: ASCIIFixedClassSequenceFastPath.ByteClass
+    ) -> Bool {
+        let sampleCount = min(dataCount, 4096)
+        guard sampleCount > 0 else {
+            return false
+        }
+        var matches = 0
+        var offset = 0
+        while offset < sampleCount {
+            if byte(baseAddress[offset], matches: byteClass) {
+                matches += 1
+                if matches * 8 > sampleCount {
+                    return false
+                }
+            }
+            offset += 1
+        }
+        return true
+    }
+
+    @inline(__always)
+    private func asciiFixedClassNextCandidate(
+        baseAddress: UnsafePointer<UInt8>,
+        endExclusive: Int,
+        byteClass: ASCIIFixedClassSequenceFastPath.ByteClass,
+        from startOffset: Int
+    ) -> Int? {
+        let endExclusive = max(0, endExclusive)
+        var cursor = max(0, startOffset)
+        guard cursor < endExclusive else {
+            return nil
+        }
+
+        let lower: UInt8
+        let upper: UInt8
+        switch byteClass {
+        case .uppercase:
+            lower = UInt8(ascii: "A")
+            upper = UInt8(ascii: "Z")
+        case .lowercase:
+            lower = UInt8(ascii: "a")
+            upper = UInt8(ascii: "z")
+        case .digit:
+            lower = UInt8(ascii: "0")
+            upper = UInt8(ascii: "9")
+        }
+
+        if endExclusive - cursor >= 16 {
+            let lowerVector = SIMD16<UInt8>(repeating: lower)
+            let upperVector = SIMD16<UInt8>(repeating: upper)
+            let vectorLimit = endExclusive - 15
+            while cursor < vectorLimit {
+                let bytes = UnsafeRawPointer(baseAddress.advanced(by: cursor))
+                    .loadUnaligned(as: SIMD16<UInt8>.self)
+                let matches = (bytes .>= lowerVector) .& (bytes .<= upperVector)
+                if matches._storage.min() < 0 {
+                    for lane in 0..<16 where matches[lane] {
+                        return cursor + lane
+                    }
+                }
+                cursor += 16
+            }
+        }
+
+        while cursor < endExclusive {
+            if byte(baseAddress[cursor], matches: byteClass) {
+                return cursor
+            }
+            cursor += 1
+        }
+        return nil
     }
 
     private func searchRawLiteralContents(
@@ -10064,6 +10270,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         byte == UInt8(ascii: " ") || (byte >= 0x09 && byte <= 0x0D)
     }
 
+    @inline(__always)
     private func byte(_ byte: UInt8, matches byteClass: ASCIIFixedClassSequenceFastPath.ByteClass) -> Bool {
         switch byteClass {
         case .uppercase:
