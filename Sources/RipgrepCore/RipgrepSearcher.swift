@@ -8782,6 +8782,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
         var failedDecode = false
         let maxCount = options.maxCount ?? Int.max
         let dataCount = data.count
+        let largeBufferGreekCandidateProofThreshold = 1 << 20
+        let useWholeBufferCandidateProof = useByteBufferProof
+            || dataCount >= largeBufferGreekCandidateProofThreshold
 
         let result = data.withUnsafeBytes { rawBytes -> SearchFileResult? in
             let bytes = rawBytes.bindMemory(to: UInt8.self)
@@ -9099,7 +9102,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 return (hasMatch, true)
             }
 
-            if useByteBufferProof,
+            if useWholeBufferCandidateProof,
                greekScriptByteCandidateMatchOffset(start: 0, end: dataCount) == nil {
                 return SearchFileResult(
                     fileURL: fileURL,
@@ -9109,7 +9112,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 )
             }
 
-            let bufferStatus = useByteBufferProof
+            let bufferStatus = useWholeBufferCandidateProof
                 ? greekScriptByteLineStatus(start: 0, end: dataCount)
                 : greekScriptLineStatus(start: 0, end: dataCount)
             if bufferStatus.validUTF8, !bufferStatus.hasMatch {

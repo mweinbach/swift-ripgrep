@@ -8,6 +8,43 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Greek script large-buffer candidate proof — 2026-06-01
+
+Recursive exact `\p{Greek}` searches now use the Swift lead-byte candidate
+proof for buffers of at least 1 MiB, not only for explicit single-file roots.
+Small files keep the previous scalar-validation path, which avoids the
+corpus-wide regression seen when the proof was applied to every file.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint `bc71b67` and Rust for
+  focused recursive Greek cases covering large no-match line output,
+  ignore-case large no-match line output, large count output, quiet first-match,
+  and files-with-matches.
+- Added a recursive large non-Greek Unicode file to the Greek script feature
+  test so the threshold path is exercised by the Swift suite.
+- The default build remains Swift-only; this change uses Swift SIMD helpers
+  and does not add or enable any C shim.
+
+A 10-run hyperfine A/B against checkpoint `bc71b67`, with 3 warmups, measured:
+
+| Command | Current Swift | Previous Swift | Rust |
+| --- | ---: | ---: | ---: |
+| recursive `-n '\p{Greek}'` over one 64 MiB non-Greek Unicode file | 40.26 ms mean / 40.41 ms median | 116.14 ms / 118.50 ms | 27.59 ms / 27.56 ms |
+| recursive `-n -i '\p{Greek}'` over one 64 MiB non-Greek Unicode file | 37.20 ms / 36.17 ms | 121.80 ms / 122.48 ms | not remeasured in this pass |
+| recursive `-q '\p{Greek}'` over one early-Greek 64 MiB file guardrail | 8.42 ms / 8.44 ms | 8.33 ms / 8.32 ms | not remeasured in this pass |
+
+Linux corpus guardrail, 4 runs with 1 warmup:
+
+| Command | Current Swift | Previous Swift |
+| --- | ---: | ---: |
+| `-n '\p{Greek}' linux` | 1.754 s mean / 1.754 s median | 1.765 s / 1.767 s |
+| `-n -i '\p{Greek}' linux` | 1.737 s / 1.742 s | 1.771 s / 1.770 s |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/greek-large-threshold-proof-1780303510.json` and
+`/tmp/swift-rg-bench/greek-large-threshold-linux-guard-1780303580.json`.
+
 ## Greek script lead-byte candidate scanner — 2026-06-01
 
 Exact `\p{Greek}` explicit-file searches now use a Greek-specific Swift SIMD

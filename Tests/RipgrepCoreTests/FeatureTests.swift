@@ -248,6 +248,12 @@ struct FeatureTests {
         try root.write("latin\nπ alpha\n", to: "a.txt")
         try root.write("micro µ\nomega Ω\n", to: "nested/b.txt")
         try root.write("plain\ncafé\nsnow ☃\n", to: "nested/c.txt")
+        var largeNonGreek = Data()
+        let largeNonGreekLine = Data("café snow ☃\n".utf8)
+        while largeNonGreek.count < 1_100_000 {
+            largeNonGreek.append(largeNonGreekLine)
+        }
+        try root.write(largeNonGreek, to: "nested/large-non-greek.txt")
 
         #expect(try run(["--sort", "path", "-n", #"\p{Greek}"#, root.url.path]) == [
             "\(root.path("a.txt")):2:π alpha",
@@ -298,7 +304,7 @@ struct FeatureTests {
         #expect(statsFilesWithMatches.contains("2 matches"))
         #expect(statsFilesWithMatches.contains("2 matched lines"))
         #expect(statsFilesWithMatches.contains("2 files contained matches"))
-        #expect(statsFilesWithMatches.contains("3 files searched"))
+        #expect(statsFilesWithMatches.contains("4 files searched"))
         let statsQuiet = try run([
             "--sort",
             "path",
@@ -310,7 +316,7 @@ struct FeatureTests {
         #expect(statsQuiet.contains("2 matches"))
         #expect(statsQuiet.contains("2 matched lines"))
         #expect(statsQuiet.contains("2 files contained matches"))
-        #expect(statsQuiet.contains("3 files searched"))
+        #expect(statsQuiet.contains("4 files searched"))
         #expect(statsQuiet.contains("0 bytes printed"))
         let jsonQuiet = try run([
             "--json",
@@ -324,7 +330,7 @@ struct FeatureTests {
         #expect(jsonQuietStats?["matches"] as? Int == 2)
         #expect(jsonQuietStats?["matched_lines"] as? Int == 2)
         #expect(jsonQuietStats?["searches_with_match"] as? Int == 2)
-        #expect(jsonQuietStats?["searches"] as? Int == 3)
+        #expect(jsonQuietStats?["searches"] as? Int == 4)
         #expect(jsonQuietStats?["bytes_printed"] as? Int == 0)
         let jsonStatsQuiet = try run([
             "--json",
@@ -339,7 +345,7 @@ struct FeatureTests {
         #expect(jsonStatsQuietStats?["matches"] as? Int == 2)
         #expect(jsonStatsQuietStats?["matched_lines"] as? Int == 2)
         #expect(jsonStatsQuietStats?["searches_with_match"] as? Int == 2)
-        #expect(jsonStatsQuietStats?["searches"] as? Int == 3)
+        #expect(jsonStatsQuietStats?["searches"] as? Int == 4)
         #expect(jsonStatsQuietStats?["bytes_printed"] as? Int == 0)
 
         try root.write(Data([0xFF]) + Data("abc\n".utf8), to: "invalid-no-greek.bin")
