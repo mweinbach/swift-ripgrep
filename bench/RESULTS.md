@@ -8,6 +8,45 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Seven-byte Swift memmem fixed-shape SIMD helper — 2026-06-01
+
+The no-C-shim Swift memmem fallback now routes seven-byte exact literals
+through a fixed-shape SIMD16 helper. This covers dense leading/trailing-space
+near-misses such as ` qqeqq ` over repeated ` theta ` windows, where the
+generic scanner accepts on first/middle/final bytes and then rejects inside the
+verifier.
+
+Validation:
+
+- Added a seven-byte ` qqeqq ` regression test with repeated `theta` false
+  candidates and a positive hit line.
+- Current Swift stdout/stderr/status matched checkpoint
+  `/tmp/swift-rg-bench/baseline-e3f652b-1780356446-ripgrep` and Rust for
+  seven-byte, six-byte, five-byte, four-byte, three-byte, longer-literal, and
+  quiet controls. The stats case matched Rust after normalizing elapsed-time
+  lines.
+- `swift build -c release` and the focused 2/3/4/5/6/7-byte scanner tests
+  passed before benchmarking.
+
+A same-session 30-run hyperfine A/B against checkpoint `e3f652b`, with five
+warmups, measured:
+
+| Command | Current Swift | Checkpoint `e3f652b` | Rust |
+| --- | ---: | ---: | ---: |
+| `-n " qqeqq " no-match-ascii-46m.txt` | 11.9 ms mean / 11.4-12.8 ms range | 20.9 ms / 20.1-21.8 ms | 8.8 ms / 8.2-9.4 ms |
+| `--stats --files-without-match " qqeqq " no-match-ascii-46m.txt` | 10.2 ms / 9.6-11.0 ms | 18.8 ms / 17.8-20.4 ms | 8.1 ms / 7.4-9.0 ms |
+| `-n zzzzzzz no-match-ascii-46m.txt` guardrail | 12.0 ms / 11.1-12.7 ms | 11.6 ms / 10.9-12.0 ms | 9.1 ms / 8.5-10.0 ms |
+| `-n "tqetq " no-match-ascii-46m.txt` guardrail | 10.8 ms / 9.9-12.0 ms | 10.9 ms / 9.8-12.0 ms | not remeasured in this pass |
+| `-n tqexa no-match-ascii-46m.txt` guardrail | 9.9 ms / 9.2-10.9 ms | 10.0 ms / 9.3-10.6 ms | not remeasured in this pass |
+| `-n btta no-match-ascii-46m.txt` guardrail | 9.8 ms / 9.0-11.9 ms | 10.0 ms / 8.8-11.5 ms | not remeasured in this pass |
+| `-n exa no-match-ascii-46m.txt` guardrail | 9.8 ms / 8.5-11.0 ms | 9.8 ms / 8.9-10.4 ms | not remeasured in this pass |
+| `-n missingliteral match-ascii-46m.txt` guardrail | 72.0 ms / 69.9-74.8 ms | 71.1 ms / 69.5-72.7 ms | not remeasured in this pass |
+| `-q PM_RESUME linux` guardrail | 34.5 ms / 32.2-37.2 ms | 33.6 ms / 31.6-35.2 ms | not remeasured in this pass |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/sevenbyte-specialized-probe-1780356700.json` and
+`/tmp/swift-rg-bench/sevenbyte-specialized-guard-1780356900.json`.
+
 ## Six-byte Swift memmem fixed-shape SIMD helper — 2026-06-01
 
 The no-C-shim Swift memmem fallback now routes six-byte exact literals through
