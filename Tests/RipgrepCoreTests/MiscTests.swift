@@ -273,6 +273,13 @@ struct MiscTests {
         \(root.path("src/match.txt")):1:prefix Abcdefghi123 middle Zbcdefghi999 suffix
 
         """)
+        let noMmapLineOutput = try runExecutableData([
+            "--no-mmap",
+            "-n",
+            pattern,
+            root.url.path,
+        ], fixture: {})
+        #expect(noMmapLineOutput == lineOutput)
         let redBold = "\u{1B}[1m\u{1B}[31m"
         let reset = "\u{1B}[0m"
         let colorOutput = try runExecutableData([
@@ -343,6 +350,13 @@ struct MiscTests {
         \(root.path("src/match.txt"))
 
         """)
+        let noMmapFilesWithMatchesOutput = try runExecutableData([
+            "--no-mmap",
+            "-l",
+            pattern,
+            root.url.path,
+        ], fixture: {})
+        #expect(noMmapFilesWithMatchesOutput == filesWithMatchesOutput)
         let afterContextFilesWithMatchesOutput = try runExecutableData([
             "-A1",
             "-l",
@@ -359,6 +373,13 @@ struct MiscTests {
         \(root.path("src/miss.txt"))
 
         """)
+        let noMmapFilesWithoutMatchOutput = try runExecutableData([
+            "--no-mmap",
+            "--files-without-match",
+            pattern,
+            root.url.path,
+        ], fixture: {})
+        #expect(noMmapFilesWithoutMatchOutput == filesWithoutMatchOutput)
         let statsFilesWithMatchesOutput = try runExecutableData([
             "--stats",
             "-l",
@@ -416,6 +437,13 @@ struct MiscTests {
         \(root.path("src/match.txt")):1
 
         """)
+        let noMmapCountOutput = try runExecutableData([
+            "--no-mmap",
+            "-c",
+            pattern,
+            root.url.path,
+        ], fixture: {})
+        #expect(noMmapCountOutput == countOutput)
         let passthruCountOutput = try runExecutableData([
             "--passthru",
             "-c",
@@ -432,6 +460,13 @@ struct MiscTests {
         \(root.path("src/match.txt")):2
 
         """)
+        let noMmapCountMatchesOutput = try runExecutableData([
+            "--no-mmap",
+            "--count-matches",
+            pattern,
+            root.url.path,
+        ], fixture: {})
+        #expect(noMmapCountMatchesOutput == countMatchesOutput)
         let replacementCountMatchesOutput = try runExecutableData([
             "-r",
             "X",

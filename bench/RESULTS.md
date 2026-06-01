@@ -8,6 +8,39 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## No-mmap ASCII fixed-class buffered raw fast path — 2026-06-01
+
+`--no-mmap` exact ASCII fixed-class sequence searches over regular files now
+bypass the generic streamed line decoder when the file fits the existing
+buffered raw search limit. The search still honors `--no-mmap` by reading
+through `HaystackReader`'s buffered path, then reuses the existing Swift raw
+ASCII fixed-class scanner.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint `3d4d0a1` and Rust for
+  focused `--no-mmap` ASCII fixed-class cases covering recursive line output,
+  count output, count-matches output, files-with-matches, files-without-match,
+  quiet match/no-match exits, and a 46 MiB no-match file.
+- Added regression assertions for `--no-mmap` recursive line output,
+  files-with-matches, files-without-match, count, and count-matches output.
+- The default build remains Swift-only; this change only routes to existing
+  Swift buffered/raw search code and does not add or enable any C shim.
+
+A 12-run hyperfine A/B against checkpoint `3d4d0a1`, with 3 warmups, measured:
+
+| Command | Current Swift | Previous Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `--no-mmap -n '[A-Z]{5}' no-match-ascii-46m.txt` | 76.83 ms mean / 77.97 ms median | 4.856 s / 4.855 s | 19.32 ms / 19.37 ms |
+| `-n '[A-Z]{5}' no-match-ascii-46m.txt` guardrail | 87.05 ms / 88.09 ms | 80.59 ms / 82.06 ms | not remeasured in this pass |
+
+The automatic mmap guardrail is noisy in this run and unaffected by the
+`--no-mmap` routing guard, because automatic regular-file searches do not enter
+the streamed line path.
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/ascii-fixed-no-mmap-buffered-1780299676.json`.
+
 ## No-mmap Greek script buffered raw fast path — 2026-06-01
 
 `--no-mmap` exact `\p{Greek}` searches over regular files now bypass the
