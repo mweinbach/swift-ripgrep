@@ -671,7 +671,7 @@ public struct FileWalker: @unchecked Sendable {
         for options: RipgrepOptions,
         visitHaystack: @escaping (Haystack) -> Bool
     ) throws -> FileWalkResults? {
-        try fastSearchFileWalkResults(for: options) { haystack, haystacks in
+        try fastSearchFileWalkResults(for: options, lexicalOrder: true) { haystack, haystacks in
             if visitHaystack(haystack) {
                 haystacks.append(haystack)
                 return true
@@ -701,6 +701,7 @@ public struct FileWalker: @unchecked Sendable {
 
     private func fastSearchFileWalkResults(
         for options: RipgrepOptions,
+        lexicalOrder: Bool = false,
         visitHaystack: (Haystack, inout [Haystack]) -> Bool
     ) throws -> FileWalkResults? {
         #if canImport(Darwin)
@@ -760,6 +761,7 @@ public struct FileWalker: @unchecked Sendable {
             filtered: &filtered,
             ignoreStack: rootIgnoreStack,
             options: options,
+            lexicalOrder: lexicalOrder,
             didStop: &didStop
         ) { haystack in
             visitHaystack(haystack, &matchedHaystacks)
@@ -1926,6 +1928,7 @@ public struct FileWalker: @unchecked Sendable {
         filtered: inout Bool,
         ignoreStack: IgnoreStack,
         options: RipgrepOptions,
+        lexicalOrder: Bool = false,
         didStop: inout Bool,
         visit: (Haystack) -> Bool
     ) throws {
@@ -1971,9 +1974,9 @@ public struct FileWalker: @unchecked Sendable {
         let directoryPathPrefix = directoryPath + "/"
         let logicalDirectoryPathPrefix = pathPrefix(logicalDirectoryPath)
         let relativePathPrefix = relativePath.isEmpty ? "" : relativePath + "/"
-        for child in contents.children.reversed() {
+        func visitChild(_ child: FastDirectoryChild) throws {
             if child.kind == .symbolicLink {
-                continue
+                return
             }
             let childRelativePath = relativePathPrefix + child.name
             let isDirectory = child.kind.isDirectory
@@ -1985,11 +1988,11 @@ public struct FileWalker: @unchecked Sendable {
                    isDirectory: isDirectory,
                    ignoreStack: directoryIgnoreStack
                ) {
-                continue
+                return
             }
             if !directoryIgnoreStack.allows(relativePath: childRelativePath, basename: child.name, isDirectory: isDirectory) {
                 filtered = true
-                continue
+                return
             }
             if child.kind.isDirectory {
                 try walkFastSearchFilesInOutputOrder(
@@ -2007,6 +2010,7 @@ public struct FileWalker: @unchecked Sendable {
                     filtered: &filtered,
                     ignoreStack: directoryIgnoreStack,
                     options: options,
+                    lexicalOrder: lexicalOrder,
                     didStop: &didStop,
                     visit: visit
                 )
@@ -2026,6 +2030,22 @@ public struct FileWalker: @unchecked Sendable {
                 )
                 if visit(haystack) {
                     didStop = true
+                    return
+                }
+            }
+        }
+        if lexicalOrder {
+            let children = contents.children.sorted { $0.name < $1.name }
+            for child in children {
+                try visitChild(child)
+                if didStop {
+                    return
+                }
+            }
+        } else {
+            for child in contents.children.reversed() {
+                try visitChild(child)
+                if didStop {
                     return
                 }
             }

@@ -412,8 +412,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
         var searchMessages: [String] = []
         var abandonedQuietFirstMatchProbe = false
         var quietByteLiteralProbeBytes = 0
-        let quietByteLiteralProbeFileLimit = 32
-        let quietByteLiteralProbeByteLimit = 64 * 1024 * 1024
+        let quietByteLiteralProbeFileLimit = 1_536
+        let quietByteLiteralProbeByteLimit = (17 * 1024 * 1024) / 2
         func visit(_ haystack: Haystack) -> Bool {
             if quietByteLiteralFastPath != nil,
                filesSearched >= quietByteLiteralProbeFileLimit

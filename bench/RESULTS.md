@@ -8,6 +8,48 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Quiet byte-literal lexical prefix probe — 2026-06-01
+
+Quiet recursive byte-literal searches now use a lexical directory order only
+for the bounded first-match probe. If the probe finds a match, search stops
+before the full haystack collection and parallel fallback; if not, it still
+abandons into the established fallback. The accepted cap is 1,536 files or
+8.5 MiB, which keeps the Swift-first/no-C-shim default and avoids adding custom
+low-level scanner code.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint `644a598` for quiet
+  late literal hit, quiet miss, early literal hit, ignore-case hit,
+  regex-required-literal hit, stats quiet, visible literal output, and
+  files-with-matches controls.
+- Current Swift quiet statuses/stdout/stderr matched Rust for the quiet
+  controls.
+
+A 20-run hyperfine A/B against checkpoint `644a598` measured:
+
+| Command | Current Swift | Previous Swift |
+| --- | ---: | ---: |
+| `-q PM_RESUME linux` | 99.8 ms mean / 95.4-116.1 ms range | 460.1 ms / 447.2-496.8 ms |
+| `-q __swift_rg_missing_needle__ linux` | 1.257 s mean / 1.216-1.308 s range | 1.192 s / 1.138-1.251 s |
+
+A separate 20-run Rust comparison on the same final build measured:
+
+| Command | Current Swift | Rust |
+| --- | ---: | ---: |
+| `-q PM_RESUME linux` | 100.8 ms mean / 94.1-138.9 ms range | 209.1 ms / 27.4-574.2 ms |
+| `-q __swift_rg_missing_needle__ linux` | 1.260 s / 1.229-1.312 s | 3.716 s / 3.382-4.066 s |
+
+Rejected companion probes:
+
+- Full quiet work-item path sorting found earlier hits but was too expensive:
+  `comparePaths` sorting made `-q PM_RESUME linux` roughly 3.19 s, and cheap
+  lexical work-item sorting only improved the hit case from 417.2 ms to
+  396.8 ms while regressing the miss case from 1.178 s to 1.267 s.
+- File-list worker-cap rescans at 4, 8, and 6 workers did not beat the existing
+  cap of 6 across default, hidden, no-vcs, and NUL file-listing controls, so no
+  source change was kept for that path.
+
 ## Rejected quiet byte-literal prefix collect — 2026-06-01
 
 A Swift-only probe reused the required-literal prefix-visit walker for quiet
