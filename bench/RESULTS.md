@@ -36,6 +36,26 @@ A 120-run interleaved process A/B against checkpoint `35f56b4` measured:
 | `--no-ignore --files linux` | 65.74 ms / 64.86 ms | 65.17 ms / 64.49 ms | 68.93 ms / 68.31 ms |
 | `--null --files linux` | 77.87 ms / 76.52 ms | 79.60 ms / 78.93 ms | 76.12 ms / 75.12 ms |
 
+## Rejected in-place logical path byte recursion — 2026-06-01
+
+A Swift-only probe changed the ignore-aware Darwin `--files` data recursion to
+mutate `logicalPathBytes` in place while descending, mirroring the no-ignore
+byte walker's shape and avoiding one copy of the logical path byte array per
+child directory. The probe preserved Swift stdout/stderr/status byte-for-byte
+against checkpoint `6b002e1` for default, hidden, no-vcs, no-ignore, NUL, and
+debug file-listing, and kept sorted Rust path parity for default, hidden, and
+no-vcs controls. It was backed out because the median movement was flat to
+tiny, while mean/p95 worsened in some rows.
+
+An 80-run interleaved process A/B against checkpoint `6b002e1` measured:
+
+| Command | Probe Swift | Baseline Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `--files linux` | 79.19 ms mean / 77.50 ms median | 77.94 ms / 77.50 ms | 76.67 ms / 75.35 ms |
+| `--hidden --files linux` | 80.89 ms / 79.90 ms | 81.54 ms / 80.18 ms | 75.76 ms / 75.14 ms |
+| `--no-ignore-vcs --files linux` | 61.36 ms / 60.04 ms | 60.80 ms / 60.25 ms | 70.03 ms / 67.49 ms |
+| `--null --files linux` | 78.38 ms / 77.77 ms | 78.86 ms / 77.82 ms | 76.34 ms / 75.18 ms |
+
 ## Bounded ignore-aware file-list workers — 2026-06-01
 
 The ignore-aware Darwin `--files` data writer now runs top-level directory
