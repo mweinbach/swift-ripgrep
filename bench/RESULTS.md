@@ -8,6 +8,36 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## ASCII fixed-class first-class no-candidate proof — 2026-06-01
+
+Exact ASCII fixed-class sequence searches now run a Swift SIMD proof for the
+first byte class before entering the full raw scanner. If a file contains no
+byte in that class, the search can return the same no-match result without
+walking line and count state byte-by-byte. Files with any first-class candidate
+still fall through to the existing scanner.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint `c65d9a2` and Rust for
+  focused `--no-mmap` ASCII fixed-class cases covering recursive line output,
+  count output, count-matches output, files-with-matches, files-without-match,
+  quiet match/no-match exits, and a 46 MiB no-match file.
+- Added a regression assertion for a `--no-mmap` no-candidate fixed-class
+  no-match search.
+- The default build remains Swift-only; this change uses Swift SIMD and does
+  not add or enable any C shim.
+
+A 12-run hyperfine A/B against checkpoint `c65d9a2`, with 3 warmups, measured:
+
+| Command | Current Swift | Previous Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `--no-mmap -n '[A-Z]{5}' no-match-ascii-46m.txt` | 56.67 ms mean / 55.27 ms median | 81.65 ms / 80.98 ms | 19.78 ms / 19.90 ms |
+| `-n '[A-Z]{5}' no-match-ascii-46m.txt` guardrail | 52.69 ms / 54.51 ms | 83.47 ms / 82.52 ms | not remeasured in this pass |
+| `--no-mmap -c '[A-Z]{5}' no-match-ascii-46m.txt` | 40.31 ms / 41.38 ms | 73.05 ms / 73.50 ms | not remeasured in this pass |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/ascii-fixed-first-class-proof-1780300442.json`.
+
 ## No-mmap ASCII fixed-class buffered raw fast path — 2026-06-01
 
 `--no-mmap` exact ASCII fixed-class sequence searches over regular files now

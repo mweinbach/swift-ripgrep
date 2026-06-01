@@ -280,6 +280,15 @@ struct MiscTests {
             root.url.path,
         ], fixture: {})
         #expect(noMmapLineOutput == lineOutput)
+        let noCandidateRoot = try TemporaryDirectory()
+        try noCandidateRoot.write("all lowercase and digits 12345\n", to: "lower.txt")
+        let noCandidateNoMmapLineOutput = try runExecutableData([
+            "--no-mmap",
+            "-n",
+            "[A-Z]{5}",
+            noCandidateRoot.url.path,
+        ], fixture: {})
+        #expect(noCandidateNoMmapLineOutput.isEmpty)
         let redBold = "\u{1B}[1m\u{1B}[31m"
         let reset = "\u{1B}[0m"
         let colorOutput = try runExecutableData([

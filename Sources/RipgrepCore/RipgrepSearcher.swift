@@ -7692,6 +7692,20 @@ public struct RipgrepSearcher: @unchecked Sendable {
         guard width > 0, data.count >= width else {
             return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: data.count, searched: true)
         }
+        let hasFirstClassCandidate = data.withUnsafeBytes { rawBuffer -> Bool in
+            let bytes = rawBuffer.bindMemory(to: UInt8.self)
+            guard let baseAddress = bytes.baseAddress else {
+                return false
+            }
+            return asciiFixedClassContainsCandidate(
+                baseAddress: baseAddress,
+                dataCount: data.count,
+                byteClass: classes[0]
+            )
+        }
+        guard hasFirstClassCandidate else {
+            return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: data.count, searched: true)
+        }
 
         if countOutput || pathStatsOutput || jsonQuietSummaryOutput || quietStatsOutput {
             let counts = data.withUnsafeBytes { rawBuffer -> ASCIIFixedClassCounts in
@@ -8071,6 +8085,54 @@ public struct RipgrepSearcher: @unchecked Sendable {
             matches: matches,
             bytesSearched: bytesSearchedThroughMaxCount ?? dataCount
         )
+    }
+
+    private func asciiFixedClassContainsCandidate(
+        baseAddress: UnsafePointer<UInt8>,
+        dataCount: Int,
+        byteClass: ASCIIFixedClassSequenceFastPath.ByteClass
+    ) -> Bool {
+        guard dataCount > 0 else {
+            return false
+        }
+
+        let lower: UInt8
+        let upper: UInt8
+        switch byteClass {
+        case .uppercase:
+            lower = UInt8(ascii: "A")
+            upper = UInt8(ascii: "Z")
+        case .lowercase:
+            lower = UInt8(ascii: "a")
+            upper = UInt8(ascii: "z")
+        case .digit:
+            lower = UInt8(ascii: "0")
+            upper = UInt8(ascii: "9")
+        }
+
+        var cursor = 0
+        if dataCount >= 16 {
+            let lowerVector = SIMD16<UInt8>(repeating: lower)
+            let upperVector = SIMD16<UInt8>(repeating: upper)
+            let vectorLimit = dataCount - 15
+            while cursor < vectorLimit {
+                let bytes = UnsafeRawPointer(baseAddress.advanced(by: cursor))
+                    .loadUnaligned(as: SIMD16<UInt8>.self)
+                let matches = (bytes .>= lowerVector) .& (bytes .<= upperVector)
+                if matches._storage.min() < 0 {
+                    return true
+                }
+                cursor += 16
+            }
+        }
+
+        while cursor < dataCount {
+            if byte(baseAddress[cursor], matches: byteClass) {
+                return true
+            }
+            cursor += 1
+        }
+        return false
     }
 
     private func searchRawLiteralContents(
