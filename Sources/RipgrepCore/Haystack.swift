@@ -1346,6 +1346,7 @@ public struct FileWalker: @unchecked Sendable {
             ))
         }
 
+        let outputReserveCapacity = options.nullPathTerminator ? 64 * 1024 : 128 * 1024
         let workQueue = DarwinFilePathDataWorkQueue(items: directoryWorkItems)
         let workerCount = min(directoryWorkItems.count, darwinFilePathDataWorkerLimit)
 
@@ -1361,7 +1362,7 @@ public struct FileWalker: @unchecked Sendable {
                     }
 
                     var output = Data()
-                    output.reserveCapacity(64 * 1024)
+                    output.reserveCapacity(outputReserveCapacity)
                     var emittedCount = 0
                     var messages: [String] = []
                     var warnings: [String] = []

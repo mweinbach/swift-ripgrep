@@ -8,6 +8,31 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Newline file-list chunk reserve retune — 2026-06-01
+
+The ignore-aware Darwin `--files` parallel path now reserves 128 KiB per
+directory worker output chunk for newline-terminated output while keeping the
+old 64 KiB reserve for `--null --files`. This is a Swift-only capacity retune:
+it does not change traversal, ignore matching, output order, or the no-C-shim
+default.
+
+A 40-run hyperfine A/B against checkpoint `0ee4120` measured:
+
+| Command | Current Swift | Previous Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `--files linux` | 93.5 ms mean / 88.2-106.2 ms range | 97.8 ms / 87.9-123.7 ms | 84.3 ms / 78.5-168.3 ms |
+| `--hidden --files linux` | 95.8 ms / 85.3-101.3 ms | 97.4 ms / 92.9-106.4 ms | not remeasured for this row |
+| `--null --files linux` | 94.1 ms / 90.6-100.5 ms | 94.8 ms / 89.7-110.0 ms | not remeasured for this row |
+
+Companion reserve probes rejected:
+
+- 256 KiB improved default `--files` from 96.7 ms to 92.9 ms in one run, but
+  `--hidden --files` was flat/slightly worse and `--null --files` did not
+  improve.
+- Unconditional 128 KiB improved default and hidden rows in one run, but left
+  the NUL row slightly worse, so the accepted shape keeps NUL on the previous
+  reserve.
+
 ## Quiet byte-literal lexical prefix probe — 2026-06-01
 
 Quiet recursive byte-literal searches now use a lexical directory order only
