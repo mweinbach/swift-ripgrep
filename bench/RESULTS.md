@@ -42,6 +42,27 @@ Raw hyperfine export:
 The official subset summary is in
 `/tmp/swift-rg-bench/memmem-3byte-official-1780336523/summary.md`.
 
+## Rejected lazy newline count for literal line-number search — 2026-06-01
+
+A Swift-only prototype changed `rg_memmem_count_byte_before` to defer newline
+counting until after a literal match was found. The hypothesis was that
+line-number no-match output ignores the count on miss and could avoid counting
+newlines across the whole haystack. In practice, the change did not improve the
+three-byte no-match row and regressed longer literal line-number searches,
+likely because match paths needed an additional prefix count pass and the
+existing fused candidate/newline loop is already cheap.
+
+Rejected 10-run probe, two warmups:
+
+| Command | Prototype Swift | Prior retained Swift |
+| --- | ---: | ---: |
+| `-n exa no-match-ascii-46m.txt` | 13.6 ms mean / 13.1-14.1 ms range | 13.4 ms / 12.9-14.7 ms |
+| `-n missingliteral match-ascii-46m.txt` | 83.2 ms / 76.2-95.5 ms | 65.0 ms / 63.5-69.1 ms |
+| `--stats --files-without-match exa no-match-ascii-46m.txt` guardrail | 11.0 ms / 10.5-11.6 ms | 9.8 ms / 9.1-11.1 ms |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/lazy-count-before-probe-1780337213.json`.
+
 ## Swift memmem middle-byte candidate filter — 2026-06-01
 
 The default no-C-shim Swift `rg_memmem_simple` fallback now checks a literal's
