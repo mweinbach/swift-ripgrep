@@ -253,12 +253,25 @@ struct FeatureTests {
             "\(root.path("a.txt")):2:π alpha",
             "\(root.path("nested/b.txt")):2:omega Ω",
         ])
+        #expect(try run(["--no-mmap", "--sort", "path", "-n", #"\p{Greek}"#, root.url.path]) == [
+            "\(root.path("a.txt")):2:π alpha",
+            "\(root.path("nested/b.txt")):2:omega Ω",
+        ])
         #expect(try run(["--sort", "path", "-n", "-i", #"\p{Greek}"#, root.url.path]) == [
             "\(root.path("a.txt")):2:π alpha",
             "\(root.path("nested/b.txt")):1:micro µ",
             "\(root.path("nested/b.txt")):2:omega Ω",
         ])
+        #expect(try run(["--no-mmap", "--sort", "path", "-n", "-i", #"\p{Greek}"#, root.url.path]) == [
+            "\(root.path("a.txt")):2:π alpha",
+            "\(root.path("nested/b.txt")):1:micro µ",
+            "\(root.path("nested/b.txt")):2:omega Ω",
+        ])
         #expect(try run(["--sort", "path", "-c", #"\p{Greek}"#, root.url.path]) == [
+            "\(root.path("a.txt")):1",
+            "\(root.path("nested/b.txt")):1",
+        ])
+        #expect(try run(["--no-mmap", "--sort", "path", "-c", #"\p{Greek}"#, root.url.path]) == [
             "\(root.path("a.txt")):1",
             "\(root.path("nested/b.txt")):1",
         ])
@@ -331,6 +344,7 @@ struct FeatureTests {
 
         try root.write(Data([0xFF]) + Data("abc\n".utf8), to: "invalid-no-greek.bin")
         #expect(try run(["-n", #"\p{Greek}"#, root.path("invalid-no-greek.bin")]) == [])
+        #expect(try run(["--no-mmap", "-n", #"\p{Greek}"#, root.path("invalid-no-greek.bin")]) == [])
         #expect(try run(["-L", #"\p{Greek}"#, root.path("invalid-no-greek.bin")]) == [])
     }
 

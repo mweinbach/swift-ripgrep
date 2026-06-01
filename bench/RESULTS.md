@@ -8,6 +8,37 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## No-mmap Greek script buffered raw fast path — 2026-06-01
+
+`--no-mmap` exact `\p{Greek}` searches over regular files now bypass the
+generic streamed line decoder when the file fits the existing buffered raw
+search limit. The search still honors `--no-mmap` because it reads through
+`HaystackReader`'s buffered path, but then reuses the existing raw Greek script
+scanner instead of decoding every line through the general matcher.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint `d077df5` and Rust for
+  15 focused `--no-mmap` Greek cases, including valid line/count/path outputs,
+  64 MiB Unicode no-match and early quiet fixtures, invalid UTF-8 no-match,
+  invalid bytes before a later Greek match, invalid bytes on the matching line,
+  and stats output after normalizing only elapsed-time lines.
+- Added regression assertions for `--no-mmap` recursive Greek line output,
+  ignore-case micro-sign output, count output, and invalid UTF-8 no-match
+  output.
+- The default build remains Swift-only; this change only routes to existing
+  Swift buffered/raw search code and does not add or enable any C shim.
+
+A 12-run hyperfine A/B against checkpoint `d077df5`, with 3 warmups, measured:
+
+| Command | Current Swift | Previous Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `--no-mmap -n '\p{Greek}' non-greek-unicode-64m.txt` | 51.04 ms mean / 50.45 ms median | 5.362 s / 5.360 s | 25.52 ms / 25.50 ms |
+| `-n '\p{Greek}' non-greek-unicode-64m.txt` guardrail | 49.26 ms / 48.38 ms | 42.36 ms / 45.59 ms | not remeasured in this pass |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/greek-no-mmap-buffered-1780298911.json`.
+
 ## Explicit Greek script no-match candidate proof — 2026-06-01
 
 Explicit-root `\p{Greek}` searches now run a Swift-only byte-candidate proof
