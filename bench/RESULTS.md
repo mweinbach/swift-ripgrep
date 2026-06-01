@@ -8,6 +8,28 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected ignore-aware final chunk coalescing — 2026-06-01
+
+A Swift-only probe kept the current ignore-aware Darwin `--files` worker
+scheduling and ordered chunk snapshot, but coalesced the final ordered `Data`
+chunks into one write when the combined payload was at most 8 MiB. The intent
+was to reduce stdout write calls without changing traversal, filtering, or C
+shim usage. It preserved Swift stdout/stderr/status byte-for-byte against
+checkpoint `638a068` for default, hidden, no-vcs, no-ignore, NUL, and debug
+file-listing, and kept sorted Rust path parity for default, hidden, and no-vcs
+controls. The copy and extra accounting cost outweighed the reduced write
+count, so the source change was backed out.
+
+An 80-run interleaved process A/B against checkpoint `638a068` measured:
+
+| Command | Probe Swift | Baseline Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `--files linux` | 82.00 ms mean / 79.19 ms median / 103.06 ms p95 | 80.95 ms / 78.40 ms / 102.30 ms | 79.26 ms / 75.57 ms / 100.79 ms |
+| `--hidden --files linux` | 82.35 ms / 80.79 ms / 93.41 ms | 82.24 ms / 80.94 ms / 98.47 ms | 77.31 ms / 75.48 ms / 88.13 ms |
+| `--no-ignore-vcs --files linux` | 62.57 ms / 60.95 ms / 77.08 ms | 62.02 ms / 60.44 ms / 72.93 ms | 69.09 ms / 67.75 ms / 76.52 ms |
+| `--no-ignore --files linux` | 67.29 ms / 65.33 ms / 78.51 ms | 66.54 ms / 65.42 ms / 75.89 ms | 69.21 ms / 68.48 ms / 74.70 ms |
+| `--null --files linux` | 80.26 ms / 78.13 ms / 92.40 ms | 80.06 ms / 77.80 ms / 93.57 ms | 79.36 ms / 75.60 ms / 103.68 ms |
+
 ## Rejected quiet fallback prefix skip after probe budget — 2026-06-01
 
 A Swift-only probe kept the quiet byte-literal first-match probe's current
