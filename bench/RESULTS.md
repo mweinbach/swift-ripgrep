@@ -8,6 +8,49 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Explicit-file Greek UTF-8 byte proof — 2026-06-01
+
+The raw `\p{Greek}` path now uses a validated UTF-8 byte-range proof only when
+the haystack is the single explicit file operand. This keeps recursive Linux
+searches on the scalar proof from `f85a1ff`, but speeds explicit Unicode files
+that contain no Greek scalars by avoiding scalar reconstruction for every
+non-ASCII character. The path still validates UTF-8 before proving absence, and
+invalid UTF-8 falls back exactly as before.
+
+Validation:
+
+- Current Swift output/status matched checkpoint `f85a1ff` and Rust for sorted
+  Linux `-n`, `-n -i`, `-l`, `--stats -l`, and `--json -q` after normalizing
+  timing fields.
+- Current Swift output/status matched checkpoint `f85a1ff` and Rust for
+  64 MiB non-Greek Unicode no-match, 64 MiB early-Greek Unicode first-match,
+  and a small invalid-UTF8 Greek edge across matching-lines, quiet, path-only,
+  and stats controls.
+
+A 16-run hyperfine A/B on the 64 MiB non-Greek Unicode no-match fixture
+measured:
+
+| Command | Current Swift | Previous Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `-n '\p{Greek}' non-greek-unicode-64m.txt` | 85.4 ms mean / 73.1-92.4 ms range | 131.3 ms / 118.9-141.4 ms | 29.4 ms / 28.0-30.5 ms |
+| `-q '\p{Greek}' non-greek-unicode-64m.txt` | 53.1 ms / 49.0-57.0 ms | 96.8 ms / 93.0-103.1 ms | not remeasured for this row |
+| `-l '\p{Greek}' non-greek-unicode-64m.txt` | 79.4 ms / 75.3-88.1 ms | 125.0 ms / 121.3-129.7 ms | not remeasured for this row |
+
+Recursive Linux guardrails stayed in the baseline band once the byte proof was
+limited to exact explicit-file roots:
+
+| Command | Current Swift | Previous Swift |
+| --- | ---: | ---: |
+| `-n '\p{Greek}' linux` | 1.780 s mean / 1.744-1.854 s range | 1.782 s / 1.763-1.815 s |
+| `-l '\p{Greek}' linux` | 1.759 s / 1.729-1.796 s | 1.749 s / 1.717-1.776 s |
+
+Rejected companion probe:
+
+- Applying the byte-range proof to every Greek search preserved output, but
+  regressed recursive Linux matching-line rows. An order-flipped 12-run A/B
+  measured `-n '\p{Greek}' linux` at 1.840 s for the probe versus 1.767 s
+  baseline, and `-n -i '\p{Greek}' linux` at 1.963 s versus 1.764 s.
+
 ## Greek-script whole-buffer absence proof — 2026-06-01
 
 The Darwin raw `\p{Greek}` path now reuses the UTF-8 scalar scan as a

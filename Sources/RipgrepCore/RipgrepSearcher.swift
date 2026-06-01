@@ -6901,7 +6901,10 @@ public struct RipgrepSearcher: @unchecked Sendable {
             data,
             fileURL: fileURL,
             matcher: matcher,
-            options: options
+            options: options,
+            useByteBufferProof: haystack.isExplicit
+                && options.effectiveRoots.count == 1
+                && options.effectiveRoots[0].path == fileURL.path
         ) {
             return FileSearchOutcome(result: fastResult)
         }
@@ -8431,7 +8434,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
         _ data: Data,
         fileURL: URL,
         matcher: PatternMatcher,
-        options: RipgrepOptions
+        options: RipgrepOptions,
+        useByteBufferProof: Bool
     ) -> SearchFileResult? {
         #if !canImport(Darwin)
         return nil
@@ -8514,6 +8518,49 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 )
             }
 
+            func isGreekScriptUTF8Scalar(
+                first: UInt8,
+                second: UInt8,
+                third: UInt8 = 0,
+                fourth: UInt8 = 0,
+                length: Int
+            ) -> Bool {
+                if length == 2 {
+                    if first == 0xC2 {
+                        return fastPath.caseInsensitive && second == 0xB5
+                    }
+                    if first == 0xCD {
+                        return (0xB0...0xB3).contains(second)
+                            || (0xB5...0xB7).contains(second)
+                            || (0xBA...0xBD).contains(second)
+                            || second == 0xBF
+                    }
+                    if first == 0xCE {
+                        return (0x84...0x8A).contains(second)
+                            || second == 0x8C
+                            || (0x8E...0xA1).contains(second)
+                            || (0xA3...0xBF).contains(second)
+                    }
+                    if first == 0xCF {
+                        return (0x80...0xA1).contains(second)
+                            || (0xB0...0xBF).contains(second)
+                    }
+                    return false
+                }
+                if length == 3 {
+                    return (first == 0xE1 && (0xBC...0xBF).contains(second))
+                        || (first == 0xE2 && second == 0x84 && third == 0xA6)
+                }
+                return (first == 0xF0
+                    && second == 0x90
+                    && ((third == 0x85 && (0x80...0xBF).contains(fourth))
+                        || (third == 0x86 && ((0x80...0x8F).contains(fourth) || fourth == 0xA0))))
+                    || (first == 0xF0
+                        && second == 0x9D
+                        && ((third == 0x88 && (0x80...0xBF).contains(fourth))
+                            || (third == 0x89 && (0x80...0x8F).contains(fourth))))
+            }
+
             func isGreekScriptScalarValue(_ value: UInt32) -> Bool {
                 switch value {
                 case 0x0370...0x0373,
@@ -8536,6 +8583,92 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 default:
                     return false
                 }
+            }
+
+            func greekScriptByteLineStatus(start: Int, end: Int) -> (hasMatch: Bool, validUTF8: Bool) {
+                var offset = start
+                var hasMatch = false
+                while offset < end {
+                    let byte = bytes[offset]
+                    if byte < 0x80 {
+                        offset += 1
+                        continue
+                    }
+
+                    if (0xC2...0xDF).contains(byte) {
+                        guard offset + 2 <= end else {
+                            return (false, false)
+                        }
+                        let second = bytes[offset + 1]
+                        guard (0x80...0xBF).contains(second) else {
+                            return (false, false)
+                        }
+                        if isGreekScriptUTF8Scalar(first: byte, second: second, length: 2) {
+                            hasMatch = true
+                            break
+                        }
+                        offset += 2
+                        continue
+                    }
+
+                    if (0xE0...0xEF).contains(byte) {
+                        guard offset + 3 <= end else {
+                            return (false, false)
+                        }
+                        let second = bytes[offset + 1]
+                        let third = bytes[offset + 2]
+                        let validSecond: Bool
+                        switch byte {
+                        case 0xE0:
+                            validSecond = (0xA0...0xBF).contains(second)
+                        case 0xED:
+                            validSecond = (0x80...0x9F).contains(second)
+                        default:
+                            validSecond = (0x80...0xBF).contains(second)
+                        }
+                        guard validSecond, (0x80...0xBF).contains(third) else {
+                            return (false, false)
+                        }
+                        if isGreekScriptUTF8Scalar(first: byte, second: second, third: third, length: 3) {
+                            hasMatch = true
+                            break
+                        }
+                        offset += 3
+                        continue
+                    }
+
+                    if (0xF0...0xF4).contains(byte) {
+                        guard offset + 4 <= end else {
+                            return (false, false)
+                        }
+                        let second = bytes[offset + 1]
+                        let third = bytes[offset + 2]
+                        let fourth = bytes[offset + 3]
+                        let validSecond: Bool
+                        switch byte {
+                        case 0xF0:
+                            validSecond = (0x90...0xBF).contains(second)
+                        case 0xF4:
+                            validSecond = (0x80...0x8F).contains(second)
+                        default:
+                            validSecond = (0x80...0xBF).contains(second)
+                        }
+                        guard validSecond,
+                              (0x80...0xBF).contains(third),
+                              (0x80...0xBF).contains(fourth) else {
+                            return (false, false)
+                        }
+                        if isGreekScriptUTF8Scalar(first: byte, second: second, third: third, fourth: fourth, length: 4) {
+                            hasMatch = true
+                            break
+                        }
+                        offset += 4
+                        continue
+                    }
+
+                    return (false, false)
+                }
+                return (hasMatch, true)
             }
 
             func greekScriptLineStatus(start: Int, end: Int) -> (hasMatch: Bool, validUTF8: Bool) {
@@ -8592,7 +8725,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 return (hasMatch, true)
             }
 
-            let bufferStatus = greekScriptLineStatus(start: 0, end: dataCount)
+            let bufferStatus = useByteBufferProof
+                ? greekScriptByteLineStatus(start: 0, end: dataCount)
+                : greekScriptLineStatus(start: 0, end: dataCount)
             if bufferStatus.validUTF8, !bufferStatus.hasMatch {
                 return SearchFileResult(
                     fileURL: fileURL,
