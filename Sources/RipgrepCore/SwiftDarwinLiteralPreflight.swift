@@ -12945,6 +12945,27 @@ private func rgSwiftDarwinWriteInvertedMultiLiteralLines(
     return selectedLineCount
 }
 
+private func rgSwiftLiteralContextWindowStart(
+    base: UnsafePointer<UInt8>,
+    matchStart: Int,
+    beforeContext: Int
+) -> Int {
+    var lineStart = matchStart
+    while lineStart > 0, base[lineStart - 1] != UInt8(ascii: "\n") {
+        lineStart -= 1
+    }
+
+    var remaining = beforeContext
+    while remaining > 0, lineStart > 0 {
+        lineStart -= 1
+        while lineStart > 0, base[lineStart - 1] != UInt8(ascii: "\n") {
+            lineStart -= 1
+        }
+        remaining -= 1
+    }
+    return lineStart
+}
+
 private func rgSwiftDarwinWriteAfterContextLiteralLines(
     _ base: UnsafePointer<UInt8>,
     haystackLength: Int,
@@ -12976,6 +12997,20 @@ private func rgSwiftDarwinWriteAfterContextLiteralLines(
        (base[0] == 0xFF && base[1] == 0xFE
         || base[0] == 0xFE && base[1] == 0xFF) {
         return nil
+    }
+    let firstLiteralMatch: UnsafePointer<UInt8>?
+    if asciiCaseInsensitive {
+        firstLiteralMatch = nil
+    } else {
+        firstLiteralMatch = rg_memmem_simple(
+            base,
+            haystackLength,
+            literalBase,
+            literal.count
+        )
+        guard firstLiteralMatch != nil else {
+            return 0
+        }
     }
     if memchr(base, 0, haystackLength) != nil {
         return nil
@@ -13010,6 +13045,18 @@ private func rgSwiftDarwinWriteAfterContextLiteralLines(
         for index in 0..<(foldedLiteral.count - 1) {
             caseInsensitiveShifts[Int(foldedLiteral[index])] = foldedLiteral.count - 1 - index
         }
+    }
+
+    if let firstLiteralMatch {
+        let firstMatchStart = base.distance(to: firstLiteralMatch)
+        lineStart = rgSwiftLiteralContextWindowStart(
+            base: base,
+            matchStart: firstMatchStart,
+            beforeContext: 0
+        )
+        currentLineNumber = lineNumber
+            ? Int(rg_memcount_byte(base, lineStart, UInt8(ascii: "\n"))) + 1
+            : 1
     }
 
     func emitGroupSeparatorIfNeeded() -> Bool {
@@ -13136,6 +13183,20 @@ private func rgSwiftDarwinWriteBeforeContextLiteralLines(
         || base[0] == 0xFE && base[1] == 0xFF) {
         return nil
     }
+    let firstLiteralMatch: UnsafePointer<UInt8>?
+    if asciiCaseInsensitive {
+        firstLiteralMatch = nil
+    } else {
+        firstLiteralMatch = rg_memmem_simple(
+            base,
+            haystackLength,
+            literalBase,
+            literal.count
+        )
+        guard firstLiteralMatch != nil else {
+            return 0
+        }
+    }
     if memchr(base, 0, haystackLength) != nil {
         return nil
     }
@@ -13179,6 +13240,18 @@ private func rgSwiftDarwinWriteBeforeContextLiteralLines(
         for index in 0..<(foldedLiteral.count - 1) {
             caseInsensitiveShifts[Int(foldedLiteral[index])] = foldedLiteral.count - 1 - index
         }
+    }
+
+    if let firstLiteralMatch {
+        let firstMatchStart = base.distance(to: firstLiteralMatch)
+        lineStart = rgSwiftLiteralContextWindowStart(
+            base: base,
+            matchStart: firstMatchStart,
+            beforeContext: beforeContext
+        )
+        currentLineNumber = lineNumber
+            ? Int(rg_memcount_byte(base, lineStart, UInt8(ascii: "\n"))) + 1
+            : 1
     }
 
     func compactPendingLinesIfNeeded() {
@@ -13340,6 +13413,20 @@ private func rgSwiftDarwinWriteContextLiteralLines(
         || base[0] == 0xFE && base[1] == 0xFF) {
         return nil
     }
+    let firstLiteralMatch: UnsafePointer<UInt8>?
+    if asciiCaseInsensitive {
+        firstLiteralMatch = nil
+    } else {
+        firstLiteralMatch = rg_memmem_simple(
+            base,
+            haystackLength,
+            literalBase,
+            literal.count
+        )
+        guard firstLiteralMatch != nil else {
+            return 0
+        }
+    }
     if memchr(base, 0, haystackLength) != nil {
         return nil
     }
@@ -13384,6 +13471,18 @@ private func rgSwiftDarwinWriteContextLiteralLines(
         for index in 0..<(foldedLiteral.count - 1) {
             caseInsensitiveShifts[Int(foldedLiteral[index])] = foldedLiteral.count - 1 - index
         }
+    }
+
+    if let firstLiteralMatch {
+        let firstMatchStart = base.distance(to: firstLiteralMatch)
+        lineStart = rgSwiftLiteralContextWindowStart(
+            base: base,
+            matchStart: firstMatchStart,
+            beforeContext: beforeContext
+        )
+        currentLineNumber = lineNumber
+            ? Int(rg_memcount_byte(base, lineStart, UInt8(ascii: "\n"))) + 1
+            : 1
     }
 
     func compactPendingLinesIfNeeded() {

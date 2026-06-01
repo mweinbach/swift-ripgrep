@@ -79,6 +79,44 @@ Raw hyperfine export:
 The official subset summary is in
 `/tmp/swift-rg-bench/lazy-nul-official-1780338013/summary.md`.
 
+## Literal context first-match proof — 2026-06-01
+
+The single-literal Darwin context writers now search for the first exact
+case-sensitive literal before doing the full binary/NUL text proof or line
+scan. If the literal is absent, `-A`, `-B`, and `-C` can return immediately
+without scanning every line. If the literal is present, the context writers
+start from the first match line or its before-context window, preserving
+context markers while avoiding a second scan over earlier unmatched lines.
+ASCII case-insensitive context remains on the existing path because its
+non-ASCII fallback rules need the full text proof first.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint `a9d855d` and Rust for
+  small `-A`, `-B`, `-C`, line-number, no-match, binary no-match, and binary
+  literal-match guards.
+- The 46 MiB no-match `-A1 exa` output/stderr/status matched checkpoint
+  `a9d855d` and Rust.
+- `xcrun swift test` passed, including the context-output feature test, and
+  `SWIFT_RIPGREP_PARITY=1 xcrun swift test --filter ParityHarnessTests` passed.
+- The default build remains Swift-only; this changes only Swift fallback
+  preflight control flow and adds no C shim or custom C code.
+
+A same-session 20-run hyperfine A/B against checkpoint `a9d855d`, with three
+warmups, measured:
+
+| Command | Current Swift | Checkpoint `a9d855d` | Rust |
+| --- | ---: | ---: | ---: |
+| `-A1 exa no-match-ascii-46m.txt` | 10.5 ms mean / 9.7-11.7 ms range | 21.7 ms / 21.0-22.6 ms | 8.0 ms / 7.6-8.6 ms |
+| `-B1 exa no-match-ascii-46m.txt` | 10.1 ms / 9.3-11.0 ms | 23.7 ms / 23.0-25.4 ms | 8.1 ms / 7.2-9.1 ms |
+| `-C1 exa no-match-ascii-46m.txt` | 10.3 ms / 9.5-12.0 ms | 24.1 ms / 23.2-25.8 ms | 8.6 ms / 8.0-9.3 ms |
+| `-A1 literal match-ascii-46m.txt` guardrail | 32.4 ms / 31.7-33.4 ms | 32.0 ms / 30.8-33.2 ms | not remeasured in this pass |
+| `-B1 literal match-ascii-46m.txt` guardrail | 39.3 ms / 38.3-39.9 ms | 39.0 ms / 38.0-39.8 ms | not remeasured in this pass |
+| `-C1 literal match-ascii-46m.txt` guardrail | 39.5 ms / 38.6-40.2 ms | 39.1 ms / 37.4-40.7 ms | not remeasured in this pass |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/context-firstmatch-window-final-1780339534.json`.
+
 ## Rejected lazy newline count for literal line-number search — 2026-06-01
 
 A Swift-only prototype changed `rg_memmem_count_byte_before` to defer newline
