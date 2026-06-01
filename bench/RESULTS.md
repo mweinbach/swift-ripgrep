@@ -8,6 +8,32 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected quiet byte-literal continuation after probe budget — 2026-06-01
+
+A Swift-only probe changed recursive quiet byte-literal search so that, after
+the first-match probe reached its 32-file / 64 MiB budget, the same fast walk
+continued with the regular searcher instead of abandoning to the existing
+parallel quiet fallback. This avoided restarting the walk for late hits, but it
+turned quiet misses into an ordered sequential scan of the remaining corpus.
+The source change was backed out.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint `5dbf898` for quiet
+  late hit, quiet miss, early hit, ignore-case early hit, regex-literal hit,
+  and file-list controls.
+- Current Swift quiet statuses/stdout matched Rust for the same quiet controls.
+
+A 40-run interleaved process A/B against checkpoint `5dbf898` measured:
+
+| Command | Probe Swift | Baseline Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `-q PM_RESUME linux` | 357.16 ms mean / 365.94 ms median | 373.83 ms / 376.04 ms | 302.82 ms / 265.77 ms |
+| `-q __swift_rg_missing_needle__ linux` | 2079.28 ms / 2077.11 ms | 937.99 ms / 936.23 ms | 2718.41 ms / 2687.12 ms |
+| `-q EXPORT_SYMBOL linux` | 7.58 ms / 7.78 ms | 7.49 ms / 7.64 ms | 6.03 ms / 5.78 ms |
+| `-q -i pm_resume linux` | 9.12 ms / 9.23 ms | 9.07 ms / 9.28 ms | 6.46 ms / 6.16 ms |
+| `-q '[A-Z]+_RESUME' linux` | 260.20 ms / 261.32 ms | 257.42 ms / 258.43 ms | 8.07 ms / 7.62 ms |
+
 ## Retuned ignore-aware file-list worker cap — 2026-06-01
 
 The bounded Swift worker queue for the Darwin ignore-aware `--files` data
