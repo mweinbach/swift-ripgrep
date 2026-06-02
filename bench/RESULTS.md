@@ -8,6 +8,45 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Eager rare-byte proof for staged SIMD literals — 2026-06-02
+
+The rare-second-byte staged SIMD helper now includes byte 1 in the initial
+first/middle/tail candidate mask instead of loading it only after those three
+filters survive. This charges one extra SIMD load per staged chunk but avoids a
+second mask merge on dense near-miss windows, which helped the retained 13-byte
+through 20-byte rare-literal cases.
+
+Validation:
+
+- Existing 2-byte through 20-byte literal SIMD exactness tests passed,
+  including the 17-byte through 20-byte middle-span false-candidate regression.
+- Current Swift stdout/stderr/status matched checkpoint
+  `/tmp/swift-rg-bench/baseline-98ad091-eager-proof-probe-1780364274-ripgrep`
+  and Rust for 13-byte, 16-byte, 18-byte, and 20-byte miss and hit line output.
+  Stats output matched both after normalizing elapsed-time fields.
+- `swift build -c release`, `swift test --filter LiteralSIMD`, full
+  `swift test`, `SWIFT_RIPGREP_PARITY=1 swift test --filter ParityHarnessTests`,
+  `scripts/check-no-external-deps.sh --skip-build`, and `git diff --check`
+  passed.
+
+A same-session 25-run hyperfine A/B against committed checkpoint `98ad091`,
+with five warmups, measured:
+
+| Command | Current Swift | Checkpoint `98ad091` |
+| --- | ---: | ---: |
+| `-n "tqeta zqta et" no-match-ascii-46m.txt` | 11.8 ms mean / 11.1-13.3 ms range | 12.1 ms / 11.5-12.6 ms |
+| `-n "tqeta zqta eta k" no-match-ascii-46m.txt` | 11.2 ms / 10.2-12.3 ms | 12.0 ms / 11.1-13.1 ms |
+| `-n "tqeta zqta eta kap" no-match-ascii-46m.txt` | 11.1 ms / 10.1-11.9 ms | 11.7 ms / 10.8-12.4 ms |
+| `-n "tqeta zqta eta kappa" no-match-ascii-46m.txt` | 10.9 ms / 9.8-11.9 ms | 12.0 ms / 11.3-12.7 ms |
+| `--stats --files-without-match "tqeta zqta eta kappa" no-match-ascii-46m.txt` | 10.1 ms / 9.0-10.9 ms | 10.9 ms / 10.0-11.6 ms |
+| `-n missingliteral match-ascii-46m.txt` guardrail | 74.6 ms / 73.4-75.6 ms | 73.7 ms / 72.5-75.0 ms |
+
+The `missingliteral` guard is not dispatched into the staged helper because its
+second byte is common; the small movement there is treated as rebuild/run noise.
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/eager-proof-staged-probe-1780364368.json`.
+
 ## Seventeen-through-twenty-byte rare second-byte staged SIMD helper — 2026-06-02
 
 The no-C-shim Swift memmem fallback now extends the shared rare-second-byte

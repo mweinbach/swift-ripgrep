@@ -889,15 +889,16 @@ private func rgMemmemStagedExactSIMD16(
             .loadUnaligned(as: SIMD16<UInt8>.self)
         let tailBytes = UnsafeRawPointer(haystack.advanced(by: cursor + needleLength - 1))
             .loadUnaligned(as: SIMD16<UInt8>.self)
+        let proofBytes = UnsafeRawPointer(haystack.advanced(by: cursor + proofOffset))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
         let candidateMask = (
             (firstBytes .== firstVector)
                 .& (middleBytes .== middleVector)
                 .& (tailBytes .== tailVector)
+                .& (proofBytes .== proofVector)
         )
         if candidateMask._storage.min() < 0 {
-            let proofBytes = UnsafeRawPointer(haystack.advanced(by: cursor + proofOffset))
-                .loadUnaligned(as: SIMD16<UInt8>.self)
-            var exactMask = candidateMask .& (proofBytes .== proofVector)
+            var exactMask = candidateMask
             var offset = 1
             while exactMask._storage.min() < 0, offset < needleLength - 1 {
                 if offset != middleIndex, offset != proofOffset {
@@ -1983,15 +1984,16 @@ private func rgMemmemStagedExactCountByteBeforeSIMD16(
             .loadUnaligned(as: SIMD16<UInt8>.self)
         let tailBytes = UnsafeRawPointer(haystack.advanced(by: cursor + needleLength - 1))
             .loadUnaligned(as: SIMD16<UInt8>.self)
+        let proofBytes = UnsafeRawPointer(haystack.advanced(by: cursor + proofOffset))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
         let candidateMask = (
             (firstBytes .== firstVector)
                 .& (middleBytes .== middleVector)
                 .& (tailBytes .== tailVector)
+                .& (proofBytes .== proofVector)
         )
         if candidateMask._storage.min() < 0 {
-            let proofBytes = UnsafeRawPointer(haystack.advanced(by: cursor + proofOffset))
-                .loadUnaligned(as: SIMD16<UInt8>.self)
-            var exactMask = candidateMask .& (proofBytes .== proofVector)
+            var exactMask = candidateMask
             var offset = 1
             while exactMask._storage.min() < 0, offset < needleLength - 1 {
                 if offset != middleIndex, offset != proofOffset {
