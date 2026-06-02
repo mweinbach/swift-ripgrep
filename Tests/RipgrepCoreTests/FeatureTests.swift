@@ -4203,6 +4203,31 @@ struct FeatureTests {
             "path",
             overrideRoot.url.path,
         ])) == [".hidden.txt", "b.txt", "c.txt"])
+        let sortedFiles = try run([
+            "--files",
+            "--sort",
+            "path",
+            overrideRoot.url.path,
+        ])
+        let slashSeparatedSortedFiles = try run([
+            "--files",
+            "--sort",
+            "path",
+            "--path-separator",
+            "/",
+            overrideRoot.url.path,
+        ])
+        #expect(slashSeparatedSortedFiles == sortedFiles)
+        let customSeparatedSortedFiles = try run([
+            "--files",
+            "--sort",
+            "path",
+            "--path-separator",
+            "Z",
+            overrideRoot.url.path,
+        ])
+        #expect(customSeparatedSortedFiles.map { $0.replacingOccurrences(of: "Z", with: "/") } == sortedFiles)
+        #expect(customSeparatedSortedFiles.allSatisfy { !$0.contains("/") })
 
         var output: [String] = []
         var errors: [String] = []

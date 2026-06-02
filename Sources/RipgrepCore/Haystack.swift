@@ -995,7 +995,7 @@ public struct FileWalker: @unchecked Sendable {
             && !options.useStdin
             && (allowNullPathTerminator || !options.nullPathTerminator)
             && canSort
-            && options.pathSeparator == nil
+            && usesDefaultDarwinPathSeparator(options)
             && options.colorMode != .always
             && options.colorMode != .ansi
             && options.colorChanges.isEmpty
@@ -1015,7 +1015,7 @@ public struct FileWalker: @unchecked Sendable {
             && !options.nullPathTerminator
             && options.sortMode == nil
             && options.loggingMode == nil
-            && options.pathSeparator == nil
+            && usesDefaultDarwinPathSeparator(options)
             && options.colorMode != .always
             && options.colorMode != .ansi
             && options.colorChanges.isEmpty
@@ -1027,6 +1027,10 @@ public struct FileWalker: @unchecked Sendable {
             && options.maxDepth == nil
             && !options.followSymlinks
             && !options.oneFileSystem
+    }
+
+    private func usesDefaultDarwinPathSeparator(_ options: RipgrepOptions) -> Bool {
+        options.pathSeparator == nil || options.pathSeparator == "/"
     }
 
     private func emitSortedFilePathLines(
