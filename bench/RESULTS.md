@@ -114,6 +114,16 @@ Follow-up rejected probe:
   `--files linux` at 77.0 ms versus 75.5 ms baseline, hidden at 80.1 ms
   versus 77.2 ms, and `--no-ignore-vcs --files` flat/noisy at 60.8 ms versus
   61.3 ms. The generic reverse rule loop stayed.
+- A signed-lane fixed-class SIMD probe loaded the existing `SIMD16` candidate
+  proof as `Int8` lanes, with scalar tails still using unsigned ASCII ranges.
+  It preserved exact output against the previous Swift binary and Rust for
+  first-class absence, files-without-match, later-class absence, dense
+  lowercase count-matches, and a non-ASCII control. The signed comparisons
+  were slower across guardrails, so the unsigned `UInt8` range proof stayed.
+  A 50-run A/B measured `[A-Z]{5}` no-candidate line output at 44.1 ms versus
+  40.8 ms baseline, sparse uppercase candidates at 42.5 ms versus 35.7 ms,
+  later-class absence at 42.8 ms versus 35.9 ms, and dense lowercase
+  count-matches at 106.8 ms versus 103.6 ms.
 
 Raw hyperfine exports:
 `/tmp/swift-rg-bench/rare-proof-memchr-1780378173.json`,
@@ -140,6 +150,8 @@ Fast-index threshold rejected probe export:
 `/tmp/swift-rg-bench/fastindex2-probe-1780383313.json`.
 Single-rule matcher rejected probe export:
 `/tmp/swift-rg-bench/singlerule-probe-1780383725.json`.
+Signed-lane fixed-class rejected probe export:
+`/tmp/swift-rg-bench/fixed-signed-simd-probe-1780384422.json`.
 
 ## Later-class absence proof for fixed ASCII class sequences — 2026-06-02
 
