@@ -8,6 +8,43 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Ignore fast-index path-rule guard - 2026-06-02
+
+Darwin ignore-aware file listing now records whether a `GlobMatcher` fast index
+contains any path-scoped rules. Basename-only indexes skip the exact/suffix path
+lookups and avoid touching `relativePath.utf8.last` before continuing through the
+existing basename and unindexed-rule checks. This is a Swift-only metadata guard;
+it does not add C shims or change rule ordering.
+
+Validation:
+
+- Patched Swift file-list output matched Rust after sorting for default
+  `--files`, `--hidden --files`, `--no-ignore-vcs --files`, explicit
+  `--ignore-file .gitignore`, and NUL-terminated `-0 --files` on the Linux
+  benchmark tree.
+- `swift build -c release`, `swift test`, `SWIFT_RIPGREP_PARITY=1 swift test
+  --filter ParityHarnessTests`, `scripts/check-no-external-deps.sh
+  --skip-build`, and `git diff --check` passed.
+- Rejected a simple-glob basename index probe because it regressed the same
+  ignore-heavy rows (`--files` 104.6 ms, explicit-root 117.9 ms). Rejected a
+  follow-up unindexed-empty return guard because the default median regressed
+  versus the path-rule guard alone.
+
+The retained A/B used a detached `96ee2df` release build, 10 warm-ups, and 80
+timed runs with stdout redirected to `/dev/null`:
+
+| Case | Current Swift | Pre-change `96ee2df` | Rust |
+| --- | ---: | ---: | ---: |
+| `--files linux` | 97.8 ms mean / 97.2 ms median | 98.7 ms / 98.2 ms | 86.6 ms / 84.9 ms |
+| `--no-ignore-vcs --files linux` | 80.5 ms / 80.6 ms | 82.1 ms / 81.2 ms | 77.0 ms / 76.9 ms |
+| `--no-ignore-vcs --ignore-file linux/.gitignore --files linux` | 106.8 ms / 106.1 ms | 108.3 ms / 108.2 ms | 78.4 ms / 78.3 ms |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/files-path-guard-ab-96ee2df.json`,
+`/tmp/swift-rg-bench/files-fast-index-path-guard.json`,
+`/tmp/swift-rg-bench/files-simple-glob-index.json`, and
+`/tmp/swift-rg-bench/files-fast-index-guards.json`.
+
 ## Explicit fixed ASCII class max-columns preflight - 2026-06-02
 
 Single-file `--max-columns` matching-line searches for plain ASCII fixed-class

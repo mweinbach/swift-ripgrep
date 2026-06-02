@@ -63,6 +63,7 @@ public struct GlobMatcher: Equatable {
 
     private final class FastRuleIndex: Equatable {
         let indexedRuleCount: Int
+        let hasPathRules: Bool
         let exactPathRules: [String: [IndexedRule]]
         let suffixPathRulesByLastByte: [UInt8: [IndexedTextRule]]
         let exactBasenameRules: [String: [IndexedRule]]
@@ -75,6 +76,7 @@ public struct GlobMatcher: Equatable {
 
         init(
             indexedRuleCount: Int,
+            hasPathRules: Bool,
             exactPathRules: [String: [IndexedRule]],
             suffixPathRulesByLastByte: [UInt8: [IndexedTextRule]],
             exactBasenameRules: [String: [IndexedRule]],
@@ -86,6 +88,7 @@ public struct GlobMatcher: Equatable {
             unindexedRuleIndicesDescending: [Int]
         ) {
             self.indexedRuleCount = indexedRuleCount
+            self.hasPathRules = hasPathRules
             self.exactPathRules = exactPathRules
             self.suffixPathRulesByLastByte = suffixPathRulesByLastByte
             self.exactBasenameRules = exactBasenameRules
@@ -100,6 +103,7 @@ public struct GlobMatcher: Equatable {
         static func == (lhs: FastRuleIndex, rhs: FastRuleIndex) -> Bool {
             lhs === rhs || (
                 lhs.indexedRuleCount == rhs.indexedRuleCount
+                    && lhs.hasPathRules == rhs.hasPathRules
                     && lhs.exactPathRules == rhs.exactPathRules
                     && lhs.suffixPathRulesByLastByte == rhs.suffixPathRulesByLastByte
                     && lhs.exactBasenameRules == rhs.exactBasenameRules
@@ -521,6 +525,7 @@ public struct GlobMatcher: Equatable {
 
         return FastRuleIndex(
             indexedRuleCount: indexedRuleCount,
+            hasPathRules: !exactPathRules.isEmpty || !suffixPathRulesByLastByte.isEmpty,
             exactPathRules: exactPathRules,
             suffixPathRulesByLastByte: suffixPathRulesByLastByte,
             exactBasenameRules: exactBasenameRules,
@@ -541,22 +546,24 @@ public struct GlobMatcher: Equatable {
     ) -> Decision? {
         var bestRuleIndex = -1
         var bestDecision: Decision?
-        considerIndexedRules(
-            fastRuleIndex.exactPathRules[relativePath],
-            isDirectory: isDirectory,
-            bestRuleIndex: &bestRuleIndex,
-            bestDecision: &bestDecision
-        )
-        if !fastRuleIndex.suffixPathRulesByLastByte.isEmpty,
-           let lastByte = relativePath.utf8.last,
-           let suffixPathRules = fastRuleIndex.suffixPathRulesByLastByte[lastByte] {
-            for candidate in suffixPathRules where hasPathComponentSuffix(candidate.text, in: relativePath) {
-                considerIndexedRule(
-                    candidate.rule,
-                    isDirectory: isDirectory,
-                    bestRuleIndex: &bestRuleIndex,
-                    bestDecision: &bestDecision
-                )
+        if fastRuleIndex.hasPathRules {
+            considerIndexedRules(
+                fastRuleIndex.exactPathRules[relativePath],
+                isDirectory: isDirectory,
+                bestRuleIndex: &bestRuleIndex,
+                bestDecision: &bestDecision
+            )
+            if !fastRuleIndex.suffixPathRulesByLastByte.isEmpty,
+               let lastByte = relativePath.utf8.last,
+               let suffixPathRules = fastRuleIndex.suffixPathRulesByLastByte[lastByte] {
+                for candidate in suffixPathRules where hasPathComponentSuffix(candidate.text, in: relativePath) {
+                    considerIndexedRule(
+                        candidate.rule,
+                        isDirectory: isDirectory,
+                        bestRuleIndex: &bestRuleIndex,
+                        bestDecision: &bestDecision
+                    )
+                }
             }
         }
 
