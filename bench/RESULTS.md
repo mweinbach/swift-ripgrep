@@ -56,6 +56,20 @@ Follow-up rejected probe:
 Rejected probe export:
 `/tmp/swift-rg-bench/run-suffix-pointer-hoist-hit-1780385343.json`.
 
+Follow-up rejected probe:
+
+- Caching `fastPath.suffix.count` in the run-suffix content scanner preserved
+  quiet stdout/stderr/status against the previous Swift binary and Rust for
+  recursive `[A-Z]+_RESUME` hits, `[A-Z]+_NEVERMATCHTOKEN` misses,
+  `[Z]{3}_RESUME` false-positive misses, and the binary-after-window control.
+  It also matched the previous Swift binary for quiet `--stats` output. The
+  target row did not improve: a 100-run A/B measured
+  `-q '[A-Z]+_RESUME' linux` at 7.6 ms for both baseline and the probe, with
+  Rust at 5.6 ms. The local `suffix.count` cache was not kept.
+
+Rejected probe export:
+`/tmp/swift-rg-bench/run-suffix-count-cache-hit-1780385897.json`.
+
 ## Rare proof-byte memchr gate for staged literals — 2026-06-02
 
 The no-C-shim Swift memmem fallback now routes 13-byte through 32-byte exact
