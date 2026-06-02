@@ -8,6 +8,43 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Quiet run-suffix binary precheck window — 2026-06-02
+
+The quiet first-match fast path for uppercase run-suffix regexes now uses the
+same 64 KiB binary NUL precheck window as the quiet byte-literal first-match
+path before probing a file. Previously this path scanned each probed file's
+entire `Data` for NUL before the suffix verifier, even though the quiet literal
+probe already treats the standard binary-detection window as sufficient for
+the same first-match-only decision. The change stays Swift-only and only
+affects quiet, non-stats run-suffix probing.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint
+  `/tmp/swift-rg-bench/baseline-a165b87-runsuffixnul-1780384785-ripgrep`
+  and Rust for recursive quiet `[A-Z]+_RESUME` hits,
+  `[A-Z]+_NEVERMATCHTOKEN` misses, `[Z]{3}_RESUME` false-positive misses, and
+  a binary-after-window quiet control.
+- `swift build -c release` passed before benchmarking.
+
+A same-session hyperfine A/B against checkpoint `a165b87`, with Rust included
+as the oracle, measured:
+
+| Case | Current Swift | Checkpoint `a165b87` | Rust |
+| --- | ---: | ---: | ---: |
+| `-q '[A-Z]+_RESUME' linux` | 7.6 ms mean / 7.4-8.2 ms range | 7.8 ms / 7.5-9.8 ms | 5.6 ms / 5.0-7.2 ms |
+| `-q '[A-Z]+_NEVERMATCHTOKEN' linux` | 953.5 ms / 951.4-957.4 ms | 955.0 ms / 950.7-971.5 ms | 2.801 s / 2.604-3.055 s |
+| `-q '[Z]{3}_RESUME' linux` | 963.2 ms / 949.5-1011.2 ms | 954.1 ms / 950.5-961.8 ms | 2.598 s / 2.484-2.764 s |
+
+The fixed-suffix false-positive miss guardrail was noisy and slightly slower in
+the short 8-run check, so the retained change is justified by the cleaner
+precheck contract and the stable hit-row improvement rather than a broad miss
+speedup.
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/run-suffix-nul-window-hit-1780384888.json` and
+`/tmp/swift-rg-bench/run-suffix-nul-window-guardrails-1780384903.json`.
+
 ## Rare proof-byte memchr gate for staged literals — 2026-06-02
 
 The no-C-shim Swift memmem fallback now routes 13-byte through 32-byte exact

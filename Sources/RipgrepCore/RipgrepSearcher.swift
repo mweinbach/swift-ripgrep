@@ -837,7 +837,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
         if !options.disablesBinaryDetection,
            shouldCheckBinary(data, options: options),
-           firstNulByteOffset(in: data) != nil {
+           firstNulByteOffset(in: data, limit: Self.binaryDetectionBufferSize) != nil {
             return nil
         }
 
