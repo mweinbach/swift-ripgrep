@@ -86,6 +86,11 @@ Follow-up rejected probe:
   A/B measured `--no-ignore --files linux` at 59.9 ms for the probe versus
   59.1 ms baseline. Earlier broader runs were too noisy to trust and the
   hidden guardrail, which did not use the larger reserve, stayed unchanged.
+- A directory-entry flag pass that folded the `.`/`..`, hidden, and ASCII
+  checks into one explicit byte loop preserved file-list output but regressed
+  the ignore-aware path. An 80-run A/B measured default `--files linux` at
+  76.0 ms for the probe versus 74.7 ms baseline, `--no-ignore-vcs --files`
+  at 62.0 ms versus 59.4 ms, and NUL output at 74.1 ms versus 75.9 ms.
 
 Raw hyperfine exports:
 `/tmp/swift-rg-bench/rare-proof-memchr-1780378173.json`,
@@ -104,6 +109,8 @@ File-list reserve rejected probe exports:
 `/tmp/swift-rg-bench/noignore-output-reserve-probe-1780381665.json`,
 `/tmp/swift-rg-bench/noignore-output-reserve-confirm-1780381751.json`, and
 `/tmp/swift-rg-bench/noignore-output-reserve-visible-only-1780381829.json`.
+Directory-entry rejected probe export:
+`/tmp/swift-rg-bench/direntry-flags-probe-1780382321.json`.
 
 ## Later-class absence proof for fixed ASCII class sequences — 2026-06-02
 
