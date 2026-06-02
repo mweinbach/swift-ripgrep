@@ -186,6 +186,15 @@ Follow-up rejected probe:
   40.8 ms baseline, sparse uppercase candidates at 42.5 ms versus 35.7 ms,
   later-class absence at 42.8 ms versus 35.9 ms, and dense lowercase
   count-matches at 106.8 ms versus 103.6 ms.
+- An uppercase memchr-range absence proof, which checked `A` through `Z` with
+  the platform `memchr` before falling back to the existing Swift SIMD range
+  scanner, also stayed rejected. It preserved exact output against the previous
+  Swift binary and Rust for first-class no-candidate line output, early and
+  late sparse uppercase guardrails, files-without-match, and mixed
+  `[a-z][A-Z]{4}` later-class absence. The repeated full-buffer memchr passes
+  were slower: a 50-run A/B measured `[A-Z]{5}` no-candidate output at
+  50.2 ms versus 42.3 ms baseline, and sparse uppercase at 52.5 ms versus
+  39.1 ms baseline.
 
 Raw hyperfine exports:
 `/tmp/swift-rg-bench/rare-proof-memchr-1780378173.json`,
@@ -214,6 +223,8 @@ Single-rule matcher rejected probe export:
 `/tmp/swift-rg-bench/singlerule-probe-1780383725.json`.
 Signed-lane fixed-class rejected probe export:
 `/tmp/swift-rg-bench/fixed-signed-simd-probe-1780384422.json`.
+Memchr-range fixed-class rejected probe export:
+`/tmp/swift-rg-bench/fixed-memchr-range-probe-1780386205.json`.
 
 ## Later-class absence proof for fixed ASCII class sequences — 2026-06-02
 
