@@ -8,6 +8,53 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Single-active multi-literal line delegation - 2026-06-02
+
+Darwin direct multi-literal matching-line output now reuses the single-literal
+byte writer when the existing first-candidate setup proves that exactly one
+literal can match the file. The proof happens inside the normal no-common-prefix
+candidate path, after the text/NUL guard has already passed, so common
+all-present alternations stay on the existing multi-literal writer. The
+single-literal result now reports `bytes_searched`, preserving max-count
+accounting for the direct-result wrapper.
+
+Validation:
+
+- Patched Swift output matched both the saved `6239428` Swift binary and Rust
+  `rg` byte-for-byte for plain one-active output, numbered one-active output,
+  all-present multi-literal output, no-match output, and a NUL-containing binary
+  fallback case.
+- Added executable regression coverage for pruned plain output, pruned numbered
+  output, all-present multi-literal output, and pruned no-match status/output.
+- `swift build -c release` and
+  `swift test --filter MiscTests/darwinExecutableLiteralPreflightDenseLines`
+  passed before recording these results.
+
+The retained A/B used the `6239428` release binary as the pre-change baseline,
+8 warm-ups, and 80 timed runs with stdout redirected to `/dev/null`; the final
+current-vs-Rust confirmation used 8 warm-ups and 50 timed runs:
+
+| Case | Current Swift | Pre-change `6239428` | Rust |
+| --- | ---: | ---: | ---: |
+| `-n -e literal -e absent match-ascii-46m.txt` | 81.4 ms mean / 79.9-84.6 ms range | 90.5 ms / 89.1-95.7 ms | 80.8 ms / 79.7-83.5 ms |
+| `-e literal -e absent match-ascii-46m.txt` | 62.8 ms / 61.4-65.1 ms | 67.1 ms / 64.9-74.5 ms | 48.1 ms / 47.0-49.6 ms |
+| All-present `-e alpha -e theta` guard | 59.1 ms / 57.2-65.1 ms | 59.5 ms / 57.4-66.1 ms | not measured |
+| Numbered all-present guard | 82.5 ms / 80.4-85.4 ms | 82.2 ms / 80.7-84.1 ms | not measured |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/plain-multilit-helper-extract-1780424660.json` and
+`/tmp/swift-rg-bench/plain-multilit-final-current-rust-1780424820.json`.
+
+Rejected:
+
+- A top-of-writer full prune proof improved the target cases but taxed common
+  all-present alternations. A bounded-prefix gate still left measurable
+  all-present overhead. The retained version moves the handoff behind normal
+  candidate initialization instead. Raw probe exports:
+  `/tmp/swift-rg-bench/plain-multilit-prune-probe-1780422850.json`,
+  `/tmp/swift-rg-bench/plain-multilit-prune-prefix-gated-1780423560.json`, and
+  `/tmp/swift-rg-bench/plain-multilit-prune-16k-gated-1780423830.json`.
+
 ## Pruned multi-literal context delegation - 2026-06-02
 
 Darwin direct context output for repeated literal patterns now reuses the

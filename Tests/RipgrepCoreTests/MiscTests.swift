@@ -4643,6 +4643,45 @@ struct MiscTests {
 
         """.utf8))
 
+        let prunedMultiLiteralOutput = try runExecutableData([
+            "-e",
+            "needle",
+            "-e",
+            "absent",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(prunedMultiLiteralOutput == output)
+
+        let prunedMultiLiteralLineNumberOutput = try runExecutableData([
+            "-n",
+            "-e",
+            "needle",
+            "-e",
+            "absent",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(prunedMultiLiteralLineNumberOutput == lineNumberOutput)
+
+        let allPresentMultiLiteralOutput = try runExecutableData([
+            "-e",
+            "needle",
+            "-e",
+            "tail",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(allPresentMultiLiteralOutput == output)
+
+        let prunedMultiLiteralNoMatch = try runExecutableResult([
+            "-e",
+            "missing",
+            "-e",
+            "absent",
+            root.path("dense.txt"),
+        ])
+        #expect(prunedMultiLiteralNoMatch.stdout.isEmpty)
+        #expect(prunedMultiLiteralNoMatch.stderr.isEmpty)
+        #expect(prunedMultiLiteralNoMatch.status == 1)
+
         let trimOutput = try runExecutableData([
             "--trim",
             "needle",

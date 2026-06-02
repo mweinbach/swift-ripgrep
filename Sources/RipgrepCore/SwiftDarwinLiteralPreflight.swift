@@ -8087,7 +8087,7 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         guard fileStat.st_size > 0 else {
-            return LiteralLineWriteStats(matchedLines: 0, bytesPrinted: 0)
+            return LiteralLineWriteStats(matchedLines: 0, bytesPrinted: 0, bytesSearched: 0)
         }
         guard UInt64(fileStat.st_size) <= UInt64(Int.max) else {
             return nil
@@ -10724,6 +10724,7 @@ private func countLiteralMatchedLines(
 private struct LiteralLineWriteStats {
     let matchedLines: Int
     let bytesPrinted: Int
+    let bytesSearched: Int
 }
 
 private struct LiteralMatchedLineAndMatchCounts {
@@ -12072,7 +12073,8 @@ private func rgSwiftDarwinWriteLiteralBytes(
     headingPrefix: [UInt8],
     emitLines: Bool = true,
     maxCount: Int = Int.max,
-    requireASCIIHaystack: Bool = false
+    requireASCIIHaystack: Bool = false,
+    knownTextHaystack: Bool = false
 ) -> LiteralLineWriteStats? {
     guard let literalBase = literal.baseAddress,
           literal.count > 0,
@@ -12121,7 +12123,8 @@ private func rgSwiftDarwinWriteLiteralBytes(
     var emittedHeading = false
     var writeFailed = false
     var declinedFastPath = false
-    var confirmedTextHaystack = false
+    var confirmedTextHaystack = knownTextHaystack
+    var bytesSearched = haystackLength
 
     func ensureTextHaystack() -> Bool {
         if confirmedTextHaystack {
@@ -12209,6 +12212,7 @@ private func rgSwiftDarwinWriteLiteralBytes(
             }
             matchedLineCount += 1
             lastEmittedLineStart = lineStart
+            bytesSearched = outputEnd
             searchOffset = outputEnd
             return true
         }
@@ -12287,6 +12291,9 @@ private func rgSwiftDarwinWriteLiteralBytes(
     guard !writeFailed, !declinedFastPath else {
         return nil
     }
+    if matchedLineCount < maxCount {
+        bytesSearched = haystackLength
+    }
     if emitLines {
         guard output?.flush() == true else {
             return nil
@@ -12294,7 +12301,8 @@ private func rgSwiftDarwinWriteLiteralBytes(
     }
     return LiteralLineWriteStats(
         matchedLines: matchedLineCount,
-        bytesPrinted: output?.statsBytesWritten ?? 0
+        bytesPrinted: output?.statsBytesWritten ?? 0,
+        bytesSearched: bytesSearched
     )
 }
 
@@ -14437,6 +14445,43 @@ private func rgSwiftDarwinWriteSurroundingWordsBytes(
     return pendingLines.count
 }
 
+private func rgSwiftDarwinWriteSingleActiveMultiLiteralLines(
+    _ base: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    literal: [UInt8],
+    maxCount: Int,
+    lineNumber: Bool,
+    lineNumberFieldSeparator: [UInt8],
+    linePrefix: [UInt8],
+    headingPrefix: [UInt8],
+    emitLines: Bool
+) -> rg_darwin_literal_file_result? {
+    literal.withUnsafeBufferPointer { literalBuffer in
+        guard let stats = rgSwiftDarwinWriteLiteralBytes(
+            base,
+            haystackLength: haystackLength,
+            literal: literalBuffer,
+            asciiCaseInsensitive: false,
+            lineNumber: lineNumber,
+            asciiBoundary: false,
+            lineNumberFieldSeparator: lineNumberFieldSeparator,
+            linePrefix: linePrefix,
+            headingPrefix: headingPrefix,
+            emitLines: emitLines,
+            maxCount: maxCount,
+            knownTextHaystack: true
+        ) else {
+            return nil
+        }
+        return rg_darwin_literal_file_result(
+            status: 0,
+            matched_line_count: stats.matchedLines,
+            total_match_count: 0,
+            bytes_searched: stats.bytesSearched
+        )
+    }
+}
+
 private func rgSwiftDarwinWriteMultiLiteralLines(
     _ base: UnsafePointer<UInt8>,
     haystackLength: Int,
@@ -14721,6 +14766,30 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
         } else {
             var candidates = literals.indices.map {
                 nextCandidate(literalIndex: $0, from: 0)
+            }
+            if !trimLeadingWhitespace {
+                var activeCandidate: (start: Int, literalIndex: Int)?
+                var activeCandidateCount = 0
+                for candidate in candidates where candidate.start < Int.max {
+                    activeCandidate = candidate
+                    activeCandidateCount += 1
+                    if activeCandidateCount > 1 {
+                        break
+                    }
+                }
+                if activeCandidateCount == 1, let activeCandidate {
+                    return rgSwiftDarwinWriteSingleActiveMultiLiteralLines(
+                        base,
+                        haystackLength: haystackLength,
+                        literal: literals[activeCandidate.literalIndex],
+                        maxCount: maxCount,
+                        lineNumber: lineNumber,
+                        lineNumberFieldSeparator: lineNumberFieldSeparator,
+                        linePrefix: linePrefix,
+                        headingPrefix: headingPrefix,
+                        emitLines: emitLines
+                    )
+                }
             }
 
             while matchedLineCount < maxCount,
