@@ -176,6 +176,14 @@ Follow-up rejected probe:
   `--files linux` at 77.0 ms versus 75.5 ms baseline, hidden at 80.1 ms
   versus 77.2 ms, and `--no-ignore-vcs --files` flat/noisy at 60.8 ms versus
   61.3 ms. The generic reverse rule loop stayed.
+- Threading a precomputed file-list path terminator byte through the
+  ignore-aware data writer preserved exact Swift output for default, hidden,
+  no-vcs, no-ignore, and NUL file-listing, and kept sorted Rust parity for
+  default, hidden, and no-vcs. The branch removal was not retained because an
+  80-run A/B was neutral-to-worse: default `--files linux` measured 74.8 ms
+  for the probe versus 75.0 ms baseline, hidden 79.6 ms versus 77.9 ms,
+  `--no-ignore-vcs --files` 61.1 ms versus 60.0 ms, and NUL 77.8 ms versus
+  74.6 ms.
 - A signed-lane fixed-class SIMD probe loaded the existing `SIMD16` candidate
   proof as `Int8` lanes, with scalar tails still using unsigned ASCII ranges.
   It preserved exact output against the previous Swift binary and Rust for
@@ -221,6 +229,8 @@ Fast-index threshold rejected probe export:
 `/tmp/swift-rg-bench/fastindex2-probe-1780383313.json`.
 Single-rule matcher rejected probe export:
 `/tmp/swift-rg-bench/singlerule-probe-1780383725.json`.
+File-list terminator rejected probe export:
+`/tmp/swift-rg-bench/file-terminator-probe-1780386516.json`.
 Signed-lane fixed-class rejected probe export:
 `/tmp/swift-rg-bench/fixed-signed-simd-probe-1780384422.json`.
 Memchr-range fixed-class rejected probe export:
