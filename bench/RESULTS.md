@@ -45,6 +45,17 @@ Raw hyperfine exports:
 `/tmp/swift-rg-bench/run-suffix-nul-window-hit-1780384888.json` and
 `/tmp/swift-rg-bench/run-suffix-nul-window-guardrails-1780384903.json`.
 
+Follow-up rejected probe:
+
+- Hoisting the run-suffix `withUnsafeBufferPointer` call outside the inner
+  suffix scan preserved exact quiet output/status against the previous Swift
+  binary and Rust, but did not improve the target. A 100-run A/B measured
+  `-q '[A-Z]+_RESUME' linux` at 7.8 ms for the probe versus 7.7 ms baseline
+  and 5.5 ms for Rust. The original local suffix buffer scope stayed.
+
+Rejected probe export:
+`/tmp/swift-rg-bench/run-suffix-pointer-hoist-hit-1780385343.json`.
+
 ## Rare proof-byte memchr gate for staged literals — 2026-06-02
 
 The no-C-shim Swift memmem fallback now routes 13-byte through 32-byte exact
