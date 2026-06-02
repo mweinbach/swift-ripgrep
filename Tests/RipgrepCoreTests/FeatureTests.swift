@@ -425,6 +425,52 @@ struct FeatureTests {
         #expect(try run(["-L", #"\p{Greek}"#, root.path("invalid-no-greek.bin")]) == [])
     }
 
+    @Test("quiet Greek script search returns only exit status")
+    func quietGreekScriptSearchReturnsOnlyExitStatus() throws {
+        let root = try TemporaryDirectory()
+        try root.write("plain\ncafé\n", to: "plain.txt")
+        try root.write("latin\nπ alpha\n", to: "hit.txt")
+        try root.write("micro µ\n", to: "micro.txt")
+
+        var nulAfterWindow = Data(repeating: 0x61, count: 70_000)
+        nulAfterWindow.append(0)
+        nulAfterWindow.append(contentsOf: Data("π after nul\n".utf8))
+        try root.write(nulAfterWindow, to: "nul-after-window-greek.bin")
+
+        var nulBeforeWindow = Data(repeating: 0x61, count: 1_000)
+        nulBeforeWindow.append(0)
+        nulBeforeWindow.append(contentsOf: Data("π after early nul\n".utf8))
+        try root.write(nulBeforeWindow, to: "nul-before-window-greek.bin")
+
+        let recursiveHitOutput = runWithExitCode(["-q", #"\p{Greek}"#, root.url.path], expectedExitCode: 0)
+        #expect(recursiveHitOutput.isEmpty)
+
+        let plainMissOutput = runWithExitCode(["-q", #"\p{Greek}"#, root.path("plain.txt")], expectedExitCode: 1)
+        #expect(plainMissOutput.isEmpty)
+
+        let caseInsensitiveMicroOutput = runWithExitCode([
+            "-q",
+            "-i",
+            #"\p{Greek}"#,
+            root.path("micro.txt"),
+        ], expectedExitCode: 0)
+        #expect(caseInsensitiveMicroOutput.isEmpty)
+
+        let lateBinaryOutput = runWithExitCode([
+            "-q",
+            #"\p{Greek}"#,
+            root.path("nul-after-window-greek.bin"),
+        ], expectedExitCode: 0)
+        #expect(lateBinaryOutput.isEmpty)
+
+        let earlyBinaryOutput = runWithExitCode([
+            "-q",
+            #"\p{Greek}"#,
+            root.path("nul-before-window-greek.bin"),
+        ], expectedExitCode: 0)
+        #expect(earlyBinaryOutput.isEmpty)
+    }
+
     @Test("supports smart case and inverted matches")
     func supportsSmartCaseAndInvertedMatches() throws {
         let root = try TemporaryDirectory()

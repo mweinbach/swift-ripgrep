@@ -8,6 +8,50 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Quiet Greek script first-match binary precheck window — 2026-06-02
+
+Plain quiet `\p{Greek}` searches now enter the existing Darwin raw Greek
+script scanner through a quiet first-match path. The path reads buffered file
+data directly, rejects UTF BOMs, and uses the same 64 KiB binary NUL precheck
+window as the quiet literal and quiet run-suffix first-match paths before
+delegating to `searchRawGreekScriptContents` with byte-buffer proof enabled.
+This avoids the generic full-file binary scan before the Greek proof while
+keeping the output logic in the already-tested raw Greek implementation. The
+change stays Swift-only and does not add a C shim.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint `cc3d589` and Rust for
+  explicit quiet early-Greek hit, explicit quiet non-Greek miss, and explicit
+  NUL-before-window / NUL-after-window binary controls.
+- Added a regression test for plain quiet Greek output/status, including
+  ignore-case micro and the binary-window controls.
+- `swift build -c release` and
+  `swift test --filter FeatureTests/quietGreekScriptSearchReturnsOnlyExitStatus`
+  passed before benchmarking.
+- Post-benchmark full `swift test`,
+  `SWIFT_RIPGREP_PARITY=1 swift test --filter ParityHarnessTests`,
+  `scripts/check-no-external-deps.sh --skip-build`, and `git diff --check`
+  passed.
+- The fair A/B copied both Swift release binaries into `/tmp/swift-rg-bench`
+  before timing so launch-path effects did not contaminate the small quiet
+  timings.
+
+A same-session hyperfine A/B against checkpoint `cc3d589`, with Rust included
+as the oracle, measured:
+
+| Case | Current Swift | Checkpoint `cc3d589` | Rust |
+| --- | ---: | ---: | ---: |
+| `-q '\p{Greek}' early-greek-unicode-64m.txt` | 4.8 ms mean / 4.1-7.8 ms range | 8.5 ms / 8.2-9.8 ms | 2.7 ms / 2.5-2.7 ms |
+| `-q '\p{Greek}' non-greek-unicode-64m.txt` | 12.3 ms / 12.1-12.5 ms | 14.5 ms / 14.3-14.8 ms | 24.1 ms / 23.7-25.0 ms |
+| `-n '\p{Greek}' non-greek-unicode-64m.txt` guardrail | 36.2 ms / 25.1-41.0 ms | 39.3 ms / 34.6-46.0 ms | not in this row |
+| recursive `-q '\p{Greek}' linux` | 7.8 ms / 7.2-9.5 ms | 239.7 ms / 235.7-257.4 ms | 16.3 ms / 6.6-31.7 ms |
+| recursive `-n '\p{Greek}' linux` guardrail | 1.688 s / 1.671-1.715 s | 1.684 s / 1.663-1.793 s | not in this row |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/greekquiet-tmp-copy-1780394555.json` and
+`/tmp/swift-rg-bench/greekquiet-recursive-copy-1780394570.json`.
+
 ## Interior rare-byte proof for long Swift memmem literals — 2026-06-02
 
 The no-C-shim Swift memmem fallback now lets 13-byte through 32-byte literals

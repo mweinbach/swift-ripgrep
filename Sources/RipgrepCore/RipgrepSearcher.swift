@@ -395,9 +395,13 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let quietASCIIRunSuffixFastPath = options.quiet && !options.stats
             ? asciiRunSuffixPattern(options: options)
             : nil
+        let quietGreekScriptFastPath = options.quiet && !options.stats
+            ? matcher.greekScriptFastPath()
+            : nil
         let quietRequiredLiteralProbe = !hasASCIIFixedClassSequence
             && quietByteLiteralFastPath == nil
             && quietASCIIRunSuffixFastPath == nil
+            && quietGreekScriptFastPath == nil
             && matcher.byteRequiredLiteralPrefilter() != nil
         guard options.mode == .search,
               options.sortMode == nil,
@@ -407,6 +411,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
               (hasASCIIFixedClassSequence
                   || quietByteLiteralFastPath != nil
                   || quietASCIIRunSuffixFastPath != nil
+                  || quietGreekScriptFastPath != nil
                   || quietRequiredLiteralProbe) else {
             return nil
         }
@@ -435,15 +440,24 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 abandonedQuietFirstMatchProbe = true
                 return true
             }
-            let outcome = quietByteLiteralFastPath.flatMap { fastPath in
-                searchQuietByteLiteralFirstMatch(
+            let outcome: FileSearchOutcome
+            if let quietByteLiteralFastPath,
+               let fastResult = searchQuietByteLiteralFirstMatch(
                     haystack,
-                    fastPath: fastPath,
+                    fastPath: quietByteLiteralFastPath,
                     options: options
-                )
-            }.map {
-                FileSearchOutcome(result: $0)
-            } ?? searchFile(haystack, matcher: matcher, options: options)
+               ) {
+                outcome = FileSearchOutcome(result: fastResult)
+            } else if quietGreekScriptFastPath != nil,
+                      let fastResult = searchQuietGreekScriptFirstMatch(
+                        haystack,
+                        matcher: matcher,
+                        options: options
+                      ) {
+                outcome = FileSearchOutcome(result: fastResult)
+            } else {
+                outcome = searchFile(haystack, matcher: matcher, options: options)
+            }
             if outcome.result.searched {
                 filesSearched += 1
             }
@@ -848,6 +862,71 @@ public struct RipgrepSearcher: @unchecked Sendable {
             fastPath: fastPath,
             firstMatchOnly: true
         )
+    }
+
+    private func searchQuietGreekScriptFirstMatch(
+        _ haystack: Haystack,
+        matcher: PatternMatcher,
+        options: RipgrepOptions
+    ) -> SearchFileResult? {
+        #if !canImport(Darwin)
+        return nil
+        #else
+        guard options.quiet,
+              !options.stats,
+              !options.json,
+              options.printMode == .matchingLines,
+              options.binaryMode == .automatic,
+              case .automatic = options.encodingMode,
+              !options.multiline,
+              !options.nullData,
+              !options.invertMatch,
+              !options.stopOnNonmatch,
+              !options.wordRegexp,
+              !options.lineRegexp,
+              !options.onlyMatching,
+              !options.column,
+              !options.byteOffset,
+              !options.vimgrep,
+              !options.crlf,
+              options.beforeContext == 0,
+              options.afterContext == 0,
+              !options.passthru,
+              options.replacement == nil,
+              options.maxColumns == nil,
+              matcher.greekScriptFastPath() != nil,
+              !shouldPreprocess(haystack, options: options),
+              decompressionCommand(for: haystack.url, options: options) == nil,
+              canUseBufferedRawLiteralSearch(haystack, options: options) else {
+            return nil
+        }
+
+        let data: Data
+        do {
+            data = try HaystackReader.read(haystack, options: options)
+        } catch {
+            return nil
+        }
+
+        guard !data.starts(with: [0xEF, 0xBB, 0xBF]),
+              !data.starts(with: [0xFF, 0xFE]),
+              !data.starts(with: [0xFE, 0xFF]) else {
+            return nil
+        }
+        if !options.disablesBinaryDetection,
+           shouldCheckBinary(data, options: options),
+           firstNulByteOffset(in: data, limit: Self.binaryDetectionBufferSize) != nil {
+            return nil
+        }
+
+        return searchRawGreekScriptContents(
+            data,
+            fileURL: haystack.url,
+            matcher: matcher,
+            options: options,
+            useByteBufferProof: true
+        )
+        #endif
     }
 
     private func canStreamPlainMatchingLines(options: RipgrepOptions) -> Bool {
