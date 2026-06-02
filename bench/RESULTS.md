@@ -84,6 +84,22 @@ Follow-up rejected probe:
 Rejected probe export:
 `/tmp/swift-rg-bench/run-suffix-firstmatch-direct-1780387234.json`.
 
+Follow-up rejected probe:
+
+- Replacing the run-suffix path's small `Data.starts(with:)` BOM checks with
+  direct byte-prefix helpers preserved stdout/stderr/status against the previous
+  Swift binary and Rust for recursive quiet hit/miss controls, fixed-repeat
+  hit/miss controls, UTF-8 BOM input, and UTF-16LE BOM fallback. Quiet
+  `--stats` output matched the previous Swift binary. The target hit row nudged
+  from 7.7 ms baseline to 7.6 ms in a 100-run A/B, but the miss guardrails
+  regressed in the 8-run check: `[A-Z]+_NEVERMATCHTOKEN` moved from 952.3 ms to
+  957.0 ms and `[Z]{3}_RESUME` moved from 951.6 ms to 953.6 ms. The existing
+  `Data.starts(with:)` checks stayed.
+
+Rejected probe exports:
+`/tmp/swift-rg-bench/run-suffix-bom-direct-hit-1780387531.json` and
+`/tmp/swift-rg-bench/run-suffix-bom-direct-guardrails-1780387545.json`.
+
 ## Rare proof-byte memchr gate for staged literals — 2026-06-02
 
 The no-C-shim Swift memmem fallback now routes 13-byte through 32-byte exact
