@@ -99,6 +99,14 @@ Follow-up rejected probe:
   78.4 ms baseline while hidden regressed to 86.9 ms from 82.4 ms and
   `--no-ignore-vcs --files` regressed to 68.2 ms from 66.0 ms. The source
   change was not retained.
+- Lowering the Darwin fast ignore-rule index activation threshold from four
+  rules to two also stayed rejected. It preserved current Swift output
+  byte-for-byte for default, hidden, no-vcs, no-ignore, and NUL file-listing,
+  and preserved sorted Rust parity for default, hidden, and no-vcs controls.
+  An 80-run A/B measured default `--files linux` at 75.1 ms for the probe
+  versus 74.4 ms baseline, hidden flat/noisy at 78.1 ms for both, and
+  `--no-ignore-vcs --files` slower at 59.9 ms versus 59.3 ms. The four-rule
+  threshold stayed.
 
 Raw hyperfine exports:
 `/tmp/swift-rg-bench/rare-proof-memchr-1780378173.json`,
@@ -121,6 +129,8 @@ Directory-entry rejected probe export:
 `/tmp/swift-rg-bench/direntry-flags-probe-1780382321.json`.
 Physical-path byte rejected probe export:
 `/tmp/swift-rg-bench/physical-path-bytes-probe-1780382969.json`.
+Fast-index threshold rejected probe export:
+`/tmp/swift-rg-bench/fastindex2-probe-1780383313.json`.
 
 ## Later-class absence proof for fixed ASCII class sequences — 2026-06-02
 
