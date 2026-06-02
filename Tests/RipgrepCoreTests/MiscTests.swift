@@ -3039,6 +3039,27 @@ struct MiscTests {
             "[A-Z]{5}",
             root.path("summary-match.txt"),
         ])
+        let fixedOnlyMatchingMatch = try runExecutableResult([
+            "--no-config",
+            "-o",
+            "[A-Z]{5}",
+            root.path("summary-match.txt"),
+        ])
+        let fixedNumberedOnlyMatchingMatch = try runExecutableResult([
+            "--no-config",
+            "-n",
+            "-o",
+            "[A-Z]{5}",
+            root.path("summary-match.txt"),
+        ])
+        let fixedPrefixedNumberedOnlyMatchingMatch = try runExecutableResult([
+            "--no-config",
+            "--with-filename",
+            "-n",
+            "-o",
+            "[A-Z]{5}",
+            root.path("summary-match.txt"),
+        ])
         let jsonCountIncludeZeroNoMatch = try runExecutableResult([
             "--no-config",
             "--json",
@@ -3704,6 +3725,15 @@ struct MiscTests {
         #expect(fixedPrefixedNumberedLineMatch.status == 0)
         #expect(fixedPrefixedNumberedLineMatch.stderr.isEmpty)
         #expect(fixedPrefixedNumberedLineMatch.stdout == Data("\(root.path("summary-match.txt")):3:ALPHA\n".utf8))
+        #expect(fixedOnlyMatchingMatch.status == 0)
+        #expect(fixedOnlyMatchingMatch.stderr.isEmpty)
+        #expect(fixedOnlyMatchingMatch.stdout == Data("ALPHA\n".utf8))
+        #expect(fixedNumberedOnlyMatchingMatch.status == 0)
+        #expect(fixedNumberedOnlyMatchingMatch.stderr.isEmpty)
+        #expect(fixedNumberedOnlyMatchingMatch.stdout == Data("3:ALPHA\n".utf8))
+        #expect(fixedPrefixedNumberedOnlyMatchingMatch.status == 0)
+        #expect(fixedPrefixedNumberedOnlyMatchingMatch.stderr.isEmpty)
+        #expect(fixedPrefixedNumberedOnlyMatchingMatch.stdout == Data("\(root.path("summary-match.txt")):3:ALPHA\n".utf8))
 
         let output = try runExecutableData([
             "needle",

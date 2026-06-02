@@ -8,6 +8,42 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Explicit fixed ASCII class only-matching preflight - 2026-06-02
+
+Single-file `-o` searches for plain ASCII fixed-class regex sequences now use a
+Swift-only direct stdout writer for regular text inputs. The preflight maps the
+file, emits non-overlapping fixed-class matches, and supports line numbers,
+columns, byte offsets, filename prefixes, and headings. Vimgrep, color, trim,
+CRLF conversion, JSON, stats, context, replacement, passthru, and other complex
+shapes still fall back to the existing searcher. UTF BOM inputs and files with
+NUL bytes also fall back. This remains Swift-only and does not add a C shim.
+
+Validation:
+
+- Patched Swift matched Rust for plain `-o`, `-n -o`, `--with-filename -n -o`,
+  `--column -o`, `-b -o`, multiple matches on one line, final no-newline
+  output, no-match, UTF-8 BOM fallback, and early NUL fallback controls.
+- Added regression coverage for fixed-class only-matching plain, numbered, and
+  prefixed numbered matched output/status.
+- `swift build -c release` and
+  `swift test --filter MiscTests/darwinExecutableLiteralPreflightDenseLines`
+  passed before recording these results.
+
+Same-session pre-probe at `d44dbe2` measured plain `-o` before this slice. The
+pre-change sweep used 5 warm-ups and 25 timed runs; the patched run used 5
+warm-ups and 30 timed runs with stdout redirected to `/dev/null`. After the
+only-matching preflight:
+
+| Case | Current Swift | Pre-change `d44dbe2` | Rust |
+| --- | ---: | ---: | ---: |
+| `-o '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 11.8 ms mean / 10.6-16.9 ms range | 63.3 ms | 19.7 ms / 19.1-22.3 ms |
+| `--column -o '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 19.6 ms / 19.0-22.2 ms | not remeasured | 20.3 ms / 19.8-20.6 ms |
+| `-o '[A-Z]{5}' no-uppercase-46m.txt` | 11.1 ms / 10.5-11.8 ms | not remeasured | 19.7 ms / 19.0-21.0 ms |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/fixed-class-matched-mode-sweep-d44dbe2.json` and
+`/tmp/swift-rg-bench/fixed-only-matching-patched-e00a7fd.json`.
+
 ## Explicit fixed ASCII class matched line-output preflight - 2026-06-02
 
 Single-file matching-line searches for plain ASCII fixed-class regex sequences
