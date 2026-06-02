@@ -8,6 +8,56 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rare proof-byte memchr gate for staged literals — 2026-06-02
+
+The no-C-shim Swift memmem fallback now routes 13-byte through 32-byte exact
+literals whose second byte is in the rarest proof tier (`q`, `z`, `x`, or `j`)
+through a proof-byte `memchr` locator before exact verification. This keeps the
+existing staged SIMD path for the next proof tier (`k`, `v`, `b`, `p`) and
+leaves common-byte literals on the generic verifier. The retained helper uses
+the standard `memchr` primitive already used elsewhere in the Swift fallback;
+it does not add a C shim or custom C/low-level implementation.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint
+  `/tmp/swift-rg-bench/baseline-34f1b81-fixed-class-wide-1780377430-ripgrep`
+  and Rust for 20-byte, 21-byte, 24-byte, 28-byte, and 32-byte rare-literal
+  miss line output, `--files-without-match`, a 32-byte positive hit fixture,
+  a 46 MiB 32-byte late-hit line-number guard, `--count-matches`, and the
+  common `missingliteral` guard.
+- `swift build -c release`, `swift test --filter LiteralSIMD`, full
+  `swift test`, `SWIFT_RIPGREP_PARITY=1 swift test --filter ParityHarnessTests`,
+  `scripts/check-no-external-deps.sh --skip-build`, and `git diff --check`
+  passed.
+
+A same-session hyperfine A/B against committed checkpoint `34f1b81`, with Rust
+included as the oracle, measured:
+
+| Case | Current Swift | Checkpoint `34f1b81` | Rust |
+| --- | ---: | ---: | ---: |
+| 20-byte rare literal miss | 5.8 ms mean / 5.6-7.0 ms range | 8.5 ms / 8.3-8.6 ms | 7.1 ms / 7.0-7.2 ms |
+| 21-byte rare literal miss | 5.7 ms / 5.5-6.8 ms | 8.5 ms / 8.3-8.8 ms | 7.1 ms / 7.0-7.2 ms |
+| 24-byte rare literal miss | 5.6 ms / 5.5-5.8 ms | 8.5 ms / 8.3-8.9 ms | 7.1 ms / 6.9-7.3 ms |
+| 32-byte rare literal miss | 5.6 ms / 5.5-6.0 ms | 8.5 ms / 8.3-8.8 ms | 7.1 ms / 6.9-7.3 ms |
+| 21-byte `--stats --files-without-match` | 5.7 ms / 5.6-6.0 ms | 7.4 ms / 7.2-7.9 ms | 6.2 ms / 6.1-6.4 ms |
+| 32-byte late hit `-n` guard | 8.4 ms / 7.9-10.2 ms | 9.2 ms / 8.8-10.0 ms | 8.8 ms / 7.4-12.0 ms |
+| common-byte `missingliteral` guard | 64.6 ms / 63.8-66.1 ms | 64.8 ms / 63.8-66.9 ms | 67.5 ms / 65.6-72.3 ms |
+
+Before this retained slice, same-session fixed ASCII class no-candidate
+experiments with SIMD64, SIMD32, unrolled SIMD16, and wrapping-range SIMD16
+proofs were rejected. The wide variants regressed badly; the wrapping-range
+variant was flat for line output and slower for `--no-mmap`. No fixed-class
+source changes were kept from those probes.
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/rare-proof-memchr-1780378173.json`,
+`/tmp/swift-rg-bench/rare-proof-late-hit-1780378488.json`,
+`/tmp/swift-rg-bench/fixed-class-wide-simd64-1780377557.json`,
+`/tmp/swift-rg-bench/fixed-class-wide-simd32-1780377649.json`,
+`/tmp/swift-rg-bench/fixed-class-unrolled-simd16-1780377747.json`, and
+`/tmp/swift-rg-bench/fixed-class-wrapping-range-1780377862.json`.
+
 ## Later-class absence proof for fixed ASCII class sequences — 2026-06-02
 
 The fixed ASCII class sequence fast path now samples for a sparse required
