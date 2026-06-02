@@ -220,6 +220,20 @@ measured:
 Raw hyperfine export:
 `/tmp/swift-rg-bench/fixed-distinct-class-skip-1780389615.json`.
 
+Follow-up rejected fixed-class mask probe:
+
+- Replacing the fixed-class SIMD mask test from `matches._storage.min() < 0`
+  to a non-zero storage-vector comparison preserved exact stdout/stderr/status
+  against checkpoint `8390ccb` and Rust for no-uppercase, sparse-uppercase,
+  later-class absence, files-without-match, and dense lowercase count controls,
+  but regressed the scanner. A 60-run A/B measured no-uppercase line output at
+  47.5 ms for the probe versus 38.1 ms baseline, sparse-uppercase line output
+  at 69.7 ms versus 35.2 ms, and dense lowercase count at 110.1 ms versus
+  107.1 ms. The existing `min() < 0` mask check stayed.
+
+Rejected probe export:
+`/tmp/swift-rg-bench/fixed-mask-storage-probe-1780396840.json`.
+
 ## Quiet run-suffix binary precheck window — 2026-06-02
 
 The quiet first-match fast path for uppercase run-suffix regexes now uses the
