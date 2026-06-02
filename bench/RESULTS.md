@@ -50,6 +50,15 @@ proofs were rejected. The wide variants regressed badly; the wrapping-range
 variant was flat for line output and slower for `--no-mmap`. No fixed-class
 source changes were kept from those probes.
 
+Follow-up rejected probe:
+
+- A pre-binary fixed-class no-match proof, shaped like the existing plain
+  literal no-match shortcut and limited to plain matching-line output, preserved
+  output but did not improve the target. A 25-run A/B measured
+  `-n '[A-Z]{5}' no-match-ascii-46m.txt` at 39.3 ms for the probe versus
+  38.0 ms baseline, and it regressed the sparse candidate guardrail from
+  34.4 ms to 39.4 ms. The helper was not kept.
+
 Raw hyperfine exports:
 `/tmp/swift-rg-bench/rare-proof-memchr-1780378173.json`,
 `/tmp/swift-rg-bench/rare-proof-late-hit-1780378488.json`,
@@ -57,6 +66,8 @@ Raw hyperfine exports:
 `/tmp/swift-rg-bench/fixed-class-wide-simd32-1780377649.json`,
 `/tmp/swift-rg-bench/fixed-class-unrolled-simd16-1780377747.json`, and
 `/tmp/swift-rg-bench/fixed-class-wrapping-range-1780377862.json`.
+Follow-up rejected probe export:
+`/tmp/swift-rg-bench/fixed-prebinary-nomatch-proof-1780379520.json`.
 
 ## Later-class absence proof for fixed ASCII class sequences — 2026-06-02
 
