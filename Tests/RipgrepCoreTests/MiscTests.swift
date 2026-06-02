@@ -2691,6 +2691,63 @@ struct MiscTests {
         #endif
     }
 
+    @Test("Darwin executable literal preflight coalesces simple line output")
+    func darwinExecutableLiteralPreflightCoalescesSimpleLineOutput() throws {
+        #if canImport(Darwin)
+        let root = try TemporaryDirectory()
+        try root.write("literal one\nliteral two\nquiet\nliteral three\nliteral four", to: "simple.txt")
+        try root.write("literal\naliteral\nliteral tail\n", to: "word.txt")
+
+        let output = try runExecutableData([
+            "--no-config",
+            "literal",
+            root.path("simple.txt"),
+        ], fixture: {})
+        #expect(output == Data("literal one\nliteral two\nliteral three\nliteral four\n".utf8))
+
+        let maxCountOutput = try runExecutableData([
+            "--no-config",
+            "-m",
+            "3",
+            "literal",
+            root.path("simple.txt"),
+        ], fixture: {})
+        #expect(maxCountOutput == Data("literal one\nliteral two\nliteral three\n".utf8))
+
+        let wordOutput = try runExecutableData([
+            "--no-config",
+            "-w",
+            "literal",
+            root.path("word.txt"),
+        ], fixture: {})
+        #expect(wordOutput == Data("literal\nliteral tail\n".utf8))
+
+        let numberedOutput = try runExecutableData([
+            "--no-config",
+            "-n",
+            "literal",
+            root.path("simple.txt"),
+        ], fixture: {})
+        #expect(numberedOutput == Data("1:literal one\n2:literal two\n4:literal three\n5:literal four\n".utf8))
+
+        let prefixedOutput = try runExecutableData([
+            "--no-config",
+            "-H",
+            "literal",
+            root.path("simple.txt"),
+        ], fixture: {})
+        #expect(prefixedOutput == Data(
+            """
+            \(root.path("simple.txt")):literal one
+            \(root.path("simple.txt")):literal two
+            \(root.path("simple.txt")):literal three
+            \(root.path("simple.txt")):literal four
+
+            """.utf8
+        ))
+        #endif
+    }
+
     @Test("Darwin executable literal preflight emits dense matching lines once")
     func darwinExecutableLiteralPreflightDenseLines() throws {
         #if canImport(Darwin)

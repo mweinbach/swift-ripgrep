@@ -8,6 +8,46 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Simple literal line-output coalescing - 2026-06-02
+
+The shared Darwin single-literal line writer now batches contiguous unnumbered,
+unprefixed matching lines into larger stdout-buffer writes. Search, boundary,
+max-count, binary fallback, and line accounting still use the existing scanner;
+the new state only delays simple line writes until a gap, a synthetic final
+newline, or the end of the file. Numbered output, headings, and filename
+prefixes stay on the previous per-line path.
+
+Validation:
+
+- Patched Swift matched Rust `rg` for status, stdout, and stderr on dense
+  matching output, numbered output, bounded `-m 10`, sparse no-final-newline
+  output, word-boundary output, filename-prefixed output, binary fallback, and
+  no-match output. A `--stats` check kept the same counters; elapsed-time fields
+  naturally differ from Rust.
+- Added executable regression coverage for contiguous simple output,
+  non-contiguous runs, `-m`, no-final-newline output, word-boundary output,
+  numbered output, and filename-prefixed output.
+- `swift build -c release`,
+  `swift test --filter MiscTests/darwinExecutableLiteralPreflightCoalescesSimpleLineOutput`,
+  `swift test --filter MiscTests/darwinExecutableLiteralPreflightDenseLines`,
+  `swift test`, and `SWIFT_RIPGREP_PARITY=1 swift test --filter ParityHarnessTests`
+  passed before recording these results.
+
+The retained dense-output probe used 5 warm-ups and 40 timed runs with stdout
+redirected to `/dev/null`. The pre-change numbers are from the same-session
+baseline refresh before this patch.
+
+| Case | Current Swift | Pre-change Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `literal match-ascii-46m.txt` | 38.0 ms mean / 36.5-40.0 ms range | 60.6 ms / 58.1-63.9 ms | 40.9 ms / 40.0-44.4 ms |
+| `-n literal match-ascii-46m.txt` guard | 78.7 ms / 76.9-85.1 ms | 78.3 ms / 76.0-81.8 ms | 74.4 ms / 72.9-76.5 ms |
+| `-e literal -e absent match-ascii-46m.txt` | 39.8 ms / 38.9-40.9 ms | 63.2 ms / 62.2-64.8 ms | 47.7 ms / 46.9-49.4 ms |
+| `absentliteral match-ascii-46m.txt` guard | 13.5 ms / 12.2-17.3 ms | 14.6 ms / 14.0-15.9 ms | 10.3 ms / 9.3-12.3 ms |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/simple-line-coalesce-probe-1780427930.json` and
+`/tmp/swift-rg-bench/simple-line-coalesce-guards-1780427957.json`.
+
 ## Quiet uppercase run-suffix lexical fallback - 2026-06-02
 
 Quiet searches for uppercase-run suffix regexes now keep the existing fast

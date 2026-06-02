@@ -12125,6 +12125,10 @@ private func rgSwiftDarwinWriteLiteralBytes(
     var declinedFastPath = false
     var confirmedTextHaystack = knownTextHaystack
     var bytesSearched = haystackLength
+    let simpleLineOutput = emitLines && !lineNumber && linePrefix.isEmpty && headingPrefix.isEmpty
+    var pendingSimpleOutputStart: Int?
+    var pendingSimpleOutputEnd = 0
+    var pendingSimpleOutputNeedsFinalNewline = false
 
     func ensureTextHaystack() -> Bool {
         if confirmedTextHaystack {
@@ -12134,6 +12138,25 @@ private func rgSwiftDarwinWriteLiteralBytes(
             return false
         }
         confirmedTextHaystack = true
+        return true
+    }
+
+    func flushPendingSimpleOutput() -> Bool {
+        guard let start = pendingSimpleOutputStart else {
+            return true
+        }
+        guard output?.write(base.advanced(by: start), count: pendingSimpleOutputEnd - start) == true else {
+            writeFailed = true
+            return false
+        }
+        if pendingSimpleOutputNeedsFinalNewline,
+           output?.writeByte(UInt8(ascii: "\n")) != true {
+            writeFailed = true
+            return false
+        }
+        pendingSimpleOutputStart = nil
+        pendingSimpleOutputEnd = 0
+        pendingSimpleOutputNeedsFinalNewline = false
         return true
     }
 
@@ -12178,7 +12201,19 @@ private func rgSwiftDarwinWriteLiteralBytes(
             let outputEnd = newline.map {
                 base.distance(to: $0.assumingMemoryBound(to: UInt8.self)) + 1
             } ?? haystackLength
-            if emitLines {
+            if simpleLineOutput {
+                if pendingSimpleOutputStart != nil,
+                   pendingSimpleOutputEnd != lineStart || pendingSimpleOutputNeedsFinalNewline {
+                    guard flushPendingSimpleOutput() else {
+                        return false
+                    }
+                    pendingSimpleOutputStart = lineStart
+                } else if pendingSimpleOutputStart == nil {
+                    pendingSimpleOutputStart = lineStart
+                }
+                pendingSimpleOutputEnd = outputEnd
+                pendingSimpleOutputNeedsFinalNewline = newline == nil
+            } else if emitLines {
                 guard output?.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading) == true else {
                     writeFailed = true
                     return false
@@ -12293,6 +12328,11 @@ private func rgSwiftDarwinWriteLiteralBytes(
     }
     if matchedLineCount < maxCount {
         bytesSearched = haystackLength
+    }
+    if simpleLineOutput {
+        guard flushPendingSimpleOutput() else {
+            return nil
+        }
     }
     if emitLines {
         guard output?.flush() == true else {
