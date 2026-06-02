@@ -8,6 +8,51 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Quiet uppercase run-suffix lexical fallback - 2026-06-02
+
+Quiet searches for uppercase-run suffix regexes now keep the existing fast
+non-lexical prefix probe, then use a streaming lexical first-match walk for
+short `[A-Z]+suffix` patterns when the prefix does not find a match. This avoids
+collecting the whole haystack list and launching the slower second search phase
+for late positive matches like `[A-Z]+_MISSING`, while preserving the current
+early-hit path for `[A-Z]+_RESUME`. Longer suffixes and exact-count forms stay
+on the existing paths.
+
+Validation:
+
+- Patched Swift matched Rust `rg` for exit status, stdout, and stderr for
+  `[A-Z]+_MISSING`, `[A-Z]+_RESUME`, `[A-Z]+_NEVERMATCHTOKEN`, and
+  `[A-Z]{3}_RESUME` on the Linux benchmark tree.
+- Added executable regression coverage for a late `[A-Z]+_MISSING` positive
+  match beyond the non-lexical prefix probe window.
+- `swift build -c release`,
+  `swift test --filter FeatureTests/quietRequiredLiteralRegexRecursiveSearchReturnsOnlyExitStatus`,
+  `swift test`, `SWIFT_RIPGREP_PARITY=1 swift test --filter ParityHarnessTests`,
+  `scripts/check-no-external-deps.sh --skip-build`, and `git diff --check`
+  passed before recording these results.
+
+The retained final confirmation used 8 warm-ups and 50 timed runs. The
+pre-change refresh used the committed `4c2e347` release binary with 5 warm-ups
+and 30 timed runs:
+
+| Case | Current Swift | Pre-change `4c2e347` | Rust |
+| --- | ---: | ---: | ---: |
+| `-q '[A-Z]+_MISSING' linux` | 25.0 ms mean / 23.8-27.4 ms range | 281.0 ms / 275.0-283.6 ms | 15.6 ms / 7.7-35.6 ms |
+| `-q '[A-Z]+_RESUME' linux` | 12.5 ms / 11.1-20.2 ms | 12.4 ms / 12.0-13.6 ms | 7.1 ms / 6.0-9.2 ms |
+| Long suffix guard, `[A-Z]+_NEVERMATCHTOKEN` | 1.215 s / 1.183-1.286 s | not measured | parity checked, not benchmarked |
+| Exact-count guard, `[A-Z]{3}_RESUME` | 11.7 ms / 10.8-12.4 ms | not measured | parity checked, not benchmarked |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/current-gap-refresh-1780425396.json` and
+`/tmp/swift-rg-bench/run-suffix-lexical-fallback-final-1780425923.json`.
+
+Rejected:
+
+- A 128-file prefix limit reduced `[A-Z]+_MISSING` to 23.3 ms, but narrowed the
+  early-hit probe window. The retained version keeps the established 160-file
+  prefix to avoid overfitting to this corpus ordering. Raw probe export:
+  `/tmp/swift-rg-bench/run-suffix-lexical-fallback-128-probe-1780425810.json`.
+
 ## Single-active multi-literal line delegation - 2026-06-02
 
 Darwin direct multi-literal matching-line output now reuses the single-literal

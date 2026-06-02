@@ -689,6 +689,32 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
 
         let fileWalker = FileWalker(fileManager: fileManager).withEnvironment(environment)
+        if let asciiRunSuffixFastPath,
+           case .uppercasePlus = asciiRunSuffixFastPath.run,
+           asciiRunSuffixFastPath.suffix.count <= 8 {
+            guard let prefixWalkResults = try fileWalker.firstVisitedFastSearchFilePrefixWithMessages(
+                for: options,
+                prefixLimit: quietRequiredLiteralProbeFileLimit,
+                visitHaystack: visit
+            ) else {
+                return nil
+            }
+            if matchedResult != nil || !prefixWalkResults.exhausted {
+                return prefixSearchResults(walkResults: prefixWalkResults.results)
+            }
+
+            filesSearched = 0
+            matchedResult = nil
+            searchMessages.removeAll(keepingCapacity: true)
+            guard let lexicalWalkResults = try fileWalker.firstVisitedFastSearchFileWithMessages(
+                for: options,
+                visitHaystack: visit
+            ) else {
+                return nil
+            }
+            return prefixSearchResults(walkResults: lexicalWalkResults)
+        }
+
         guard let fastWalkResults = try fileWalker.fastSearchHaystacksWithPrefixVisitMessages(
             for: options,
             prefixLimit: quietRequiredLiteralProbeFileLimit,

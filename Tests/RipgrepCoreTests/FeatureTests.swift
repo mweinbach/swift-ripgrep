@@ -73,6 +73,23 @@ struct FeatureTests {
         #expect(exitCode == 1)
         #expect(output.isEmpty)
         #expect(errors.isEmpty)
+
+        let lateRoot = try TemporaryDirectory()
+        for index in 0..<200 {
+            try lateRoot.write("plain \(index)\n", to: String(format: "late/file-%03d.txt", index))
+        }
+        try lateRoot.write("task ABC_MISSING\n", to: "late/file-001.txt")
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["-q", "[A-Z]+_MISSING", lateRoot.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(output.isEmpty)
+        #expect(errors.isEmpty)
     }
 
     @Test("quiet stats uppercase run suffix regex counts recursively")
