@@ -996,12 +996,27 @@ public enum SwiftDarwinLiteralPreflight {
         pattern: String,
         includeZero: Bool,
         countPrefix: [UInt8],
-        crlfTerminated: Bool
+        crlfTerminated: Bool,
+        stats: Bool = false
     ) -> Int32? {
-        guard let classes = asciiFixedClassSequenceClasses(pattern: pattern),
-              let matched = containsASCIIFixedClassSequence(path: path, classes: classes),
-              !matched else {
+        guard let classes = asciiFixedClassSequenceClasses(pattern: pattern) else {
             return nil
+        }
+        let bytesSearched: Int?
+        if stats {
+            guard let provenBytesSearched = asciiFixedClassNoMatchByteCount(
+                path: path,
+                classes: classes
+            ) else {
+                return nil
+            }
+            bytesSearched = provenBytesSearched
+        } else {
+            guard let matched = containsASCIIFixedClassSequence(path: path, classes: classes),
+                  !matched else {
+                return nil
+            }
+            bytesSearched = nil
         }
         if includeZero {
             guard writeCountOutput(
@@ -1012,7 +1027,27 @@ public enum SwiftDarwinLiteralPreflight {
                 return nil
             }
         }
+        if let bytesSearched {
+            guard fflush(Darwin.stdout) == 0 else {
+                return nil
+            }
+            return writeNoMatchSummary(bytesSearched: bytesSearched, json: false)
+        }
         return 1
+    }
+
+    public static func asciiFixedClassNoMatchSummaryExitCode(
+        path: String,
+        pattern: String,
+        json: Bool,
+        stats: Bool
+    ) -> Int32? {
+        guard json || stats,
+              let classes = asciiFixedClassSequenceClasses(pattern: pattern),
+              let bytesSearched = asciiFixedClassNoMatchByteCount(path: path, classes: classes) else {
+            return nil
+        }
+        return writeNoMatchSummary(bytesSearched: bytesSearched, json: json)
     }
 
     private static func asciiFixedClassSequenceClasses(
@@ -4159,6 +4194,37 @@ public enum SwiftDarwinLiteralPreflight {
                 classes: classes
             )
         }
+    }
+
+    private static func asciiFixedClassNoMatchByteCount(
+        path: String,
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass]
+    ) -> Int? {
+        guard !classes.isEmpty,
+              let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !startsWithUTFBOM(data),
+              !hasBinaryDetectionPrefix(data) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return data.count
+        }
+        let matched = data.withUnsafeBytes { rawData -> Bool in
+            guard let rawBase = rawData.baseAddress else {
+                return false
+            }
+            return asciiFixedClassSequenceMatch(
+                baseAddress: rawBase.assumingMemoryBound(to: UInt8.self),
+                searchCount: rawData.count,
+                classes: classes
+            )
+        }
+        guard !matched else {
+            return nil
+        }
+        return data.count
     }
 
     private static func asciiFixedClassSequenceMatch(

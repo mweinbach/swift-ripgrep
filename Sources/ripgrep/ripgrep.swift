@@ -2799,8 +2799,8 @@ struct RipgrepCommand {
            !parsedLineRegexp,
            !parsedOnlyMatching,
            !parsedVimgrep,
-           !parsedJson,
-           !parsedStats,
+           (!parsedJson || parsedIncludeZero),
+           (!parsedStats || parsedIncludeZero),
            parsedMaxCount == nil,
            parsedAfterContext == 0,
            parsedBeforeContext == 0,
@@ -2884,7 +2884,39 @@ struct RipgrepCommand {
             pattern: pattern,
             includeZero: parsedIncludeZero,
             countPrefix: parsedCountPrefix,
-            crlfTerminated: parsedCrlf
+            crlfTerminated: parsedCrlf,
+            stats: parsedStats
+           ) {
+            return exitCode
+        }
+        if parsedJson || parsedStats,
+           parsedSummaryPrintModeCanUseNoMatchPreflight,
+           paths.count == 1,
+           !fixedStrings,
+           !asciiCaseInsensitive,
+           !wordRegexp,
+           !parsedLineRegexp,
+           !parsedOnlyMatching,
+           !parsedVimgrep,
+           parsedMaxCount != 0,
+           parsedAfterContext == 0,
+           parsedBeforeContext == 0,
+           !parsedInvertMatch,
+           !parsedNullData,
+           !parsedPassthru,
+           !parsedReplacement,
+           !parsedStopOnNonmatch,
+           !parsedSearchZipAffectsPreflight,
+           parsedEncodingIsAutomatic,
+           !parsedColorAffectsPreflightOutput,
+           (patternCanStartWithDash || !pattern.hasPrefix("-")),
+           path != "-",
+           isReadableRegularFile(path),
+           let exitCode = SwiftDarwinLiteralPreflight.asciiFixedClassNoMatchSummaryExitCode(
+            path: path,
+            pattern: pattern,
+            json: parsedJson,
+            stats: parsedStats
            ) {
             return exitCode
         }

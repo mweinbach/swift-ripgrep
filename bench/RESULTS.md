@@ -8,6 +8,46 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Explicit fixed ASCII class summary no-match preflight - 2026-06-02
+
+Single-file stats and JSON summary searches for plain ASCII fixed-class regex
+sequences now reuse the Swift full-buffer no-match proof before entering the
+heavier search path. When the sequence is proven absent, the executable writes
+the existing deterministic no-match summary with the mapped file byte count;
+`--stats --include-zero` count modes keep writing `0` before the summary.
+Matching files, UTF BOM inputs, and early binary-prefix inputs fall back to the
+existing machinery. This remains Swift-only and does not add a C shim.
+
+Validation:
+
+- Patched Swift stdout/stderr/status matched checkpoint `721180e` exactly for
+  stats matching-line no-match, JSON no-match, stats count no-match, stats
+  count-matches no-match, JSON include-zero count no-match, JSON+stats
+  include-zero count no-match, stats hit fallbacks, UTF-8 BOM JSON hit fallback,
+  and binary-prefix stats miss fallback.
+- Patched Swift matched Rust for the same controls after normalizing elapsed
+  timing fields in stats/JSON summaries.
+- Added regression coverage for fixed-class JSON no-match summary, stats
+  no-match summary, numbered stats no-match summary, stats count no-match,
+  stats count-matches no-match, include-zero stats count no-match, JSON+stats
+  include-zero count no-match, and JSON include-zero count outputs.
+- `swift build -c release` and
+  `swift test --filter MiscTests/darwinExecutableLiteralPreflightDenseLines`
+  passed before recording these results.
+
+A same-session hyperfine A/B against checkpoint `721180e`, with Rust included
+as the oracle, measured:
+
+| Case | Current Swift | Checkpoint `721180e` | Rust |
+| --- | ---: | ---: | ---: |
+| `--stats -n '[A-Z]{5}' no-uppercase-46m.txt` | 8.0 ms mean / 7.2-12.5 ms range | 31.3 ms / 14.5-47.8 ms | 18.8 ms / 18.3-19.1 ms |
+| `--json '[A-Z]{5}' no-uppercase-46m.txt` | 7.4 ms / 7.2-8.0 ms | 9.6 ms / 9.2-12.6 ms | 18.7 ms / 18.3-18.9 ms |
+| `--stats -c '[A-Z]{5}' no-uppercase-46m.txt` | 7.4 ms / 7.1-8.1 ms | 36.3 ms / 25.0-60.3 ms | 18.0 ms / 17.6-18.3 ms |
+| `--stats --count-matches '[A-Z]{5}' sparse-uppercase-no-five-46m.txt` | 11.2 ms / 10.7-13.9 ms | 37.0 ms / 20.5-46.0 ms | 18.3 ms / 17.7-19.4 ms |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/fixed-summary-nomatch-patched-721180e.json`.
+
 ## Explicit fixed ASCII class count no-match preflight - 2026-06-02
 
 Single-file count and count-matches searches for plain ASCII fixed-class regex
