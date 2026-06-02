@@ -8,6 +8,43 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Explicit fixed ASCII class JSON count matched preflight - 2026-06-02
+
+Single-file JSON `-c` and `--count-matches` searches for plain ASCII
+fixed-class regex sequences now use the same Swift matched count-output
+preflight as non-JSON count modes. These modes still print plain count output,
+so the preflight preserves Rust-compatible output while avoiding the generic
+matched scan. JSON path-only matched modes were already fast and were left
+unchanged. This remains Swift-only and does not add a C shim.
+
+Validation:
+
+- Patched Swift matched Rust for JSON count hit, JSON count-matches hit,
+  explicit `--with-filename` JSON count prefix, JSON count no-match, JSON
+  count-matches sparse no-match, UTF-8 BOM fallback, and early NUL fallback
+  controls.
+- Added regression coverage for fixed-class JSON count and count-matches
+  matched output/status.
+- `swift build -c release` and
+  `swift test --filter MiscTests/darwinExecutableLiteralPreflightDenseLines`
+  passed before recording these results.
+
+Same-session pre-probe at `0e3214d` measured the matched JSON count gap before
+this slice. The pre-change sweep used 5 warm-ups and 25 timed runs; the
+patched run used 5 warm-ups and 30 timed runs. After allowing JSON count modes
+through the matched count preflight:
+
+| Case | Current Swift | Pre-change `0e3214d` | Rust |
+| --- | ---: | ---: | ---: |
+| `--json -c '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 17.2 ms mean / 15.4-30.8 ms range | 43.6 ms / 23.8-62.9 ms | 21.4 ms / 19.8-25.9 ms |
+| `--json --count-matches '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 16.0 ms / 15.3-18.2 ms | 45.4 ms / 38.6-72.9 ms | 20.9 ms / 19.9-21.7 ms |
+| `--json -c '[A-Z]{5}' no-uppercase-46m.txt` | 10.9 ms / 10.1-12.9 ms | not remeasured | 21.0 ms / 20.2-23.0 ms |
+| `--json --count-matches '[A-Z]{5}' sparse-uppercase-no-five-46m.txt` | 14.5 ms / 13.5-15.2 ms | not remeasured | 21.4 ms / 20.5-23.1 ms |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/fixed-json-matched-mode-sweep-0e3214d.json` and
+`/tmp/swift-rg-bench/fixed-json-count-matched-patched-0e3214d.json`.
+
 ## Explicit fixed ASCII class count matched preflight - 2026-06-02
 
 Single-file `-c` and `--count-matches` searches for plain ASCII fixed-class

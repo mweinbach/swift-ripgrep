@@ -2889,7 +2889,6 @@ struct RipgrepCommand {
         }
         if parsedCountStyleOutput,
            paths.count == 1,
-           !parsedJson,
            !parsedStats,
            !parsedQuiet,
            !fixedStrings,

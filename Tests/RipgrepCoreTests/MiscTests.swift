@@ -2970,6 +2970,20 @@ struct MiscTests {
             "alpha",
             root.path("summary-match.txt"),
         ])
+        let fixedJsonCountMatch = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "-c",
+            "[A-Z]{5}",
+            root.path("summary-match.txt"),
+        ])
+        let fixedJsonCountMatchesMatch = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "--count-matches",
+            "[A-Z]{5}",
+            root.path("summary-match.txt"),
+        ])
         let jsonIgnoreCaseWordCountMatch = try runExecutableResult([
             "--no-config",
             "--json",
@@ -3638,6 +3652,14 @@ struct MiscTests {
         #expect(jsonCountMatchesMatch.status == 0)
         #expect(jsonCountMatchesMatch.stderr.isEmpty)
         #expect(jsonCountMatchesMatch.stdout == Data("4\n".utf8))
+        for result in [
+            fixedJsonCountMatch,
+            fixedJsonCountMatchesMatch,
+        ] {
+            #expect(result.status == 0)
+            #expect(result.stderr.isEmpty)
+            #expect(result.stdout == Data("1\n".utf8))
+        }
         #expect(jsonIgnoreCaseWordCountMatch.status == 0)
         #expect(jsonIgnoreCaseWordCountMatch.stderr.isEmpty)
         #expect(jsonIgnoreCaseWordCountMatch.stdout == Data("3\n".utf8))
