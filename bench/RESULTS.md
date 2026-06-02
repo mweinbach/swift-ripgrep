@@ -8,6 +8,48 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Thirteen-through-sixteen-byte rare second-byte staged SIMD helper — 2026-06-01
+
+The no-C-shim Swift memmem fallback now routes 13-byte through 16-byte exact
+literals through a shared staged SIMD16 helper when the second byte is rare
+(`q`, `z`, `x`, `j`, `k`, `v`, `b`, or `p`). The helper keeps the existing
+first/middle/tail screen, proves byte 1 first, and only walks the remaining
+proof bytes if candidate lanes survive. Common-byte literals fall through to
+the generic verifier; this keeps controls such as `missingliteral` out of the
+new path after that guardrail showed a measurable regression.
+
+Validation:
+
+- Added 13-byte, 14-byte, 15-byte, and 16-byte exactness regressions with
+  repeated `theta zeta eta` false candidates and positive hit lines.
+- Current Swift stdout/stderr/status matched checkpoint
+  `/tmp/swift-rg-bench/baseline-d378296-1780360027-ripgrep` and Rust for
+  13-byte through 16-byte line output, the 14-byte all-`z` guard, and the
+  common-byte `missingliteral` guard. Stats output matched after normalizing
+  timing fields.
+- `swift build -c release`, focused 13/14/15/16-byte scanner tests, full
+  `swift test`, `scripts/check-no-external-deps.sh --skip-build`, and
+  `SWIFT_RIPGREP_PARITY=1 swift test --filter ParityHarnessTests` passed.
+
+A same-session 30-run hyperfine A/B against checkpoint `d378296`, with five
+warmups, measured:
+
+| Command | Current Swift | Checkpoint `d378296` | Rust |
+| --- | ---: | ---: | ---: |
+| `-n "tqeta zqta et" no-match-ascii-46m.txt` | 11.2 ms mean / 10.2-12.4 ms range | 19.0 ms / 17.8-20.1 ms | 7.5 ms / 7.2-7.9 ms |
+| `-n "tqeta zeqa eta" no-match-ascii-46m.txt` | 10.0 ms / 9.7-10.5 ms | 18.1 ms / 17.7-18.5 ms | 7.5 ms / 7.2-7.8 ms |
+| `-n "tqeta zeqa eta " no-match-ascii-46m.txt` | 9.9 ms / 9.7-10.4 ms | 18.0 ms / 17.6-18.9 ms | 7.6 ms / 7.3-8.0 ms |
+| `-n "tqeta zqta eta k" no-match-ascii-46m.txt` | 10.0 ms / 9.6-10.4 ms | 18.4 ms / 17.6-20.4 ms | 7.6 ms / 7.4-7.9 ms |
+| `--stats --files-without-match "tqeta zqta et" no-match-ascii-46m.txt` | 9.6 ms / 8.8-10.9 ms | 17.1 ms / 16.5-17.9 ms | 6.9 ms / 6.6-7.5 ms |
+| `--stats --files-without-match "tqeta zqta eta k" no-match-ascii-46m.txt` | 9.0 ms / 8.7-9.4 ms | 17.2 ms / 16.6-17.7 ms | 6.7 ms / 6.4-7.2 ms |
+| `-n missingliteral match-ascii-46m.txt` guardrail | 69.7 ms / 69.1-70.4 ms | 68.9 ms / 68.4-70.2 ms | not remeasured in this pass |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/thirteen-sixteen-staged-exact-rust-final-1780361563.json`,
+`/tmp/swift-rg-bench/thirteen-sixteen-staged-exact-stats-final-1780361583.json`,
+and
+`/tmp/swift-rg-bench/thirteen-sixteen-staged-exact-secondbyte-probe-1780361526.json`.
+
 ## Eleven/twelve-byte Swift memmem staged SIMD helpers — 2026-06-01
 
 The no-C-shim Swift memmem fallback now routes eleven-byte and twelve-byte
