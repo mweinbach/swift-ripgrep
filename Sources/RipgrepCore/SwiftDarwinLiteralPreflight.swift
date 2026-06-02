@@ -968,18 +968,10 @@ public enum SwiftDarwinLiteralPreflight {
         guard let fastPath = PatternMatcher.asciiFixedClassSequence(in: patternBytes) else {
             return nil
         }
-        let matched: Bool?
-        if printWhenMatched {
-            matched = containsASCIIFixedClassSequencePrefix(
-                path: path,
-                classes: fastPath.classes
-            )
-        } else {
-            matched = containsASCIIFixedClassSequence(
-                path: path,
-                classes: fastPath.classes
-            )
-        }
+        let matched = containsASCIIFixedClassSequence(
+            path: path,
+            classes: fastPath.classes
+        )
         guard let matched else { return nil }
         guard matched == printWhenMatched else {
             return 1
@@ -4102,40 +4094,6 @@ public enum SwiftDarwinLiteralPreflight {
 
     private static func hasBinaryDetectionPrefix(_ data: Data) -> Bool {
         containsNULByte(data, limit: 64 * 1024)
-    }
-
-    private static func containsASCIIFixedClassSequencePrefix(
-        path: String,
-        classes: [ASCIIFixedClassSequenceFastPath.ByteClass]
-    ) -> Bool? {
-        guard !classes.isEmpty,
-              let data = mappedPreflightData(path: path) else {
-            return nil
-        }
-        guard !startsWithUTFBOM(data) else {
-            return nil
-        }
-        guard !hasBinaryDetectionPrefix(data) else {
-            return nil
-        }
-        guard !data.isEmpty else {
-            return false
-        }
-        let searchCount = min(data.count, 64 * 1024)
-        guard searchCount >= classes.count else {
-            return data.count <= searchCount ? false : nil
-        }
-        let matched = data.withUnsafeBytes { rawData -> Bool in
-            guard let rawBase = rawData.baseAddress else {
-                return false
-            }
-            return asciiFixedClassSequenceMatch(
-                baseAddress: rawBase.assumingMemoryBound(to: UInt8.self),
-                searchCount: searchCount,
-                classes: classes
-            )
-        }
-        return matched || data.count <= searchCount ? matched : nil
     }
 
     private static func containsASCIIFixedClassSequence(

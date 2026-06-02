@@ -8,15 +8,51 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Explicit fixed ASCII class files-with-matches full-buffer preflight - 2026-06-02
+
+Single-file `--files-with-matches` / `-l` searches for plain ASCII fixed-class
+regex sequences now use the same Swift full-buffer fixed-class proof as
+`--files-without-match`. The earlier executable preflight only wrote matching
+paths when the proof completed inside the 64 KiB binary detection prefix
+window; misses and late hits fell back to the generic search path. Current
+Swift maps the file, rejects UTF BOMs, and scans the full byte buffer with the
+SIMD fixed-class candidate helper before writing the path or returning a silent
+miss. This remains Swift-only and does not add a C shim.
+
+Validation:
+
+- Patched Swift stdout/stderr/status matched checkpoint `a03ab44` and Rust for
+  explicit `-l '[A-Z]{5}'` text miss, text hit, late-NUL hit, early-NUL hit,
+  early-NUL miss, UTF-8 BOM hit, and UTF-16LE BOM hit controls.
+- The shared `--files-without-match '[A-Z]{5}'` text hit/miss and binary
+  hit/miss controls still matched checkpoint `a03ab44` and Rust.
+- Added regression coverage for explicit fixed-class `-l` text no-match and
+  binary no-match output.
+- `swift build -c release` and
+  `swift test --filter MiscTests/quietFixedASCIIClassRegexMatchesRecursively`
+  passed before recording these results.
+
+A same-session hyperfine A/B against checkpoint `a03ab44`, with Rust included
+as the oracle, measured:
+
+| Case | Current Swift | Checkpoint `a03ab44` | Rust |
+| --- | ---: | ---: | ---: |
+| `-l '[A-Z]{5}' no-uppercase-46m.txt` | 7.9 ms mean / 7.5-9.8 ms range | 36.6 ms / 18.2-60.2 ms | 18.1 ms / 17.6-20.3 ms |
+| `-l '[A-Z]{5}' sparse-uppercase-no-five-46m.txt` | 11.0 ms / 10.7-11.6 ms | 31.1 ms / 18.0-41.8 ms | 18.3 ms / 17.7-19.1 ms |
+| `-l '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 7.5 ms / 7.1-7.9 ms | 28.7 ms / 15.8-38.4 ms | 17.9 ms / 17.4-18.6 ms |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/fixed-fileswithmatches-fullscan-1780400599.json`.
+
 ## Explicit fixed ASCII class files-without-match executable preflight — 2026-06-02
 
 Single-file `--files-without-match` searches for plain ASCII fixed-class regex
-sequences now share the Swift executable path-only preflight. For matching-path
-output, the preflight still only proves early prefix hits. For non-matching-path
-output, it maps the file and uses the same fixed-class parser with a SIMD
+sequences share the Swift executable path-only preflight. At this checkpoint,
+matching-path output still only proved early prefix hits. For non-matching-path
+output, it mapped the file and used the same fixed-class parser with a SIMD
 candidate scan across the full byte buffer so it can prove no match and write
-the path directly. UTF BOM files fall back to the decoded search path. The
-change stays Swift-only and does not add a C shim.
+the path directly. UTF BOM files fell back to the decoded search path. The
+change stayed Swift-only and did not add a C shim.
 
 Validation:
 
