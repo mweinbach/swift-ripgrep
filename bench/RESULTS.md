@@ -58,6 +58,14 @@ Follow-up rejected probe:
   `-n '[A-Z]{5}' no-match-ascii-46m.txt` at 39.3 ms for the probe versus
   38.0 ms baseline, and it regressed the sparse candidate guardrail from
   34.4 ms to 39.4 ms. The helper was not kept.
+- A Greek lead-byte candidate refinement, which only loaded second and third
+  UTF-8 bytes after the existing lead-byte SIMD mask found a possible match,
+  also preserved output but was not retained. A 20-run A/B measured
+  `-n '\p{Greek}' non-greek-unicode-64m.txt` at 42.1 ms for the probe versus
+  36.1 ms baseline, and a false-E2 late-omega positive guard at 154.9 ms
+  versus 147.9 ms baseline. The `--files-without-match` number looked
+  noisily better, but the main miss and positive guardrail both moved the
+  wrong way.
 
 Raw hyperfine exports:
 `/tmp/swift-rg-bench/rare-proof-memchr-1780378173.json`,
@@ -67,7 +75,8 @@ Raw hyperfine exports:
 `/tmp/swift-rg-bench/fixed-class-unrolled-simd16-1780377747.json`, and
 `/tmp/swift-rg-bench/fixed-class-wrapping-range-1780377862.json`.
 Follow-up rejected probe export:
-`/tmp/swift-rg-bench/fixed-prebinary-nomatch-proof-1780379520.json`.
+`/tmp/swift-rg-bench/fixed-prebinary-nomatch-proof-1780379520.json` and
+`/tmp/swift-rg-bench/greek-refined-candidates-1780380196.json`.
 
 ## Later-class absence proof for fixed ASCII class sequences — 2026-06-02
 
