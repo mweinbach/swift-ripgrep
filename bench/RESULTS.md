@@ -8,6 +8,47 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Explicit fixed ASCII class max-count count preflight - 2026-06-02
+
+Single-file `-c -m 1` and `--count-matches -m 1` searches for plain ASCII
+fixed-class regex sequences now stay on a Swift-only bounded summary preflight.
+The bounded counter preserves ripgrep's max-count semantics by counting every
+non-overlapping match on the selected matching lines, stopping stats
+`bytes searched` at the end of the last selected line, printing include-zero
+no-match output when requested, and still returning the no-match exit status.
+The route continues to fall back for `-m 0`, context, inverted search,
+line-oriented output modes, replacement, passthru, semantic modes, UTF BOM
+inputs, and files with NUL bytes. No C shim is added.
+
+Validation:
+
+- Patched Swift matched Rust after normalizing elapsed stats lines for
+  `-c -m 1`, `--count-matches -m 1`, `--stats -c -m 1`,
+  `--stats --count-matches -m 1`, `-c --include-zero -m 1` no-match, and
+  `--stats -c --include-zero -m 1` no-match.
+- Added executable regression coverage for fixed-class max-count count output,
+  count-matches output, stats summaries with bounded `20 bytes searched`, and
+  include-zero no-match status/output.
+- `swift build -c release` and
+  `swift test --filter MiscTests/darwinExecutableLiteralPreflightDenseLines`
+  passed before recording these results.
+
+The before/after pass used a detached `a04afa7` baseline build, 5 warm-ups, and
+30 timed runs with stdout redirected to `/dev/null`. A separate final
+current-vs-Rust pass used 8 warm-ups and 40 timed runs after the first pass
+showed a scheduler outlier in one stats case:
+
+| Case | Current Swift | Pre-change `a04afa7` | Rust |
+| --- | ---: | ---: | ---: |
+| `-c -m 1 '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 14.1 ms mean / 12.9-16.2 ms range | 56.8 ms / 46.4-62.9 ms | 21.7 ms / 20.5-22.9 ms |
+| `--count-matches -m 1 '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 13.9 ms / 12.4-15.0 ms | 66.8 ms / 50.2-156.6 ms | 22.1 ms / 20.7-23.8 ms |
+| `--stats -c -m 1 '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 18.9 ms / 16.7-22.7 ms | 68.9 ms / 48.9-83.0 ms | 22.0 ms / 20.9-23.7 ms |
+| `--stats --count-matches -m 1 '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 18.3 ms / 17.2-20.1 ms | 66.0 ms / 53.4-81.4 ms | 22.2 ms / 20.3-24.4 ms |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/fixed-count-max-final-a04afa7.json` and
+`/tmp/swift-rg-bench/fixed-count-max-current-rust-a04afa7.json`.
+
 ## Explicit fixed ASCII class max-count formatted preflight - 2026-06-02
 
 Single-file `-m 1` searches for plain ASCII fixed-class regex sequences now

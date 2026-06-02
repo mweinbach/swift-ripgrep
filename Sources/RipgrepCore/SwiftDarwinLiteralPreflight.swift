@@ -1052,11 +1052,17 @@ public enum SwiftDarwinLiteralPreflight {
         pattern: String,
         countMatches: Bool,
         includeZero: Bool,
+        maxCount: Int?,
         countPrefix: [UInt8],
         crlfTerminated: Bool
     ) -> Int32? {
-        guard let classes = asciiFixedClassSequenceClasses(pattern: pattern),
-              let stats = asciiFixedClassMatchedSummaryStats(path: path, classes: classes) else {
+        guard maxCount.map({ $0 > 0 }) ?? true,
+              let classes = asciiFixedClassSequenceClasses(pattern: pattern),
+              let stats = asciiFixedClassMatchedSummaryStats(
+                path: path,
+                classes: classes,
+                maxCount: maxCount
+              ) else {
             return nil
         }
         let count = countMatches ? stats.totalMatches : stats.matchedLines
@@ -1070,13 +1076,14 @@ public enum SwiftDarwinLiteralPreflight {
         ), fflush(Darwin.stdout) == 0 else {
             return nil
         }
+        let exitCode: Int32 = stats.matchedLines > 0 ? 0 : 1
         return writeStatsSummary(
             totalMatches: stats.totalMatches,
             matchedLines: stats.matchedLines,
-            filesWithMatches: 1,
+            filesWithMatches: stats.matchedLines > 0 ? 1 : 0,
             filesSearched: 1,
             bytesSearched: stats.bytesSearched,
-            exitCode: 0
+            exitCode: exitCode
         )
     }
 
@@ -1085,11 +1092,17 @@ public enum SwiftDarwinLiteralPreflight {
         pattern: String,
         countMatches: Bool,
         includeZero: Bool,
+        maxCount: Int?,
         countPrefix: [UInt8],
         crlfTerminated: Bool
     ) -> Int32? {
-        guard let classes = asciiFixedClassSequenceClasses(pattern: pattern),
-              let stats = asciiFixedClassMatchedSummaryStats(path: path, classes: classes) else {
+        guard maxCount.map({ $0 > 0 }) ?? true,
+              let classes = asciiFixedClassSequenceClasses(pattern: pattern),
+              let stats = asciiFixedClassMatchedSummaryStats(
+                path: path,
+                classes: classes,
+                maxCount: maxCount
+              ) else {
             return nil
         }
         let count = countMatches ? stats.totalMatches : stats.matchedLines
@@ -1103,7 +1116,7 @@ public enum SwiftDarwinLiteralPreflight {
         ) else {
             return nil
         }
-        return 0
+        return stats.matchedLines > 0 ? 0 : 1
     }
 
     public static func asciiFixedClassMatchedLineOutputExitCode(
@@ -4593,7 +4606,8 @@ public enum SwiftDarwinLiteralPreflight {
 
     private static func asciiFixedClassMatchedSummaryStats(
         path: String,
-        classes: [ASCIIFixedClassSequenceFastPath.ByteClass]
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass],
+        maxCount: Int? = nil
     ) -> MatchedSummaryStats? {
         guard !classes.isEmpty,
               let data = mappedPreflightData(path: path) else {
@@ -4606,6 +4620,26 @@ public enum SwiftDarwinLiteralPreflight {
         }
         guard !data.isEmpty else {
             return nil
+        }
+        if let maxCount {
+            guard maxCount > 0 else {
+                return nil
+            }
+            return data.withUnsafeBytes { rawData -> MatchedSummaryStats? in
+                guard let rawBase = rawData.baseAddress else {
+                    return MatchedSummaryStats(
+                        totalMatches: 0,
+                        matchedLines: 0,
+                        bytesSearched: data.count
+                    )
+                }
+                return asciiFixedClassBoundedMatchedSummaryStats(
+                    baseAddress: rawBase.assumingMemoryBound(to: UInt8.self),
+                    dataCount: rawData.count,
+                    classes: classes,
+                    maxCount: maxCount
+                )
+            }
         }
         let counts = data.withUnsafeBytes { rawData -> (matches: Int, matchedLines: Int) in
             guard let rawBase = rawData.baseAddress else {
@@ -4625,6 +4659,66 @@ public enum SwiftDarwinLiteralPreflight {
             totalMatches: counts.matches,
             matchedLines: counts.matchedLines,
             bytesSearched: data.count
+        )
+    }
+
+    private static func asciiFixedClassBoundedMatchedSummaryStats(
+        baseAddress: UnsafePointer<UInt8>,
+        dataCount: Int,
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass],
+        maxCount: Int
+    ) -> MatchedSummaryStats? {
+        let width = classes.count
+        guard width > 0, maxCount > 0, dataCount >= width else {
+            return MatchedSummaryStats(
+                totalMatches: 0,
+                matchedLines: 0,
+                bytesSearched: dataCount
+            )
+        }
+
+        let newline = UInt8(ascii: "\n")
+        var searchOffset = 0
+        var selectedLineEnd = -1
+        var matchedLineCount = 0
+        var matchCount = 0
+        var bytesSearched = dataCount
+
+        while let matchStart = asciiFixedClassNextSequenceMatch(
+            baseAddress: baseAddress,
+            endExclusive: matchedLineCount >= maxCount ? selectedLineEnd : dataCount,
+            classes: classes,
+            from: searchOffset
+        ) {
+            if matchStart >= selectedLineEnd {
+                guard matchedLineCount < maxCount else {
+                    break
+                }
+                matchedLineCount += 1
+                if let newlinePointer = memchr(
+                    baseAddress.advanced(by: matchStart),
+                    Int32(newline),
+                    dataCount - matchStart
+                ) {
+                    selectedLineEnd = baseAddress.distance(
+                        to: newlinePointer.assumingMemoryBound(to: UInt8.self)
+                    ) + 1
+                } else {
+                    selectedLineEnd = dataCount
+                }
+            }
+
+            matchCount += 1
+            searchOffset = matchStart + width
+        }
+        if matchedLineCount >= maxCount, selectedLineEnd >= 0 {
+            bytesSearched = selectedLineEnd
+        }
+
+        return MatchedSummaryStats(
+            totalMatches: matchCount,
+            matchedLines: matchedLineCount,
+            bytesSearched: bytesSearched
         )
     }
 

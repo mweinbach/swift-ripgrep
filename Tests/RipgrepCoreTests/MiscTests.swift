@@ -3117,6 +3117,31 @@ struct MiscTests {
             "[A-Z]{5}",
             root.path("fixed-max.txt"),
         ])
+        let fixedMaxCountCountMatch = try runExecutableResult([
+            "--no-config",
+            "-c",
+            "-m",
+            "1",
+            "[A-Z]{5}",
+            root.path("fixed-max.txt"),
+        ])
+        let fixedMaxCountCountMatchesMatch = try runExecutableResult([
+            "--no-config",
+            "--count-matches",
+            "-m",
+            "1",
+            "[A-Z]{5}",
+            root.path("fixed-max.txt"),
+        ])
+        let fixedMaxCountIncludeZeroNoMatch = try runExecutableResult([
+            "--no-config",
+            "-c",
+            "--include-zero",
+            "-m",
+            "1",
+            "[A-Z]{5}",
+            root.path("fixed-summary.txt"),
+        ])
         let fixedJsonMaxCountLineMatch = try runExecutableResult([
             "--no-config",
             "--json",
@@ -3402,6 +3427,34 @@ struct MiscTests {
             "1",
             "[A-Z]{5}",
             root.path("fixed-max.txt"),
+        ])
+        let fixedStatsMaxCountCountMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "-c",
+            "-m",
+            "1",
+            "[A-Z]{5}",
+            root.path("fixed-max.txt"),
+        ])
+        let fixedStatsMaxCountCountMatchesMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "--count-matches",
+            "-m",
+            "1",
+            "[A-Z]{5}",
+            root.path("fixed-max.txt"),
+        ])
+        let fixedStatsMaxCountCountIncludeZeroNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "-c",
+            "--include-zero",
+            "-m",
+            "1",
+            "[A-Z]{5}",
+            root.path("fixed-summary.txt"),
         ])
         let statsContextNoMatchSummary = try runExecutableResult([
             "--no-config",
@@ -3726,6 +3779,7 @@ struct MiscTests {
             fixedJsonStatsCountIncludeZeroNoMatchSummary,
             statsCountIncludeZeroNoMatchSummary,
             fixedStatsCountIncludeZeroNoMatchSummary,
+            fixedStatsMaxCountCountIncludeZeroNoMatchSummary,
             statsCountMatchesIncludeZeroNoMatchSummary,
         ] {
             #expect(result.status == 1)
@@ -3820,6 +3874,22 @@ struct MiscTests {
                 matches: 2,
                 matchedLines: 1,
                 bytesPrinted: expectedFixedMaxVimgrepOutput.count
+            ))
+        #expect(fixedStatsMaxCountCountMatchSummary.status == 0)
+        #expect(fixedStatsMaxCountCountMatchSummary.stderr.isEmpty)
+        #expect(fixedStatsMaxCountCountMatchSummary.stdout == Data("1\n".utf8)
+            + expectedStatsMaxCountSummary(
+                matches: 2,
+                matchedLines: 1,
+                bytesPrinted: 0
+            ))
+        #expect(fixedStatsMaxCountCountMatchesMatchSummary.status == 0)
+        #expect(fixedStatsMaxCountCountMatchesMatchSummary.stderr.isEmpty)
+        #expect(fixedStatsMaxCountCountMatchesMatchSummary.stdout == Data("2\n".utf8)
+            + expectedStatsMaxCountSummary(
+                matches: 2,
+                matchedLines: 1,
+                bytesPrinted: 0
             ))
         for result in [
             fixedStatsCountMatchSummary,
@@ -3973,6 +4043,15 @@ struct MiscTests {
         #expect(fixedMaxCountVimgrepLineMatch.status == 0)
         #expect(fixedMaxCountVimgrepLineMatch.stderr.isEmpty)
         #expect(fixedMaxCountVimgrepLineMatch.stdout == expectedFixedMaxVimgrepOutput)
+        #expect(fixedMaxCountCountMatch.status == 0)
+        #expect(fixedMaxCountCountMatch.stderr.isEmpty)
+        #expect(fixedMaxCountCountMatch.stdout == Data("1\n".utf8))
+        #expect(fixedMaxCountCountMatchesMatch.status == 0)
+        #expect(fixedMaxCountCountMatchesMatch.stderr.isEmpty)
+        #expect(fixedMaxCountCountMatchesMatch.stdout == Data("2\n".utf8))
+        #expect(fixedMaxCountIncludeZeroNoMatch.status == 1)
+        #expect(fixedMaxCountIncludeZeroNoMatch.stderr.isEmpty)
+        #expect(fixedMaxCountIncludeZeroNoMatch.stdout == Data("0\n".utf8))
         #expect(fixedJsonMaxCountLineMatch.status == 0)
         #expect(fixedJsonMaxCountLineMatch.stderr.isEmpty)
         #expect(fixedJsonMaxCountLineMatch.stdout == expectedFixedJSONMaxCountOutput())

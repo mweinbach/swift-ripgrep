@@ -3175,7 +3175,7 @@ struct RipgrepCommand {
            !parsedLineRegexp,
            !parsedOnlyMatching,
            !parsedVimgrep,
-           parsedMaxCount == nil,
+           parsedMaxCount != 0,
            parsedAfterContext == 0,
            parsedBeforeContext == 0,
            !parsedInvertMatch,
@@ -3194,6 +3194,7 @@ struct RipgrepCommand {
             pattern: pattern,
             countMatches: parsedPrintMode == .countMatches,
             includeZero: parsedIncludeZero,
+            maxCount: parsedMaxCount,
             countPrefix: parsedCountPrefix,
             crlfTerminated: parsedCrlf
            ) {
@@ -3485,7 +3486,7 @@ struct RipgrepCommand {
         if parsedStatsCountPrintModeCanUseMatchedStatsPreflight,
            paths.count == 1,
            !parsedInvertMatch,
-           parsedMaxCount == nil,
+           parsedMaxCount != 0,
            !parsedNullData,
            !parsedPassthru,
            !parsedSearchZipAffectsPreflight,
@@ -3509,6 +3510,7 @@ struct RipgrepCommand {
                     pattern: pattern,
                     countMatches: parsedPrintMode == .countMatches,
                     includeZero: parsedIncludeZero,
+                    maxCount: parsedMaxCount,
                     countPrefix: parsedCountPrefix,
                     crlfTerminated: parsedCrlf
                ) {
