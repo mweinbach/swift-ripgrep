@@ -3143,6 +3143,20 @@ struct MiscTests {
             "[A-Z]{5}",
             root.path("fixed-summary.txt"),
         ])
+        let fixedStatsCountMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "-c",
+            "[A-Z]{5}",
+            root.path("summary-match.txt"),
+        ])
+        let fixedStatsCountMatchesMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "--count-matches",
+            "[A-Z]{5}",
+            root.path("summary-match.txt"),
+        ])
         let statsCountIncludeZeroNoMatchSummary = try runExecutableResult([
             "--no-config",
             "--stats",
@@ -3513,6 +3527,14 @@ struct MiscTests {
         #expect(fixedStatsFilesWithMatchesMatchSummary.status == 0)
         #expect(fixedStatsFilesWithMatchesMatchSummary.stderr.isEmpty)
         #expect(fixedStatsFilesWithMatchesMatchSummary.stdout == expectedFixedMatchPathStatsSummary)
+        for result in [
+            fixedStatsCountMatchSummary,
+            fixedStatsCountMatchesMatchSummary,
+        ] {
+            #expect(result.status == 0)
+            #expect(result.stderr.isEmpty)
+            #expect(result.stdout == Data("1\n".utf8) + expectedStatsMatchSummary(matches: 1, matchedLines: 1))
+        }
         #expect(statsFilesWithoutMatchMatchSummary.status == 1)
         #expect(statsFilesWithoutMatchMatchSummary.stderr.isEmpty)
         #expect(statsFilesWithoutMatchMatchSummary.stdout == expectedStatsMatchSummary(matches: 4, matchedLines: 2))

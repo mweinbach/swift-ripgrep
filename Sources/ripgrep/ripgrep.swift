@@ -3153,6 +3153,24 @@ struct RipgrepCommand {
            !parsedReplacement,
            (patternCanStartWithDash || !pattern.hasPrefix("-")),
            path != "-" {
+            if !fixedStrings,
+               !asciiCaseInsensitive,
+               !wordRegexp,
+               !parsedVimgrep,
+               parsedAfterContext == 0,
+               parsedBeforeContext == 0,
+               !parsedStopOnNonmatch,
+               isReadableRegularFile(path),
+               let exitCode = SwiftDarwinLiteralPreflight.asciiFixedClassMatchedCountStatsExitCode(
+                    path: path,
+                    pattern: pattern,
+                    countMatches: parsedPrintMode == .countMatches,
+                    includeZero: parsedIncludeZero,
+                    countPrefix: parsedCountPrefix,
+                    crlfTerminated: parsedCrlf
+               ) {
+                return exitCode
+            }
             let statsCountLiteralPattern: String?
             if fixedStrings {
                 statsCountLiteralPattern = pattern

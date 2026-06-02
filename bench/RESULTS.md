@@ -8,6 +8,43 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Explicit fixed ASCII class count-stats matched preflight - 2026-06-02
+
+Single-file `--stats -c` and `--stats --count-matches` searches for plain
+ASCII fixed-class regex sequences now use the Swift matched-stats preflight for
+regular text inputs. The preflight reuses the fixed-class summary scanner,
+writes the count output, flushes, and appends the existing deterministic stats
+summary. No-match count modes still hit the no-match proof first, while UTF BOM
+inputs and files with NUL bytes fall back to the existing machinery. This
+remains Swift-only and does not add a C shim.
+
+Validation:
+
+- Patched Swift matched Rust for stats count hit, count-matches hit, count
+  no-match, count-matches sparse no-match, CRLF count hit, UTF-8 BOM fallback,
+  UTF-16LE BOM fallback, and early/late NUL fallback controls after normalizing
+  elapsed timing fields.
+- Added regression coverage for fixed-class stats count and count-matches
+  matched output/status.
+- `swift build -c release` and
+  `swift test --filter MiscTests/darwinExecutableLiteralPreflightDenseLines`
+  passed before recording these results.
+
+Same-session pre-probe at `747d25c` measured the matched count-stats gap before
+this slice. These section-specific `hyperfine` runs used 5 warm-ups and 30
+timed runs per case. After the matched count-stats preflight:
+
+| Case | Current Swift | Pre-change `747d25c` | Rust |
+| --- | ---: | ---: | ---: |
+| `--stats -c '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 13.0 ms mean / 11.3-19.7 ms range | 40.0 ms / 21.5-56.8 ms | 18.5 ms / 17.8-23.0 ms |
+| `--stats --count-matches '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 12.5 ms / 12.0-16.0 ms | 34.4 ms / 19.7-43.6 ms | 21.3 ms / 17.6-26.7 ms |
+| `--stats -c '[A-Z]{5}' no-uppercase-46m.txt` | 9.7 ms / 7.7-13.9 ms | 7.2 ms / 7.0-7.4 ms | 19.6 ms / 17.6-30.1 ms |
+| `--stats --count-matches '[A-Z]{5}' sparse-uppercase-no-five-46m.txt` | 11.3 ms / 10.9-13.3 ms | 10.8 ms / 10.5-11.5 ms | 18.4 ms / 17.7-18.8 ms |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/fixed-stats-count-matched-current-747d25c.json` and
+`/tmp/swift-rg-bench/fixed-stats-count-matched-patched-747d25c.json`.
+
 ## Explicit fixed ASCII class path-stats matched preflight - 2026-06-02
 
 Single-file `--stats -l` and `--stats --files-without-match` searches for
