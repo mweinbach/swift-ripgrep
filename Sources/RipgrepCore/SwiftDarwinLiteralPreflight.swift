@@ -991,6 +991,30 @@ public enum SwiftDarwinLiteralPreflight {
         return 1
     }
 
+    public static func asciiFixedClassNoMatchCountOutputExitCode(
+        path: String,
+        pattern: String,
+        includeZero: Bool,
+        countPrefix: [UInt8],
+        crlfTerminated: Bool
+    ) -> Int32? {
+        guard let classes = asciiFixedClassSequenceClasses(pattern: pattern),
+              let matched = containsASCIIFixedClassSequence(path: path, classes: classes),
+              !matched else {
+            return nil
+        }
+        if includeZero {
+            guard writeCountOutput(
+                0,
+                countPrefix: countPrefix,
+                crlfTerminated: crlfTerminated
+            ) else {
+                return nil
+            }
+        }
+        return 1
+    }
+
     private static func asciiFixedClassSequenceClasses(
         pattern: String
     ) -> [ASCIIFixedClassSequenceFastPath.ByteClass]? {

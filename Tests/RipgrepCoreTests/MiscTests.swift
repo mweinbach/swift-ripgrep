@@ -865,6 +865,21 @@ struct MiscTests {
         Aabcdefghi123
         """, to: "src/miss.txt")
         let pattern = "[A-Z][a-z]{8}[0-9]{3}"
+        func runExecutableStatusData(_ arguments: [String]) throws -> (stdout: Data, stderr: Data, status: Int32) {
+            let executable = ripgrepPackageRootURL().appendingPathComponent(".build/debug/ripgrep")
+            let process = Process()
+            process.executableURL = executable
+            process.arguments = arguments
+            let output = Pipe()
+            let error = Pipe()
+            process.standardOutput = output
+            process.standardError = error
+            try process.run()
+            let data = output.fileHandleForReading.readDataToEndOfFile()
+            let errorData = error.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            return (data, errorData, process.terminationStatus)
+        }
 
         let plainLineOutput = try runExecutableData([
             pattern,
@@ -913,6 +928,27 @@ struct MiscTests {
             noCandidateRoot.path("lower.txt"),
         ], fixture: {})
         #expect(noCandidateLineOutput.isEmpty)
+        let noCandidateCountOutput = try runExecutableData([
+            "-c",
+            "[A-Z]{5}",
+            noCandidateRoot.path("lower.txt"),
+        ], fixture: {})
+        #expect(noCandidateCountOutput.isEmpty)
+        let noCandidateCountMatchesOutput = try runExecutableData([
+            "--count-matches",
+            "[A-Z]{5}",
+            noCandidateRoot.path("lower.txt"),
+        ], fixture: {})
+        #expect(noCandidateCountMatchesOutput.isEmpty)
+        let noCandidateIncludeZeroCountOutput = try runExecutableStatusData([
+            "--include-zero",
+            "-c",
+            "[A-Z]{5}",
+            noCandidateRoot.path("lower.txt"),
+        ])
+        #expect(noCandidateIncludeZeroCountOutput.stdout == Data("0\n".utf8))
+        #expect(noCandidateIncludeZeroCountOutput.stderr.isEmpty)
+        #expect(noCandidateIncludeZeroCountOutput.status == 1)
 
         let noCandidateNoMmapLineOutput = try runExecutableData([
             "--no-mmap",
@@ -987,6 +1023,15 @@ struct MiscTests {
             noCandidateRoot.path("nul-no-match-fixed.bin"),
         ], fixture: {})
         #expect(binaryNoMatchLineOutput.isEmpty)
+        let binaryNoMatchIncludeZeroCountOutput = try runExecutableStatusData([
+            "--include-zero",
+            "--count-matches",
+            "[A-Z]{5}",
+            noCandidateRoot.path("nul-no-match-fixed.bin"),
+        ])
+        #expect(binaryNoMatchIncludeZeroCountOutput.stdout == Data("0\n".utf8))
+        #expect(binaryNoMatchIncludeZeroCountOutput.stderr.isEmpty)
+        #expect(binaryNoMatchIncludeZeroCountOutput.status == 1)
         let textFilesWithoutMatchOutput = try runExecutableData([
             "--files-without-match",
             "[A-Z]{5}",

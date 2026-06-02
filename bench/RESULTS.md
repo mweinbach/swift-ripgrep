@@ -8,6 +8,43 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Explicit fixed ASCII class count no-match preflight - 2026-06-02
+
+Single-file count and count-matches searches for plain ASCII fixed-class regex
+sequences now share the Swift full-buffer fixed-class no-match proof used by
+line and path-only output. If no match is proven, plain count modes return the
+silent no-match status directly, while `--include-zero` writes the existing
+count prefix plus `0` and still returns status 1. Matching files fall back to
+the existing count machinery so binary, BOM, and positive-count behavior stay
+unchanged. This remains Swift-only and does not add a C shim.
+
+Validation:
+
+- Patched Swift stdout/stderr/status matched checkpoint `82ebb7c` and Rust for
+  `-c`, `--count-matches`, `--include-zero -c`,
+  `--include-zero --count-matches`, prefixed include-zero count, CRLF
+  include-zero count, text hit counts, binary hit counts, binary no-match
+  include-zero counts, UTF-8 BOM counts, and UTF-16LE BOM counts.
+- Added regression coverage for explicit fixed-class count no-match,
+  count-matches no-match, include-zero count no-match, and binary include-zero
+  count-matches no-match output/status.
+- `swift build -c release` and
+  `swift test --filter MiscTests/quietFixedASCIIClassRegexMatchesRecursively`
+  passed before recording these results.
+
+A same-session hyperfine A/B against checkpoint `82ebb7c`, with Rust included
+as the oracle, measured:
+
+| Case | Current Swift | Checkpoint `82ebb7c` | Rust |
+| --- | ---: | ---: | ---: |
+| `-c '[A-Z]{5}' no-uppercase-46m.txt` | 7.4 ms mean / 7.2-7.7 ms range | 38.8 ms / 28.2-55.4 ms | 17.9 ms / 17.5-18.2 ms |
+| `--count-matches '[A-Z]{5}' sparse-uppercase-no-five-46m.txt` | 11.2 ms / 10.7-13.3 ms | 37.2 ms / 31.0-49.6 ms | 18.3 ms / 17.7-20.3 ms |
+| `--include-zero -c '[A-Z]{5}' no-uppercase-46m.txt` | 7.4 ms / 7.2-7.7 ms | 35.8 ms / 15.2-52.3 ms | 18.1 ms / 17.7-18.3 ms |
+| `--include-zero --count-matches '[A-Z]{5}' sparse-uppercase-no-five-46m.txt` | 11.4 ms / 11.2-12.0 ms | 38.9 ms / 31.4-65.0 ms | 18.3 ms / 17.6-18.5 ms |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/fixed-count-nomatch-fullscan-1780401724.json`.
+
 ## Explicit fixed ASCII class matching-line no-match preflight - 2026-06-02
 
 Single-file matching-line searches for plain ASCII fixed-class regex sequences
