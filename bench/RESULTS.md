@@ -8,6 +8,47 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Quiet ASCII fixed-class first-match binary precheck window — 2026-06-02
+
+Plain quiet ASCII fixed-class sequence searches now use a dedicated first-match
+entry point before falling back to `searchFile`. The helper reads buffered file
+data directly, rejects UTF BOMs, applies the same 64 KiB binary NUL precheck
+window used by the quiet literal, run-suffix, and Greek first-match paths, then
+delegates to the existing `searchRawASCIIFixedClassSequenceContents` first-match
+logic. This avoids the generic full-file binary scan for quiet fixed-class
+misses while preserving the raw fixed-class matcher as the single source of
+truth. The change stays Swift-only and does not add a C shim.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint `10251f9` and Rust for
+  explicit quiet `[A-Z]{5}` no-uppercase misses, sparse-uppercase misses, and
+  NUL-before-window / NUL-after-window binary controls.
+- Added regression coverage for plain quiet fixed-class hit/miss output/status
+  and the binary-window controls.
+- `swift build -c release` and
+  `swift test --filter MiscTests/quietFixedASCIIClassRegexMatchesRecursively`
+  passed before benchmarking.
+- Post-benchmark full `swift test`,
+  `SWIFT_RIPGREP_PARITY=1 swift test --filter ParityHarnessTests`,
+  `scripts/check-no-external-deps.sh --skip-build`, and `git diff --check`
+  passed.
+
+A same-session hyperfine A/B against checkpoint `10251f9`, with Rust included
+as the oracle, measured:
+
+| Case | Current Swift | Checkpoint `10251f9` | Rust |
+| --- | ---: | ---: | ---: |
+| `-q '[A-Z]{5}' no-match-ascii-46m.txt` | 8.2 ms mean / 7.8-9.9 ms range | 9.1 ms / 8.9-9.8 ms | 18.1 ms / 17.5-18.4 ms |
+| `-q '[A-Z]{5}' late-uppercase-no-five-46m.txt` | 9.5 ms / 9.4-9.9 ms | 10.7 ms / 10.4-11.1 ms | 27.3 ms / 27.0-27.7 ms |
+| recursive `-q '[A-Z]{5}' linux` guardrail | 5.5 ms / 5.4-5.7 ms | 5.5 ms / 5.4-5.7 ms | 4.3 ms / 4.0-5.6 ms |
+| `-n '[A-Z]{5}' no-match-ascii-46m.txt` guardrail | 32.0 ms / 17.1-39.6 ms | 33.2 ms / 27.3-38.4 ms | not in this row |
+| `-n '[A-Z]{5}' late-uppercase-no-five-46m.txt` guardrail | 45.8 ms / 15.2-67.8 ms | 55.8 ms / 34.2-81.9 ms | not in this row |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/fixedquiet-firstmatch-probe-1780395293.json` and
+`/tmp/swift-rg-bench/fixedquiet-line-guard-1780395308.json`.
+
 ## Quiet Greek script first-match binary precheck window — 2026-06-02
 
 Plain quiet `\p{Greek}` searches now enter the existing Darwin raw Greek

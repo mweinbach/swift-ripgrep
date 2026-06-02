@@ -391,7 +391,11 @@ public struct RipgrepSearcher: @unchecked Sendable {
         matcher: PatternMatcher
     ) throws -> SearchResults? {
         let quietByteLiteralFastPath = quietByteLiteralFirstMatchFastPath(options: options, matcher: matcher)
-        let hasASCIIFixedClassSequence = matcher.asciiFixedClassSequenceFastPath() != nil
+        let asciiFixedClassFastPath = matcher.asciiFixedClassSequenceFastPath()
+        let quietASCIIFixedClassFastPath = options.quiet && !options.stats
+            ? asciiFixedClassFastPath
+            : nil
+        let hasASCIIFixedClassSequence = asciiFixedClassFastPath != nil
         let quietASCIIRunSuffixFastPath = options.quiet && !options.stats
             ? asciiRunSuffixPattern(options: options)
             : nil
@@ -450,6 +454,13 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 outcome = FileSearchOutcome(result: fastResult)
             } else if quietGreekScriptFastPath != nil,
                       let fastResult = searchQuietGreekScriptFirstMatch(
+                        haystack,
+                        matcher: matcher,
+                        options: options
+                      ) {
+                outcome = FileSearchOutcome(result: fastResult)
+            } else if quietASCIIFixedClassFastPath != nil,
+                      let fastResult = searchQuietASCIIFixedClassSequenceFirstMatch(
                         haystack,
                         matcher: matcher,
                         options: options
@@ -927,6 +938,67 @@ public struct RipgrepSearcher: @unchecked Sendable {
             useByteBufferProof: true
         )
         #endif
+    }
+
+    private func searchQuietASCIIFixedClassSequenceFirstMatch(
+        _ haystack: Haystack,
+        matcher: PatternMatcher,
+        options: RipgrepOptions
+    ) -> SearchFileResult? {
+        guard options.quiet,
+              !options.stats,
+              !options.json,
+              options.printMode == .matchingLines,
+              options.binaryMode == .automatic,
+              case .automatic = options.encodingMode,
+              !options.multiline,
+              !options.nullData,
+              !options.invertMatch,
+              !options.stopOnNonmatch,
+              !options.wordRegexp,
+              !options.lineRegexp,
+              !options.onlyMatching,
+              !options.column,
+              !options.byteOffset,
+              !options.vimgrep,
+              !options.crlf,
+              options.beforeContext == 0,
+              options.afterContext == 0,
+              !options.passthru,
+              options.replacement == nil,
+              options.maxColumns == nil,
+              options.maxCount == nil,
+              matcher.asciiFixedClassSequenceFastPath() != nil,
+              !shouldPreprocess(haystack, options: options),
+              decompressionCommand(for: haystack.url, options: options) == nil,
+              canUseBufferedRawLiteralSearch(haystack, options: options) else {
+            return nil
+        }
+
+        let data: Data
+        do {
+            data = try HaystackReader.read(haystack, options: options)
+        } catch {
+            return nil
+        }
+
+        guard !data.starts(with: [0xEF, 0xBB, 0xBF]),
+              !data.starts(with: [0xFF, 0xFE]),
+              !data.starts(with: [0xFE, 0xFF]) else {
+            return nil
+        }
+        if !options.disablesBinaryDetection,
+           shouldCheckBinary(data, options: options),
+           firstNulByteOffset(in: data, limit: Self.binaryDetectionBufferSize) != nil {
+            return nil
+        }
+
+        return searchRawASCIIFixedClassSequenceContents(
+            data,
+            fileURL: haystack.url,
+            matcher: matcher,
+            options: options
+        )
     }
 
     private func canStreamPlainMatchingLines(options: RipgrepOptions) -> Bool {

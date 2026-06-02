@@ -890,8 +890,18 @@ struct MiscTests {
             root.url.path,
         ], fixture: {})
         #expect(noMmapLineOutput == lineOutput)
+        let quietHitOutput = runWithExitCode(["-q", pattern, root.url.path], expectedExitCode: 0)
+        #expect(quietHitOutput.isEmpty)
+
         let noCandidateRoot = try TemporaryDirectory()
         try noCandidateRoot.write("all lowercase and digits 12345\n", to: "lower.txt")
+        let noCandidateQuietOutput = runWithExitCode([
+            "-q",
+            "[A-Z]{5}",
+            noCandidateRoot.url.path,
+        ], expectedExitCode: 1)
+        #expect(noCandidateQuietOutput.isEmpty)
+
         let noCandidateNoMmapLineOutput = try runExecutableData([
             "--no-mmap",
             "-n",
@@ -907,6 +917,37 @@ struct MiscTests {
             noCandidateRoot.path("sparse.txt"),
         ], fixture: {})
         #expect(sparseCandidateNoMmapLineOutput.isEmpty)
+        let sparseCandidateQuietOutput = runWithExitCode([
+            "-q",
+            "[A-Z]{5}",
+            noCandidateRoot.path("sparse.txt"),
+        ], expectedExitCode: 1)
+        #expect(sparseCandidateQuietOutput.isEmpty)
+
+        var nulAfterWindow = Data(repeating: 0x61, count: 70_000)
+        nulAfterWindow.append(0)
+        nulAfterWindow.append(contentsOf: Data("ABCDE after nul\n".utf8))
+        try noCandidateRoot.write(nulAfterWindow, to: "nul-after-window-fixed.bin")
+
+        var nulBeforeWindow = Data(repeating: 0x61, count: 1_000)
+        nulBeforeWindow.append(0)
+        nulBeforeWindow.append(contentsOf: Data("ABCDE after early nul\n".utf8))
+        try noCandidateRoot.write(nulBeforeWindow, to: "nul-before-window-fixed.bin")
+
+        let lateBinaryQuietOutput = runWithExitCode([
+            "-q",
+            "[A-Z]{5}",
+            noCandidateRoot.path("nul-after-window-fixed.bin"),
+        ], expectedExitCode: 0)
+        #expect(lateBinaryQuietOutput.isEmpty)
+
+        let earlyBinaryQuietOutput = runWithExitCode([
+            "-q",
+            "[A-Z]{5}",
+            noCandidateRoot.path("nul-before-window-fixed.bin"),
+        ], expectedExitCode: 0)
+        #expect(earlyBinaryQuietOutput.isEmpty)
+
         try noCandidateRoot.write("""
         all lowercase and digits 12345
         more lowercase without uppercase runs
