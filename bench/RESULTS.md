@@ -8,6 +8,43 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Explicit fixed ASCII class matching-line no-match preflight - 2026-06-02
+
+Single-file matching-line searches for plain ASCII fixed-class regex sequences
+now use the Swift full-buffer fixed-class proof only as a no-match preflight.
+If the sequence is present, the executable falls back to the existing
+line-output machinery so binary hit formatting, line numbering, and matched
+line emission remain unchanged. If the full proof shows no match, the
+executable returns the silent no-match status directly. This remains Swift-only
+and does not add a C shim.
+
+Validation:
+
+- Patched Swift stdout/stderr/status matched checkpoint `307ff2b` and Rust for
+  explicit `-n '[A-Z]{5}'` text miss, text hit, late-NUL hit, early-NUL hit,
+  early-NUL miss, UTF-8 BOM hit, and UTF-16LE BOM hit controls.
+- The shared `--files-without-match '[A-Z]{5}'` text miss control still matched
+  checkpoint `307ff2b` and Rust.
+- `--stats -n '[A-Z]{5}'` text miss output/status matched checkpoint `307ff2b`;
+  the Rust exact-byte comparison was skipped for that row because elapsed fields
+  differ byte-for-byte.
+- Added regression coverage for explicit fixed-class `-n` text no-match and
+  binary no-match output.
+- `swift build -c release` and
+  `swift test --filter MiscTests/quietFixedASCIIClassRegexMatchesRecursively`
+  passed before recording these results.
+
+A same-session hyperfine A/B against checkpoint `307ff2b`, with Rust included
+as the oracle, measured:
+
+| Case | Current Swift | Checkpoint `307ff2b` | Rust |
+| --- | ---: | ---: | ---: |
+| `-n '[A-Z]{5}' no-uppercase-46m.txt` | 7.7 ms mean / 7.2-10.8 ms range | 43.4 ms / 28.8-69.2 ms | 18.9 ms / 18.4-20.6 ms |
+| `-n '[A-Z]{5}' sparse-uppercase-no-five-46m.txt` | 11.2 ms / 10.8-11.8 ms | 37.4 ms / 19.1-62.3 ms | 19.2 ms / 18.7-19.6 ms |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/fixed-line-nomatch-fullscan-1780401139.json`.
+
 ## Explicit fixed ASCII class files-with-matches full-buffer preflight - 2026-06-02
 
 Single-file `--files-with-matches` / `-l` searches for plain ASCII fixed-class

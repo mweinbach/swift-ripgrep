@@ -907,6 +907,12 @@ struct MiscTests {
             noCandidateRoot.path("lower.txt"),
         ], fixture: {})
         #expect(noCandidateFilesWithMatchesOutput.isEmpty)
+        let noCandidateLineOutput = try runExecutableData([
+            "-n",
+            "[A-Z]{5}",
+            noCandidateRoot.path("lower.txt"),
+        ], fixture: {})
+        #expect(noCandidateLineOutput.isEmpty)
 
         let noCandidateNoMmapLineOutput = try runExecutableData([
             "--no-mmap",
@@ -975,6 +981,12 @@ struct MiscTests {
             noCandidateRoot.path("nul-no-match-fixed.bin"),
         ], fixture: {})
         #expect(binaryNoMatchFilesWithMatchesOutput.isEmpty)
+        let binaryNoMatchLineOutput = try runExecutableData([
+            "-n",
+            "[A-Z]{5}",
+            noCandidateRoot.path("nul-no-match-fixed.bin"),
+        ], fixture: {})
+        #expect(binaryNoMatchLineOutput.isEmpty)
         let textFilesWithoutMatchOutput = try runExecutableData([
             "--files-without-match",
             "[A-Z]{5}",

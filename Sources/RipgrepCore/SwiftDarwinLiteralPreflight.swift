@@ -960,18 +960,10 @@ public enum SwiftDarwinLiteralPreflight {
         crlfTerminated: Bool = false,
         outputPath: [UInt8]? = nil
     ) -> Int32? {
-        var patternBytes = Array(pattern.utf8)
-        let noUnicodePrefix = Array("(?-u)".utf8)
-        if patternBytes.starts(with: noUnicodePrefix) {
-            patternBytes.removeFirst(noUnicodePrefix.count)
-        }
-        guard let fastPath = PatternMatcher.asciiFixedClassSequence(in: patternBytes) else {
+        guard let classes = asciiFixedClassSequenceClasses(pattern: pattern) else {
             return nil
         }
-        let matched = containsASCIIFixedClassSequence(
-            path: path,
-            classes: fastPath.classes
-        )
+        let matched = containsASCIIFixedClassSequence(path: path, classes: classes)
         guard let matched else { return nil }
         guard matched == printWhenMatched else {
             return 1
@@ -985,6 +977,29 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         return 0
+    }
+
+    public static func asciiFixedClassNoMatchExitCode(
+        path: String,
+        pattern: String
+    ) -> Int32? {
+        guard let classes = asciiFixedClassSequenceClasses(pattern: pattern),
+              let matched = containsASCIIFixedClassSequence(path: path, classes: classes),
+              !matched else {
+            return nil
+        }
+        return 1
+    }
+
+    private static func asciiFixedClassSequenceClasses(
+        pattern: String
+    ) -> [ASCIIFixedClassSequenceFastPath.ByteClass]? {
+        var patternBytes = Array(pattern.utf8)
+        let noUnicodePrefix = Array("(?-u)".utf8)
+        if patternBytes.starts(with: noUnicodePrefix) {
+            patternBytes.removeFirst(noUnicodePrefix.count)
+        }
+        return PatternMatcher.asciiFixedClassSequence(in: patternBytes)?.classes
     }
 
     public static func fixedLookbehindQuietExitCode(
