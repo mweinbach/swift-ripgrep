@@ -8,6 +8,39 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Explicit fixed ASCII class quiet-stats matched preflight - 2026-06-02
+
+Single-file `--stats -q` searches for plain ASCII fixed-class regex sequences
+now use the Swift matched-stats preflight for regular text inputs. The
+preflight reuses the fixed-class summary scanner and writes only the
+deterministic stats summary. No-match quiet stats still hit the no-match proof
+first, while UTF BOM inputs and files with NUL bytes fall back to the existing
+machinery. This remains Swift-only and does not add a C shim.
+
+Validation:
+
+- Patched Swift matched Rust for stats quiet hit, no-match, sparse no-match,
+  UTF-8 BOM fallback, UTF-16LE BOM fallback, and early/late NUL fallback
+  controls after normalizing elapsed timing fields.
+- Added regression coverage for fixed-class stats quiet matched output/status.
+- `swift build -c release` and
+  `swift test --filter MiscTests/darwinExecutableLiteralPreflightDenseLines`
+  passed before recording these results.
+
+Same-session pre-probe at `06aa882` measured the matched quiet-stats gap
+before this slice. These section-specific `hyperfine` runs used 5 warm-ups and
+30 timed runs per case. After the matched quiet-stats preflight:
+
+| Case | Current Swift | Pre-change `06aa882` | Rust |
+| --- | ---: | ---: | ---: |
+| `--stats -q '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 12.9 ms mean / 11.8-17.7 ms range | 38.6 ms / 24.3-68.7 ms | 18.8 ms / 17.8-23.4 ms |
+| `--stats -q '[A-Z]{5}' no-uppercase-46m.txt` | 7.9 ms / 7.5-8.6 ms | 7.4 ms / 6.8-8.7 ms | 18.5 ms / 17.6-20.0 ms |
+| `--stats -q '[A-Z]{5}' sparse-uppercase-no-five-46m.txt` | 11.2 ms / 10.9-11.7 ms | 11.3 ms / 10.5-15.0 ms | 18.3 ms / 17.6-18.7 ms |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/fixed-stats-quiet-matched-current-06aa882.json` and
+`/tmp/swift-rg-bench/fixed-stats-quiet-matched-patched-06aa882.json`.
+
 ## Explicit fixed ASCII class count-stats matched preflight - 2026-06-02
 
 Single-file `--stats -c` and `--stats --count-matches` searches for plain

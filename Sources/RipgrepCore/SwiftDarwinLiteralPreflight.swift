@@ -1073,6 +1073,24 @@ public enum SwiftDarwinLiteralPreflight {
         )
     }
 
+    public static func asciiFixedClassMatchedQuietStatsExitCode(
+        path: String,
+        pattern: String
+    ) -> Int32? {
+        guard let classes = asciiFixedClassSequenceClasses(pattern: pattern),
+              let stats = asciiFixedClassMatchedSummaryStats(path: path, classes: classes) else {
+            return nil
+        }
+        return writeStatsSummary(
+            totalMatches: stats.totalMatches,
+            matchedLines: stats.matchedLines,
+            filesWithMatches: 1,
+            filesSearched: 1,
+            bytesSearched: stats.bytesSearched,
+            exitCode: 0
+        )
+    }
+
     public static func asciiFixedClassNoMatchExitCode(
         path: String,
         pattern: String
