@@ -8,6 +8,40 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Explicit fixed ASCII class files-without-match executable preflight — 2026-06-02
+
+Single-file `--files-without-match` searches for plain ASCII fixed-class regex
+sequences now share the Swift executable path-only preflight. For matching-path
+output, the preflight still only proves early prefix hits. For non-matching-path
+output, it maps the file and uses the same fixed-class parser with a SIMD
+candidate scan across the full byte buffer so it can prove no match and write
+the path directly. UTF BOM files fall back to the decoded search path. The
+change stays Swift-only and does not add a C shim.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint `d49aa3d` and Rust for
+  explicit `--files-without-match '[A-Z]{5}'` text miss, text hit, early-NUL
+  no-match, late-NUL no-match, late-NUL after hit, no-uppercase miss,
+  sparse-uppercase miss, and early text hit controls.
+- UTF-8 BOM and UTF-16LE BOM hit/miss controls matched checkpoint `d49aa3d` and
+  Rust for both `-l` and `--files-without-match`.
+- Added regression coverage for explicit fixed-class `--files-without-match`
+  text, binary no-match, and binary-with-match output.
+- `swift build -c release` passed before benchmarking.
+
+A same-session hyperfine A/B against checkpoint `d49aa3d`, with Rust included
+as the oracle, measured:
+
+| Case | Current Swift | Checkpoint `d49aa3d` | Rust |
+| --- | ---: | ---: | ---: |
+| `--files-without-match '[A-Z]{5}' no-uppercase-46m.txt` | 8.7 ms mean / 8.1-10.0 ms range | 64.9 ms / 39.1-89.6 ms | 18.6 ms / 18.1-18.9 ms |
+| `--files-without-match '[A-Z]{5}' sparse-uppercase-no-five-46m.txt` | 11.9 ms / 11.4-14.5 ms | 45.6 ms / 33.0-81.5 ms | 19.0 ms / 18.0-21.2 ms |
+| `--files-without-match '[A-Z]{5}' fixed-early-uppercase-46m.txt` | 4.7 ms / 4.4-5.1 ms | 53.9 ms / 37.4-79.0 ms | 19.0 ms / 18.4-20.7 ms |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/fixed-fileswithout-preflight-1780399779.json`.
+
 ## Explicit fixed ASCII class files-with-matches executable preflight — 2026-06-02
 
 Single-file `--files-with-matches` / `-l` searches for plain ASCII fixed-class

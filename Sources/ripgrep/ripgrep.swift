@@ -2792,7 +2792,6 @@ struct RipgrepCommand {
             && !parsedQuiet
             && (parsedJson || parsedStats)
         if let parsedPathOnlyMode,
-           parsedPathOnlyMode == .matching,
            paths.count == 1,
            !fixedStrings,
            !asciiCaseInsensitive,
@@ -2819,7 +2818,7 @@ struct RipgrepCommand {
            let exitCode = SwiftDarwinLiteralPreflight.asciiFixedClassPathOnlyExitCode(
             path: path,
             pattern: pattern,
-            printWhenMatched: true,
+            printWhenMatched: parsedPathOnlyMode == .matching,
             nullTerminated: parsedNullPathTerminator,
             crlfTerminated: parsedCrlf,
             outputPath: parsedPathOnlyOutputPath

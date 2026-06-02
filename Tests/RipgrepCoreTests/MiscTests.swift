@@ -959,6 +959,28 @@ struct MiscTests {
             noCandidateRoot.path("nul-before-window-fixed.bin"),
         ], fixture: {})
         #expect(earlyBinaryFilesWithMatchesOutput == Data("\(noCandidateRoot.path("nul-before-window-fixed.bin"))\n".utf8))
+        var binaryNoMatch = Data(repeating: 0x61, count: 1_000)
+        binaryNoMatch.append(0)
+        binaryNoMatch.append(contentsOf: Data("lowercase after nul\n".utf8))
+        try noCandidateRoot.write(binaryNoMatch, to: "nul-no-match-fixed.bin")
+        let textFilesWithoutMatchOutput = try runExecutableData([
+            "--files-without-match",
+            "[A-Z]{5}",
+            noCandidateRoot.path("lower.txt"),
+        ], fixture: {})
+        #expect(textFilesWithoutMatchOutput == Data("\(noCandidateRoot.path("lower.txt"))\n".utf8))
+        let binaryFilesWithoutMatchOutput = try runExecutableData([
+            "--files-without-match",
+            "[A-Z]{5}",
+            noCandidateRoot.path("nul-no-match-fixed.bin"),
+        ], fixture: {})
+        #expect(binaryFilesWithoutMatchOutput == Data("\(noCandidateRoot.path("nul-no-match-fixed.bin"))\n".utf8))
+        let binaryWithMatchFilesWithoutMatchOutput = try runExecutableData([
+            "--files-without-match",
+            "[A-Z]{5}",
+            noCandidateRoot.path("nul-before-window-fixed.bin"),
+        ], fixture: {})
+        #expect(binaryWithMatchFilesWithoutMatchOutput.isEmpty)
 
         try noCandidateRoot.write("""
         all lowercase and digits 12345

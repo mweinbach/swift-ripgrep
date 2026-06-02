@@ -965,13 +965,22 @@ public enum SwiftDarwinLiteralPreflight {
         if patternBytes.starts(with: noUnicodePrefix) {
             patternBytes.removeFirst(noUnicodePrefix.count)
         }
-        guard let fastPath = PatternMatcher.asciiFixedClassSequence(in: patternBytes),
-              let matched = containsASCIIFixedClassSequencePrefix(
-                path: path,
-                classes: fastPath.classes
-              ) else {
+        guard let fastPath = PatternMatcher.asciiFixedClassSequence(in: patternBytes) else {
             return nil
         }
+        let matched: Bool?
+        if printWhenMatched {
+            matched = containsASCIIFixedClassSequencePrefix(
+                path: path,
+                classes: fastPath.classes
+            )
+        } else {
+            matched = containsASCIIFixedClassSequence(
+                path: path,
+                classes: fastPath.classes
+            )
+        }
+        guard let matched else { return nil }
         guard matched == printWhenMatched else {
             return 1
         }
@@ -4103,7 +4112,41 @@ public enum SwiftDarwinLiteralPreflight {
               let data = mappedPreflightData(path: path) else {
             return nil
         }
+        guard !startsWithUTFBOM(data) else {
+            return nil
+        }
         guard !hasBinaryDetectionPrefix(data) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return false
+        }
+        let searchCount = min(data.count, 64 * 1024)
+        guard searchCount >= classes.count else {
+            return data.count <= searchCount ? false : nil
+        }
+        let matched = data.withUnsafeBytes { rawData -> Bool in
+            guard let rawBase = rawData.baseAddress else {
+                return false
+            }
+            return asciiFixedClassSequenceMatch(
+                baseAddress: rawBase.assumingMemoryBound(to: UInt8.self),
+                searchCount: searchCount,
+                classes: classes
+            )
+        }
+        return matched || data.count <= searchCount ? matched : nil
+    }
+
+    private static func containsASCIIFixedClassSequence(
+        path: String,
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass]
+    ) -> Bool? {
+        guard !classes.isEmpty,
+              let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !startsWithUTFBOM(data) else {
             return nil
         }
         guard !data.isEmpty else {
@@ -4113,31 +4156,95 @@ public enum SwiftDarwinLiteralPreflight {
             guard let rawBase = rawData.baseAddress else {
                 return false
             }
-            let base = rawBase.assumingMemoryBound(to: UInt8.self)
-            let width = classes.count
-            let searchCount = min(rawData.count, 64 * 1024)
-            guard searchCount >= width else {
-                return rawData.count <= searchCount ? false : nil
-            }
-            let lastStart = searchCount - width
-            var offset = 0
-            while offset <= lastStart {
-                guard asciiFixedClassByte(base[offset], matches: classes[0]) else {
-                    offset += 1
-                    continue
-                }
-                var classIndex = 1
-                while classIndex < width,
-                      asciiFixedClassByte(base[offset + classIndex], matches: classes[classIndex]) {
-                    classIndex += 1
-                }
-                if classIndex == width {
-                    return true
-                }
-                offset += 1
-            }
-            return rawData.count <= searchCount ? false : nil
+            return asciiFixedClassSequenceMatch(
+                baseAddress: rawBase.assumingMemoryBound(to: UInt8.self),
+                searchCount: rawData.count,
+                classes: classes
+            )
         }
+    }
+
+    private static func asciiFixedClassSequenceMatch(
+        baseAddress: UnsafePointer<UInt8>,
+        searchCount: Int,
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass]
+    ) -> Bool {
+        let width = classes.count
+        guard width > 0, searchCount >= width else {
+            return false
+        }
+
+        let lastStartExclusive = searchCount - width + 1
+        var offset = 0
+        while let candidateOffset = asciiFixedClassNextCandidate(
+            baseAddress: baseAddress,
+            endExclusive: lastStartExclusive,
+            byteClass: classes[0],
+            from: offset
+        ) {
+            var classIndex = 1
+            while classIndex < width,
+                  asciiFixedClassByte(baseAddress[candidateOffset + classIndex], matches: classes[classIndex]) {
+                classIndex += 1
+            }
+            if classIndex == width {
+                return true
+            }
+            offset = candidateOffset + 1
+        }
+        return false
+    }
+
+    private static func asciiFixedClassNextCandidate(
+        baseAddress: UnsafePointer<UInt8>,
+        endExclusive: Int,
+        byteClass: ASCIIFixedClassSequenceFastPath.ByteClass,
+        from startOffset: Int
+    ) -> Int? {
+        let endExclusive = max(0, endExclusive)
+        var cursor = max(0, startOffset)
+        guard cursor < endExclusive else {
+            return nil
+        }
+
+        let lower: UInt8
+        let upper: UInt8
+        switch byteClass {
+        case .uppercase:
+            lower = UInt8(ascii: "A")
+            upper = UInt8(ascii: "Z")
+        case .lowercase:
+            lower = UInt8(ascii: "a")
+            upper = UInt8(ascii: "z")
+        case .digit:
+            lower = UInt8(ascii: "0")
+            upper = UInt8(ascii: "9")
+        }
+
+        if endExclusive - cursor >= 16 {
+            let lowerVector = SIMD16<UInt8>(repeating: lower)
+            let upperVector = SIMD16<UInt8>(repeating: upper)
+            let vectorLimit = endExclusive - 15
+            while cursor < vectorLimit {
+                let bytes = UnsafeRawPointer(baseAddress.advanced(by: cursor))
+                    .loadUnaligned(as: SIMD16<UInt8>.self)
+                let matches = (bytes .>= lowerVector) .& (bytes .<= upperVector)
+                if matches._storage.min() < 0 {
+                    for lane in 0..<16 where matches[lane] {
+                        return cursor + lane
+                    }
+                }
+                cursor += 16
+            }
+        }
+
+        while cursor < endExclusive {
+            if asciiFixedClassByte(baseAddress[cursor], matches: byteClass) {
+                return cursor
+            }
+            cursor += 1
+        }
+        return nil
     }
 
     private static func asciiFixedClassByte(
@@ -4152,6 +4259,12 @@ public enum SwiftDarwinLiteralPreflight {
         case .digit:
             byte >= UInt8(ascii: "0") && byte <= UInt8(ascii: "9")
         }
+    }
+
+    private static func startsWithUTFBOM(_ data: Data) -> Bool {
+        data.starts(with: [0xEF, 0xBB, 0xBF])
+            || data.starts(with: [0xFF, 0xFE])
+            || data.starts(with: [0xFE, 0xFF])
     }
 
     private static func containsNULByte(_ data: Data, limit: Int? = nil) -> Bool {
