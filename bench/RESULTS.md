@@ -48,6 +48,20 @@ Raw hyperfine exports:
 `/tmp/swift-rg-bench/interior-proof-byte-final-1780391869.json` and
 `/tmp/swift-rg-bench/interior-proof-byte-hotpath-1780391838.json`.
 
+Follow-up rejected probe:
+
+- Reusing the first 160 quiet run-suffix prefix-probe results in the no-match
+  fallback, instead of searching that prefix again with the complete haystack
+  list, preserved the hit path but did not produce a stable miss win. A valid
+  12-run A/B measured `-q '[A-Z]+_RESUME' linux` at 8.4 ms for the probe
+  versus 8.5 ms for checkpoint `92a74a8` and 5.8 ms for Rust, while
+  `-q '[A-Z]+_NEVERMATCHTOKEN' linux` measured 958.7 ms for the probe versus
+  964.1 ms for the checkpoint with the checkpoint median slightly faster
+  (954.0 ms versus 958.0 ms). The source change was backed out as noise.
+
+Rejected probe export:
+`/tmp/swift-rg-bench/run-suffix-prefix-reuse-valid-1780392885.json`.
+
 ## Rejected fixed-class buffered read policy — 2026-06-02
 
 A Swift-only probe made automatic mmap choose a buffered read for explicit
