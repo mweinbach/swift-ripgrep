@@ -855,6 +855,42 @@ private func rgMemmemProofScore(_ byte: UInt8) -> Int {
     }
 }
 
+private func rgMemmemProofTieBreakRank(_ byte: UInt8) -> Int {
+    switch byte {
+    case 113, 120, 106: // q x j
+        return 0
+    case 122: // z
+        return 1
+    case 107, 118, 98, 112: // k v b p
+        return 2
+    case 121, 103, 119, 102: // y g w f
+        return 3
+    case 109, 99, 117, 108: // m c u l
+        return 4
+    case 100, 114, 104, 115, 110: // d r h s n
+        return 5
+    case 105, 111, 97: // i o a
+        return 6
+    case 101, 116: // e t
+        return 7
+    case 32:
+        return 8
+    default:
+        return 3
+    }
+}
+
+private func rgMemmemRarestProofTieBreakRank(_ byte: UInt8) -> Int? {
+    switch byte {
+    case 113, 120, 106: // q x j
+        return 0
+    case 122: // z
+        return 1
+    default:
+        return nil
+    }
+}
+
 private enum RgMemmemLongLiteralProof {
     case memchr(offset: Int)
     case staged(offset: Int)
@@ -863,6 +899,7 @@ private enum RgMemmemLongLiteralProof {
 private func rgMemmemLongLiteralProof(
     needle: UnsafePointer<UInt8>,
     needleLength: Int,
+    firstScore: Int,
     secondScore: Int
 ) -> RgMemmemLongLiteralProof? {
     guard needleLength > 2 else {
@@ -872,25 +909,37 @@ private func rgMemmemLongLiteralProof(
     let middleIndex = needleLength / 2
     var bestAnyOffset = 1
     var bestAnyScore = secondScore
+    var bestAnyRank = rgMemmemProofTieBreakRank(needle[1])
     var bestStagedOffset = middleIndex == 1 ? nil : Optional(1)
     var bestStagedScore = bestStagedOffset == nil ? Int.max : secondScore
+    var bestStagedRank = bestStagedOffset == nil ? Int.max : bestAnyRank
+
+    func considerAny(offset: Int, score: Int) {
+        let rank = rgMemmemProofTieBreakRank(needle[offset])
+        if score < bestAnyScore || score == bestAnyScore && rank < bestAnyRank {
+            bestAnyOffset = offset
+            bestAnyScore = score
+            bestAnyRank = rank
+        }
+    }
+
+    func considerStaged(offset: Int, score: Int) {
+        let rank = rgMemmemProofTieBreakRank(needle[offset])
+        if score < bestStagedScore || score == bestStagedScore && rank < bestStagedRank {
+            bestStagedOffset = offset
+            bestStagedScore = score
+            bestStagedRank = rank
+        }
+    }
+
+    considerAny(offset: 0, score: firstScore)
 
     var offset = 2
     while offset < needleLength - 1 {
         let score = rgMemmemProofScore(needle[offset])
-        if score < bestAnyScore {
-            bestAnyOffset = offset
-            bestAnyScore = score
-            if score == 0 {
-                break
-            }
-        }
-        if offset != middleIndex, score < bestStagedScore {
-            bestStagedOffset = offset
-            bestStagedScore = score
-            if score == 0 {
-                break
-            }
+        considerAny(offset: offset, score: score)
+        if offset != middleIndex {
+            considerStaged(offset: offset, score: score)
         }
         offset += 1
     }
@@ -900,6 +949,44 @@ private func rgMemmemLongLiteralProof(
     }
     if let bestStagedOffset, bestStagedScore <= 1 {
         return .staged(offset: bestStagedOffset)
+    }
+    return nil
+}
+
+private func rgMemmemLongLiteralProofSelection(
+    needle: UnsafePointer<UInt8>,
+    needleLength: Int
+) -> RgMemmemLongLiteralProof? {
+    guard needleLength >= 13, needleLength <= 32 else {
+        return nil
+    }
+
+    let secondScore = rgMemmemProofScore(needle[1])
+    if secondScore == 0 {
+        let secondRank = rgMemmemProofTieBreakRank(needle[1])
+        if let firstRank = rgMemmemRarestProofTieBreakRank(needle[0]),
+           firstRank < secondRank {
+            return rgMemmemLongLiteralProof(
+                needle: needle,
+                needleLength: needleLength,
+                firstScore: 0,
+                secondScore: secondScore
+            ) ?? .memchr(offset: 1)
+        }
+        return .memchr(offset: 1)
+    }
+
+    if secondScore <= 4 {
+        return rgMemmemLongLiteralProof(
+            needle: needle,
+            needleLength: needleLength,
+            firstScore: rgMemmemProofScore(needle[0]),
+            secondScore: secondScore
+        )
+    }
+
+    if rgMemmemRarestProofTieBreakRank(needle[0]) != nil {
+        return .memchr(offset: 0)
     }
     return nil
 }
@@ -1074,38 +1161,24 @@ private func rgMemmemSIMD16(
     if needleLength == 12 {
         return rgMemmem12SIMD16(haystack: haystack, haystackLength: haystackLength, needle: needle)
     }
-    if needleLength >= 13, needleLength <= 32 {
-        let proofScore = rgMemmemProofScore(needle[1])
-        if proofScore == 0 {
+    if let proof = rgMemmemLongLiteralProofSelection(needle: needle, needleLength: needleLength) {
+        switch proof {
+        case .memchr(let proofOffset):
             return rgMemmemRareProofByteMemchr(
                 haystack: haystack,
                 haystackLength: haystackLength,
                 needle: needle,
                 needleLength: needleLength,
-                proofOffset: 1
+                proofOffset: proofOffset
             )
-        }
-        if proofScore <= 4 {
-            switch rgMemmemLongLiteralProof(needle: needle, needleLength: needleLength, secondScore: proofScore) {
-            case .memchr(let proofOffset):
-                return rgMemmemRareProofByteMemchr(
-                    haystack: haystack,
-                    haystackLength: haystackLength,
-                    needle: needle,
-                    needleLength: needleLength,
-                    proofOffset: proofOffset
-                )
-            case .staged(let proofOffset):
-                return rgMemmemStagedExactSIMD16(
-                    haystack: haystack,
-                    haystackLength: haystackLength,
-                    needle: needle,
-                    needleLength: needleLength,
-                    proofOffset: proofOffset
-                )
-            case nil:
-                break
-            }
+        case .staged(let proofOffset):
+            return rgMemmemStagedExactSIMD16(
+                haystack: haystack,
+                haystackLength: haystackLength,
+                needle: needle,
+                needleLength: needleLength,
+                proofOffset: proofOffset
+            )
         }
     }
 
@@ -2231,41 +2304,26 @@ func rg_memmem_count_byte_before(
     if needleLength == 12 {
         return rgMemmem12CountByteBeforeSIMD16(haystack: haystack, haystackLength: haystackLength, needle: needle, byte: byte)
     }
-    if needleLength >= 13, needleLength <= 32 {
-        let proofScore = rgMemmemProofScore(needle[1])
-        if proofScore == 0 {
+    if let proof = rgMemmemLongLiteralProofSelection(needle: needle, needleLength: needleLength) {
+        switch proof {
+        case .memchr(let proofOffset):
             return rgMemmemRareProofByteMemchrCountByteBefore(
                 haystack: haystack,
                 haystackLength: haystackLength,
                 needle: needle,
                 needleLength: needleLength,
                 byte: byte,
-                proofOffset: 1
+                proofOffset: proofOffset
             )
-        }
-        if proofScore <= 4 {
-            switch rgMemmemLongLiteralProof(needle: needle, needleLength: needleLength, secondScore: proofScore) {
-            case .memchr(let proofOffset):
-                return rgMemmemRareProofByteMemchrCountByteBefore(
-                    haystack: haystack,
-                    haystackLength: haystackLength,
-                    needle: needle,
-                    needleLength: needleLength,
-                    byte: byte,
-                    proofOffset: proofOffset
-                )
-            case .staged(let proofOffset):
-                return rgMemmemStagedExactCountByteBeforeSIMD16(
-                    haystack: haystack,
-                    haystackLength: haystackLength,
-                    needle: needle,
-                    needleLength: needleLength,
-                    byte: byte,
-                    proofOffset: proofOffset
-                )
-            case nil:
-                break
-            }
+        case .staged(let proofOffset):
+            return rgMemmemStagedExactCountByteBeforeSIMD16(
+                haystack: haystack,
+                haystackLength: haystackLength,
+                needle: needle,
+                needleLength: needleLength,
+                byte: byte,
+                proofOffset: proofOffset
+            )
         }
     }
 

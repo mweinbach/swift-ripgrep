@@ -8,6 +8,53 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rare first-byte long-literal proof - 2026-06-02
+
+The no-C-shim Swift memmem fallback now lets 13-byte through 32-byte exact
+literals choose a rare leading proof byte for the existing `memchr` proof path
+when it is ranked rarer than the byte-1 proof. This closes the `qz...` no-match
+case where byte 1 (`z`) is present throughout the benchmark fixture but byte 0
+(`q`) is absent. The common-literal path still avoids the broader selector, and
+existing rare-second/interior proof cases stay on their previous route unless a
+rarer leading proof byte wins.
+
+Validation:
+
+- Direct patched Swift output for `-n qzqzqzqzqzqzqz no-match-ascii-46m.txt`
+  matched Rust exactly: both exited 1 and stdout was byte-identical.
+- Added regression coverage for a 14-byte rare-leading literal miss, hit, and
+  `--files-without-match` output.
+- `swift build -c release`, `swift test --filter SIMD`, `swift test`, and
+  `SWIFT_RIPGREP_PARITY=1 swift test --filter ParityHarnessTests` passed.
+- `scripts/check-no-external-deps.sh --skip-build` and `git diff --check`
+  passed.
+
+The retained A/B used the `2c61ece` release binary as the pre-change baseline.
+The table uses the final refactored release build: the target/common rows come
+from a 30-run confirmation, the rare-second/interior rows from a 50-run guard
+confirmation, and the Rust columns from the final 12-row Rust matrix:
+
+| Case | Current Swift | Pre-change `2c61ece` | Rust |
+| --- | ---: | ---: | ---: |
+| `-n qzqzqzqzqzqzqz no-match-ascii-46m.txt` | 11.5 ms mean / 10.9-12.2 ms range | 17.8 ms / 17.0-18.3 ms | 9.4 ms / 8.7-10.5 ms |
+| Existing rare-second-byte guard | 11.4 ms / 10.6-12.1 ms | 11.6 ms / 10.5-19.3 ms | 9.1 ms / 8.3-10.0 ms |
+| Interior rare-byte guard | 11.0 ms / 10.1-11.9 ms | 11.2 ms / 10.1-12.7 ms | 9.1 ms / 8.4-10.1 ms |
+| Dense common-byte `missingliteral` guard | 77.2 ms / 75.9-78.7 ms | 76.6 ms / 74.7-78.6 ms | 75.1 ms / 74.0-76.3 ms |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/rare-first-proof-final-refactored-1780420366.json`,
+`/tmp/swift-rg-bench/rare-first-proof-refactor-confirm-1780420339.json`, and
+`/tmp/swift-rg-bench/rare-first-guard-confirm-1780420395.json`.
+
+Rejected:
+
+- A broader first-byte selector that always computed the leading proof score for
+  long literals preserved correctness and improved the target, but it moved the
+  dense common-byte `missingliteral` guard from 76.6 ms to 78.5 ms in a 40-run
+  confirmation. The retained dispatch keeps common second-byte literals on the
+  old route. Raw probe:
+  `/tmp/swift-rg-bench/rare-first-common-confirm-1780419641.json`.
+
 ## Ignore fast-index path-rule guard - 2026-06-02
 
 Darwin ignore-aware file listing now records whether a `GlobMatcher` fast index
