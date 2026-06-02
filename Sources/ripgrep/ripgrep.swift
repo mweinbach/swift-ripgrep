@@ -2902,7 +2902,6 @@ struct RipgrepCommand {
            !wordRegexp,
            !parsedLineRegexp,
            parsedOnlyMatching,
-           !parsedVimgrep,
            !parsedJson,
            !parsedStats,
            parsedMaxCount == nil,
@@ -2930,8 +2929,8 @@ struct RipgrepCommand {
             column: parsedFieldedOnlyMatchingColumn,
             maxCount: parsedMaxCount,
             lineNumberFieldSeparator: parsedFieldMatchSeparator,
-            linePrefix: parsedLinePrefix,
-            headingPrefix: parsedHeadingPrefix
+            linePrefix: parsedVimgrep ? parsedVimgrepLinePrefix : parsedLinePrefix,
+            headingPrefix: parsedVimgrep ? [] : parsedHeadingPrefix
            ) {
             return exitCode
         }

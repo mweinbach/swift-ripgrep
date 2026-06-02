@@ -3066,6 +3066,13 @@ struct MiscTests {
             "[A-Z]{5}",
             root.path("summary-match.txt"),
         ])
+        let fixedVimgrepOnlyMatchingMatch = try runExecutableResult([
+            "--no-config",
+            "--vimgrep",
+            "-o",
+            "[A-Z]{5}",
+            root.path("summary-match.txt"),
+        ])
         let jsonCountIncludeZeroNoMatch = try runExecutableResult([
             "--no-config",
             "--json",
@@ -3743,6 +3750,9 @@ struct MiscTests {
         #expect(fixedVimgrepLineMatch.status == 0)
         #expect(fixedVimgrepLineMatch.stderr.isEmpty)
         #expect(fixedVimgrepLineMatch.stdout == Data("\(root.path("summary-match.txt")):3:1:ALPHA\n".utf8))
+        #expect(fixedVimgrepOnlyMatchingMatch.status == 0)
+        #expect(fixedVimgrepOnlyMatchingMatch.stderr.isEmpty)
+        #expect(fixedVimgrepOnlyMatchingMatch.stdout == Data("\(root.path("summary-match.txt")):3:1:ALPHA\n".utf8))
 
         let output = try runExecutableData([
             "needle",

@@ -8,6 +8,43 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Explicit fixed ASCII class vimgrep only-matching preflight - 2026-06-02
+
+Single-file `--vimgrep -o` searches for plain ASCII fixed-class regex sequences
+now reuse the Swift-only fixed-class only-matching writer for regular text
+inputs. The route emits non-overlapping match spans with vimgrep line, column,
+byte-offset, and filename fields, while preserving the existing fallback for
+color, trim, CRLF conversion, JSON, stats, context, replacement, passthru, and
+semantic modes. UTF BOM inputs and files with NUL bytes also fall back. This
+remains Swift-only and does not add a C shim.
+
+Validation:
+
+- Patched Swift matched Rust for default `--vimgrep -o`, `--no-line-number`,
+  `--no-column`, `--vimgrep -o -b`, multiple matches on one line, final
+  no-newline output, no-match, UTF-8 BOM fallback, and early NUL fallback
+  controls.
+- Added regression coverage for fixed-class default vimgrep only-matching
+  matched output/status.
+- `swift build -c release` and
+  `swift test --filter MiscTests/darwinExecutableLiteralPreflightDenseLines`
+  passed before recording these results.
+
+Same-session probe at `8b57836` measured `--vimgrep -o` before this slice at
+67.4 ms mean for the late-hit fixture versus Rust at 20.9 ms. The patched run
+used 5 warm-ups and 30 timed runs with stdout redirected to `/dev/null`. After
+the vimgrep only-matching preflight:
+
+| Case | Current Swift | Pre-change `8b57836` | Rust |
+| --- | ---: | ---: | ---: |
+| `--vimgrep -o '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 20.0 ms mean / 19.2-25.4 ms range | 67.4 ms / 53.6-82.4 ms | 21.0 ms / 19.9-25.4 ms |
+| `--vimgrep -o -b '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 19.4 ms / 19.0-20.1 ms | not remeasured | 20.4 ms / 20.0-20.9 ms |
+| `--vimgrep -o '[A-Z]{5}' no-uppercase-46m.txt` | 11.4 ms / 10.7-14.4 ms | 42.5 ms / 36.5-54.4 ms | 20.4 ms / 20.0-20.7 ms |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/fixed-vimgrep-only-matching-probe-8b57836.json` and
+`/tmp/swift-rg-bench/fixed-vimgrep-only-matching-patched-8b57836.json`.
+
 ## Explicit fixed ASCII class vimgrep preflight - 2026-06-02
 
 Single-file `--vimgrep` searches for plain ASCII fixed-class regex sequences
