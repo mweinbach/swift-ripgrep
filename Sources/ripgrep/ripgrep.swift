@@ -2935,6 +2935,46 @@ struct RipgrepCommand {
            ) {
             return exitCode
         }
+        if parsedPrintMode == .matchingLines,
+           paths.count == 1,
+           !parsedQuiet,
+           !fixedStrings,
+           !asciiCaseInsensitive,
+           !wordRegexp,
+           !parsedLineRegexp,
+           !parsedOnlyMatching,
+           parsedVimgrep,
+           !parsedJson,
+           !parsedStats,
+           parsedMaxCount == nil,
+           parsedAfterContext == 0,
+           parsedBeforeContext == 0,
+           !parsedInvertMatch,
+           !parsedNullData,
+           !parsedPassthru,
+           !parsedReplacement,
+           !parsedStopOnNonmatch,
+           !parsedSearchZipAffectsPreflight,
+           parsedEncodingIsAutomatic,
+           !parsedColorAffectsPreflightOutput,
+           parsedMaxColumns == 0,
+           !parsedTrim,
+           !parsedCrlf,
+           (patternCanStartWithDash || !pattern.hasPrefix("-")),
+           path != "-",
+           isReadableRegularFile(path),
+           let exitCode = SwiftDarwinLiteralPreflight.asciiFixedClassVimgrepLineOutputExitCode(
+            path: path,
+            pattern: pattern,
+            lineNumber: parsedVimgrepLineNumber,
+            byteOffset: parsedByteOffset,
+            column: parsedVimgrepColumn,
+            maxCount: parsedMaxCount,
+            lineNumberFieldSeparator: parsedFieldMatchSeparator,
+            linePrefix: parsedVimgrepLinePrefix
+           ) {
+            return exitCode
+        }
         if parsedCountStyleOutput,
            paths.count == 1,
            !fixedStrings,

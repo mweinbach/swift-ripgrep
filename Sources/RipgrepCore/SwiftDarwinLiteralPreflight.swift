@@ -1151,6 +1151,33 @@ public enum SwiftDarwinLiteralPreflight {
         return matchCount > 0 ? 0 : 1
     }
 
+    public static func asciiFixedClassVimgrepLineOutputExitCode(
+        path: String,
+        pattern: String,
+        lineNumber: Bool,
+        byteOffset: Bool,
+        column: Bool,
+        maxCount: Int?,
+        lineNumberFieldSeparator: [UInt8],
+        linePrefix: [UInt8]
+    ) -> Int32? {
+        guard maxCount.map({ $0 > 0 }) ?? true,
+              let classes = asciiFixedClassSequenceClasses(pattern: pattern),
+              let matchCount = asciiFixedClassVimgrepLineOutput(
+                path: path,
+                classes: classes,
+                lineNumber: lineNumber,
+                byteOffset: byteOffset,
+                column: column,
+                maxCount: maxCount ?? Int.max,
+                lineNumberFieldSeparator: lineNumberFieldSeparator,
+                linePrefix: linePrefix
+              ) else {
+            return nil
+        }
+        return matchCount > 0 ? 0 : 1
+    }
+
     public static func asciiFixedClassMatchedQuietStatsExitCode(
         path: String,
         pattern: String
@@ -4724,6 +4751,160 @@ public enum SwiftDarwinLiteralPreflight {
                 return nil
             }
             guard output.write(baseAddress.advanced(by: matchStart), count: width),
+                  output.writeByte(newline) else {
+                return nil
+            }
+
+            matchCount += 1
+            searchOffset = matchStart + width
+        }
+
+        guard output.flush() else {
+            return nil
+        }
+        return matchCount
+    }
+
+    private static func asciiFixedClassVimgrepLineOutput(
+        path: String,
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass],
+        lineNumber: Bool,
+        byteOffset: Bool,
+        column: Bool,
+        maxCount: Int,
+        lineNumberFieldSeparator: [UInt8],
+        linePrefix: [UInt8]
+    ) -> Int? {
+        guard !classes.isEmpty,
+              maxCount > 0,
+              let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !startsWithUTFBOM(data),
+              !hasBinaryDetectionPrefix(data),
+              !containsNULByte(data) else {
+            return nil
+        }
+        return data.withUnsafeBytes { rawData -> Int? in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
+            }
+            return asciiFixedClassVimgrepLineOutput(
+                baseAddress: rawBase.assumingMemoryBound(to: UInt8.self),
+                dataCount: rawData.count,
+                classes: classes,
+                lineNumber: lineNumber,
+                byteOffset: byteOffset,
+                column: column,
+                maxCount: maxCount,
+                lineNumberFieldSeparator: lineNumberFieldSeparator,
+                linePrefix: linePrefix
+            )
+        }
+    }
+
+    private static func asciiFixedClassVimgrepLineOutput(
+        baseAddress: UnsafePointer<UInt8>,
+        dataCount: Int,
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass],
+        lineNumber: Bool,
+        byteOffset: Bool,
+        column: Bool,
+        maxCount: Int,
+        lineNumberFieldSeparator: [UInt8],
+        linePrefix: [UInt8]
+    ) -> Int? {
+        let width = classes.count
+        guard width > 0, dataCount >= width else {
+            return 0
+        }
+        guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+            return nil
+        }
+        defer {
+            output.deallocate()
+        }
+
+        let newline = UInt8(ascii: "\n")
+        var searchOffset = 0
+        var selectedLineEnd = -1
+        var matchedLineCount = 0
+        var matchCount = 0
+        var currentLineNumber = 1
+        var currentLineStart = 0
+        var lineCountOffset = 0
+
+        func advanceLineState(to matchStart: Int) {
+            while lineCountOffset < matchStart {
+                let distance = matchStart - lineCountOffset
+                guard let newlinePointer = memchr(
+                    baseAddress.advanced(by: lineCountOffset),
+                    Int32(newline),
+                    distance
+                ) else {
+                    return
+                }
+                let newlineOffset = baseAddress.distance(
+                    to: newlinePointer.assumingMemoryBound(to: UInt8.self)
+                )
+                currentLineNumber += 1
+                currentLineStart = newlineOffset + 1
+                lineCountOffset = currentLineStart
+            }
+        }
+
+        while let matchStart = asciiFixedClassNextSequenceMatch(
+            baseAddress: baseAddress,
+            endExclusive: dataCount,
+            classes: classes,
+            from: searchOffset
+        ) {
+            if matchStart >= selectedLineEnd {
+                guard matchedLineCount < maxCount else {
+                    break
+                }
+                matchedLineCount += 1
+                if let newlinePointer = memchr(
+                    baseAddress.advanced(by: matchStart),
+                    Int32(newline),
+                    dataCount - matchStart
+                ) {
+                    selectedLineEnd = baseAddress.distance(
+                        to: newlinePointer.assumingMemoryBound(to: UInt8.self)
+                    ) + 1
+                } else {
+                    selectedLineEnd = dataCount
+                }
+            }
+
+            advanceLineState(to: matchStart)
+            let lineOutputEnd = if selectedLineEnd > currentLineStart,
+                                   selectedLineEnd <= dataCount,
+                                   baseAddress[selectedLineEnd - 1] == newline {
+                selectedLineEnd - 1
+            } else {
+                selectedLineEnd
+            }
+
+            guard output.writeBytes(linePrefix) else {
+                return nil
+            }
+            if lineNumber,
+               !output.writeLineNumberPrefix(currentLineNumber, fieldSeparator: lineNumberFieldSeparator) {
+                return nil
+            }
+            if column,
+               !output.writeLineNumberPrefix(
+                matchStart - currentLineStart + 1,
+                fieldSeparator: lineNumberFieldSeparator
+               ) {
+                return nil
+            }
+            if byteOffset,
+               !output.writeLineNumberPrefix(matchStart, fieldSeparator: lineNumberFieldSeparator) {
+                return nil
+            }
+            guard output.write(baseAddress.advanced(by: currentLineStart), count: lineOutputEnd - currentLineStart),
                   output.writeByte(newline) else {
                 return nil
             }
