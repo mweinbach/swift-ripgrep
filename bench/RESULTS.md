@@ -8,6 +8,28 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected fixed-class same-class metadata skip — 2026-06-02
+
+A Swift-only probe stored whether an ASCII fixed-class sequence contained more
+than one byte class at parse time, then skipped the later-class absence wrapper
+for same-class patterns such as `[A-Z]{5}`. The source change preserved exact
+stdout/stderr/status against checkpoint `48436f3` and Rust for same-class
+no-candidate output, sparse uppercase no-run output, mixed later-class absence,
+`--files-without-match`, and dense lowercase `--count-matches`, but it was
+backed out because the same-session A/B regressed the fixed-class controls.
+
+A 60-run hyperfine A/B, with 8 warmups and Rust included as the oracle,
+measured:
+
+| Case | Probe Swift | Checkpoint `48436f3` | Rust |
+| --- | ---: | ---: | ---: |
+| `[A-Z]{5}` no-uppercase miss | 42.9 ms mean / 41.3 ms median | 39.7 ms / 38.2 ms | 18.5 ms / 18.6 ms |
+| `[A-Z]{5}` sparse-uppercase miss | 48.6 ms / 46.8 ms | 34.0 ms / 32.9 ms | 27.7 ms / 27.6 ms |
+| `[a-z][A-Z]{4}` later-class absence | 42.6 ms / 42.3 ms | 38.9 ms / 36.1 ms | 66.0 ms / 65.7 ms |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/fixed-distinct-class-skip-1780389615.json`.
+
 ## Quiet run-suffix binary precheck window — 2026-06-02
 
 The quiet first-match fast path for uppercase run-suffix regexes now uses the
