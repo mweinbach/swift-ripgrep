@@ -1199,6 +1199,23 @@ public enum SwiftDarwinLiteralPreflight {
         )
     }
 
+    public static func asciiFixedClassJSONOutputExitCode(
+        path: String,
+        displayPath: [UInt8],
+        pattern: String,
+        noLineNumber: Bool
+    ) -> Int32? {
+        guard let classes = asciiFixedClassSequenceClasses(pattern: pattern) else {
+            return nil
+        }
+        return asciiFixedClassJSONOutput(
+            path: path,
+            displayPath: displayPath,
+            classes: classes,
+            noLineNumber: noLineNumber
+        )
+    }
+
     public static func asciiFixedClassVimgrepLineOutputExitCode(
         path: String,
         pattern: String,
@@ -4826,6 +4843,482 @@ public enum SwiftDarwinLiteralPreflight {
             bytesPrinted: output.statsBytesWritten + matchCount,
             bytesSearched: dataCount
         )
+    }
+
+    private static func asciiFixedClassJSONOutput(
+        path: String,
+        displayPath: [UInt8],
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass],
+        noLineNumber: Bool
+    ) -> Int32? {
+        guard !classes.isEmpty,
+              let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !startsWithUTFBOM(data),
+              !hasBinaryDetectionPrefix(data),
+              !containsNULByte(data),
+              !containsNonASCIIByte(data) else {
+            return nil
+        }
+        return data.withUnsafeBytes { rawData -> Int32? in
+            guard let rawBase = rawData.baseAddress else {
+                return writeNoMatchSummary(bytesSearched: data.count, json: true)
+            }
+            return asciiFixedClassJSONOutput(
+                baseAddress: rawBase.assumingMemoryBound(to: UInt8.self),
+                dataCount: rawData.count,
+                displayPath: displayPath,
+                classes: classes,
+                noLineNumber: noLineNumber
+            )
+        }
+    }
+
+    private static func asciiFixedClassJSONOutput(
+        baseAddress: UnsafePointer<UInt8>,
+        dataCount: Int,
+        displayPath: [UInt8],
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass],
+        noLineNumber: Bool
+    ) -> Int32? {
+        let width = classes.count
+        guard width > 0, dataCount >= width else {
+            return writeNoMatchSummary(bytesSearched: dataCount, json: true)
+        }
+        guard let firstMatch = asciiFixedClassNextSequenceMatch(
+            baseAddress: baseAddress,
+            endExclusive: dataCount,
+            classes: classes,
+            from: 0
+        ) else {
+            return writeNoMatchSummary(bytesSearched: dataCount, json: true)
+        }
+        guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+            return nil
+        }
+        defer {
+            output.deallocate()
+        }
+
+        let newline = UInt8(ascii: "\n")
+        var fileBytesPrinted = 0
+        var totalMatches = 0
+        var matchedLineCount = 0
+        var currentLineNumber = 1
+        var currentLineStart = 0
+        var lineCountOffset = 0
+
+        func advanceLineState(to matchStart: Int) {
+            while lineCountOffset < matchStart {
+                let distance = matchStart - lineCountOffset
+                guard let newlinePointer = memchr(
+                    baseAddress.advanced(by: lineCountOffset),
+                    Int32(newline),
+                    distance
+                ) else {
+                    return
+                }
+                let newlineOffset = baseAddress.distance(
+                    to: newlinePointer.assumingMemoryBound(to: UInt8.self)
+                )
+                currentLineNumber += 1
+                currentLineStart = newlineOffset + 1
+                lineCountOffset = currentLineStart
+            }
+        }
+
+        guard let beginBytes = writeJSONBeginRecord(
+            displayPath: displayPath,
+            to: &output
+        ) else {
+            return nil
+        }
+        fileBytesPrinted += beginBytes
+
+        var searchOffset = firstMatch
+        while let matchStart = asciiFixedClassNextSequenceMatch(
+            baseAddress: baseAddress,
+            endExclusive: dataCount,
+            classes: classes,
+            from: searchOffset
+        ) {
+            advanceLineState(to: matchStart)
+            let lineStart = currentLineStart
+            let lineNumber = currentLineNumber
+            let lineEnd: Int
+            let outputEnd: Int
+            if let newlinePointer = memchr(
+                baseAddress.advanced(by: matchStart),
+                Int32(newline),
+                dataCount - matchStart
+            ) {
+                lineEnd = baseAddress.distance(
+                    to: newlinePointer.assumingMemoryBound(to: UInt8.self)
+                )
+                outputEnd = lineEnd + 1
+            } else {
+                lineEnd = dataCount
+                outputEnd = dataCount
+            }
+
+            var spans: [(start: Int, end: Int)] = []
+            var spanSearchOffset = matchStart
+            while let spanStart = asciiFixedClassNextSequenceMatch(
+                baseAddress: baseAddress,
+                endExclusive: lineEnd,
+                classes: classes,
+                from: spanSearchOffset
+            ) {
+                spans.append((spanStart - lineStart, spanStart - lineStart + width))
+                totalMatches += 1
+                spanSearchOffset = spanStart + width
+            }
+            guard !spans.isEmpty,
+                  let matchBytes = writeJSONMatchRecord(
+                    displayPath: displayPath,
+                    lineBaseAddress: baseAddress.advanced(by: lineStart),
+                    lineByteCount: outputEnd - lineStart,
+                    lineNumber: lineNumber,
+                    noLineNumber: noLineNumber,
+                    absoluteOffset: lineStart,
+                    spans: spans,
+                    to: &output
+                  ) else {
+                return nil
+            }
+            matchedLineCount += 1
+            fileBytesPrinted += matchBytes
+            searchOffset = outputEnd
+        }
+
+        guard writeJSONEndRecord(
+            displayPath: displayPath,
+            bytesSearched: dataCount,
+            bytesPrinted: fileBytesPrinted,
+            matchedLines: matchedLineCount,
+            matches: totalMatches,
+            to: &output
+        ),
+              writeJSONSummaryRecord(
+                bytesPrinted: fileBytesPrinted,
+                bytesSearched: dataCount,
+                matchedLines: matchedLineCount,
+                matches: totalMatches,
+                filesSearched: 1,
+                filesWithMatches: matchedLineCount > 0 ? 1 : 0,
+                to: &output
+              ),
+              output.flush() else {
+            return nil
+        }
+        return totalMatches > 0 ? 0 : 1
+    }
+
+    private static func writeJSONBeginRecord(
+        displayPath: [UInt8],
+        to output: inout rgSwiftStdoutBuffer
+    ) -> Int? {
+        var bytesWritten = 0
+        guard writeCountedJSONBytes(
+            Array(#"{"type":"begin","data":{"path":{"text":"#.utf8),
+            to: &output,
+            bytesWritten: &bytesWritten
+        ),
+              writeJSONEscapedBytes(displayPath, to: &output, bytesWritten: &bytesWritten),
+              writeCountedJSONBytes(Array(#"}}}"#.utf8), to: &output, bytesWritten: &bytesWritten),
+              writeCountedJSONByte(UInt8(ascii: "\n"), to: &output, bytesWritten: &bytesWritten) else {
+            return nil
+        }
+        return bytesWritten
+    }
+
+    private static func writeJSONMatchRecord(
+        displayPath: [UInt8],
+        lineBaseAddress: UnsafePointer<UInt8>,
+        lineByteCount: Int,
+        lineNumber: Int,
+        noLineNumber: Bool,
+        absoluteOffset: Int,
+        spans: [(start: Int, end: Int)],
+        to output: inout rgSwiftStdoutBuffer
+    ) -> Int? {
+        var bytesWritten = 0
+        guard writeCountedJSONBytes(
+            Array(#"{"type":"match","data":{"path":{"text":"#.utf8),
+            to: &output,
+            bytesWritten: &bytesWritten
+        ),
+              writeJSONEscapedBytes(displayPath, to: &output, bytesWritten: &bytesWritten),
+              writeCountedJSONBytes(Array(#"},"lines":{"text":"#.utf8), to: &output, bytesWritten: &bytesWritten),
+              writeJSONEscapedBytes(
+                lineBaseAddress,
+                count: lineByteCount,
+                to: &output,
+                bytesWritten: &bytesWritten
+              ),
+              writeCountedJSONBytes(
+                Array(#"},"line_number":"#.utf8),
+                to: &output,
+                bytesWritten: &bytesWritten
+              ) else {
+            return nil
+        }
+        if noLineNumber {
+            guard writeCountedJSONBytes(Array("null".utf8), to: &output, bytesWritten: &bytesWritten) else {
+                return nil
+            }
+        } else {
+            guard writeCountedJSONInt(lineNumber, to: &output, bytesWritten: &bytesWritten) else {
+                return nil
+            }
+        }
+        guard writeCountedJSONBytes(
+            Array(#","absolute_offset":"#.utf8),
+            to: &output,
+            bytesWritten: &bytesWritten
+        ),
+              writeCountedJSONInt(absoluteOffset, to: &output, bytesWritten: &bytesWritten),
+              writeCountedJSONBytes(
+                Array(#","submatches":["#.utf8),
+                to: &output,
+                bytesWritten: &bytesWritten
+              ) else {
+            return nil
+        }
+
+        for (index, span) in spans.enumerated() {
+            if index > 0,
+               !writeCountedJSONByte(UInt8(ascii: ","), to: &output, bytesWritten: &bytesWritten) {
+                return nil
+            }
+            guard writeCountedJSONBytes(
+                Array(#"{"match":{"text":"#.utf8),
+                to: &output,
+                bytesWritten: &bytesWritten
+            ),
+                  writeJSONEscapedBytes(
+                    lineBaseAddress.advanced(by: span.start),
+                    count: span.end - span.start,
+                    to: &output,
+                    bytesWritten: &bytesWritten
+                  ),
+                  writeCountedJSONBytes(
+                    Array(#"},"start":"#.utf8),
+                    to: &output,
+                    bytesWritten: &bytesWritten
+                  ),
+                  writeCountedJSONInt(span.start, to: &output, bytesWritten: &bytesWritten),
+                  writeCountedJSONBytes(Array(#","end":"#.utf8), to: &output, bytesWritten: &bytesWritten),
+                  writeCountedJSONInt(span.end, to: &output, bytesWritten: &bytesWritten),
+                  writeCountedJSONByte(UInt8(ascii: "}"), to: &output, bytesWritten: &bytesWritten) else {
+                return nil
+            }
+        }
+        guard writeCountedJSONBytes(Array(#"]}}"#.utf8), to: &output, bytesWritten: &bytesWritten),
+              writeCountedJSONByte(UInt8(ascii: "\n"), to: &output, bytesWritten: &bytesWritten) else {
+            return nil
+        }
+        return bytesWritten
+    }
+
+    private static func writeJSONEndRecord(
+        displayPath: [UInt8],
+        bytesSearched: Int,
+        bytesPrinted: Int,
+        matchedLines: Int,
+        matches: Int,
+        to output: inout rgSwiftStdoutBuffer
+    ) -> Bool {
+        guard output.writeBytes(Array(#"{"type":"end","data":{"path":{"text":"#.utf8)),
+              writeJSONEscapedBytes(displayPath, to: &output),
+              output.writeBytes(Array(#"},"binary_offset":null,"stats":{"elapsed":{"secs":0,"nanos":0,"human":"0.000000s"},"searches":1,"searches_with_match":1,"bytes_searched":"#.utf8)),
+              writeJSONInt(bytesSearched, to: &output),
+              output.writeBytes(Array(#","bytes_printed":"#.utf8)),
+              writeJSONInt(bytesPrinted, to: &output),
+              output.writeBytes(Array(#","matched_lines":"#.utf8)),
+              writeJSONInt(matchedLines, to: &output),
+              output.writeBytes(Array(#","matches":"#.utf8)),
+              writeJSONInt(matches, to: &output),
+              output.writeBytes(Array(#"}}}"#.utf8)),
+              output.writeByte(UInt8(ascii: "\n")) else {
+            return false
+        }
+        return true
+    }
+
+    private static func writeJSONSummaryRecord(
+        bytesPrinted: Int,
+        bytesSearched: Int,
+        matchedLines: Int,
+        matches: Int,
+        filesSearched: Int,
+        filesWithMatches: Int,
+        to output: inout rgSwiftStdoutBuffer
+    ) -> Bool {
+        guard output.writeBytes(Array(#"{"data":{"elapsed_total":{"human":"0.000000s","nanos":0,"secs":0},"stats":{"bytes_printed":"#.utf8)),
+              writeJSONInt(bytesPrinted, to: &output),
+              output.writeBytes(Array(#","bytes_searched":"#.utf8)),
+              writeJSONInt(bytesSearched, to: &output),
+              output.writeBytes(Array(#","elapsed":{"human":"0.000000s","nanos":0,"secs":0},"matched_lines":"#.utf8)),
+              writeJSONInt(matchedLines, to: &output),
+              output.writeBytes(Array(#","matches":"#.utf8)),
+              writeJSONInt(matches, to: &output),
+              output.writeBytes(Array(#","searches":"#.utf8)),
+              writeJSONInt(filesSearched, to: &output),
+              output.writeBytes(Array(#","searches_with_match":"#.utf8)),
+              writeJSONInt(filesWithMatches, to: &output),
+              output.writeBytes(Array(#"}},"type":"summary"}"#.utf8)),
+              output.writeByte(UInt8(ascii: "\n")) else {
+            return false
+        }
+        return true
+    }
+
+    private static func writeJSONEscapedBytes(
+        _ bytes: [UInt8],
+        to output: inout rgSwiftStdoutBuffer
+    ) -> Bool {
+        var ignoredBytesWritten = 0
+        return writeJSONEscapedBytes(bytes, to: &output, bytesWritten: &ignoredBytesWritten)
+    }
+
+    private static func writeJSONEscapedBytes(
+        _ bytes: [UInt8],
+        to output: inout rgSwiftStdoutBuffer,
+        bytesWritten: inout Int
+    ) -> Bool {
+        guard !bytes.isEmpty else {
+            return writeCountedJSONBytes(Array(#""""#.utf8), to: &output, bytesWritten: &bytesWritten)
+        }
+        return bytes.withUnsafeBufferPointer { buffer in
+            guard let baseAddress = buffer.baseAddress else {
+                return writeCountedJSONBytes(Array(#""""#.utf8), to: &output, bytesWritten: &bytesWritten)
+            }
+            return writeJSONEscapedBytes(
+                baseAddress,
+                count: buffer.count,
+                to: &output,
+                bytesWritten: &bytesWritten
+            )
+        }
+    }
+
+    private static func writeJSONEscapedBytes(
+        _ baseAddress: UnsafePointer<UInt8>,
+        count: Int,
+        to output: inout rgSwiftStdoutBuffer
+    ) -> Bool {
+        var ignoredBytesWritten = 0
+        return writeJSONEscapedBytes(
+            baseAddress,
+            count: count,
+            to: &output,
+            bytesWritten: &ignoredBytesWritten
+        )
+    }
+
+    private static func writeJSONEscapedBytes(
+        _ baseAddress: UnsafePointer<UInt8>,
+        count: Int,
+        to output: inout rgSwiftStdoutBuffer,
+        bytesWritten: inout Int
+    ) -> Bool {
+        guard writeCountedJSONByte(UInt8(ascii: "\""), to: &output, bytesWritten: &bytesWritten) else {
+            return false
+        }
+        let hex = Array("0123456789ABCDEF".utf8)
+        for index in 0..<count {
+            let byte = baseAddress[index]
+            switch byte {
+            case UInt8(ascii: "\""):
+                guard writeCountedJSONBytes(Array(#"\""#.utf8), to: &output, bytesWritten: &bytesWritten) else {
+                    return false
+                }
+            case UInt8(ascii: "\\"):
+                guard writeCountedJSONBytes(Array(#"\\"#.utf8), to: &output, bytesWritten: &bytesWritten) else {
+                    return false
+                }
+            case UInt8(ascii: "\u{08}"):
+                guard writeCountedJSONBytes(Array(#"\b"#.utf8), to: &output, bytesWritten: &bytesWritten) else {
+                    return false
+                }
+            case UInt8(ascii: "\t"):
+                guard writeCountedJSONBytes(Array(#"\t"#.utf8), to: &output, bytesWritten: &bytesWritten) else {
+                    return false
+                }
+            case UInt8(ascii: "\n"):
+                guard writeCountedJSONBytes(Array(#"\n"#.utf8), to: &output, bytesWritten: &bytesWritten) else {
+                    return false
+                }
+            case UInt8(ascii: "\u{0C}"):
+                guard writeCountedJSONBytes(Array(#"\f"#.utf8), to: &output, bytesWritten: &bytesWritten) else {
+                    return false
+                }
+            case UInt8(ascii: "\r"):
+                guard writeCountedJSONBytes(Array(#"\r"#.utf8), to: &output, bytesWritten: &bytesWritten) else {
+                    return false
+                }
+            case 0x00...0x1F:
+                guard writeCountedJSONBytes(
+                    [
+                        UInt8(ascii: "\\"),
+                        UInt8(ascii: "u"),
+                        UInt8(ascii: "0"),
+                        UInt8(ascii: "0"),
+                        hex[Int(byte >> 4)],
+                        hex[Int(byte & 0x0F)],
+                    ],
+                    to: &output,
+                    bytesWritten: &bytesWritten
+                ) else {
+                    return false
+                }
+            default:
+                guard writeCountedJSONByte(byte, to: &output, bytesWritten: &bytesWritten) else {
+                    return false
+                }
+            }
+        }
+        return writeCountedJSONByte(UInt8(ascii: "\""), to: &output, bytesWritten: &bytesWritten)
+    }
+
+    private static func writeJSONInt(_ value: Int, to output: inout rgSwiftStdoutBuffer) -> Bool {
+        var ignoredBytesWritten = 0
+        return writeCountedJSONInt(value, to: &output, bytesWritten: &ignoredBytesWritten)
+    }
+
+    private static func writeCountedJSONInt(
+        _ value: Int,
+        to output: inout rgSwiftStdoutBuffer,
+        bytesWritten: inout Int
+    ) -> Bool {
+        let bytes = Array(String(value).utf8)
+        return writeCountedJSONBytes(bytes, to: &output, bytesWritten: &bytesWritten)
+    }
+
+    private static func writeCountedJSONBytes(
+        _ bytes: [UInt8],
+        to output: inout rgSwiftStdoutBuffer,
+        bytesWritten: inout Int
+    ) -> Bool {
+        guard output.writeBytes(bytes) else {
+            return false
+        }
+        bytesWritten += bytes.count
+        return true
+    }
+
+    private static func writeCountedJSONByte(
+        _ byte: UInt8,
+        to output: inout rgSwiftStdoutBuffer,
+        bytesWritten: inout Int
+    ) -> Bool {
+        guard output.writeByte(byte) else {
+            return false
+        }
+        bytesWritten += 1
+        return true
     }
 
     private static func asciiFixedClassVimgrepLineOutput(

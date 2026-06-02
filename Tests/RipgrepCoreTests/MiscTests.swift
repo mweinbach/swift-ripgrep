@@ -3073,6 +3073,26 @@ struct MiscTests {
             "[A-Z]{5}",
             root.path("summary-match.txt"),
         ])
+        let fixedJsonLineMatch = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "[A-Z]{5}",
+            root.path("summary-match.txt"),
+        ])
+        let fixedJsonOnlyMatchingMatch = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "-o",
+            "[A-Z]{5}",
+            root.path("summary-match.txt"),
+        ])
+        let fixedJsonNoLineNumberMatch = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "--no-line-number",
+            "[A-Z]{5}",
+            root.path("summary-match.txt"),
+        ])
         let jsonCountIncludeZeroNoMatch = try runExecutableResult([
             "--no-config",
             "--json",
@@ -3475,6 +3495,16 @@ struct MiscTests {
         let expectedFixedVimgrepOnlyMatchingOutput = Data(
             "\(root.path("summary-match.txt")):3:1:ALPHA\n".utf8
         )
+        func expectedFixedJSONMatchOutput(noLineNumber: Bool = false) -> Data {
+            let path = root.path("summary-match.txt")
+            let lineNumber = noLineNumber ? "null" : "3"
+            let begin = #"{"type":"begin","data":{"path":{"text":"\#(path)"}}}"# + "\n"
+            let match = #"{"type":"match","data":{"path":{"text":"\#(path)"},"lines":{"text":"ALPHA\n"},"line_number":\#(lineNumber),"absolute_offset":18,"submatches":[{"match":{"text":"ALPHA"},"start":0,"end":5}]}}"# + "\n"
+            let bytesPrinted = begin.utf8.count + match.utf8.count
+            let end = #"{"type":"end","data":{"path":{"text":"\#(path)"},"binary_offset":null,"stats":{"elapsed":{"secs":0,"nanos":0,"human":"0.000000s"},"searches":1,"searches_with_match":1,"bytes_searched":40,"bytes_printed":\#(bytesPrinted),"matched_lines":1,"matches":1}}}"# + "\n"
+            let summary = #"{"data":{"elapsed_total":{"human":"0.000000s","nanos":0,"secs":0},"stats":{"bytes_printed":\#(bytesPrinted),"bytes_searched":40,"elapsed":{"human":"0.000000s","nanos":0,"secs":0},"matched_lines":1,"matches":1,"searches":1,"searches_with_match":1}},"type":"summary"}"# + "\n"
+            return Data((begin + match + end + summary).utf8)
+        }
         let expectedPathStatsNoMatchSummary = expectedPathNoMatch + expectedStatsNoMatchSummary
         let expectedFixedPathStatsNoMatchSummary = expectedFixedPathNoMatch
             + expectedStatsNoMatchSummary
@@ -3792,6 +3822,15 @@ struct MiscTests {
         #expect(fixedVimgrepOnlyMatchingMatch.status == 0)
         #expect(fixedVimgrepOnlyMatchingMatch.stderr.isEmpty)
         #expect(fixedVimgrepOnlyMatchingMatch.stdout == Data("\(root.path("summary-match.txt")):3:1:ALPHA\n".utf8))
+        #expect(fixedJsonLineMatch.status == 0)
+        #expect(fixedJsonLineMatch.stderr.isEmpty)
+        #expect(fixedJsonLineMatch.stdout == expectedFixedJSONMatchOutput())
+        #expect(fixedJsonOnlyMatchingMatch.status == 0)
+        #expect(fixedJsonOnlyMatchingMatch.stderr.isEmpty)
+        #expect(fixedJsonOnlyMatchingMatch.stdout == expectedFixedJSONMatchOutput())
+        #expect(fixedJsonNoLineNumberMatch.status == 0)
+        #expect(fixedJsonNoLineNumberMatch.stderr.isEmpty)
+        #expect(fixedJsonNoLineNumberMatch.stdout == expectedFixedJSONMatchOutput(noLineNumber: true))
 
         let output = try runExecutableData([
             "needle",

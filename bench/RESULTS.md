@@ -8,6 +8,48 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Explicit fixed ASCII class JSON preflight - 2026-06-02
+
+Single-file `--json` and `--json -o` searches for plain ASCII fixed-class
+regex sequences now use a Swift-only JSON writer for regular ASCII text inputs.
+The route emits `begin`, `match`, `end`, and `summary` records directly,
+groups non-overlapping submatches per matched line, preserves `--no-line-number`,
+and matches Rust's JSON `bytes_printed` convention by counting only the emitted
+`begin` and `match` records. It falls back for quiet mode, `--stats`, vimgrep,
+context, replacement, passthru, trim, CRLF conversion, null-data, non-automatic
+encoding, UTF BOM inputs, files with NUL bytes, and non-ASCII file contents.
+This remains Swift-only and does not add a C shim.
+
+Validation:
+
+- Patched Swift matched Rust after normalizing JSON elapsed fields for `--json`
+  default, `--json -o`, `--no-line-number`, `-b`, `--column`, multiple matches
+  on one line, final no-newline output, no-match, JSON escaping, UTF-8 BOM
+  fallback, and early NUL fallback controls.
+- Added regression coverage for fixed-class JSON output/status, including
+  only-matching JSON and `--no-line-number` JSON output.
+- `swift build -c release`,
+  `swift test --filter MiscTests/darwinExecutableLiteralPreflightDenseLines`,
+  full `swift test`,
+  `SWIFT_RIPGREP_PARITY=1 swift test --filter ParityHarnessTests`,
+  `scripts/check-no-external-deps.sh --skip-build`, and `git diff --check`
+  passed before recording these results.
+
+Same-session probe at `493ab19` measured default `--json` before this slice at
+43.3 ms mean for the late-hit fixture versus Rust at 20.8 ms, and `--json -o`
+at 37.9 ms versus Rust at 21.5 ms. The patched run used 5 warm-ups and 30
+timed runs with stdout redirected to `/dev/null`. After the JSON preflight:
+
+| Case | Current Swift | Pre-change `493ab19` | Rust |
+| --- | ---: | ---: | ---: |
+| `--json '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 24.3 ms mean / 23.6-25.8 ms range | 43.3 ms / 41.9-47.6 ms | 23.7 ms / 22.9-24.5 ms |
+| `--json -o '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 24.6 ms / 23.5-26.1 ms | 37.9 ms / 36.7-39.3 ms | 24.3 ms / 23.1-26.6 ms |
+| `--json '[A-Z]{5}' no-uppercase-46m.txt` | 15.2 ms / 14.5-16.0 ms | not remeasured | 24.0 ms / 23.2-25.1 ms |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/fixed-formatted-visible-sweep-493ab19.json` and
+`/tmp/swift-rg-bench/fixed-json-patched-86d1d45.json`.
+
 ## Explicit fixed ASCII class stats only-matching preflight - 2026-06-02
 
 Single-file `--stats -o` searches for plain ASCII fixed-class regex sequences
