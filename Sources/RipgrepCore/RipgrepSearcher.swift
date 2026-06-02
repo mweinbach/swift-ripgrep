@@ -733,6 +733,29 @@ public struct RipgrepSearcher: @unchecked Sendable {
         return completeSearchResults(walkResults: fastWalkResults, searchedHaystacks: searchedHaystacks)
     }
 
+    private func directDefaultCaseSensitiveByteLiteralFastPath(options: RipgrepOptions) -> ByteLiteralFastPath? {
+        guard options.engineMode == .default,
+              !options.fixedStrings,
+              !options.effectiveIgnoreCase,
+              !options.wordRegexp,
+              !options.noUnicode,
+              !options.effectivePatterns.isEmpty else {
+            return nil
+        }
+        let literals = options.effectivePatterns.compactMap { pattern -> [UInt8]? in
+            guard let literal = RegexLiteralParser.literal(fromPlainRegexPattern: pattern),
+                  !literal.utf8.contains(UInt8(ascii: "\n")),
+                  !literal.utf8.contains(0) else {
+                return nil
+            }
+            return Array(literal.utf8)
+        }
+        guard literals.count == options.effectivePatterns.count else {
+            return nil
+        }
+        return ByteLiteralFastPath(literals: literals, caseInsensitiveASCII: false, wordASCII: false)
+    }
+
     private func quietByteLiteralFirstMatchFastPath(
         options: RipgrepOptions,
         matcher: PatternMatcher
@@ -1254,19 +1277,40 @@ public struct RipgrepSearcher: @unchecked Sendable {
             return nil
         }
 
-        let matcher = try PatternMatcher(options: options)
-        let fixedLookbehindFastPath = matcher.fixedPositiveLookbehindFastPath()
-        let fixedLookaheadFastPath = matcher.fixedPositiveLookaheadFastPath()
-        let fixedNegativeLookbehindFastPath = matcher.fixedNegativeLookbehindFastPath()
-        let fixedNegativeLookaheadFastPath = matcher.fixedNegativeLookaheadFastPath()
-        let fixedResetStartFastPath = matcher.fixedResetStartFastPath()
-        let bareResetStartFastPath = matcher.bareResetStartFastPath()
-        let fixedBackreferenceFastPath = matcher.fixedLiteralBackreferenceFastPath()
-        let fixedConditionalFastPath = matcher.fixedAssertionConditionalFastPath()
-        let byteUnitFastPath = matcher.byteUnitFastPath()
-        let byteLiteralFastPath = matcher.byteLiteralFastPath()
-        let asciiBoundaryLiteralFastPath = asciiBoundaryLiteralPattern(options: options)
-        let surroundingWordsLiteralFastPath = surroundingWordsLiteralPattern(options: options)
+        let directByteLiteralFastPath = directDefaultCaseSensitiveByteLiteralFastPath(options: options)
+        let matcher = directByteLiteralFastPath == nil ? try PatternMatcher(options: options) : nil
+        let byteLiteralFastPath = directByteLiteralFastPath ?? matcher?.byteLiteralFastPath()
+        let fixedLookbehindFastPath = byteLiteralFastPath == nil
+            ? matcher?.fixedPositiveLookbehindFastPath()
+            : nil
+        let fixedLookaheadFastPath = byteLiteralFastPath == nil
+            ? matcher?.fixedPositiveLookaheadFastPath()
+            : nil
+        let fixedNegativeLookbehindFastPath = byteLiteralFastPath == nil
+            ? matcher?.fixedNegativeLookbehindFastPath()
+            : nil
+        let fixedNegativeLookaheadFastPath = byteLiteralFastPath == nil
+            ? matcher?.fixedNegativeLookaheadFastPath()
+            : nil
+        let fixedResetStartFastPath = byteLiteralFastPath == nil
+            ? matcher?.fixedResetStartFastPath()
+            : nil
+        let bareResetStartFastPath = byteLiteralFastPath == nil && (matcher?.bareResetStartFastPath() ?? false)
+        let fixedBackreferenceFastPath = byteLiteralFastPath == nil
+            ? matcher?.fixedLiteralBackreferenceFastPath()
+            : nil
+        let fixedConditionalFastPath = byteLiteralFastPath == nil
+            ? matcher?.fixedAssertionConditionalFastPath()
+            : nil
+        let byteUnitFastPath = byteLiteralFastPath == nil
+            ? matcher?.byteUnitFastPath()
+            : nil
+        let asciiBoundaryLiteralFastPath = byteLiteralFastPath == nil
+            ? asciiBoundaryLiteralPattern(options: options)
+            : nil
+        let surroundingWordsLiteralFastPath = byteLiteralFastPath == nil
+            ? surroundingWordsLiteralPattern(options: options)
+            : nil
         guard fixedLookbehindFastPath != nil
                 || fixedLookaheadFastPath != nil
                 || fixedNegativeLookbehindFastPath != nil
@@ -1345,10 +1389,10 @@ public struct RipgrepSearcher: @unchecked Sendable {
             data,
             fileURL: fileURL,
             literal: surroundingWordsLiteralFastPath,
-            matcher: matcher,
+            matcher: matcher!,
             options: options,
             writeBytes: writeBytes
-           ) {
+        ) {
             return directResults
         }
 
