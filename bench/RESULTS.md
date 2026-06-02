@@ -91,6 +91,14 @@ Follow-up rejected probe:
   the ignore-aware path. An 80-run A/B measured default `--files linux` at
   76.0 ms for the probe versus 74.7 ms baseline, `--no-ignore-vcs --files`
   at 62.0 ms versus 59.4 ms, and NUL output at 74.1 ms versus 75.9 ms.
+- An ignore-aware byte-output walker probe carried physical directory paths as
+  mutable UTF-8 byte arrays, mirroring the no-ignore writer and rebuilding
+  `String` paths only for ignore-file loading and errors. Sorted output
+  matched Rust for default, hidden, and `--no-ignore-vcs` file listing, but a
+  30-run A/B measured default `--files linux` at 77.5 ms for the probe versus
+  78.4 ms baseline while hidden regressed to 86.9 ms from 82.4 ms and
+  `--no-ignore-vcs --files` regressed to 68.2 ms from 66.0 ms. The source
+  change was not retained.
 
 Raw hyperfine exports:
 `/tmp/swift-rg-bench/rare-proof-memchr-1780378173.json`,
@@ -111,6 +119,8 @@ File-list reserve rejected probe exports:
 `/tmp/swift-rg-bench/noignore-output-reserve-visible-only-1780381829.json`.
 Directory-entry rejected probe export:
 `/tmp/swift-rg-bench/direntry-flags-probe-1780382321.json`.
+Physical-path byte rejected probe export:
+`/tmp/swift-rg-bench/physical-path-bytes-probe-1780382969.json`.
 
 ## Later-class absence proof for fixed ASCII class sequences — 2026-06-02
 
