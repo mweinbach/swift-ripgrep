@@ -8350,16 +8350,16 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 }
 
                 let suffixStart = baseAddress.distance(to: foundPointer)
-                var lineStart = suffixStart
-                while lineStart > contentStart, bytes[lineStart - 1] != newline {
-                    lineStart -= 1
-                }
-
                 let matchStart: Int?
                 switch fastPath.run {
                 case .uppercasePlus:
+                    guard suffixStart > contentStart,
+                          isASCIIUppercase(bytes[suffixStart - 1]) else {
+                        searchOffset = suffixStart + 1
+                        continue
+                    }
                     var runStart = suffixStart
-                    while runStart > lineStart,
+                    while runStart > contentStart,
                           isASCIIUppercase(bytes[runStart - 1]) {
                         runStart -= 1
                     }
@@ -8367,7 +8367,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     matchStart = suffixStart > start ? start : nil
                 case .exactUppercase(let count):
                     let start = suffixStart - count
-                    if start >= lineStart,
+                    if start >= contentStart,
                        start >= lastMatchEnd,
                        asciiRunMatches(
                         bytes: bytes,
@@ -8381,7 +8381,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     }
                 case .exactByte(let byte, let count):
                     let start = suffixStart - count
-                    if start >= lineStart,
+                    if start >= contentStart,
                        start >= lastMatchEnd,
                        asciiRunMatches(
                         bytes: bytes,
@@ -8396,6 +8396,10 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 }
 
                 if let matchStart {
+                    var lineStart = matchStart
+                    while lineStart > contentStart, bytes[lineStart - 1] != newline {
+                        lineStart -= 1
+                    }
                     if firstMatchOnly {
                         return SearchFileResult(
                             fileURL: fileURL,

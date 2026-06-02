@@ -8,6 +8,45 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Uppercase suffix impossible-match precheck - 2026-06-02
+
+The quiet `[A-Z]+suffix` scanner now checks that a found suffix is immediately
+preceded by an uppercase byte before walking backward to find the enclosing line
+and run start. Exact-count run suffix paths also delay the line-start scan until
+after the byte-class proof succeeds. This keeps the path Swift-only and avoids
+line backtracking for suffix hits that cannot match the regex.
+
+Validation:
+
+- Patched Swift matched Rust `rg` quiet exit status for `[A-Z]+_MISSING`,
+  `[A-Z]+_RESUME`, `[A-Z]{3}_RESUME`, and `[A-Z]+_NEVERMATCHTOKEN` on the Linux
+  benchmark tree.
+- Added executable regression coverage for a lowercase `_MISSING` suffix hit
+  that must not satisfy `[A-Z]+_MISSING`.
+- `swift build -c release`, `swift test --filter
+  FeatureTests/quietRequiredLiteralRegexRecursiveSearchReturnsOnlyExitStatus`,
+  `swift test`, `SWIFT_RIPGREP_PARITY=1 swift test --filter ParityHarnessTests`,
+  `scripts/check-no-external-deps.sh --skip-build`, and `git diff --check`
+  passed before recording these results.
+
+The retained same-session probe used 5 warm-ups and 30 timed runs and moved the
+target `[A-Z]+_MISSING` row from 25.3 ms to 23.5 ms. The detached `f961a31` A/B
+was filesystem-cache-sensitive, so the final table reports the cleaner
+current-vs-Rust confirmation with 8 warm-ups and 40 timed runs. Treat this as a
+small guard against impossible suffix hits rather than a large benchmark cliff.
+
+| Case | Current Swift | Pre-change `f961a31` quick probe | Rust |
+| --- | ---: | ---: | ---: |
+| `-q '[A-Z]+_MISSING' linux` | 25.8 ms mean / 19.8-34.9 ms range | 25.3 ms / 21.4-33.7 ms | 21.2 ms / 8.2-40.8 ms |
+| `-q '[A-Z]+_RESUME' linux` | 12.6 ms / 10.4-16.8 ms | 10.2 ms / 9.4-11.8 ms | 6.5 ms / 5.1-9.9 ms |
+| `-q '[A-Z]{3}_RESUME' linux` | 10.9 ms / 9.5-14.9 ms | 12.1 ms / 9.5-18.0 ms | 6.9 ms / 4.7-13.5 ms |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/run-suffix-precheck-baseline-1780428462.json`,
+`/tmp/swift-rg-bench/run-suffix-precheck-probe-1780428631.json`,
+`/tmp/swift-rg-bench/run-suffix-precheck-missing-ab-1780428849.json`, and
+`/tmp/swift-rg-bench/run-suffix-precheck-current-rust-1780429045.json`.
+
 ## Simple literal line-output coalescing - 2026-06-02
 
 The shared Darwin single-literal line writer now batches contiguous unnumbered,

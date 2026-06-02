@@ -40,6 +40,7 @@ struct FeatureTests {
             try root.write("plain \(index)\n", to: String(format: "prefix/file-%03d.txt", index))
         }
         try root.write("task TWA_RESUME\n", to: "prefix/file-120.txt")
+        try root.write("task lower_MISSING\n", to: "prefix/file-121.txt")
 
         var output: [String] = []
         var errors: [String] = []
