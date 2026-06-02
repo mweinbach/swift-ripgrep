@@ -1008,6 +1008,38 @@ public enum SwiftDarwinLiteralPreflight {
         return 0
     }
 
+    public static func asciiFixedClassMatchedPathStatsExitCode(
+        path: String,
+        pattern: String,
+        printWhenMatched: Bool,
+        nullTerminated: Bool,
+        crlfTerminated: Bool = false,
+        outputPath: [UInt8]? = nil
+    ) -> Int32? {
+        guard let classes = asciiFixedClassSequenceClasses(pattern: pattern),
+              let stats = asciiFixedClassMatchedSummaryStats(path: path, classes: classes) else {
+            return nil
+        }
+        if printWhenMatched {
+            guard writePathOnlyOutput(
+                path: path,
+                outputPath: outputPath,
+                nullTerminated: nullTerminated,
+                crlfTerminated: crlfTerminated
+            ), fflush(Darwin.stdout) == 0 else {
+                return nil
+            }
+        }
+        return writeStatsSummary(
+            totalMatches: stats.totalMatches,
+            matchedLines: stats.matchedLines,
+            filesWithMatches: 1,
+            filesSearched: 1,
+            bytesSearched: stats.bytesSearched,
+            exitCode: printWhenMatched ? 0 : 1
+        )
+    }
+
     public static func asciiFixedClassNoMatchExitCode(
         path: String,
         pattern: String
@@ -4254,6 +4286,147 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         return data.count
+    }
+
+    private static func asciiFixedClassMatchedSummaryStats(
+        path: String,
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass]
+    ) -> MatchedSummaryStats? {
+        guard !classes.isEmpty,
+              let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !startsWithUTFBOM(data),
+              !hasBinaryDetectionPrefix(data),
+              !containsNULByte(data) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return nil
+        }
+        let counts = data.withUnsafeBytes { rawData -> (matches: Int, matchedLines: Int) in
+            guard let rawBase = rawData.baseAddress else {
+                return (0, 0)
+            }
+            return asciiFixedClassMatchedCounts(
+                baseAddress: rawBase.assumingMemoryBound(to: UInt8.self),
+                searchCount: rawData.count,
+                classes: classes
+            )
+        }
+        guard counts.matches > 0,
+              counts.matchedLines > 0 else {
+            return nil
+        }
+        return MatchedSummaryStats(
+            totalMatches: counts.matches,
+            matchedLines: counts.matchedLines,
+            bytesSearched: data.count
+        )
+    }
+
+    private static func asciiFixedClassMatchedCounts(
+        baseAddress: UnsafePointer<UInt8>,
+        searchCount: Int,
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass]
+    ) -> (matches: Int, matchedLines: Int) {
+        let width = classes.count
+        guard width > 0, searchCount >= width else {
+            return (0, 0)
+        }
+
+        let newline = UInt8(ascii: "\n")
+        let lastStart = searchCount - width
+        var matches = 0
+        var matchedLines = 0
+        var lineHasMatch = false
+        var offset = 0
+        guard asciiFixedClassShouldUseCandidateJumps(
+            baseAddress: baseAddress,
+            searchCount: searchCount,
+            byteClass: classes[0]
+        ) else {
+            while offset <= lastStart {
+                if baseAddress[offset] == newline {
+                    lineHasMatch = false
+                    offset += 1
+                    continue
+                }
+                guard asciiFixedClassByte(baseAddress[offset], matches: classes[0]) else {
+                    offset += 1
+                    continue
+                }
+
+                var classIndex = 1
+                while classIndex < width,
+                      asciiFixedClassByte(baseAddress[offset + classIndex], matches: classes[classIndex]) {
+                    classIndex += 1
+                }
+                if classIndex == width {
+                    matches += 1
+                    if !lineHasMatch {
+                        matchedLines += 1
+                        lineHasMatch = true
+                    }
+                    offset += width
+                    continue
+                }
+                offset += 1
+            }
+            return (matches, matchedLines)
+        }
+
+        while let candidateOffset = asciiFixedClassNextCandidate(
+            baseAddress: baseAddress,
+            endExclusive: lastStart + 1,
+            byteClass: classes[0],
+            from: offset
+        ) {
+            if candidateOffset > offset,
+               memchr(baseAddress.advanced(by: offset), Int32(newline), candidateOffset - offset) != nil {
+                lineHasMatch = false
+            }
+
+            var classIndex = 1
+            while classIndex < width,
+                  asciiFixedClassByte(baseAddress[candidateOffset + classIndex], matches: classes[classIndex]) {
+                classIndex += 1
+            }
+            if classIndex == width {
+                matches += 1
+                if !lineHasMatch {
+                    matchedLines += 1
+                    lineHasMatch = true
+                }
+                offset = candidateOffset + width
+                continue
+            }
+            offset = candidateOffset + 1
+        }
+        return (matches, matchedLines)
+    }
+
+    private static func asciiFixedClassShouldUseCandidateJumps(
+        baseAddress: UnsafePointer<UInt8>,
+        searchCount: Int,
+        byteClass: ASCIIFixedClassSequenceFastPath.ByteClass
+    ) -> Bool {
+        let sampleCount = min(searchCount, 4096)
+        guard sampleCount > 0 else {
+            return false
+        }
+        var matches = 0
+        var offset = 0
+        while offset < sampleCount {
+            if asciiFixedClassByte(baseAddress[offset], matches: byteClass) {
+                matches += 1
+                if matches * 8 > sampleCount {
+                    return false
+                }
+            }
+            offset += 1
+        }
+        return true
     }
 
     private static func asciiFixedClassSequenceMatch(

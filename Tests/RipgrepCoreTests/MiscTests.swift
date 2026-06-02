@@ -3086,6 +3086,13 @@ struct MiscTests {
             "missingliteral",
             root.path("summary.txt"),
         ])
+        let fixedStatsFilesWithMatchesMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "-l",
+            "[A-Z]{5}",
+            root.path("summary-match.txt"),
+        ])
         let statsFilesWithoutMatchNoMatchSummary = try runExecutableResult([
             "--no-config",
             "--stats",
@@ -3235,6 +3242,13 @@ struct MiscTests {
             "alpha",
             root.path("summary-match.txt"),
         ])
+        let fixedStatsFilesWithoutMatchMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "--files-without-match",
+            "[A-Z]{5}",
+            root.path("summary-match.txt"),
+        ])
         let statsIgnoreCaseFilesWithoutMatchMatchSummary = try runExecutableResult([
             "--no-config",
             "--stats",
@@ -3355,6 +3369,8 @@ struct MiscTests {
 
             """.utf8)
         }
+        let expectedFixedMatchPathStatsSummary = expectedFixedMatchPath
+            + expectedStatsMatchSummary(matches: 1, matchedLines: 1)
         func expectedVisibleStatsSummary(bytesPrinted: Int) -> Data {
             Data("""
 
@@ -3494,9 +3510,15 @@ struct MiscTests {
         #expect(statsCrlfFilesWithoutMatchNoMatchSummary.status == 0)
         #expect(statsCrlfFilesWithoutMatchNoMatchSummary.stderr.isEmpty)
         #expect(statsCrlfFilesWithoutMatchNoMatchSummary.stdout == expectedCrlfPathStatsNoMatchSummary)
+        #expect(fixedStatsFilesWithMatchesMatchSummary.status == 0)
+        #expect(fixedStatsFilesWithMatchesMatchSummary.stderr.isEmpty)
+        #expect(fixedStatsFilesWithMatchesMatchSummary.stdout == expectedFixedMatchPathStatsSummary)
         #expect(statsFilesWithoutMatchMatchSummary.status == 1)
         #expect(statsFilesWithoutMatchMatchSummary.stderr.isEmpty)
         #expect(statsFilesWithoutMatchMatchSummary.stdout == expectedStatsMatchSummary(matches: 4, matchedLines: 2))
+        #expect(fixedStatsFilesWithoutMatchMatchSummary.status == 1)
+        #expect(fixedStatsFilesWithoutMatchMatchSummary.stderr.isEmpty)
+        #expect(fixedStatsFilesWithoutMatchMatchSummary.stdout == expectedStatsMatchSummary(matches: 1, matchedLines: 1))
         #expect(statsIgnoreCaseFilesWithoutMatchMatchSummary.status == 1)
         #expect(statsIgnoreCaseFilesWithoutMatchMatchSummary.stderr.isEmpty)
         #expect(statsIgnoreCaseFilesWithoutMatchMatchSummary.stdout == expectedStatsMatchSummary(matches: 5, matchedLines: 3))

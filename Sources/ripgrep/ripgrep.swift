@@ -3008,6 +3008,40 @@ struct RipgrepCommand {
            ) {
             return exitCode
         }
+        if let parsedPathOnlyMode,
+           paths.count == 1,
+           parsedStats,
+           !parsedJson,
+           !fixedStrings,
+           !asciiCaseInsensitive,
+           !wordRegexp,
+           !parsedLineRegexp,
+           !parsedOnlyMatching,
+           !parsedVimgrep,
+           parsedMaxCount == nil,
+           parsedAfterContext == 0,
+           parsedBeforeContext == 0,
+           !parsedInvertMatch,
+           !parsedNullData,
+           !parsedPassthru,
+           !parsedReplacement,
+           !parsedStopOnNonmatch,
+           !parsedSearchZipAffectsPreflight,
+           parsedEncodingIsAutomatic,
+           !parsedColorAffectsPreflightOutput,
+           (patternCanStartWithDash || !pattern.hasPrefix("-")),
+           path != "-",
+           isReadableRegularFile(path),
+           let exitCode = SwiftDarwinLiteralPreflight.asciiFixedClassMatchedPathStatsExitCode(
+            path: path,
+            pattern: pattern,
+            printWhenMatched: parsedPathOnlyMode == .matching,
+            nullTerminated: parsedNullPathTerminator,
+            crlfTerminated: parsedCrlf,
+            outputPath: parsedPathOnlyOutputPath
+           ) {
+            return exitCode
+        }
         if parsedFilesWithoutMatchPrintModeCanUseNoMatchPreflight,
            paths.count == 1,
            !parsedInvertMatch,
