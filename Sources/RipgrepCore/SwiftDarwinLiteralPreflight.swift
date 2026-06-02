@@ -1110,23 +1110,63 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         pattern: String,
         lineNumber: Bool,
+        maxCount: Int?,
         lineNumberFieldSeparator: [UInt8],
         linePrefix: [UInt8],
         headingPrefix: [UInt8]
     ) -> Int32? {
-        guard let classes = asciiFixedClassSequenceClasses(pattern: pattern),
-              let matchedLineCount = asciiFixedClassMatchedLineOutput(
+        guard maxCount.map({ $0 > 0 }) ?? true,
+              let classes = asciiFixedClassSequenceClasses(pattern: pattern),
+              let matchedLineCount = asciiFixedClassMatchedLineOutputCount(
                 path: path,
                 classes: classes,
                 lineNumber: lineNumber,
+                maxCount: maxCount ?? Int.max,
                 lineNumberFieldSeparator: lineNumberFieldSeparator,
                 linePrefix: linePrefix,
                 headingPrefix: headingPrefix
-              ),
-              matchedLineCount > 0 else {
+              ) else {
             return nil
         }
-        return 0
+        return matchedLineCount > 0 ? 0 : 1
+    }
+
+    public static func asciiFixedClassMatchedLineStatsExitCode(
+        path: String,
+        pattern: String,
+        lineNumber: Bool,
+        maxCount: Int?,
+        lineNumberFieldSeparator: [UInt8],
+        linePrefix: [UInt8],
+        headingPrefix: [UInt8]
+    ) -> Int32? {
+        guard maxCount.map({ $0 > 0 }) ?? true,
+              let classes = asciiFixedClassSequenceClasses(pattern: pattern),
+              let stats = asciiFixedClassMatchedLineOutput(
+                path: path,
+                classes: classes,
+                lineNumber: lineNumber,
+                maxCount: maxCount ?? Int.max,
+                lineNumberFieldSeparator: lineNumberFieldSeparator,
+                linePrefix: linePrefix,
+                headingPrefix: headingPrefix,
+                collectTotalMatches: true
+              ) else {
+            return nil
+        }
+        guard fflush(Darwin.stdout) == 0 else {
+            return nil
+        }
+        let exitCode: Int32 = stats.matchedLines > 0 ? 0 : 1
+        return writeStatsSummary(
+            totalMatches: stats.totalMatches,
+            matchedLines: stats.matchedLines,
+            filesWithMatches: stats.matchedLines > 0 ? 1 : 0,
+            filesSearched: 1,
+            bytesPrinted: stats.bytesPrinted,
+            bytesSearched: stats.bytesSearched,
+            exitCode: exitCode
+        )
     }
 
     public static func asciiFixedClassOnlyMatchingOutputExitCode(
@@ -1203,16 +1243,19 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         displayPath: [UInt8],
         pattern: String,
-        noLineNumber: Bool
+        noLineNumber: Bool,
+        maxCount: Int?
     ) -> Int32? {
-        guard let classes = asciiFixedClassSequenceClasses(pattern: pattern) else {
+        guard maxCount.map({ $0 > 0 }) ?? true,
+              let classes = asciiFixedClassSequenceClasses(pattern: pattern) else {
             return nil
         }
         return asciiFixedClassJSONOutput(
             path: path,
             displayPath: displayPath,
             classes: classes,
-            noLineNumber: noLineNumber
+            noLineNumber: noLineNumber,
+            maxCount: maxCount ?? Int.max
         )
     }
 
@@ -4589,11 +4632,192 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         classes: [ASCIIFixedClassSequenceFastPath.ByteClass],
         lineNumber: Bool,
+        maxCount: Int,
+        lineNumberFieldSeparator: [UInt8],
+        linePrefix: [UInt8],
+        headingPrefix: [UInt8],
+        collectTotalMatches: Bool
+    ) -> MatchedOutputStats? {
+        guard !classes.isEmpty,
+              maxCount > 0,
+              let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !startsWithUTFBOM(data),
+              !hasBinaryDetectionPrefix(data),
+              !containsNULByte(data) else {
+            return nil
+        }
+        return data.withUnsafeBytes { rawData -> MatchedOutputStats? in
+            guard let rawBase = rawData.baseAddress else {
+                return MatchedOutputStats(
+                    totalMatches: 0,
+                    matchedLines: 0,
+                    bytesPrinted: 0,
+                    bytesSearched: data.count
+                )
+            }
+            return asciiFixedClassMatchedLineOutput(
+                baseAddress: rawBase.assumingMemoryBound(to: UInt8.self),
+                dataCount: rawData.count,
+                classes: classes,
+                lineNumber: lineNumber,
+                maxCount: maxCount,
+                lineNumberFieldSeparator: lineNumberFieldSeparator,
+                linePrefix: linePrefix,
+                headingPrefix: headingPrefix,
+                collectTotalMatches: collectTotalMatches
+            )
+        }
+    }
+
+    private static func asciiFixedClassMatchedLineOutput(
+        baseAddress: UnsafePointer<UInt8>,
+        dataCount: Int,
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass],
+        lineNumber: Bool,
+        maxCount: Int,
+        lineNumberFieldSeparator: [UInt8],
+        linePrefix: [UInt8],
+        headingPrefix: [UInt8],
+        collectTotalMatches: Bool
+    ) -> MatchedOutputStats? {
+        let width = classes.count
+        guard width > 0, dataCount >= width else {
+            return MatchedOutputStats(
+                totalMatches: 0,
+                matchedLines: 0,
+                bytesPrinted: 0,
+                bytesSearched: dataCount
+            )
+        }
+        guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+            return nil
+        }
+        defer {
+            output.deallocate()
+        }
+
+        let newline = UInt8(ascii: "\n")
+        var searchOffset = 0
+        var lineStart = 0
+        var lineNumberAtLineStart = 1
+        var matchedLineCount = 0
+        var totalMatches = 0
+        var bytesSearched = dataCount
+        var synthesizedLineTerminators = 0
+        var emittedHeading = false
+
+        func advanceLineStart(to matchOffset: Int) {
+            while lineStart < matchOffset {
+                let distance = matchOffset - lineStart
+                guard let newlinePointer = memchr(
+                    baseAddress.advanced(by: lineStart),
+                    Int32(newline),
+                    distance
+                ) else {
+                    return
+                }
+                let newlineOffset = baseAddress.distance(
+                    to: newlinePointer.assumingMemoryBound(to: UInt8.self)
+                )
+                lineNumberAtLineStart += 1
+                lineStart = newlineOffset + 1
+            }
+        }
+
+        while let matchOffset = asciiFixedClassNextSequenceMatch(
+            baseAddress: baseAddress,
+            endExclusive: dataCount,
+            classes: classes,
+            from: searchOffset
+        ) {
+            guard matchedLineCount < maxCount else {
+                break
+            }
+            advanceLineStart(to: matchOffset)
+
+            let newlinePointer = memchr(
+                baseAddress.advanced(by: matchOffset),
+                Int32(newline),
+                dataCount - matchOffset
+            )
+            let lineEnd = newlinePointer.map {
+                baseAddress.distance(to: $0.assumingMemoryBound(to: UInt8.self))
+            } ?? dataCount
+            let outputEnd = newlinePointer == nil ? dataCount : lineEnd + 1
+
+            if collectTotalMatches {
+                var spanSearchOffset = matchOffset
+                while let spanStart = asciiFixedClassNextSequenceMatch(
+                    baseAddress: baseAddress,
+                    endExclusive: lineEnd,
+                    classes: classes,
+                    from: spanSearchOffset
+                ) {
+                    totalMatches += 1
+                    spanSearchOffset = spanStart + width
+                }
+            }
+
+            guard output.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading),
+                  output.writeBytes(linePrefix) else {
+                return nil
+            }
+            if lineNumber,
+               !output.writeLineNumberPrefix(
+                lineNumberAtLineStart,
+                fieldSeparator: lineNumberFieldSeparator
+               ) {
+                return nil
+            }
+            guard output.write(baseAddress.advanced(by: lineStart), count: outputEnd - lineStart) else {
+                return nil
+            }
+            if newlinePointer == nil,
+               !output.writeByte(newline) {
+                return nil
+            }
+            if newlinePointer == nil {
+                synthesizedLineTerminators += 1
+            }
+
+            matchedLineCount += 1
+            if matchedLineCount >= maxCount {
+                bytesSearched = outputEnd
+                break
+            }
+            searchOffset = outputEnd
+            lineStart = outputEnd
+            if newlinePointer != nil {
+                lineNumberAtLineStart += 1
+            } else {
+                break
+            }
+        }
+
+        guard output.flush() else {
+            return nil
+        }
+        return MatchedOutputStats(
+            totalMatches: collectTotalMatches ? totalMatches : matchedLineCount,
+            matchedLines: matchedLineCount,
+            bytesPrinted: output.statsBytesWritten + synthesizedLineTerminators,
+            bytesSearched: bytesSearched
+        )
+    }
+
+    private static func asciiFixedClassMatchedLineOutputCount(
+        path: String,
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass],
+        lineNumber: Bool,
+        maxCount: Int,
         lineNumberFieldSeparator: [UInt8],
         linePrefix: [UInt8],
         headingPrefix: [UInt8]
     ) -> Int? {
         guard !classes.isEmpty,
+              maxCount > 0,
               let data = mappedPreflightData(path: path) else {
             return nil
         }
@@ -4604,13 +4828,14 @@ public enum SwiftDarwinLiteralPreflight {
         }
         return data.withUnsafeBytes { rawData -> Int? in
             guard let rawBase = rawData.baseAddress else {
-                return nil
+                return 0
             }
-            return asciiFixedClassMatchedLineOutput(
+            return asciiFixedClassMatchedLineOutputCount(
                 baseAddress: rawBase.assumingMemoryBound(to: UInt8.self),
                 dataCount: rawData.count,
                 classes: classes,
                 lineNumber: lineNumber,
+                maxCount: maxCount,
                 lineNumberFieldSeparator: lineNumberFieldSeparator,
                 linePrefix: linePrefix,
                 headingPrefix: headingPrefix
@@ -4618,11 +4843,12 @@ public enum SwiftDarwinLiteralPreflight {
         }
     }
 
-    private static func asciiFixedClassMatchedLineOutput(
+    private static func asciiFixedClassMatchedLineOutputCount(
         baseAddress: UnsafePointer<UInt8>,
         dataCount: Int,
         classes: [ASCIIFixedClassSequenceFastPath.ByteClass],
         lineNumber: Bool,
+        maxCount: Int,
         lineNumberFieldSeparator: [UInt8],
         linePrefix: [UInt8],
         headingPrefix: [UInt8]
@@ -4701,6 +4927,9 @@ public enum SwiftDarwinLiteralPreflight {
             }
 
             matchedLineCount += 1
+            if matchedLineCount >= maxCount {
+                break
+            }
             searchOffset = outputEnd
             lineStart = outputEnd
             if newlinePointer != nil {
@@ -4798,6 +5027,7 @@ public enum SwiftDarwinLiteralPreflight {
         var currentLineStart = 0
         var lineCountOffset = 0
         var emittedHeading = false
+        var bytesSearched = dataCount
 
         func advanceLineState(to matchStart: Int) {
             while lineCountOffset < matchStart {
@@ -4820,7 +5050,7 @@ public enum SwiftDarwinLiteralPreflight {
 
         while let matchStart = asciiFixedClassNextSequenceMatch(
             baseAddress: baseAddress,
-            endExclusive: dataCount,
+            endExclusive: matchedLineCount >= maxCount ? selectedLineEnd : dataCount,
             classes: classes,
             from: searchOffset
         ) {
@@ -4872,6 +5102,9 @@ public enum SwiftDarwinLiteralPreflight {
             matchCount += 1
             searchOffset = matchStart + width
         }
+        if matchedLineCount >= maxCount, selectedLineEnd >= 0 {
+            bytesSearched = selectedLineEnd
+        }
 
         guard output.flush() else {
             return nil
@@ -4880,7 +5113,7 @@ public enum SwiftDarwinLiteralPreflight {
             totalMatches: matchCount,
             matchedLines: matchedLineCount,
             bytesPrinted: output.statsBytesWritten + matchCount,
-            bytesSearched: dataCount
+            bytesSearched: bytesSearched
         )
     }
 
@@ -4888,9 +5121,11 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         displayPath: [UInt8],
         classes: [ASCIIFixedClassSequenceFastPath.ByteClass],
-        noLineNumber: Bool
+        noLineNumber: Bool,
+        maxCount: Int
     ) -> Int32? {
         guard !classes.isEmpty,
+              maxCount > 0,
               let data = mappedPreflightData(path: path) else {
             return nil
         }
@@ -4909,7 +5144,8 @@ public enum SwiftDarwinLiteralPreflight {
                 dataCount: rawData.count,
                 displayPath: displayPath,
                 classes: classes,
-                noLineNumber: noLineNumber
+                noLineNumber: noLineNumber,
+                maxCount: maxCount
             )
         }
     }
@@ -4919,7 +5155,8 @@ public enum SwiftDarwinLiteralPreflight {
         dataCount: Int,
         displayPath: [UInt8],
         classes: [ASCIIFixedClassSequenceFastPath.ByteClass],
-        noLineNumber: Bool
+        noLineNumber: Bool,
+        maxCount: Int
     ) -> Int32? {
         let width = classes.count
         guard width > 0, dataCount >= width else {
@@ -4947,6 +5184,7 @@ public enum SwiftDarwinLiteralPreflight {
         var currentLineNumber = 1
         var currentLineStart = 0
         var lineCountOffset = 0
+        var bytesSearched = dataCount
 
         func advanceLineState(to matchStart: Int) {
             while lineCountOffset < matchStart {
@@ -4982,6 +5220,9 @@ public enum SwiftDarwinLiteralPreflight {
             classes: classes,
             from: searchOffset
         ) {
+            guard matchedLineCount < maxCount else {
+                break
+            }
             advanceLineState(to: matchStart)
             let lineStart = currentLineStart
             let lineNumber = currentLineNumber
@@ -5028,12 +5269,16 @@ public enum SwiftDarwinLiteralPreflight {
             }
             matchedLineCount += 1
             fileBytesPrinted += matchBytes
+            if matchedLineCount >= maxCount {
+                bytesSearched = outputEnd
+                break
+            }
             searchOffset = outputEnd
         }
 
         guard writeJSONEndRecord(
             displayPath: displayPath,
-            bytesSearched: dataCount,
+            bytesSearched: bytesSearched,
             bytesPrinted: fileBytesPrinted,
             matchedLines: matchedLineCount,
             matches: totalMatches,
@@ -5041,7 +5286,7 @@ public enum SwiftDarwinLiteralPreflight {
         ),
               writeJSONSummaryRecord(
                 bytesPrinted: fileBytesPrinted,
-                bytesSearched: dataCount,
+                bytesSearched: bytesSearched,
                 matchedLines: matchedLineCount,
                 matches: totalMatches,
                 filesSearched: 1,
@@ -5438,6 +5683,7 @@ public enum SwiftDarwinLiteralPreflight {
         var currentLineNumber = 1
         var currentLineStart = 0
         var lineCountOffset = 0
+        var bytesSearched = dataCount
 
         func advanceLineState(to matchStart: Int) {
             while lineCountOffset < matchStart {
@@ -5460,7 +5706,7 @@ public enum SwiftDarwinLiteralPreflight {
 
         while let matchStart = asciiFixedClassNextSequenceMatch(
             baseAddress: baseAddress,
-            endExclusive: dataCount,
+            endExclusive: matchedLineCount >= maxCount ? selectedLineEnd : dataCount,
             classes: classes,
             from: searchOffset
         ) {
@@ -5517,6 +5763,9 @@ public enum SwiftDarwinLiteralPreflight {
             matchCount += 1
             searchOffset = matchStart + width
         }
+        if matchedLineCount >= maxCount, selectedLineEnd >= 0 {
+            bytesSearched = selectedLineEnd
+        }
 
         guard output.flush() else {
             return nil
@@ -5525,7 +5774,7 @@ public enum SwiftDarwinLiteralPreflight {
             totalMatches: matchCount,
             matchedLines: matchedLineCount,
             bytesPrinted: output.statsBytesWritten + matchCount,
-            bytesSearched: dataCount
+            bytesSearched: bytesSearched
         )
     }
 

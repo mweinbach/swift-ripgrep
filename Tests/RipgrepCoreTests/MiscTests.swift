@@ -2729,6 +2729,7 @@ struct MiscTests {
         try root.write("alpha\nquiet\n", to: "summary.txt")
         try root.write("lower lower\n", to: "fixed-summary.txt")
         try root.write("alpha alpha\nquiet\nALPHA\nwordalpha alpha\n", to: "summary-match.txt")
+        try root.write("one ALPHA two BRAVO\nthree CHARLIE\nquiet\n", to: "fixed-max.txt")
 
         func runExecutableResult(_ arguments: [String]) throws -> (stdout: Data, stderr: Data, status: Int32) {
             let executable = ripgrepPackageRootURL().appendingPathComponent(".build/debug/ripgrep")
@@ -3093,6 +3094,37 @@ struct MiscTests {
             "[A-Z]{5}",
             root.path("summary-match.txt"),
         ])
+        let fixedMaxCountLineMatch = try runExecutableResult([
+            "--no-config",
+            "-m",
+            "1",
+            "[A-Z]{5}",
+            root.path("fixed-max.txt"),
+        ])
+        let fixedMaxCountOnlyMatchingMatch = try runExecutableResult([
+            "--no-config",
+            "-m",
+            "1",
+            "-o",
+            "[A-Z]{5}",
+            root.path("fixed-max.txt"),
+        ])
+        let fixedMaxCountVimgrepLineMatch = try runExecutableResult([
+            "--no-config",
+            "--vimgrep",
+            "-m",
+            "1",
+            "[A-Z]{5}",
+            root.path("fixed-max.txt"),
+        ])
+        let fixedJsonMaxCountLineMatch = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "-m",
+            "1",
+            "[A-Z]{5}",
+            root.path("fixed-max.txt"),
+        ])
         let jsonCountIncludeZeroNoMatch = try runExecutableResult([
             "--no-config",
             "--json",
@@ -3345,6 +3377,32 @@ struct MiscTests {
             "[A-Z]{5}",
             root.path("summary-match.txt"),
         ])
+        let fixedStatsMaxCountLineMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "-m",
+            "1",
+            "[A-Z]{5}",
+            root.path("fixed-max.txt"),
+        ])
+        let fixedStatsMaxCountOnlyMatchingMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "-m",
+            "1",
+            "-o",
+            "[A-Z]{5}",
+            root.path("fixed-max.txt"),
+        ])
+        let fixedStatsMaxCountVimgrepLineMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "--vimgrep",
+            "-m",
+            "1",
+            "[A-Z]{5}",
+            root.path("fixed-max.txt"),
+        ])
         let statsContextNoMatchSummary = try runExecutableResult([
             "--no-config",
             "--stats",
@@ -3502,6 +3560,15 @@ struct MiscTests {
         let expectedFixedVimgrepOnlyMatchingOutput = Data(
             "\(root.path("summary-match.txt")):3:1:ALPHA\n".utf8
         )
+        let expectedFixedMaxLineOutput = Data("one ALPHA two BRAVO\n".utf8)
+        let expectedFixedMaxOnlyMatchingOutput = Data("ALPHA\nBRAVO\n".utf8)
+        let expectedFixedMaxVimgrepOutput = Data(
+            """
+            \(root.path("fixed-max.txt")):1:5:one ALPHA two BRAVO
+            \(root.path("fixed-max.txt")):1:15:one ALPHA two BRAVO
+
+            """.utf8
+        )
         func expectedFixedJSONMatchOutput(noLineNumber: Bool = false) -> Data {
             let path = root.path("summary-match.txt")
             let lineNumber = noLineNumber ? "null" : "3"
@@ -3510,6 +3577,15 @@ struct MiscTests {
             let bytesPrinted = begin.utf8.count + match.utf8.count
             let end = #"{"type":"end","data":{"path":{"text":"\#(path)"},"binary_offset":null,"stats":{"elapsed":{"secs":0,"nanos":0,"human":"0.000000s"},"searches":1,"searches_with_match":1,"bytes_searched":40,"bytes_printed":\#(bytesPrinted),"matched_lines":1,"matches":1}}}"# + "\n"
             let summary = #"{"data":{"elapsed_total":{"human":"0.000000s","nanos":0,"secs":0},"stats":{"bytes_printed":\#(bytesPrinted),"bytes_searched":40,"elapsed":{"human":"0.000000s","nanos":0,"secs":0},"matched_lines":1,"matches":1,"searches":1,"searches_with_match":1}},"type":"summary"}"# + "\n"
+            return Data((begin + match + end + summary).utf8)
+        }
+        func expectedFixedJSONMaxCountOutput() -> Data {
+            let path = root.path("fixed-max.txt")
+            let begin = #"{"type":"begin","data":{"path":{"text":"\#(path)"}}}"# + "\n"
+            let match = #"{"type":"match","data":{"path":{"text":"\#(path)"},"lines":{"text":"one ALPHA two BRAVO\n"},"line_number":1,"absolute_offset":0,"submatches":[{"match":{"text":"ALPHA"},"start":4,"end":9},{"match":{"text":"BRAVO"},"start":14,"end":19}]}}"# + "\n"
+            let bytesPrinted = begin.utf8.count + match.utf8.count
+            let end = #"{"type":"end","data":{"path":{"text":"\#(path)"},"binary_offset":null,"stats":{"elapsed":{"secs":0,"nanos":0,"human":"0.000000s"},"searches":1,"searches_with_match":1,"bytes_searched":20,"bytes_printed":\#(bytesPrinted),"matched_lines":1,"matches":2}}}"# + "\n"
+            let summary = #"{"data":{"elapsed_total":{"human":"0.000000s","nanos":0,"secs":0},"stats":{"bytes_printed":\#(bytesPrinted),"bytes_searched":20,"elapsed":{"human":"0.000000s","nanos":0,"secs":0},"matched_lines":1,"matches":2,"searches":1,"searches_with_match":1}},"type":"summary"}"# + "\n"
             return Data((begin + match + end + summary).utf8)
         }
         let expectedPathStatsNoMatchSummary = expectedPathNoMatch + expectedStatsNoMatchSummary
@@ -3530,6 +3606,24 @@ struct MiscTests {
             1 files searched
             \(bytesPrinted) bytes printed
             40 bytes searched
+            0.000000 seconds spent searching
+            0.000000 seconds total
+
+            """.utf8)
+        }
+        func expectedStatsMaxCountSummary(
+            matches: Int,
+            matchedLines: Int,
+            bytesPrinted: Int
+        ) -> Data {
+            Data("""
+
+            \(matches) matches
+            \(matchedLines) matched lines
+            1 files contained matches
+            1 files searched
+            \(bytesPrinted) bytes printed
+            20 bytes searched
             0.000000 seconds spent searching
             0.000000 seconds total
 
@@ -3703,6 +3797,30 @@ struct MiscTests {
                 matchedLines: 1,
                 bytesPrinted: expectedFixedVimgrepOnlyMatchingOutput.count
             ))
+        #expect(fixedStatsMaxCountLineMatchSummary.status == 0)
+        #expect(fixedStatsMaxCountLineMatchSummary.stderr.isEmpty)
+        #expect(fixedStatsMaxCountLineMatchSummary.stdout == expectedFixedMaxLineOutput
+            + expectedStatsMaxCountSummary(
+                matches: 2,
+                matchedLines: 1,
+                bytesPrinted: expectedFixedMaxLineOutput.count
+            ))
+        #expect(fixedStatsMaxCountOnlyMatchingMatchSummary.status == 0)
+        #expect(fixedStatsMaxCountOnlyMatchingMatchSummary.stderr.isEmpty)
+        #expect(fixedStatsMaxCountOnlyMatchingMatchSummary.stdout == expectedFixedMaxOnlyMatchingOutput
+            + expectedStatsMaxCountSummary(
+                matches: 2,
+                matchedLines: 1,
+                bytesPrinted: expectedFixedMaxOnlyMatchingOutput.count
+            ))
+        #expect(fixedStatsMaxCountVimgrepLineMatchSummary.status == 0)
+        #expect(fixedStatsMaxCountVimgrepLineMatchSummary.stderr.isEmpty)
+        #expect(fixedStatsMaxCountVimgrepLineMatchSummary.stdout == expectedFixedMaxVimgrepOutput
+            + expectedStatsMaxCountSummary(
+                matches: 2,
+                matchedLines: 1,
+                bytesPrinted: expectedFixedMaxVimgrepOutput.count
+            ))
         for result in [
             fixedStatsCountMatchSummary,
             fixedStatsCountMatchesMatchSummary,
@@ -3846,6 +3964,18 @@ struct MiscTests {
         #expect(fixedJsonNoLineNumberMatch.status == 0)
         #expect(fixedJsonNoLineNumberMatch.stderr.isEmpty)
         #expect(fixedJsonNoLineNumberMatch.stdout == expectedFixedJSONMatchOutput(noLineNumber: true))
+        #expect(fixedMaxCountLineMatch.status == 0)
+        #expect(fixedMaxCountLineMatch.stderr.isEmpty)
+        #expect(fixedMaxCountLineMatch.stdout == expectedFixedMaxLineOutput)
+        #expect(fixedMaxCountOnlyMatchingMatch.status == 0)
+        #expect(fixedMaxCountOnlyMatchingMatch.stderr.isEmpty)
+        #expect(fixedMaxCountOnlyMatchingMatch.stdout == expectedFixedMaxOnlyMatchingOutput)
+        #expect(fixedMaxCountVimgrepLineMatch.status == 0)
+        #expect(fixedMaxCountVimgrepLineMatch.stderr.isEmpty)
+        #expect(fixedMaxCountVimgrepLineMatch.stdout == expectedFixedMaxVimgrepOutput)
+        #expect(fixedJsonMaxCountLineMatch.status == 0)
+        #expect(fixedJsonMaxCountLineMatch.stderr.isEmpty)
+        #expect(fixedJsonMaxCountLineMatch.stdout == expectedFixedJSONMaxCountOutput())
 
         let output = try runExecutableData([
             "needle",
