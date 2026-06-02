@@ -8,6 +8,49 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Visible no-ignore file-list worker cap — 2026-06-02
+
+The Darwin no-ignore `--files` byte writer now feeds visible top-level
+directory subtrees through the same bounded Swift worker queue shape used by
+the ignore-aware writer instead of launching one GCD task per root child.
+Hidden no-ignore file listing keeps full fanout because a longer confirmation
+run showed the cap helped visible and NUL-terminated visible output but could
+slow `--no-ignore --hidden`.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint
+  `/tmp/swift-rg-bench/baseline-bd451b4-worker6-probe-1780367304-ripgrep`
+  for `--no-ignore --files`, `--no-ignore --hidden --files`, and
+  `-0 --no-ignore --files` on `/tmp/swift-rg-bench/linux`.
+- Sorted current Swift output matched Rust for visible and hidden no-ignore
+  file listing; NUL-terminated current Swift output matched sorted Rust
+  visible no-ignore output after splitting on NUL bytes.
+- `swift build -c release`, full `swift test`,
+  `SWIFT_RIPGREP_PARITY=1 swift test --filter ParityHarnessTests`,
+  `scripts/check-no-external-deps.sh --skip-build`, and `git diff --check`
+  passed.
+- The default build remains Swift-only; this change adds no C shim or custom C
+  code.
+
+A 50-run hyperfine A/B against committed checkpoint `bd451b4`, with eight
+warmups, measured:
+
+| Command | Current Swift | Checkpoint `bd451b4` | Rust |
+| --- | ---: | ---: | ---: |
+| `--no-ignore --files linux` | 79.0 ms mean / 73.0-108.3 ms range | 81.6 ms / 73.4-106.1 ms | 80.9 ms / 69.8-139.5 ms |
+| `-0 --no-ignore --files linux` | 77.6 ms / 72.7-83.6 ms | 81.0 ms / 74.9-90.4 ms | not remeasured for NUL |
+| `--no-ignore --hidden --files linux` guardrail | 83.0 ms / 76.6-89.8 ms | 83.1 ms / 78.7-129.7 ms | 74.6 ms / 70.7-82.9 ms |
+
+An earlier 80-run cap-all probe confirmed the visible and NUL wins but
+regressed hidden no-ignore from 82.4 ms to 84.0 ms, so the retained branch only
+caps visible no-ignore workers.
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/noignore-bounded-workers-probe-1780369434.json`,
+`/tmp/swift-rg-bench/noignore-bounded-workers-confirm-1780369484.json`, and
+`/tmp/swift-rg-bench/noignore-visible-bounded-hidden-full-probe-1780369639.json`.
+
 ## Twenty-one-through-thirty-two-byte rare second-byte staged SIMD helper — 2026-06-02
 
 The no-C-shim Swift memmem fallback now extends the rare-second-byte staged

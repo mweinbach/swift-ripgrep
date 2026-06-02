@@ -138,6 +138,36 @@ private struct DarwinNoIgnoreFilePathChunk: @unchecked Sendable {
     let count: Int
 }
 
+private struct DarwinNoIgnoreFilePathWorkItem: @unchecked Sendable {
+    let index: Int
+    let directoryPathBytes: [UInt8]
+    let logicalPathBytes: [UInt8]
+    let logicalPathIsASCII: Bool
+}
+
+private final class DarwinNoIgnoreFilePathWorkQueue: @unchecked Sendable {
+    private let items: [DarwinNoIgnoreFilePathWorkItem]
+    private let lock = NSLock()
+    private var nextIndex = 0
+
+    init(items: [DarwinNoIgnoreFilePathWorkItem]) {
+        self.items = items
+    }
+
+    func next() -> DarwinNoIgnoreFilePathWorkItem? {
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
+        guard nextIndex < items.count else {
+            return nil
+        }
+        let item = items[nextIndex]
+        nextIndex += 1
+        return item
+    }
+}
+
 private struct DarwinFilePathStringChunk: @unchecked Sendable {
     let lines: [String]
     let messages: [String]
@@ -2123,6 +2153,8 @@ public struct FileWalker: @unchecked Sendable {
         let store = DarwinNoIgnoreFilePathChunkStore(count: orderedChildren.count)
         let group = DispatchGroup()
         let queue = DispatchQueue.global(qos: .userInitiated)
+        var directoryWorkItems: [DarwinNoIgnoreFilePathWorkItem] = []
+        directoryWorkItems.reserveCapacity(directoryCount)
 
         for (index, child) in orderedChildren.enumerated() {
             if child.kind.isFile {
@@ -2149,37 +2181,56 @@ public struct FileWalker: @unchecked Sendable {
             let childDirectoryPathBytes = taskDirectoryPathBytes
             let childLogicalPathBytes = taskLogicalPathBytes
 
+            directoryWorkItems.append(DarwinNoIgnoreFilePathWorkItem(
+                index: index,
+                directoryPathBytes: childDirectoryPathBytes,
+                logicalPathBytes: childLogicalPathBytes,
+                logicalPathIsASCII: childLogicalPathIsASCII
+            ))
+        }
+
+        let workQueue = DarwinNoIgnoreFilePathWorkQueue(items: directoryWorkItems)
+        let workerCount = includeHidden
+            ? directoryWorkItems.count
+            : min(directoryWorkItems.count, darwinFilePathDataWorkerLimit)
+        for _ in 0..<workerCount {
             group.enter()
             queue.async {
                 defer {
                     group.leave()
                 }
-                var directoryPathBytes = childDirectoryPathBytes
-                var logicalPathBytes = childLogicalPathBytes
-                var flushedOutput = Data()
-                var output = Data()
-                output.reserveCapacity(64 * 1024)
-                var emittedCount = 0
-                do {
-                    try writeDarwinNoIgnoreFilePathsInOutputOrder(
-                        directoryPathBytes: &directoryPathBytes,
-                        logicalPathBytes: &logicalPathBytes,
-                        logicalPathIsASCII: childLogicalPathIsASCII,
-                        includeHidden: includeHidden,
-                        terminator: terminator,
-                        emittedCount: &emittedCount,
-                        outputBuffer: &output,
-                        writeBytes: { bytes in
-                            flushedOutput.append(bytes.bindMemory(to: UInt8.self))
-                        }
-                    )
-                    flushedOutput.append(output)
-                    store.store(
-                        .success(DarwinNoIgnoreFilePathChunk(data: flushedOutput, count: emittedCount)),
-                        at: index
-                    )
-                } catch {
-                    store.store(.failure(error), at: index)
+                while true {
+                    guard let workItem = workQueue.next() else {
+                        return
+                    }
+
+                    var directoryPathBytes = workItem.directoryPathBytes
+                    var logicalPathBytes = workItem.logicalPathBytes
+                    var flushedOutput = Data()
+                    var output = Data()
+                    output.reserveCapacity(64 * 1024)
+                    var emittedCount = 0
+                    do {
+                        try writeDarwinNoIgnoreFilePathsInOutputOrder(
+                            directoryPathBytes: &directoryPathBytes,
+                            logicalPathBytes: &logicalPathBytes,
+                            logicalPathIsASCII: workItem.logicalPathIsASCII,
+                            includeHidden: includeHidden,
+                            terminator: terminator,
+                            emittedCount: &emittedCount,
+                            outputBuffer: &output,
+                            writeBytes: { bytes in
+                                flushedOutput.append(bytes.bindMemory(to: UInt8.self))
+                            }
+                        )
+                        flushedOutput.append(output)
+                        store.store(
+                            .success(DarwinNoIgnoreFilePathChunk(data: flushedOutput, count: emittedCount)),
+                            at: workItem.index
+                        )
+                    } catch {
+                        store.store(.failure(error), at: workItem.index)
+                    }
                 }
             }
         }
