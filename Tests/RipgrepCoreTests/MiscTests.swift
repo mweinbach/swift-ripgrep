@@ -874,6 +874,46 @@ struct MiscTests {
         ], fixture: {})
         #expect(sparseCandidateNoMmapLineOutput.isEmpty)
         try noCandidateRoot.write("""
+        all lowercase and digits 12345
+        more lowercase without uppercase runs
+        """, to: "later-class-absent.txt")
+        let laterClassAbsentNoMmapLineOutput = try runExecutableData([
+            "--no-mmap",
+            "-n",
+            "[a-z][A-Z]{4}",
+            noCandidateRoot.path("later-class-absent.txt"),
+        ], fixture: {})
+        #expect(laterClassAbsentNoMmapLineOutput.isEmpty)
+        let laterClassAbsentFilesWithoutMatchOutput = try runExecutableData([
+            "--no-mmap",
+            "--files-without-match",
+            "[a-z][A-Z]{4}",
+            noCandidateRoot.path("later-class-absent.txt"),
+        ], fixture: {})
+        #expect(laterClassAbsentFilesWithoutMatchOutput == Data("\(noCandidateRoot.path("later-class-absent.txt"))\n".utf8))
+        try noCandidateRoot.write("""
+        lower
+        aABCD
+        xx bWXYZ tail
+        cABC
+        """, to: "later-class-anchor.txt")
+        let laterClassAnchorLineOutput = try runExecutableData([
+            "-n",
+            "[a-z][A-Z]{4}",
+            noCandidateRoot.path("later-class-anchor.txt"),
+        ], fixture: {})
+        #expect(String(decoding: laterClassAnchorLineOutput, as: UTF8.self) == """
+        2:aABCD
+        3:xx bWXYZ tail
+
+        """)
+        let laterClassAnchorCountMatchesOutput = try runExecutableData([
+            "--count-matches",
+            "[a-z][A-Z]{4}",
+            noCandidateRoot.path("later-class-anchor.txt"),
+        ], fixture: {})
+        #expect(laterClassAnchorCountMatchesOutput == Data("2\n".utf8))
+        try noCandidateRoot.write("""
         alpha
 
         one Z here

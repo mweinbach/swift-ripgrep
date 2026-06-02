@@ -8,6 +8,47 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Later-class absence proof for fixed ASCII class sequences — 2026-06-02
+
+The fixed ASCII class sequence fast path now samples for a sparse required
+later class after the existing first-class proof succeeds. When the first
+class is dense but a distinct later class is sparse, Swift performs one full
+absence proof for that later class before falling back to the normal scanner.
+This lets patterns like `[a-z][A-Z]{4}` reject all-lowercase haystacks from
+the absent uppercase class instead of walking every lowercase byte candidate.
+The retained change does not rewrite the scanner or add any C shim/custom C
+code.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint
+  `/tmp/swift-rg-bench/baseline-5c06631-fixed-simd32-1780372147-ripgrep`
+  and Rust for later-class miss/hit line output, `--count-matches`,
+  `--files-without-match`, existing `[A-Z]{5}` no-candidate/sparse
+  guardrails, the mixed fixed sequence guardrail, and dense lowercase counts.
+- `swift build -c release`, full `swift test`,
+  `SWIFT_RIPGREP_PARITY=1 swift test --filter ParityHarnessTests`,
+  `scripts/check-no-external-deps.sh --skip-build`, and `git diff --check`
+  passed.
+
+The final same-session hyperfine checks, with Rust included as the oracle,
+measured:
+
+| Case | Current Swift | Checkpoint `5c06631` | Rust |
+| --- | ---: | ---: | ---: |
+| `[a-z][A-Z]{4}` line-output miss | 40.2 ms mean / 39.5 ms median | 110.8 ms / 110.4 ms | 69.0 ms / 68.5 ms |
+| `[a-z][A-Z]{4}` `--files-without-match` | 37.2 ms / 37.1 ms | 111.3 ms / 110.6 ms | 69.1 ms / 68.0 ms |
+| `[A-Z]{5}` first-class absence guardrail | 46.2 ms / 44.9 ms | 41.8 ms / 38.5 ms | 19.1 ms / 19.2 ms |
+
+The pure first-class absence guardrail remains noisy and was a few
+milliseconds slower in the final focused pass; the retained implementation is
+therefore deliberately scoped to a later-class absence proof rather than the
+broader later-anchor scanner prototype, which was rejected.
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/fixed-anchor-wrapper-final-1780376840.json` and
+`/tmp/swift-rg-bench/fixed-nocand-wrapper-noinline-1780376812.json`.
+
 ## Visible no-ignore file-list worker cap — 2026-06-02
 
 The Darwin no-ignore `--files` byte writer now feeds visible top-level

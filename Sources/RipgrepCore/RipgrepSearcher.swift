@@ -7826,6 +7826,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
         guard hasFirstClassCandidate else {
             return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: data.count, searched: true)
         }
+        guard asciiFixedClassHasRequiredLaterClassCandidate(data, classes: classes) else {
+            return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: data.count, searched: true)
+        }
 
         if countOutput || pathStatsOutput || jsonQuietSummaryOutput || quietStatsOutput {
             let counts = data.withUnsafeBytes { rawBuffer -> ASCIIFixedClassCounts in
@@ -8698,6 +8701,111 @@ public struct RipgrepSearcher: @unchecked Sendable {
             cursor += 1
         }
         return false
+    }
+
+    @inline(never)
+    private func asciiFixedClassHasRequiredLaterClassCandidate(
+        _ data: Data,
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass]
+    ) -> Bool {
+        data.withUnsafeBytes { rawBuffer -> Bool in
+            let bytes = rawBuffer.bindMemory(to: UInt8.self)
+            guard let baseAddress = bytes.baseAddress,
+                  let proofClass = asciiFixedClassLaterAbsenceProofClass(
+                    baseAddress: baseAddress,
+                    dataCount: data.count,
+                    classes: classes
+                  ) else {
+                return true
+            }
+            return asciiFixedClassContainsCandidate(
+                baseAddress: baseAddress,
+                dataCount: data.count,
+                byteClass: proofClass
+            )
+        }
+    }
+
+    @inline(never)
+    private func asciiFixedClassLaterAbsenceProofClass(
+        baseAddress: UnsafePointer<UInt8>,
+        dataCount: Int,
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass]
+    ) -> ASCIIFixedClassSequenceFastPath.ByteClass? {
+        guard classes.count > 1 else {
+            return nil
+        }
+
+        let firstClass = classes[0]
+        var needsUppercase = false
+        var needsLowercase = false
+        var needsDigit = false
+        for index in classes.indices.dropFirst() {
+            switch classes[index] {
+            case .uppercase where classes[index] != firstClass:
+                needsUppercase = true
+            case .lowercase where classes[index] != firstClass:
+                needsLowercase = true
+            case .digit where classes[index] != firstClass:
+                needsDigit = true
+            default:
+                break
+            }
+        }
+        guard needsUppercase || needsLowercase || needsDigit else {
+            return nil
+        }
+
+        let sampleCount = min(dataCount, 4096)
+        guard sampleCount > 0 else {
+            return nil
+        }
+
+        var firstClassMatches = 0
+        var uppercaseMatches = 0
+        var lowercaseMatches = 0
+        var digitMatches = 0
+        var offset = 0
+        while offset < sampleCount {
+            let value = baseAddress[offset]
+            if byte(value, matches: firstClass) {
+                firstClassMatches += 1
+            }
+            if needsUppercase, byte(value, matches: .uppercase) {
+                uppercaseMatches += 1
+            }
+            if needsLowercase, byte(value, matches: .lowercase) {
+                lowercaseMatches += 1
+            }
+            if needsDigit, byte(value, matches: .digit) {
+                digitMatches += 1
+            }
+            offset += 1
+        }
+
+        guard firstClassMatches * 8 > sampleCount else {
+            return nil
+        }
+
+        var bestClass: ASCIIFixedClassSequenceFastPath.ByteClass?
+        var bestMatches = Int.max
+        func consider(_ byteClass: ASCIIFixedClassSequenceFastPath.ByteClass, matches: Int) {
+            guard matches * 8 <= sampleCount, matches < bestMatches else {
+                return
+            }
+            bestClass = byteClass
+            bestMatches = matches
+        }
+        if needsUppercase {
+            consider(.uppercase, matches: uppercaseMatches)
+        }
+        if needsLowercase {
+            consider(.lowercase, matches: lowercaseMatches)
+        }
+        if needsDigit {
+            consider(.digit, matches: digitMatches)
+        }
+        return bestClass
     }
 
     @inline(__always)
