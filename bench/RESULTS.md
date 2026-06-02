@@ -8,6 +8,46 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Interior rare-byte proof for long Swift memmem literals — 2026-06-02
+
+The no-C-shim Swift memmem fallback now lets 13-byte through 32-byte literals
+choose a rare proof byte from the interior of the needle instead of only
+checking byte 1. Score-0 proof bytes still route through the existing `memchr`
+gate, while score-1 proof bytes route through the staged SIMD verifier when the
+proof byte is not already the middle byte. The broader selector is only tried
+when byte 1 is not in the common vowel/space tiers, preserving the dense
+common-literal path. This stays Swift-first and does not add a C shim.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint `fd212fb` and Rust for
+  the new interior rare-byte no-match line output, `--files-without-match`, the
+  existing rare-second-byte guard, and the dense common-byte `missingliteral`
+  guard.
+- Added a regression test for an interior `q` proof byte where byte 1 is
+  common enough that the previous selector stayed on the generic verifier.
+- `swift build -c release` and
+  `swift test --filter interiorRareByteLiteralSIMDCandidatesRemainExact`
+  passed before benchmarking.
+- Post-benchmark `swift test --filter LiteralSIMD`, full `swift test`,
+  `SWIFT_RIPGREP_PARITY=1 swift test --filter ParityHarnessTests`,
+  `scripts/check-no-external-deps.sh --skip-build`, and `git diff --check`
+  passed.
+
+A same-session hyperfine A/B against checkpoint `fd212fb`, with Rust included
+as the oracle, measured:
+
+| Case | Current Swift | Checkpoint `fd212fb` | Rust |
+| --- | ---: | ---: | ---: |
+| 14-byte interior-`q` no-match line output | 5.9 ms mean / 5.5-7.6 ms range | 21.5 ms / 21.1-22.7 ms | 6.9 ms / 6.7-7.8 ms |
+| 14-byte interior-`q` `--stats --files-without-match` | 5.8 ms / 5.6-7.8 ms | 16.2 ms / 15.7-17.2 ms | 6.0 ms / 5.9-6.3 ms |
+| Existing rare-second-byte guard | 5.6 ms / 5.5-5.9 ms | 5.8 ms / 5.5-7.3 ms | 6.9 ms / 6.7-7.2 ms |
+| Dense common-byte `missingliteral` guard | 65.9 ms / 64.5-69.1 ms | 66.2 ms / 65.0-67.9 ms | 66.2 ms / 65.2-67.7 ms |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/interior-proof-byte-final-1780391869.json` and
+`/tmp/swift-rg-bench/interior-proof-byte-hotpath-1780391838.json`.
+
 ## Rejected fixed-class buffered read policy — 2026-06-02
 
 A Swift-only probe made automatic mmap choose a buffered read for explicit

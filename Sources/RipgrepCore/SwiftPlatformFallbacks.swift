@@ -855,11 +855,61 @@ private func rgMemmemProofScore(_ byte: UInt8) -> Int {
     }
 }
 
+private enum RgMemmemLongLiteralProof {
+    case memchr(offset: Int)
+    case staged(offset: Int)
+}
+
+private func rgMemmemLongLiteralProof(
+    needle: UnsafePointer<UInt8>,
+    needleLength: Int,
+    secondScore: Int
+) -> RgMemmemLongLiteralProof? {
+    guard needleLength > 2 else {
+        return nil
+    }
+
+    let middleIndex = needleLength / 2
+    var bestAnyOffset = 1
+    var bestAnyScore = secondScore
+    var bestStagedOffset = middleIndex == 1 ? nil : Optional(1)
+    var bestStagedScore = bestStagedOffset == nil ? Int.max : secondScore
+
+    var offset = 2
+    while offset < needleLength - 1 {
+        let score = rgMemmemProofScore(needle[offset])
+        if score < bestAnyScore {
+            bestAnyOffset = offset
+            bestAnyScore = score
+            if score == 0 {
+                break
+            }
+        }
+        if offset != middleIndex, score < bestStagedScore {
+            bestStagedOffset = offset
+            bestStagedScore = score
+            if score == 0 {
+                break
+            }
+        }
+        offset += 1
+    }
+
+    if bestAnyScore == 0 {
+        return .memchr(offset: bestAnyOffset)
+    }
+    if let bestStagedOffset, bestStagedScore <= 1 {
+        return .staged(offset: bestStagedOffset)
+    }
+    return nil
+}
+
 private func rgMemmemStagedExactSIMD16(
     haystack: UnsafePointer<UInt8>,
     haystackLength: Int,
     needle: UnsafePointer<UInt8>,
-    needleLength: Int
+    needleLength: Int,
+    proofOffset: Int
 ) -> UnsafePointer<UInt8>? {
     let first = needle[0]
     let tail = needle[needleLength - 1]
@@ -875,7 +925,6 @@ private func rgMemmemStagedExactSIMD16(
         .loadUnaligned(as: UInt64.self)
     let middleSpanOffset = 8
     let middleSpanLength = max(0, tailWordOffset - middleSpanOffset)
-    let proofOffset = 1
     let proofVector = SIMD16<UInt8>(repeating: needle[proofOffset])
 
     var cursor = 0
@@ -944,9 +993,9 @@ private func rgMemmemRareProofByteMemchr(
     haystack: UnsafePointer<UInt8>,
     haystackLength: Int,
     needle: UnsafePointer<UInt8>,
-    needleLength: Int
+    needleLength: Int,
+    proofOffset: Int
 ) -> UnsafePointer<UInt8>? {
-    let proofOffset = 1
     let proof = needle[proofOffset]
     let first = needle[0]
     let tail = needle[needleLength - 1]
@@ -1032,16 +1081,31 @@ private func rgMemmemSIMD16(
                 haystack: haystack,
                 haystackLength: haystackLength,
                 needle: needle,
-                needleLength: needleLength
+                needleLength: needleLength,
+                proofOffset: 1
             )
         }
-        if proofScore <= 1 {
-            return rgMemmemStagedExactSIMD16(
-                haystack: haystack,
-                haystackLength: haystackLength,
-                needle: needle,
-                needleLength: needleLength
-            )
+        if proofScore <= 4 {
+            switch rgMemmemLongLiteralProof(needle: needle, needleLength: needleLength, secondScore: proofScore) {
+            case .memchr(let proofOffset):
+                return rgMemmemRareProofByteMemchr(
+                    haystack: haystack,
+                    haystackLength: haystackLength,
+                    needle: needle,
+                    needleLength: needleLength,
+                    proofOffset: proofOffset
+                )
+            case .staged(let proofOffset):
+                return rgMemmemStagedExactSIMD16(
+                    haystack: haystack,
+                    haystackLength: haystackLength,
+                    needle: needle,
+                    needleLength: needleLength,
+                    proofOffset: proofOffset
+                )
+            case nil:
+                break
+            }
         }
     }
 
@@ -2007,7 +2071,8 @@ private func rgMemmemStagedExactCountByteBeforeSIMD16(
     haystackLength: Int,
     needle: UnsafePointer<UInt8>,
     needleLength: Int,
-    byte: UInt8
+    byte: UInt8,
+    proofOffset: Int
 ) -> (match: UnsafePointer<UInt8>?, count: Int) {
     let first = needle[0]
     let tail = needle[needleLength - 1]
@@ -2024,7 +2089,6 @@ private func rgMemmemStagedExactCountByteBeforeSIMD16(
         .loadUnaligned(as: UInt64.self)
     let middleSpanOffset = 8
     let middleSpanLength = max(0, tailWordOffset - middleSpanOffset)
-    let proofOffset = 1
     let proofVector = SIMD16<UInt8>(repeating: needle[proofOffset])
 
     var count = 0
@@ -2102,13 +2166,15 @@ private func rgMemmemRareProofByteMemchrCountByteBefore(
     haystackLength: Int,
     needle: UnsafePointer<UInt8>,
     needleLength: Int,
-    byte: UInt8
+    byte: UInt8,
+    proofOffset: Int
 ) -> (match: UnsafePointer<UInt8>?, count: Int) {
     guard let match = rgMemmemRareProofByteMemchr(
         haystack: haystack,
         haystackLength: haystackLength,
         needle: needle,
-        needleLength: needleLength
+        needleLength: needleLength,
+        proofOffset: proofOffset
     ) else {
         return (nil, 0)
     }
@@ -2173,17 +2239,33 @@ func rg_memmem_count_byte_before(
                 haystackLength: haystackLength,
                 needle: needle,
                 needleLength: needleLength,
-                byte: byte
+                byte: byte,
+                proofOffset: 1
             )
         }
-        if proofScore <= 1 {
-            return rgMemmemStagedExactCountByteBeforeSIMD16(
-                haystack: haystack,
-                haystackLength: haystackLength,
-                needle: needle,
-                needleLength: needleLength,
-                byte: byte
-            )
+        if proofScore <= 4 {
+            switch rgMemmemLongLiteralProof(needle: needle, needleLength: needleLength, secondScore: proofScore) {
+            case .memchr(let proofOffset):
+                return rgMemmemRareProofByteMemchrCountByteBefore(
+                    haystack: haystack,
+                    haystackLength: haystackLength,
+                    needle: needle,
+                    needleLength: needleLength,
+                    byte: byte,
+                    proofOffset: proofOffset
+                )
+            case .staged(let proofOffset):
+                return rgMemmemStagedExactCountByteBeforeSIMD16(
+                    haystack: haystack,
+                    haystackLength: haystackLength,
+                    needle: needle,
+                    needleLength: needleLength,
+                    byte: byte,
+                    proofOffset: proofOffset
+                )
+            case nil:
+                break
+            }
         }
     }
 
