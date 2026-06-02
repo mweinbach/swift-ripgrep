@@ -2887,6 +2887,41 @@ struct RipgrepCommand {
            ) {
             return exitCode
         }
+        if parsedCountStyleOutput,
+           paths.count == 1,
+           !parsedJson,
+           !parsedStats,
+           !parsedQuiet,
+           !fixedStrings,
+           !asciiCaseInsensitive,
+           !wordRegexp,
+           !parsedLineRegexp,
+           !parsedOnlyMatching,
+           !parsedVimgrep,
+           parsedMaxCount == nil,
+           parsedAfterContext == 0,
+           parsedBeforeContext == 0,
+           !parsedInvertMatch,
+           !parsedNullData,
+           !parsedPassthru,
+           !parsedReplacement,
+           !parsedStopOnNonmatch,
+           !parsedSearchZipAffectsPreflight,
+           parsedEncodingIsAutomatic,
+           !parsedColorAffectsPreflightOutput,
+           (patternCanStartWithDash || !pattern.hasPrefix("-")),
+           path != "-",
+           isReadableRegularFile(path),
+           let exitCode = SwiftDarwinLiteralPreflight.asciiFixedClassMatchedCountOutputExitCode(
+            path: path,
+            pattern: pattern,
+            countMatches: parsedPrintMode == .countMatches,
+            includeZero: parsedIncludeZero,
+            countPrefix: parsedCountPrefix,
+            crlfTerminated: parsedCrlf
+           ) {
+            return exitCode
+        }
         if parsedJson || parsedStats,
            parsedSummaryPrintModeCanUseNoMatchPreflight,
            paths.count == 1,

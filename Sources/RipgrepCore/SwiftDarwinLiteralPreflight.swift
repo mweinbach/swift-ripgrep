@@ -1073,6 +1073,32 @@ public enum SwiftDarwinLiteralPreflight {
         )
     }
 
+    public static func asciiFixedClassMatchedCountOutputExitCode(
+        path: String,
+        pattern: String,
+        countMatches: Bool,
+        includeZero: Bool,
+        countPrefix: [UInt8],
+        crlfTerminated: Bool
+    ) -> Int32? {
+        guard let classes = asciiFixedClassSequenceClasses(pattern: pattern),
+              let stats = asciiFixedClassMatchedSummaryStats(path: path, classes: classes) else {
+            return nil
+        }
+        let count = countMatches ? stats.totalMatches : stats.matchedLines
+        guard count > 0 || includeZero else {
+            return nil
+        }
+        guard writeCountOutput(
+            count,
+            countPrefix: countPrefix,
+            crlfTerminated: crlfTerminated
+        ) else {
+            return nil
+        }
+        return 0
+    }
+
     public static func asciiFixedClassMatchedQuietStatsExitCode(
         path: String,
         pattern: String
