@@ -628,6 +628,210 @@ private func rgMemmem10SIMD16(
     return nil
 }
 
+private func rgMemmem11SIMD16(
+    haystack: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    needle: UnsafePointer<UInt8>
+) -> UnsafePointer<UInt8>? {
+    let first = needle[0]
+    let second = needle[1]
+    let third = needle[2]
+    let fourth = needle[3]
+    let fifth = needle[4]
+    let middle = needle[5]
+    let seventh = needle[6]
+    let eighth = needle[7]
+    let ninth = needle[8]
+    let tenth = needle[9]
+    let tail = needle[10]
+    let firstVector = SIMD16<UInt8>(repeating: first)
+    let secondVector = SIMD16<UInt8>(repeating: second)
+    let thirdVector = SIMD16<UInt8>(repeating: third)
+    let fourthVector = SIMD16<UInt8>(repeating: fourth)
+    let fifthVector = SIMD16<UInt8>(repeating: fifth)
+    let middleVector = SIMD16<UInt8>(repeating: middle)
+    let seventhVector = SIMD16<UInt8>(repeating: seventh)
+    let eighthVector = SIMD16<UInt8>(repeating: eighth)
+    let ninthVector = SIMD16<UInt8>(repeating: ninth)
+    let tenthVector = SIMD16<UInt8>(repeating: tenth)
+    let tailVector = SIMD16<UInt8>(repeating: tail)
+
+    var cursor = 0
+    let vectorLimit = haystackLength >= 26 ? haystackLength - 25 : 0
+    while cursor < vectorLimit {
+        let firstBytes = UnsafeRawPointer(haystack.advanced(by: cursor))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let middleBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 5))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let tailBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 10))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let candidateMask = (
+            (firstBytes .== firstVector)
+                .& (middleBytes .== middleVector)
+                .& (tailBytes .== tailVector)
+        )
+        if candidateMask._storage.min() < 0 {
+            let secondBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 1))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let thirdBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 2))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let fourthBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 3))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let fifthBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 4))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let seventhBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 6))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let eighthBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 7))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let ninthBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 8))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let tenthBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 9))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let exactStorage = (
+                candidateMask
+                    .& (secondBytes .== secondVector)
+                    .& (thirdBytes .== thirdVector)
+                    .& (fourthBytes .== fourthVector)
+                    .& (fifthBytes .== fifthVector)
+                    .& (seventhBytes .== seventhVector)
+                    .& (eighthBytes .== eighthVector)
+                    .& (ninthBytes .== ninthVector)
+                    .& (tenthBytes .== tenthVector)
+            )._storage
+            if exactStorage.min() < 0 {
+                for lane in 0..<16 where exactStorage[lane] != 0 {
+                    return haystack.advanced(by: cursor + lane)
+                }
+            }
+        }
+        cursor += 16
+    }
+
+    let maxStart = haystackLength - 10
+    while cursor < maxStart {
+        if haystack[cursor] == first,
+           haystack[cursor + 1] == second,
+           haystack[cursor + 2] == third,
+           haystack[cursor + 3] == fourth,
+           haystack[cursor + 4] == fifth,
+           haystack[cursor + 5] == middle,
+           haystack[cursor + 6] == seventh,
+           haystack[cursor + 7] == eighth,
+           haystack[cursor + 8] == ninth,
+           haystack[cursor + 9] == tenth,
+           haystack[cursor + 10] == tail {
+            return haystack.advanced(by: cursor)
+        }
+        cursor += 1
+    }
+    return nil
+}
+
+private func rgMemmem12SIMD16(
+    haystack: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    needle: UnsafePointer<UInt8>
+) -> UnsafePointer<UInt8>? {
+    let first = needle[0]
+    let second = needle[1]
+    let third = needle[2]
+    let fourth = needle[3]
+    let fifth = needle[4]
+    let sixth = needle[5]
+    let middle = needle[6]
+    let eighth = needle[7]
+    let ninth = needle[8]
+    let tenth = needle[9]
+    let eleventh = needle[10]
+    let tail = needle[11]
+    let firstVector = SIMD16<UInt8>(repeating: first)
+    let secondVector = SIMD16<UInt8>(repeating: second)
+    let thirdVector = SIMD16<UInt8>(repeating: third)
+    let fourthVector = SIMD16<UInt8>(repeating: fourth)
+    let fifthVector = SIMD16<UInt8>(repeating: fifth)
+    let sixthVector = SIMD16<UInt8>(repeating: sixth)
+    let middleVector = SIMD16<UInt8>(repeating: middle)
+    let eighthVector = SIMD16<UInt8>(repeating: eighth)
+    let ninthVector = SIMD16<UInt8>(repeating: ninth)
+    let tenthVector = SIMD16<UInt8>(repeating: tenth)
+    let eleventhVector = SIMD16<UInt8>(repeating: eleventh)
+    let tailVector = SIMD16<UInt8>(repeating: tail)
+
+    var cursor = 0
+    let vectorLimit = haystackLength >= 27 ? haystackLength - 26 : 0
+    while cursor < vectorLimit {
+        let firstBytes = UnsafeRawPointer(haystack.advanced(by: cursor))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let middleBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 6))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let tailBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 11))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let candidateMask = (
+            (firstBytes .== firstVector)
+                .& (middleBytes .== middleVector)
+                .& (tailBytes .== tailVector)
+        )
+        if candidateMask._storage.min() < 0 {
+            let secondBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 1))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let thirdBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 2))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let fourthBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 3))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let fifthBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 4))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let sixthBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 5))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let eighthBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 7))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let ninthBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 8))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let tenthBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 9))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let eleventhBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 10))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let exactStorage = (
+                candidateMask
+                    .& (secondBytes .== secondVector)
+                    .& (thirdBytes .== thirdVector)
+                    .& (fourthBytes .== fourthVector)
+                    .& (fifthBytes .== fifthVector)
+                    .& (sixthBytes .== sixthVector)
+                    .& (eighthBytes .== eighthVector)
+                    .& (ninthBytes .== ninthVector)
+                    .& (tenthBytes .== tenthVector)
+                    .& (eleventhBytes .== eleventhVector)
+            )._storage
+            if exactStorage.min() < 0 {
+                for lane in 0..<16 where exactStorage[lane] != 0 {
+                    return haystack.advanced(by: cursor + lane)
+                }
+            }
+        }
+        cursor += 16
+    }
+
+    let maxStart = haystackLength - 11
+    while cursor < maxStart {
+        if haystack[cursor] == first,
+           haystack[cursor + 1] == second,
+           haystack[cursor + 2] == third,
+           haystack[cursor + 3] == fourth,
+           haystack[cursor + 4] == fifth,
+           haystack[cursor + 5] == sixth,
+           haystack[cursor + 6] == middle,
+           haystack[cursor + 7] == eighth,
+           haystack[cursor + 8] == ninth,
+           haystack[cursor + 9] == tenth,
+           haystack[cursor + 10] == eleventh,
+           haystack[cursor + 11] == tail {
+            return haystack.advanced(by: cursor)
+        }
+        cursor += 1
+    }
+    return nil
+}
+
 private func rgMemmemSIMD16(
     haystack: UnsafePointer<UInt8>,
     haystackLength: Int,
@@ -660,6 +864,12 @@ private func rgMemmemSIMD16(
     }
     if needleLength == 10 {
         return rgMemmem10SIMD16(haystack: haystack, haystackLength: haystackLength, needle: needle)
+    }
+    if needleLength == 11 {
+        return rgMemmem11SIMD16(haystack: haystack, haystackLength: haystackLength, needle: needle)
+    }
+    if needleLength == 12 {
+        return rgMemmem12SIMD16(haystack: haystack, haystackLength: haystackLength, needle: needle)
     }
 
     let first = needle[0]
@@ -1395,6 +1605,230 @@ private func rgMemmem10CountByteBeforeSIMD16(
     return (nil, count)
 }
 
+private func rgMemmem11CountByteBeforeSIMD16(
+    haystack: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    needle: UnsafePointer<UInt8>,
+    byte: UInt8
+) -> (match: UnsafePointer<UInt8>?, count: Int) {
+    let first = needle[0]
+    let second = needle[1]
+    let third = needle[2]
+    let fourth = needle[3]
+    let fifth = needle[4]
+    let middle = needle[5]
+    let seventh = needle[6]
+    let eighth = needle[7]
+    let ninth = needle[8]
+    let tenth = needle[9]
+    let tail = needle[10]
+    let firstVector = SIMD16<UInt8>(repeating: first)
+    let secondVector = SIMD16<UInt8>(repeating: second)
+    let thirdVector = SIMD16<UInt8>(repeating: third)
+    let fourthVector = SIMD16<UInt8>(repeating: fourth)
+    let fifthVector = SIMD16<UInt8>(repeating: fifth)
+    let middleVector = SIMD16<UInt8>(repeating: middle)
+    let seventhVector = SIMD16<UInt8>(repeating: seventh)
+    let eighthVector = SIMD16<UInt8>(repeating: eighth)
+    let ninthVector = SIMD16<UInt8>(repeating: ninth)
+    let tenthVector = SIMD16<UInt8>(repeating: tenth)
+    let tailVector = SIMD16<UInt8>(repeating: tail)
+    let countVector = SIMD16<UInt8>(repeating: byte)
+
+    var count = 0
+    var cursor = 0
+    let vectorLimit = haystackLength >= 26 ? haystackLength - 25 : 0
+    while cursor < vectorLimit {
+        let firstBytes = UnsafeRawPointer(haystack.advanced(by: cursor))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let middleBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 5))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let tailBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 10))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let candidateMask = (
+            (firstBytes .== firstVector)
+                .& (middleBytes .== middleVector)
+                .& (tailBytes .== tailVector)
+        )
+        if candidateMask._storage.min() < 0 {
+            let secondBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 1))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let thirdBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 2))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let fourthBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 3))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let fifthBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 4))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let seventhBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 6))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let eighthBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 7))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let ninthBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 8))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let tenthBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 9))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let exactStorage = (
+                candidateMask
+                    .& (secondBytes .== secondVector)
+                    .& (thirdBytes .== thirdVector)
+                    .& (fourthBytes .== fourthVector)
+                    .& (fifthBytes .== fifthVector)
+                    .& (seventhBytes .== seventhVector)
+                    .& (eighthBytes .== eighthVector)
+                    .& (ninthBytes .== ninthVector)
+                    .& (tenthBytes .== tenthVector)
+            )._storage
+            if exactStorage.min() < 0 {
+                for lane in 0..<16 where exactStorage[lane] != 0 {
+                    for offset in 0..<lane where haystack[cursor + offset] == byte {
+                        count += 1
+                    }
+                    return (haystack.advanced(by: cursor + lane), count)
+                }
+            }
+        }
+        count -= Int((firstBytes .== countVector)._storage.wrappedSum())
+        cursor += 16
+    }
+
+    let maxStart = haystackLength - 10
+    while cursor < maxStart {
+        if haystack[cursor] == first,
+           haystack[cursor + 1] == second,
+           haystack[cursor + 2] == third,
+           haystack[cursor + 3] == fourth,
+           haystack[cursor + 4] == fifth,
+           haystack[cursor + 5] == middle,
+           haystack[cursor + 6] == seventh,
+           haystack[cursor + 7] == eighth,
+           haystack[cursor + 8] == ninth,
+           haystack[cursor + 9] == tenth,
+           haystack[cursor + 10] == tail {
+            return (haystack.advanced(by: cursor), count)
+        }
+        if haystack[cursor] == byte {
+            count += 1
+        }
+        cursor += 1
+    }
+    return (nil, count)
+}
+
+private func rgMemmem12CountByteBeforeSIMD16(
+    haystack: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    needle: UnsafePointer<UInt8>,
+    byte: UInt8
+) -> (match: UnsafePointer<UInt8>?, count: Int) {
+    let first = needle[0]
+    let second = needle[1]
+    let third = needle[2]
+    let fourth = needle[3]
+    let fifth = needle[4]
+    let sixth = needle[5]
+    let middle = needle[6]
+    let eighth = needle[7]
+    let ninth = needle[8]
+    let tenth = needle[9]
+    let eleventh = needle[10]
+    let tail = needle[11]
+    let firstVector = SIMD16<UInt8>(repeating: first)
+    let secondVector = SIMD16<UInt8>(repeating: second)
+    let thirdVector = SIMD16<UInt8>(repeating: third)
+    let fourthVector = SIMD16<UInt8>(repeating: fourth)
+    let fifthVector = SIMD16<UInt8>(repeating: fifth)
+    let sixthVector = SIMD16<UInt8>(repeating: sixth)
+    let middleVector = SIMD16<UInt8>(repeating: middle)
+    let eighthVector = SIMD16<UInt8>(repeating: eighth)
+    let ninthVector = SIMD16<UInt8>(repeating: ninth)
+    let tenthVector = SIMD16<UInt8>(repeating: tenth)
+    let eleventhVector = SIMD16<UInt8>(repeating: eleventh)
+    let tailVector = SIMD16<UInt8>(repeating: tail)
+    let countVector = SIMD16<UInt8>(repeating: byte)
+
+    var count = 0
+    var cursor = 0
+    let vectorLimit = haystackLength >= 27 ? haystackLength - 26 : 0
+    while cursor < vectorLimit {
+        let firstBytes = UnsafeRawPointer(haystack.advanced(by: cursor))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let middleBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 6))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let tailBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 11))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let candidateMask = (
+            (firstBytes .== firstVector)
+                .& (middleBytes .== middleVector)
+                .& (tailBytes .== tailVector)
+        )
+        if candidateMask._storage.min() < 0 {
+            let secondBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 1))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let thirdBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 2))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let fourthBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 3))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let fifthBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 4))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let sixthBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 5))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let eighthBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 7))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let ninthBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 8))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let tenthBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 9))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let eleventhBytes = UnsafeRawPointer(haystack.advanced(by: cursor + 10))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let exactStorage = (
+                candidateMask
+                    .& (secondBytes .== secondVector)
+                    .& (thirdBytes .== thirdVector)
+                    .& (fourthBytes .== fourthVector)
+                    .& (fifthBytes .== fifthVector)
+                    .& (sixthBytes .== sixthVector)
+                    .& (eighthBytes .== eighthVector)
+                    .& (ninthBytes .== ninthVector)
+                    .& (tenthBytes .== tenthVector)
+                    .& (eleventhBytes .== eleventhVector)
+            )._storage
+            if exactStorage.min() < 0 {
+                for lane in 0..<16 where exactStorage[lane] != 0 {
+                    for offset in 0..<lane where haystack[cursor + offset] == byte {
+                        count += 1
+                    }
+                    return (haystack.advanced(by: cursor + lane), count)
+                }
+            }
+        }
+        count -= Int((firstBytes .== countVector)._storage.wrappedSum())
+        cursor += 16
+    }
+
+    let maxStart = haystackLength - 11
+    while cursor < maxStart {
+        if haystack[cursor] == first,
+           haystack[cursor + 1] == second,
+           haystack[cursor + 2] == third,
+           haystack[cursor + 3] == fourth,
+           haystack[cursor + 4] == fifth,
+           haystack[cursor + 5] == sixth,
+           haystack[cursor + 6] == middle,
+           haystack[cursor + 7] == eighth,
+           haystack[cursor + 8] == ninth,
+           haystack[cursor + 9] == tenth,
+           haystack[cursor + 10] == eleventh,
+           haystack[cursor + 11] == tail {
+            return (haystack.advanced(by: cursor), count)
+        }
+        if haystack[cursor] == byte {
+            count += 1
+        }
+        cursor += 1
+    }
+    return (nil, count)
+}
+
 func rg_memmem_count_byte_before(
     _ haystack: UnsafePointer<UInt8>?,
     _ haystackLength: Int,
@@ -1436,6 +1870,12 @@ func rg_memmem_count_byte_before(
     }
     if needleLength == 10 {
         return rgMemmem10CountByteBeforeSIMD16(haystack: haystack, haystackLength: haystackLength, needle: needle, byte: byte)
+    }
+    if needleLength == 11 {
+        return rgMemmem11CountByteBeforeSIMD16(haystack: haystack, haystackLength: haystackLength, needle: needle, byte: byte)
+    }
+    if needleLength == 12 {
+        return rgMemmem12CountByteBeforeSIMD16(haystack: haystack, haystackLength: haystackLength, needle: needle, byte: byte)
     }
 
     let first = needle[0]
