@@ -107,6 +107,13 @@ Follow-up rejected probe:
   versus 74.4 ms baseline, hidden flat/noisy at 78.1 ms for both, and
   `--no-ignore-vcs --files` slower at 59.9 ms versus 59.3 ms. The four-rule
   threshold stayed.
+- A one-rule `GlobMatcher.decision` shortcut that cached `rules.count == 1`
+  and called the existing matcher directly also preserved exact Swift output,
+  debug stderr, and sorted Rust file-list parity, but the extra branch and
+  copied rule did not pay for itself. A 100-run A/B measured default
+  `--files linux` at 77.0 ms versus 75.5 ms baseline, hidden at 80.1 ms
+  versus 77.2 ms, and `--no-ignore-vcs --files` flat/noisy at 60.8 ms versus
+  61.3 ms. The generic reverse rule loop stayed.
 
 Raw hyperfine exports:
 `/tmp/swift-rg-bench/rare-proof-memchr-1780378173.json`,
@@ -131,6 +138,8 @@ Physical-path byte rejected probe export:
 `/tmp/swift-rg-bench/physical-path-bytes-probe-1780382969.json`.
 Fast-index threshold rejected probe export:
 `/tmp/swift-rg-bench/fastindex2-probe-1780383313.json`.
+Single-rule matcher rejected probe export:
+`/tmp/swift-rg-bench/singlerule-probe-1780383725.json`.
 
 ## Later-class absence proof for fixed ASCII class sequences — 2026-06-02
 
