@@ -3093,6 +3093,13 @@ struct MiscTests {
             "missingliteral",
             root.path("summary.txt"),
         ])
+        let fixedStatsFilesWithoutMatchNoMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "--files-without-match",
+            "[A-Z]{5}",
+            root.path("fixed-summary.txt"),
+        ])
         let statsCrlfFilesWithoutMatchNoMatchSummary = try runExecutableResult([
             "--no-config",
             "--stats",
@@ -3330,6 +3337,8 @@ struct MiscTests {
         let expectedFixedPathNoMatch = Data((root.path("fixed-summary.txt") + "\n").utf8)
         let expectedFixedMatchPath = Data((root.path("summary-match.txt") + "\n").utf8)
         let expectedPathStatsNoMatchSummary = expectedPathNoMatch + expectedStatsNoMatchSummary
+        let expectedFixedPathStatsNoMatchSummary = expectedFixedPathNoMatch
+            + expectedStatsNoMatchSummary
         let expectedCrlfPathStatsNoMatchSummary = Data((root.path("summary.txt") + "\r\n").utf8)
             + expectedStatsNoMatchSummary
         func expectedStatsMatchSummary(matches: Int, matchedLines: Int) -> Data {
@@ -3479,6 +3488,9 @@ struct MiscTests {
         #expect(statsFilesWithoutMatchNoMatchSummary.status == 0)
         #expect(statsFilesWithoutMatchNoMatchSummary.stderr.isEmpty)
         #expect(statsFilesWithoutMatchNoMatchSummary.stdout == expectedPathStatsNoMatchSummary)
+        #expect(fixedStatsFilesWithoutMatchNoMatchSummary.status == 0)
+        #expect(fixedStatsFilesWithoutMatchNoMatchSummary.stderr.isEmpty)
+        #expect(fixedStatsFilesWithoutMatchNoMatchSummary.stdout == expectedFixedPathStatsNoMatchSummary)
         #expect(statsCrlfFilesWithoutMatchNoMatchSummary.status == 0)
         #expect(statsCrlfFilesWithoutMatchNoMatchSummary.stderr.isEmpty)
         #expect(statsCrlfFilesWithoutMatchNoMatchSummary.stdout == expectedCrlfPathStatsNoMatchSummary)

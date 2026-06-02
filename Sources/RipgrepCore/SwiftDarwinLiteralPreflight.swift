@@ -979,6 +979,35 @@ public enum SwiftDarwinLiteralPreflight {
         return 0
     }
 
+    public static func asciiFixedClassNoMatchPathOutputExitCode(
+        path: String,
+        pattern: String,
+        nullTerminated: Bool,
+        crlfTerminated: Bool = false,
+        outputPath: [UInt8]? = nil,
+        stats: Bool
+    ) -> Int32? {
+        guard let classes = asciiFixedClassSequenceClasses(pattern: pattern),
+              let bytesSearched = asciiFixedClassNoMatchByteCount(path: path, classes: classes) else {
+            return nil
+        }
+        guard writePathOnlyOutput(
+            path: path,
+            outputPath: outputPath,
+            nullTerminated: nullTerminated,
+            crlfTerminated: crlfTerminated
+        ) else {
+            return nil
+        }
+        if stats {
+            guard fflush(Darwin.stdout) == 0 else {
+                return nil
+            }
+            return writeNoMatchSummary(bytesSearched: bytesSearched, json: false, exitCode: 0)
+        }
+        return 0
+    }
+
     public static func asciiFixedClassNoMatchExitCode(
         path: String,
         pattern: String
