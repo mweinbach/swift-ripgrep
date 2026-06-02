@@ -8,48 +8,47 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
-## Eleven- and twelve-byte Swift memmem staged SIMD helpers — 2026-06-01
+## Eleven/twelve-byte Swift memmem staged SIMD helpers — 2026-06-01
 
-The no-C-shim Swift memmem fallback now routes eleven- and twelve-byte exact
-literals through staged SIMD16 helpers. Eleven-byte needles screen offsets
-0/5/10, twelve-byte needles screen offsets 0/6/11, and both run a full SIMD
-proof only when candidate lanes exist. This avoids the generic `memcmp`
-verifier for dense near-misses such as `tqeta zqta ` and `tqeta zqta e` over
-repeated `theta zeta` windows.
+The no-C-shim Swift memmem fallback now routes eleven-byte and twelve-byte
+exact literals through the same staged SIMD16 helper shape used by the retained
+8/9/10-byte paths. The helpers keep the cheap first/middle/tail screen for
+ordinary chunks, then run a full fixed-width SIMD proof only when candidate
+lanes exist. This avoids the generic `memcmp` verifier for dense near-misses
+such as `tqeta zqta ` and `tqeta zqta e` over repeated `theta zeta ` windows.
 
 Validation:
 
-- Added eleven-byte and twelve-byte regression tests with repeated
+- Added eleven-byte and twelve-byte exactness regressions with repeated
   `theta zeta` false candidates and positive hit lines.
 - Current Swift stdout/stderr/status matched checkpoint
   `/tmp/swift-rg-bench/baseline-38cbd11-1780358999-ripgrep` and Rust for
-  eleven-byte, twelve-byte, all-`z` no-candidate, ten-byte, nine-byte,
-  eight-byte, three-byte, longer-literal, and quiet controls. The stats cases
-  matched Rust after normalizing elapsed-time lines.
-- `swift build -c release` and the focused 2/3/4/5/6/7/8/9/10/11/12-byte
-  scanner tests passed before benchmarking.
+  eleven-byte, twelve-byte, ten-byte, longer-literal, and quiet controls. The
+  stats cases matched Rust after normalizing elapsed-time lines.
+- `swift test --filter LiteralSIMD`, `swift build -c release`, full
+  `swift test`, and `git diff --check` passed before benchmarking.
 
 A same-session 30-run hyperfine A/B against checkpoint `38cbd11`, with five
 warmups, measured:
 
 | Command | Current Swift | Checkpoint `38cbd11` | Rust |
 | --- | ---: | ---: | ---: |
-| `-n "tqeta zqta " no-match-ascii-46m.txt` | 11.9 ms mean / 11.0-13.4 ms range | 19.8 ms / 18.3-21.3 ms | 8.6 ms / 8.0-9.6 ms |
-| `--stats --files-without-match "tqeta zqta " no-match-ascii-46m.txt` | 10.5 ms / 9.0-11.5 ms | 18.7 ms / 17.4-19.9 ms | 7.7 ms / 6.6-8.8 ms |
-| `-n "tqeta zqta e" no-match-ascii-46m.txt` | 11.6 ms / 10.7-13.0 ms | 19.7 ms / 18.5-20.7 ms | 8.4 ms / 7.8-9.1 ms |
-| `--stats --files-without-match "tqeta zqta e" no-match-ascii-46m.txt` | 10.4 ms / 9.3-11.3 ms | 18.1 ms / 17.2-19.2 ms | 7.2 ms / 6.6-8.1 ms |
-| `-n zzzzzzzzzzz no-match-ascii-46m.txt` guardrail | 9.2 ms / 8.2-11.6 ms | 10.7 ms / 9.6-11.8 ms | 9.1 ms / 8.0-11.2 ms |
-| `-n zzzzzzzzzzzz no-match-ascii-46m.txt` guardrail | 9.9 ms / 8.8-11.0 ms | 12.5 ms / 10.9-20.6 ms | 8.4 ms / 7.8-9.5 ms |
-| `-n "tqeta zqta" no-match-ascii-46m.txt` guardrail | 12.0 ms / 11.5-12.7 ms | 11.4 ms / 10.4-12.0 ms | not remeasured in this pass |
-| `-n tqetazqet no-match-ascii-46m.txt` guardrail | 11.8 ms / 10.9-16.4 ms | 11.0 ms / 10.3-11.6 ms | not remeasured in this pass |
-| `-n tqetazqe no-match-ascii-46m.txt` guardrail | 10.7 ms / 9.8-11.9 ms | 10.5 ms / 9.6-11.3 ms | not remeasured in this pass |
-| `-n exa no-match-ascii-46m.txt` guardrail | 9.3 ms / 8.8-9.9 ms | 9.4 ms / 8.6-10.2 ms | not remeasured in this pass |
-| `-n missingliteral match-ascii-46m.txt` guardrail | 72.8 ms / 71.6-73.9 ms | 72.6 ms / 71.3-73.8 ms | not remeasured in this pass |
-| `-q PM_RESUME linux` guardrail | 35.1 ms / 33.7-36.8 ms | 37.2 ms / 34.1-42.4 ms | not remeasured in this pass |
+| `-n "tqeta zqta " no-match-ascii-46m.txt` | 13.0 ms mean / 11.6-15.0 ms range | 21.2 ms / 19.9-24.2 ms | 9.4 ms / 8.3-10.2 ms |
+| `--stats --files-without-match "tqeta zqta " no-match-ascii-46m.txt` | 11.3 ms / 10.3-12.8 ms | 19.9 ms / 18.4-21.4 ms | 9.0 ms / 8.0-10.1 ms |
+| `-n "tqeta zqta e" no-match-ascii-46m.txt` | 13.0 ms / 11.8-14.1 ms | 21.1 ms / 20.0-22.6 ms | 9.5 ms / 8.5-10.3 ms |
+| `--stats --files-without-match "tqeta zqta e" no-match-ascii-46m.txt` | 11.9 ms / 11.0-13.3 ms | 19.6 ms / 18.0-20.7 ms | 8.7 ms / 7.8-10.3 ms |
+| `-n zzzzzzzzzzz no-match-ascii-46m.txt` guardrail | 10.6 ms / 9.5-11.6 ms | 11.9 ms / 11.0-12.8 ms | 9.1 ms / 8.4-10.2 ms |
+| `-n zzzzzzzzzzzz no-match-ascii-46m.txt` guardrail | 10.4 ms / 9.6-11.2 ms | 11.8 ms / 10.4-12.9 ms | 9.3 ms / 8.7-10.0 ms |
+| `-n "tqeta zqta" no-match-ascii-46m.txt` guardrail | 12.2 ms / 11.6-13.6 ms | 12.1 ms / 11.5-13.0 ms | not remeasured in this pass |
+| `-n tqetazqet no-match-ascii-46m.txt` guardrail | 11.9 ms / 10.8-12.6 ms | 11.7 ms / 10.8-12.4 ms | not remeasured in this pass |
+| `-n missingliteral match-ascii-46m.txt` guardrail | 72.9 ms / 71.7-74.3 ms | 73.9 ms / 72.1-75.6 ms | not remeasured in this pass |
+| `-q PM_RESUME linux` guardrail, checkpoint-first 60-run rerun | 36.3 ms / 33.3-40.7 ms | 35.3 ms / 33.5-41.1 ms | not remeasured in this pass |
 
 Raw hyperfine exports:
-`/tmp/swift-rg-bench/eleven-twelve-specialized-probe-1780359528.json` and
-`/tmp/swift-rg-bench/eleven-twelve-specialized-guard-1780359575.json`.
+`/tmp/swift-rg-bench/eleven-twelve-specialized-probe-1780359724.json`,
+`/tmp/swift-rg-bench/eleven-twelve-specialized-stats-1780359741.json`,
+`/tmp/swift-rg-bench/eleven-twelve-specialized-guard-1780359767.json`, and
+`/tmp/swift-rg-bench/eleven-twelve-specialized-quiet-rerun-1780359792.json`.
 
 ## Ten-byte Swift memmem staged SIMD helper — 2026-06-01
 
