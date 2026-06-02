@@ -8,6 +8,39 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected fixed-class buffered read policy — 2026-06-02
+
+A Swift-only probe made automatic mmap choose a buffered read for explicit
+Darwin ASCII fixed-class plain line-output searches up to 64 MiB. A proxy pass
+suggested `--no-mmap` could reduce the `[A-Z]{5}` no-candidate miss from
+46.3 ms to 36.9 ms and sparse uppercase from 42.8 ms to 34.6 ms, while dense
+`--count-matches` stayed neutral/slightly slower. The source probe preserved
+exact stdout/stderr/status against checkpoint `adeb80b` and Rust for
+same-class no-candidate output, sparse uppercase no-run output, mixed
+later-class absence, explicit `--no-mmap`, dense lowercase `--count-matches`,
+and `--files-without-match`, but it was backed out because the default-policy
+A/B did not hold a stable win.
+
+The first 60-run hyperfine pass measured sparse uppercase better but
+no-uppercase and later-class absence worse:
+
+| Case | Probe Swift | Checkpoint `adeb80b` | Rust |
+| --- | ---: | ---: | ---: |
+| `[A-Z]{5}` no-uppercase miss | 36.8 ms mean / 37.5 ms median | 35.1 ms / 34.5 ms | 19.1 ms / 19.2 ms |
+| `[A-Z]{5}` sparse-uppercase miss | 36.0 ms / 36.0 ms | 40.9 ms / 36.2 ms | 28.3 ms / 28.2 ms |
+| `[a-z][A-Z]{4}` later-class absence | 40.7 ms / 39.0 ms | 35.1 ms / 34.2 ms | 66.3 ms / 66.2 ms |
+
+The flipped 80-run confirmation flattened the same-class rows and only kept a
+noisy later-class improvement: no-uppercase 41.1 ms probe versus 40.5 ms
+baseline, sparse uppercase 40.8 ms versus 41.1 ms, and later-class absence
+42.4 ms versus 49.7 ms.
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/fixed-mmap-vs-buffer-1780390008.json`,
+`/tmp/swift-rg-bench/fixed-buffer-policy-proxy-1780390035.json`,
+`/tmp/swift-rg-bench/fixed-buffer-policy-1780390262.json`, and
+`/tmp/swift-rg-bench/fixed-buffer-policy-flipped-1780390326.json`.
+
 ## Rejected fixed-class same-class metadata skip — 2026-06-02
 
 A Swift-only probe stored whether an ASCII fixed-class sequence contained more
