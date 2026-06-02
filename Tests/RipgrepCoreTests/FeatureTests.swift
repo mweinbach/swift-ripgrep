@@ -5430,6 +5430,21 @@ struct FeatureTests {
             root.path("explicit-prefix"),
         ])) == ["keep.rs"])
 
+        try root.createDirectory("explicit-glob-prefix/vendor")
+        try root.createDirectory("explicit-glob-prefix/src")
+        try root.write("needle\n", to: "explicit-glob-prefix/vendor/skip.rs")
+        try root.write("needle\n", to: "explicit-glob-prefix/src/keep.rs")
+        try root.write("needle\n", to: "explicit-glob-prefix/keep.spec")
+        try root.write("/*.spec\n/explicit-*/vendor/\n", to: "anchored-glob-prefix.ignore")
+        #expect(pathBasenames(try run([
+            "--sort",
+            "path",
+            "--ignore-file",
+            root.path("anchored-glob-prefix.ignore"),
+            "needle",
+            root.path("explicit-glob-prefix"),
+        ])) == ["keep.spec", "keep.rs"])
+
         let overrideDirectoryRoot = try TemporaryDirectory()
         try overrideDirectoryRoot.createDirectory(".hidden")
         try overrideDirectoryRoot.write("needle\n", to: ".hidden/child.txt")

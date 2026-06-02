@@ -4133,19 +4133,38 @@ public struct FileWalker: @unchecked Sendable {
               !prefixComponent.isEmpty else {
             return patterns
         }
+        let prefix = String(prefixComponent)
+        let foldedPrefix = caseInsensitive ? prefix.lowercased() : prefix
 
         return patterns.filter { pattern in
-            guard let anchorComponent = explicitAnchorFirstLiteralComponent(pattern) else {
+            guard let anchorComponent = explicitAnchorFirstComponent(pattern) else {
                 return true
             }
-            if caseInsensitive {
-                return anchorComponent.lowercased() == prefixComponent.lowercased()
+            if anchorComponent.hasGlobMeta {
+                let matcher = GlobMatcher(
+                    patterns: [anchorComponent.pattern],
+                    caseInsensitive: caseInsensitive,
+                    slashPatternsMatchAnywhere: false
+                )
+                return matcher.decision(
+                    relativePath: prefix,
+                    basename: prefix,
+                    isDirectory: true
+                ) != nil
             }
-            return anchorComponent == prefixComponent
+            if caseInsensitive {
+                return anchorComponent.pattern.lowercased() == foldedPrefix
+            }
+            return anchorComponent.pattern == prefix
         }
     }
 
-    private func explicitAnchorFirstLiteralComponent(_ rawPattern: String) -> Substring? {
+    private struct ExplicitAnchorFirstComponent {
+        let pattern: String
+        let hasGlobMeta: Bool
+    }
+
+    private func explicitAnchorFirstComponent(_ rawPattern: String) -> ExplicitAnchorFirstComponent? {
         let trimmed = rawPattern.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else {
             return nil
@@ -4165,14 +4184,16 @@ public struct FileWalker: @unchecked Sendable {
         }
         guard let firstComponent = pattern.split(separator: "/", maxSplits: 1).first,
               !firstComponent.isEmpty,
-              !firstComponent.contains("*"),
-              !firstComponent.contains("?"),
-              !firstComponent.contains("["),
-              !firstComponent.contains("{"),
               !firstComponent.contains("\\") else {
             return nil
         }
-        return firstComponent
+        return ExplicitAnchorFirstComponent(
+            pattern: String(firstComponent),
+            hasGlobMeta: firstComponent.contains("*")
+                || firstComponent.contains("?")
+                || firstComponent.contains("[")
+                || firstComponent.contains("{")
+        )
     }
 
     private func ignoreFileLoadMessage(for fileURL: URL, displayPath: String?) -> String {
