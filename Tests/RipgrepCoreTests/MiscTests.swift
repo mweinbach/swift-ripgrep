@@ -5694,6 +5694,99 @@ struct MiscTests {
 
         """.utf8))
 
+        let prunedMultiAfterContextOutput = try runExecutableData([
+            "--no-config",
+            "-n",
+            "-A",
+            "1",
+            "-e",
+            "needle",
+            "-e",
+            "absent",
+            root.path("multi-context.txt"),
+        ], fixture: {})
+        #expect(prunedMultiAfterContextOutput == Data("""
+        2:needle one
+        3-beta
+
+        """.utf8))
+
+        let prunedMultiBeforeContextOutput = try runExecutableData([
+            "--no-config",
+            "-n",
+            "-B",
+            "1",
+            "-e",
+            "needle",
+            "-e",
+            "absent",
+            root.path("multi-context.txt"),
+        ], fixture: {})
+        #expect(prunedMultiBeforeContextOutput == Data("""
+        1-alpha
+        2:needle one
+
+        """.utf8))
+
+        let prunedMultiContextCustomSeparatorOutput = try runExecutableData([
+            "--no-config",
+            "-n",
+            "--context=1",
+            "--field-match-separator=|",
+            "--field-context-separator=_",
+            "--context-separator=ZZ",
+            "-e",
+            "needle",
+            "-e",
+            "absent",
+            root.path("multi-context.txt"),
+        ], fixture: {})
+        #expect(prunedMultiContextCustomSeparatorOutput == Data("""
+        1_alpha
+        2|needle one
+        3_beta
+
+        """.utf8))
+
+        let prunedMultiContextHeadingOutput = try runExecutableData([
+            "--no-config",
+            "--heading",
+            "--with-filename",
+            "-C",
+            "1",
+            "-e",
+            "needle",
+            "-e",
+            "absent",
+            root.path("multi-context.txt"),
+        ], fixture: {})
+        #expect(prunedMultiContextHeadingOutput == Data("""
+        \(root.path("multi-context.txt"))
+        alpha
+        needle one
+        beta
+
+        """.utf8))
+
+        let prunedMultiContextMaxCountOutput = try runExecutableData([
+            "--no-config",
+            "-n",
+            "-C",
+            "1",
+            "-m",
+            "1",
+            "-e",
+            "needle",
+            "-e",
+            "absent",
+            root.path("multi-context-max.txt"),
+        ], fixture: {})
+        #expect(prunedMultiContextMaxCountOutput == Data("""
+        1:needle one
+        2-hay two
+
+        """.utf8))
+
         let multiContextMissingResult = try runExecutableResult([
             "-C",
             "1",

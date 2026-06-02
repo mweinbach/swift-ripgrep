@@ -8,6 +8,39 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Pruned multi-literal context delegation - 2026-06-02
+
+Darwin direct context output for repeated literal patterns now reuses the
+single-literal context writers after the existing multi-literal proof prunes
+all but one present literal. This keeps the fast path Swift-only and avoids the
+multi-literal per-line matcher for common cases like `-A1 -e literal -e
+absent`, while preserving the multi-literal route for case-insensitive searches
+and for files where more than one literal is present.
+
+Validation:
+
+- Direct patched Swift output matched both the saved `5c69c22` Swift binary and
+  Rust `rg` byte-for-byte for pruned `-A1`, `-B1`, `-C1` with custom field and
+  context separators, `--heading --with-filename -C1`, `-m1 -C1`, and a
+  NUL-containing binary fallback case.
+- Added executable regression coverage for pruned after-context,
+  before-context, custom full-context, heading full-context, and max-count
+  full-context output.
+- `swift test --filter MiscTests/darwinExecutableLiteralPreflightDenseLines`
+  passed before recording these results.
+
+The retained A/B used the `5c69c22` release binary as the pre-change baseline,
+5 warm-ups, and 50 timed runs with stdout redirected to `/dev/null`:
+
+| Case | Current Swift | Pre-change `5c69c22` | Rust |
+| --- | ---: | ---: | ---: |
+| `-A1 -e literal -e absent match-ascii-46m.txt` | 44.6 ms mean / 43.3-46.3 ms range | 55.0 ms / 53.3-56.9 ms | 50.8 ms / 49.3-53.5 ms |
+| `-C1 -e literal -e absent match-ascii-46m.txt` | 50.3 ms / 49.4-52.1 ms | 60.6 ms / 58.9-67.5 ms | not measured |
+| `-A1 -e exa -e xyz no-match-ascii-46m.txt` | 11.8 ms / 10.8-12.4 ms | 11.7 ms / 10.2-13.5 ms | not measured |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/context-single-delegate-probe-1780421677.json`.
+
 ## Rare first-byte long-literal proof - 2026-06-02
 
 The no-C-shim Swift memmem fallback now lets 13-byte through 32-byte exact

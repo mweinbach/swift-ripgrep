@@ -16205,6 +16205,60 @@ private func rgSwiftDarwinWriteMultiLiteralContextLines(
         activeLiterals = matchInfo.presentLiterals
         firstLiteralMatch = firstMatch
     }
+    if !asciiCaseInsensitive, activeLiterals.count == 1 {
+        return activeLiterals[0].withUnsafeBufferPointer { literal in
+            if beforeContext > 0, afterContext > 0 {
+                return rgSwiftDarwinWriteContextLiteralLines(
+                    base,
+                    haystackLength: haystackLength,
+                    literal: literal,
+                    beforeContext: beforeContext,
+                    afterContext: afterContext,
+                    maxCount: maxCount,
+                    asciiCaseInsensitive: false,
+                    lineNumber: lineNumber,
+                    lineNumberFieldMatchSeparator: lineNumberFieldMatchSeparator,
+                    lineNumberFieldContextSeparator: lineNumberFieldContextSeparator,
+                    lineMatchPrefix: lineMatchPrefix,
+                    lineContextPrefix: lineContextPrefix,
+                    headingPrefix: headingPrefix,
+                    contextSeparator: contextSeparator
+                )
+            }
+            if beforeContext > 0 {
+                return rgSwiftDarwinWriteBeforeContextLiteralLines(
+                    base,
+                    haystackLength: haystackLength,
+                    literal: literal,
+                    beforeContext: beforeContext,
+                    maxCount: maxCount,
+                    asciiCaseInsensitive: false,
+                    lineNumber: lineNumber,
+                    lineNumberFieldMatchSeparator: lineNumberFieldMatchSeparator,
+                    lineNumberFieldContextSeparator: lineNumberFieldContextSeparator,
+                    lineMatchPrefix: lineMatchPrefix,
+                    lineContextPrefix: lineContextPrefix,
+                    headingPrefix: headingPrefix,
+                    contextSeparator: contextSeparator
+                )
+            }
+            return rgSwiftDarwinWriteAfterContextLiteralLines(
+                base,
+                haystackLength: haystackLength,
+                literal: literal,
+                afterContext: afterContext,
+                maxCount: maxCount,
+                asciiCaseInsensitive: false,
+                lineNumber: lineNumber,
+                lineNumberFieldMatchSeparator: lineNumberFieldMatchSeparator,
+                lineNumberFieldContextSeparator: lineNumberFieldContextSeparator,
+                lineMatchPrefix: lineMatchPrefix,
+                lineContextPrefix: lineContextPrefix,
+                headingPrefix: headingPrefix,
+                contextSeparator: contextSeparator
+            )
+        }
+    }
     if memchr(base, 0, haystackLength) != nil {
         return nil
     }
