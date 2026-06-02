@@ -66,6 +66,26 @@ Follow-up rejected probe:
   versus 147.9 ms baseline. The `--files-without-match` number looked
   noisily better, but the main miss and positive guardrail both moved the
   wrong way.
+- A scalar-lane Greek candidate refinement, which checked only the matching
+  SIMD lanes before returning them to the outer verifier, preserved output but
+  was also rejected. A 20-run A/B measured the main Greek no-match at
+  41.2 ms versus 38.1 ms baseline, ignore-case no-match at 40.5 ms versus
+  37.1 ms, and the false-E2 late-omega guard at 165.2 ms versus 150.4 ms.
+- A fixed-class word-range proof using packed `UInt64` arithmetic was
+  rejected as both out of scope for the no-low-level-code default and slower
+  in practice. A 25-run A/B measured `[A-Z]{5}` no-candidate output at
+  44.6 ms versus 34.2 ms baseline, later-class absence at 40.0 ms versus
+  31.3 ms, and dense lowercase count output at 113.4 ms versus 107.6 ms.
+- A parallel fixed-class absence proof using `DispatchQueue.concurrentPerform`
+  was parity-clean but not retained. A 30-run A/B measured the no-candidate
+  headline at 43.5 ms versus a noisy 48.1 ms baseline, but later-class
+  absence regressed to 42.0 ms from 32.3 ms and the sparse guardrail moved to
+  38.4 ms from 34.9 ms.
+- A visible no-ignore file-list output reserve increase from 64 KiB to 128 KiB
+  preserved output but was flat in a stable confirmation. An 80-run visible-only
+  A/B measured `--no-ignore --files linux` at 59.9 ms for the probe versus
+  59.1 ms baseline. Earlier broader runs were too noisy to trust and the
+  hidden guardrail, which did not use the larger reserve, stayed unchanged.
 
 Raw hyperfine exports:
 `/tmp/swift-rg-bench/rare-proof-memchr-1780378173.json`,
@@ -75,8 +95,15 @@ Raw hyperfine exports:
 `/tmp/swift-rg-bench/fixed-class-unrolled-simd16-1780377747.json`, and
 `/tmp/swift-rg-bench/fixed-class-wrapping-range-1780377862.json`.
 Follow-up rejected probe export:
-`/tmp/swift-rg-bench/fixed-prebinary-nomatch-proof-1780379520.json` and
-`/tmp/swift-rg-bench/greek-refined-candidates-1780380196.json`.
+`/tmp/swift-rg-bench/fixed-prebinary-nomatch-proof-1780379520.json`,
+`/tmp/swift-rg-bench/greek-refined-candidates-1780380196.json`,
+`/tmp/swift-rg-bench/greek-scalar-lane-candidate-1780380898.json`,
+`/tmp/swift-rg-bench/fixed-word-range-probe-1780381094.json`, and
+`/tmp/swift-rg-bench/fixed-parallel-absence-probe-1780381315.json`.
+File-list reserve rejected probe exports:
+`/tmp/swift-rg-bench/noignore-output-reserve-probe-1780381665.json`,
+`/tmp/swift-rg-bench/noignore-output-reserve-confirm-1780381751.json`, and
+`/tmp/swift-rg-bench/noignore-output-reserve-visible-only-1780381829.json`.
 
 ## Later-class absence proof for fixed ASCII class sequences — 2026-06-02
 
