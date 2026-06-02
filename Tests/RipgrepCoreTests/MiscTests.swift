@@ -3296,12 +3296,27 @@ struct MiscTests {
             "missingliteral",
             root.path("summary.txt"),
         ])
+        let fixedStatsOnlyMatchingMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "-o",
+            "[A-Z]{5}",
+            root.path("summary-match.txt"),
+        ])
         let statsVimgrepNoMatchSummary = try runExecutableResult([
             "--no-config",
             "--stats",
             "--vimgrep",
             "missingliteral",
             root.path("summary.txt"),
+        ])
+        let fixedStatsVimgrepOnlyMatchingMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "--vimgrep",
+            "-o",
+            "[A-Z]{5}",
+            root.path("summary-match.txt"),
         ])
         let statsContextNoMatchSummary = try runExecutableResult([
             "--no-config",
@@ -3456,19 +3471,27 @@ struct MiscTests {
         let expectedPathNoMatch = Data((root.path("summary.txt") + "\n").utf8)
         let expectedFixedPathNoMatch = Data((root.path("fixed-summary.txt") + "\n").utf8)
         let expectedFixedMatchPath = Data((root.path("summary-match.txt") + "\n").utf8)
+        let expectedFixedOnlyMatchingOutput = Data("ALPHA\n".utf8)
+        let expectedFixedVimgrepOnlyMatchingOutput = Data(
+            "\(root.path("summary-match.txt")):3:1:ALPHA\n".utf8
+        )
         let expectedPathStatsNoMatchSummary = expectedPathNoMatch + expectedStatsNoMatchSummary
         let expectedFixedPathStatsNoMatchSummary = expectedFixedPathNoMatch
             + expectedStatsNoMatchSummary
         let expectedCrlfPathStatsNoMatchSummary = Data((root.path("summary.txt") + "\r\n").utf8)
             + expectedStatsNoMatchSummary
-        func expectedStatsMatchSummary(matches: Int, matchedLines: Int) -> Data {
+        func expectedStatsMatchSummary(
+            matches: Int,
+            matchedLines: Int,
+            bytesPrinted: Int = 0
+        ) -> Data {
             Data("""
 
             \(matches) matches
             \(matchedLines) matched lines
             1 files contained matches
             1 files searched
-            0 bytes printed
+            \(bytesPrinted) bytes printed
             40 bytes searched
             0.000000 seconds spent searching
             0.000000 seconds total
@@ -3619,6 +3642,22 @@ struct MiscTests {
         #expect(fixedStatsFilesWithMatchesMatchSummary.status == 0)
         #expect(fixedStatsFilesWithMatchesMatchSummary.stderr.isEmpty)
         #expect(fixedStatsFilesWithMatchesMatchSummary.stdout == expectedFixedMatchPathStatsSummary)
+        #expect(fixedStatsOnlyMatchingMatchSummary.status == 0)
+        #expect(fixedStatsOnlyMatchingMatchSummary.stderr.isEmpty)
+        #expect(fixedStatsOnlyMatchingMatchSummary.stdout == expectedFixedOnlyMatchingOutput
+            + expectedStatsMatchSummary(
+                matches: 1,
+                matchedLines: 1,
+                bytesPrinted: expectedFixedOnlyMatchingOutput.count
+            ))
+        #expect(fixedStatsVimgrepOnlyMatchingMatchSummary.status == 0)
+        #expect(fixedStatsVimgrepOnlyMatchingMatchSummary.stderr.isEmpty)
+        #expect(fixedStatsVimgrepOnlyMatchingMatchSummary.stdout == expectedFixedVimgrepOnlyMatchingOutput
+            + expectedStatsMatchSummary(
+                matches: 1,
+                matchedLines: 1,
+                bytesPrinted: expectedFixedVimgrepOnlyMatchingOutput.count
+            ))
         for result in [
             fixedStatsCountMatchSummary,
             fixedStatsCountMatchesMatchSummary,

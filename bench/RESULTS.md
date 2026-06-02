@@ -8,6 +8,51 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Explicit fixed ASCII class stats only-matching preflight - 2026-06-02
+
+Single-file `--stats -o` searches for plain ASCII fixed-class regex sequences
+now reuse the Swift-only fixed-class only-matching writer and return the match
+counts, matched-line counts, searched bytes, and printed bytes needed for the
+stats summary. The same route covers `--stats --vimgrep -o` by using the
+vimgrep line prefix while preserving the existing fallback for quiet mode,
+color, trim, CRLF conversion, JSON, context, replacement, passthru, semantic
+modes, UTF BOM inputs, and files with NUL bytes. This remains Swift-only and
+does not add a C shim.
+
+Validation:
+
+- Patched Swift matched Rust after normalizing elapsed stats lines for
+  `--stats -o` default, `-n`, `--column`, `-b`, multiple matches on one line,
+  final no-newline output, no-match, UTF-8 BOM fallback, and early NUL fallback
+  controls.
+- Patched Swift matched Rust after elapsed normalization for
+  `--stats --vimgrep -o` default, `--no-line-number`, `--no-column`, `-b`, and
+  no-match controls.
+- Added regression coverage for fixed-class `--stats -o` and
+  `--stats --vimgrep -o` matched output/status, including nonzero
+  `bytes printed` accounting.
+- `swift build -c release`,
+  `swift test --filter MiscTests/darwinExecutableLiteralPreflightDenseLines`,
+  full `swift test`,
+  `SWIFT_RIPGREP_PARITY=1 swift test --filter ParityHarnessTests`,
+  `scripts/check-no-external-deps.sh --skip-build`, and `git diff --check`
+  passed before recording these results.
+
+Same-session probe at `493ab19` measured `--stats -o` before this slice at
+64.8 ms mean for the late-hit fixture versus Rust at 19.6 ms. The patched run
+used 5 warm-ups and 30 timed runs with stdout redirected to `/dev/null`. After
+the stats only-matching preflight:
+
+| Case | Current Swift | Pre-change `493ab19` | Rust |
+| --- | ---: | ---: | ---: |
+| `--stats -o '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 14.9 ms mean / 13.4-17.6 ms range | 64.8 ms / 44.2-79.8 ms | 22.6 ms / 21.4-24.6 ms |
+| `--stats --vimgrep -o '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 22.4 ms / 21.6-23.3 ms | not remeasured | 23.2 ms / 22.5-23.9 ms |
+| `--stats -o '[A-Z]{5}' no-uppercase-46m.txt` | 14.3 ms / 13.4-15.5 ms | not remeasured | 22.2 ms / 21.2-23.0 ms |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/fixed-formatted-visible-sweep-493ab19.json` and
+`/tmp/swift-rg-bench/fixed-stats-only-matching-patched-493ab19.json`.
+
 ## Explicit fixed ASCII class vimgrep only-matching preflight - 2026-06-02
 
 Single-file `--vimgrep -o` searches for plain ASCII fixed-class regex sequences
