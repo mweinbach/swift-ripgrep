@@ -10513,6 +10513,33 @@ public enum SwiftDarwinLiteralPreflight {
         lineContextPrefix: [UInt8] = [],
         headingPrefix: [UInt8] = []
     ) -> Int32? {
+        guard let result = passthruLiteralLineResult(
+            path: path,
+            literal: literal,
+            asciiCaseInsensitive: asciiCaseInsensitive,
+            lineNumber: lineNumber,
+            lineNumberFieldMatchSeparator: lineNumberFieldMatchSeparator,
+            lineNumberFieldContextSeparator: lineNumberFieldContextSeparator,
+            lineMatchPrefix: lineMatchPrefix,
+            lineContextPrefix: lineContextPrefix,
+            headingPrefix: headingPrefix
+        ) else {
+            return nil
+        }
+        return result.matched_line_count > 0 ? 0 : 1
+    }
+
+    static func passthruLiteralLineResult(
+        path: String,
+        literal: [UInt8],
+        asciiCaseInsensitive: Bool = false,
+        lineNumber: Bool = false,
+        lineNumberFieldMatchSeparator: [UInt8] = [58],
+        lineNumberFieldContextSeparator: [UInt8] = [45],
+        lineMatchPrefix: [UInt8] = [],
+        lineContextPrefix: [UInt8] = [],
+        headingPrefix: [UInt8] = []
+    ) -> rg_darwin_literal_file_result? {
         guard !literal.isEmpty else {
             return nil
         }
@@ -10536,7 +10563,12 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         guard fileStat.st_size > 0 else {
-            return 1
+            return rg_darwin_literal_file_result(
+                status: 0,
+                matched_line_count: 0,
+                total_match_count: 0,
+                bytes_searched: 0
+            )
         }
         guard UInt64(fileStat.st_size) <= UInt64(Int.max) else {
             return nil
@@ -10567,7 +10599,12 @@ public enum SwiftDarwinLiteralPreflight {
         }) else {
             return nil
         }
-        return matchedLineCount > 0 ? 0 : 1
+        return rg_darwin_literal_file_result(
+            status: 0,
+            matched_line_count: matchedLineCount,
+            total_match_count: matchedLineCount,
+            bytes_searched: haystackLength
+        )
     }
 
     public static func multiLiteralPassthruLineExitCode(
@@ -16670,6 +16707,31 @@ private func rgSwiftDarwinWritePassthruLiteralLines(
         if rgSwiftContainsNonASCIIByte(base, count: haystackLength) {
             return nil
         }
+    }
+
+    if !asciiCaseInsensitive,
+       !lineNumber,
+       lineMatchPrefix.isEmpty,
+       lineContextPrefix.isEmpty,
+       headingPrefix.isEmpty,
+       rg_memmem_simple(base, haystackLength, literalBase, literal.count) == nil {
+        guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+            return nil
+        }
+        defer {
+            output.deallocate()
+        }
+        guard output.write(base, count: haystackLength) else {
+            return nil
+        }
+        if base[haystackLength - 1] != UInt8(ascii: "\n"),
+           !output.writeByte(UInt8(ascii: "\n")) {
+            return nil
+        }
+        guard output.flush() else {
+            return nil
+        }
+        return 0
     }
 
     guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {

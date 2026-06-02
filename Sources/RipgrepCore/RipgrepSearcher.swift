@@ -1351,6 +1351,22 @@ public struct RipgrepSearcher: @unchecked Sendable {
             }
         }
 
+        if options.passthru {
+            guard allowDirectStdout,
+                  let byteLiteralFastPath,
+                  !byteLiteralFastPath.caseInsensitiveASCII,
+                  !byteLiteralFastPath.wordASCII,
+                  byteLiteralFastPath.literals.count == 1,
+                  let literal = byteLiteralFastPath.literals.first,
+                  let directResult = SwiftDarwinLiteralPreflight.passthruLiteralLineResult(
+                    path: fileURL.path,
+                    literal: literal
+                  ) else {
+                return nil
+            }
+            return searchResults(fileURL: fileURL, directResult: directResult)
+        }
+
         if allowDirectStdout,
            let byteLiteralFastPath,
            let directResults = try writeDarwinMultiLiteralStdout(
@@ -6234,7 +6250,14 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !options.oneFileSystem,
               options.beforeContext == 0,
               options.afterContext == 0,
-              !options.passthru,
+              (!options.passthru
+                || (options.printMode == .matchingLines
+                    && !options.quiet
+                    && !options.onlyMatching
+                    && !options.wantsLineNumber
+                    && options.withFilename != true
+                    && options.replacement == nil
+                    && !options.vimgrep)),
               !options.nullData else {
             return false
         }
@@ -6342,6 +6365,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         #else
         guard options.printMode == .matchingLines,
               !options.quiet,
+              !options.passthru,
               options.mmapMode != .never,
               options.withFilename != true,
               !options.vimgrep,
