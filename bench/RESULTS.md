@@ -8,6 +8,44 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Explicit fixed ASCII class matched line-output preflight - 2026-06-02
+
+Single-file matching-line searches for plain ASCII fixed-class regex sequences
+now use a Swift-only direct stdout writer for regular text inputs. The preflight
+maps the file, reuses the fixed-class candidate scanner, emits each matching
+line once, and supports the plain, line-numbered, filename-prefixed, and heading
+line shapes. Span-producing modes such as `-o`, `--vimgrep`, byte offsets,
+columns, trim, CRLF conversion, JSON, stats, and context still fall back to the
+existing searcher. No-match line output still hits the earlier no-match proof
+first, while UTF BOM inputs and files with NUL bytes fall back to the existing
+machinery. This remains Swift-only and does not add a C shim.
+
+Validation:
+
+- Patched Swift matched Rust for plain line output, `-n`, `--with-filename -n`,
+  `--heading -H -n`, multiple matches on one line, final no-newline output,
+  no-match, UTF-8 BOM fallback, and early NUL fallback controls.
+- Added regression coverage for fixed-class plain, numbered, and prefixed
+  numbered matched line output/status.
+- `swift build -c release` and
+  `swift test --filter MiscTests/darwinExecutableLiteralPreflightDenseLines`
+  passed before recording these results.
+
+Same-session pre-probe at `d44dbe2` measured the matched visible line-output
+gap before this slice. The pre-change sweep used 5 warm-ups and 25 timed runs;
+the patched run used 5 warm-ups and 30 timed runs with stdout redirected to
+`/dev/null`. After the matched line-output preflight:
+
+| Case | Current Swift | Pre-change `d44dbe2` | Rust |
+| --- | ---: | ---: | ---: |
+| `'[A-Z]{5}' fixed-late-uppercase-46m.txt` | 23.2 ms mean / 22.3-25.7 ms range | 58.6 ms / noisy 28.8 ms sigma | 20.6 ms / 19.8-22.6 ms |
+| `-n '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 22.9 ms / 22.5-25.2 ms | 55.7 ms / noisy 41.5 ms sigma | 21.8 ms / 21.1-23.0 ms |
+| `'[A-Z]{5}' no-uppercase-46m.txt` | 10.2 ms / 9.1-12.3 ms | not remeasured | 20.8 ms / 20.2-21.5 ms |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/fixed-class-matched-mode-sweep-d44dbe2.json` and
+`/tmp/swift-rg-bench/fixed-line-matched-patched-c4cac07.json`.
+
 ## Explicit fixed ASCII class JSON count matched preflight - 2026-06-02
 
 Single-file JSON `-c` and `--count-matches` searches for plain ASCII

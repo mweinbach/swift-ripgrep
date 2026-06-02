@@ -1099,6 +1099,29 @@ public enum SwiftDarwinLiteralPreflight {
         return 0
     }
 
+    public static func asciiFixedClassMatchedLineOutputExitCode(
+        path: String,
+        pattern: String,
+        lineNumber: Bool,
+        lineNumberFieldSeparator: [UInt8],
+        linePrefix: [UInt8],
+        headingPrefix: [UInt8]
+    ) -> Int32? {
+        guard let classes = asciiFixedClassSequenceClasses(pattern: pattern),
+              let matchedLineCount = asciiFixedClassMatchedLineOutput(
+                path: path,
+                classes: classes,
+                lineNumber: lineNumber,
+                lineNumberFieldSeparator: lineNumberFieldSeparator,
+                linePrefix: linePrefix,
+                headingPrefix: headingPrefix
+              ),
+              matchedLineCount > 0 else {
+            return nil
+        }
+        return 0
+    }
+
     public static func asciiFixedClassMatchedQuietStatsExitCode(
         path: String,
         pattern: String
@@ -4402,6 +4425,137 @@ public enum SwiftDarwinLiteralPreflight {
         )
     }
 
+    private static func asciiFixedClassMatchedLineOutput(
+        path: String,
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass],
+        lineNumber: Bool,
+        lineNumberFieldSeparator: [UInt8],
+        linePrefix: [UInt8],
+        headingPrefix: [UInt8]
+    ) -> Int? {
+        guard !classes.isEmpty,
+              let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !startsWithUTFBOM(data),
+              !hasBinaryDetectionPrefix(data),
+              !containsNULByte(data) else {
+            return nil
+        }
+        return data.withUnsafeBytes { rawData -> Int? in
+            guard let rawBase = rawData.baseAddress else {
+                return nil
+            }
+            return asciiFixedClassMatchedLineOutput(
+                baseAddress: rawBase.assumingMemoryBound(to: UInt8.self),
+                dataCount: rawData.count,
+                classes: classes,
+                lineNumber: lineNumber,
+                lineNumberFieldSeparator: lineNumberFieldSeparator,
+                linePrefix: linePrefix,
+                headingPrefix: headingPrefix
+            )
+        }
+    }
+
+    private static func asciiFixedClassMatchedLineOutput(
+        baseAddress: UnsafePointer<UInt8>,
+        dataCount: Int,
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass],
+        lineNumber: Bool,
+        lineNumberFieldSeparator: [UInt8],
+        linePrefix: [UInt8],
+        headingPrefix: [UInt8]
+    ) -> Int? {
+        let width = classes.count
+        guard width > 0, dataCount >= width else {
+            return 0
+        }
+        guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+            return nil
+        }
+        defer {
+            output.deallocate()
+        }
+
+        let newline = UInt8(ascii: "\n")
+        var searchOffset = 0
+        var lineStart = 0
+        var lineNumberAtLineStart = 1
+        var matchedLineCount = 0
+        var emittedHeading = false
+
+        func advanceLineStart(to matchOffset: Int) {
+            while lineStart < matchOffset {
+                let distance = matchOffset - lineStart
+                guard let newlinePointer = memchr(
+                    baseAddress.advanced(by: lineStart),
+                    Int32(newline),
+                    distance
+                ) else {
+                    return
+                }
+                let newlineOffset = baseAddress.distance(
+                    to: newlinePointer.assumingMemoryBound(to: UInt8.self)
+                )
+                lineNumberAtLineStart += 1
+                lineStart = newlineOffset + 1
+            }
+        }
+
+        while let matchOffset = asciiFixedClassNextSequenceMatch(
+            baseAddress: baseAddress,
+            endExclusive: dataCount,
+            classes: classes,
+            from: searchOffset
+        ) {
+            advanceLineStart(to: matchOffset)
+
+            let newlinePointer = memchr(
+                baseAddress.advanced(by: matchOffset),
+                Int32(newline),
+                dataCount - matchOffset
+            )
+            let lineEnd = newlinePointer.map {
+                baseAddress.distance(to: $0.assumingMemoryBound(to: UInt8.self))
+            } ?? dataCount
+            let outputEnd = newlinePointer == nil ? dataCount : lineEnd + 1
+
+            guard output.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading),
+                  output.writeBytes(linePrefix) else {
+                return nil
+            }
+            if lineNumber,
+               !output.writeLineNumberPrefix(
+                lineNumberAtLineStart,
+                fieldSeparator: lineNumberFieldSeparator
+               ) {
+                return nil
+            }
+            guard output.write(baseAddress.advanced(by: lineStart), count: outputEnd - lineStart) else {
+                return nil
+            }
+            if newlinePointer == nil,
+               !output.writeByte(newline) {
+                return nil
+            }
+
+            matchedLineCount += 1
+            searchOffset = outputEnd
+            lineStart = outputEnd
+            if newlinePointer != nil {
+                lineNumberAtLineStart += 1
+            } else {
+                break
+            }
+        }
+
+        guard output.flush() else {
+            return nil
+        }
+        return matchedLineCount
+    }
+
     private static func asciiFixedClassMatchedCounts(
         baseAddress: UnsafePointer<UInt8>,
         searchCount: Int,
@@ -4535,6 +4689,41 @@ public enum SwiftDarwinLiteralPreflight {
             offset = candidateOffset + 1
         }
         return false
+    }
+
+    private static func asciiFixedClassNextSequenceMatch(
+        baseAddress: UnsafePointer<UInt8>,
+        endExclusive: Int,
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass],
+        from startOffset: Int
+    ) -> Int? {
+        let width = classes.count
+        guard width > 0 else {
+            return nil
+        }
+        let lastStartExclusive = endExclusive - width + 1
+        guard lastStartExclusive > startOffset else {
+            return nil
+        }
+
+        var offset = startOffset
+        while let candidateOffset = asciiFixedClassNextCandidate(
+            baseAddress: baseAddress,
+            endExclusive: lastStartExclusive,
+            byteClass: classes[0],
+            from: offset
+        ) {
+            var classIndex = 1
+            while classIndex < width,
+                  asciiFixedClassByte(baseAddress[candidateOffset + classIndex], matches: classes[classIndex]) {
+                classIndex += 1
+            }
+            if classIndex == width {
+                return candidateOffset
+            }
+            offset = candidateOffset + 1
+        }
+        return nil
     }
 
     private static func asciiFixedClassNextCandidate(
