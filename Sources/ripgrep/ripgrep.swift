@@ -2791,6 +2791,41 @@ struct RipgrepCommand {
         let parsedFilesWithoutMatchPrintModeCanUseNoMatchPreflight = parsedPrintMode == .filesWithoutMatch
             && !parsedQuiet
             && (parsedJson || parsedStats)
+        if let parsedPathOnlyMode,
+           parsedPathOnlyMode == .matching,
+           paths.count == 1,
+           !fixedStrings,
+           !asciiCaseInsensitive,
+           !wordRegexp,
+           !parsedLineRegexp,
+           !parsedOnlyMatching,
+           !parsedVimgrep,
+           !parsedJson,
+           !parsedStats,
+           parsedMaxCount == nil,
+           parsedAfterContext == 0,
+           parsedBeforeContext == 0,
+           !parsedInvertMatch,
+           !parsedNullData,
+           !parsedPassthru,
+           !parsedReplacement,
+           !parsedStopOnNonmatch,
+           !parsedSearchZipAffectsPreflight,
+           parsedEncodingIsAutomatic,
+           !parsedColorAffectsPreflightOutput,
+           (patternCanStartWithDash || !pattern.hasPrefix("-")),
+           path != "-",
+           isReadableRegularFile(path),
+           let exitCode = SwiftDarwinLiteralPreflight.asciiFixedClassPathOnlyExitCode(
+            path: path,
+            pattern: pattern,
+            printWhenMatched: true,
+            nullTerminated: parsedNullPathTerminator,
+            crlfTerminated: parsedCrlf,
+            outputPath: parsedPathOnlyOutputPath
+           ) {
+            return exitCode
+        }
         if parsedJson || parsedStats,
            parsedSummaryPrintModeCanUseNoMatchPreflight,
            paths.count == 1,

@@ -952,6 +952,40 @@ public enum SwiftDarwinLiteralPreflight {
         return 0
     }
 
+    public static func asciiFixedClassPathOnlyExitCode(
+        path: String,
+        pattern: String,
+        printWhenMatched: Bool,
+        nullTerminated: Bool,
+        crlfTerminated: Bool = false,
+        outputPath: [UInt8]? = nil
+    ) -> Int32? {
+        var patternBytes = Array(pattern.utf8)
+        let noUnicodePrefix = Array("(?-u)".utf8)
+        if patternBytes.starts(with: noUnicodePrefix) {
+            patternBytes.removeFirst(noUnicodePrefix.count)
+        }
+        guard let fastPath = PatternMatcher.asciiFixedClassSequence(in: patternBytes),
+              let matched = containsASCIIFixedClassSequencePrefix(
+                path: path,
+                classes: fastPath.classes
+              ) else {
+            return nil
+        }
+        guard matched == printWhenMatched else {
+            return 1
+        }
+        guard writePathOnlyOutput(
+            path: path,
+            outputPath: outputPath,
+            nullTerminated: nullTerminated,
+            crlfTerminated: crlfTerminated
+        ) else {
+            return nil
+        }
+        return 0
+    }
+
     public static func fixedLookbehindQuietExitCode(
         path: String,
         prefix: [UInt8],
@@ -4059,6 +4093,65 @@ public enum SwiftDarwinLiteralPreflight {
 
     private static func hasBinaryDetectionPrefix(_ data: Data) -> Bool {
         containsNULByte(data, limit: 64 * 1024)
+    }
+
+    private static func containsASCIIFixedClassSequencePrefix(
+        path: String,
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass]
+    ) -> Bool? {
+        guard !classes.isEmpty,
+              let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !hasBinaryDetectionPrefix(data) else {
+            return nil
+        }
+        guard !data.isEmpty else {
+            return false
+        }
+        return data.withUnsafeBytes { rawData -> Bool? in
+            guard let rawBase = rawData.baseAddress else {
+                return false
+            }
+            let base = rawBase.assumingMemoryBound(to: UInt8.self)
+            let width = classes.count
+            let searchCount = min(rawData.count, 64 * 1024)
+            guard searchCount >= width else {
+                return rawData.count <= searchCount ? false : nil
+            }
+            let lastStart = searchCount - width
+            var offset = 0
+            while offset <= lastStart {
+                guard asciiFixedClassByte(base[offset], matches: classes[0]) else {
+                    offset += 1
+                    continue
+                }
+                var classIndex = 1
+                while classIndex < width,
+                      asciiFixedClassByte(base[offset + classIndex], matches: classes[classIndex]) {
+                    classIndex += 1
+                }
+                if classIndex == width {
+                    return true
+                }
+                offset += 1
+            }
+            return rawData.count <= searchCount ? false : nil
+        }
+    }
+
+    private static func asciiFixedClassByte(
+        _ byte: UInt8,
+        matches byteClass: ASCIIFixedClassSequenceFastPath.ByteClass
+    ) -> Bool {
+        switch byteClass {
+        case .uppercase:
+            byte >= UInt8(ascii: "A") && byte <= UInt8(ascii: "Z")
+        case .lowercase:
+            byte >= UInt8(ascii: "a") && byte <= UInt8(ascii: "z")
+        case .digit:
+            byte >= UInt8(ascii: "0") && byte <= UInt8(ascii: "9")
+        }
     }
 
     private static func containsNULByte(_ data: Data, limit: Int? = nil) -> Bool {

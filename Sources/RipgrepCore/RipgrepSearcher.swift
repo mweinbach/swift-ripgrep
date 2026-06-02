@@ -1001,6 +1001,76 @@ public struct RipgrepSearcher: @unchecked Sendable {
         )
     }
 
+    private func canUseExplicitASCIIFixedClassFilesWithMatchesFastPath(
+        haystack: Haystack,
+        matcher: PatternMatcher,
+        options: RipgrepOptions
+    ) -> Bool {
+        guard haystack.isExplicit,
+              !options.quiet,
+              !options.stats,
+              !options.json,
+              options.printMode == .filesWithMatches,
+              options.binaryMode == .automatic,
+              case .automatic = options.encodingMode,
+              !options.multiline,
+              !options.nullData,
+              !options.invertMatch,
+              !options.stopOnNonmatch,
+              !options.wordRegexp,
+              !options.lineRegexp,
+              !options.onlyMatching,
+              !options.column,
+              !options.byteOffset,
+              !options.vimgrep,
+              !options.crlf,
+              options.beforeContext == 0,
+              options.afterContext == 0,
+              !options.passthru,
+              options.replacement == nil,
+              options.maxColumns == nil,
+              options.maxCount == nil,
+              matcher.asciiFixedClassSequenceFastPath() != nil,
+              haystack.isRegularFile != false,
+              !shouldPreprocess(haystack, options: options),
+              decompressionCommand(for: haystack.url, options: options) == nil else {
+            return false
+        }
+        return true
+    }
+
+    private func searchExplicitASCIIFixedClassFilesWithMatchesFirstMatch(
+        _ haystack: Haystack,
+        matcher: PatternMatcher,
+        options: RipgrepOptions
+    ) -> SearchFileResult? {
+        guard canUseExplicitASCIIFixedClassFilesWithMatchesFastPath(
+            haystack: haystack,
+            matcher: matcher,
+            options: options
+        ) else {
+            return nil
+        }
+
+        let data: Data
+        do {
+            data = try HaystackReader.read(haystack, options: options)
+        } catch {
+            return nil
+        }
+        if !options.disablesBinaryDetection,
+           shouldCheckBinary(data, options: options),
+           firstNulByteOffset(in: data, limit: Self.binaryDetectionBufferSize) != nil {
+            return nil
+        }
+        return searchRawASCIIFixedClassSequenceContents(
+            data,
+            fileURL: haystack.url,
+            matcher: matcher,
+            options: options
+        )
+    }
+
     private func canStreamPlainMatchingLines(options: RipgrepOptions) -> Bool {
         guard options.mode == .search,
               options.printMode == .matchingLines,
@@ -7019,6 +7089,14 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     message: String(describing: error)
                 )
             }
+        }
+
+        if let fastResult = searchExplicitASCIIFixedClassFilesWithMatchesFirstMatch(
+            haystack,
+            matcher: matcher,
+            options: options
+        ) {
+            return FileSearchOutcome(result: fastResult)
         }
 
         let data: Data

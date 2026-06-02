@@ -737,7 +737,7 @@ public struct PatternMatcher {
         return asciiFixedClassSequence(in: bytes)
     }
 
-    private static func asciiFixedClassSequence(in bytes: [UInt8]) -> ASCIIFixedClassSequenceFastPath? {
+    static func asciiFixedClassSequence(in bytes: [UInt8]) -> ASCIIFixedClassSequenceFastPath? {
         guard !bytes.isEmpty else {
             return nil
         }

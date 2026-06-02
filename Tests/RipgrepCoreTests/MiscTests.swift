@@ -947,6 +947,18 @@ struct MiscTests {
             noCandidateRoot.path("nul-before-window-fixed.bin"),
         ], expectedExitCode: 0)
         #expect(earlyBinaryQuietOutput.isEmpty)
+        let lateBinaryFilesWithMatchesOutput = try runExecutableData([
+            "-l",
+            "[A-Z]{5}",
+            noCandidateRoot.path("nul-after-window-fixed.bin"),
+        ], fixture: {})
+        #expect(lateBinaryFilesWithMatchesOutput == Data("\(noCandidateRoot.path("nul-after-window-fixed.bin"))\n".utf8))
+        let earlyBinaryFilesWithMatchesOutput = try runExecutableData([
+            "-l",
+            "[A-Z]{5}",
+            noCandidateRoot.path("nul-before-window-fixed.bin"),
+        ], fixture: {})
+        #expect(earlyBinaryFilesWithMatchesOutput == Data("\(noCandidateRoot.path("nul-before-window-fixed.bin"))\n".utf8))
 
         try noCandidateRoot.write("""
         all lowercase and digits 12345
@@ -1086,6 +1098,12 @@ struct MiscTests {
         \(root.path("src/match.txt"))
 
         """)
+        let explicitFilesWithMatchesOutput = try runExecutableData([
+            "-l",
+            pattern,
+            root.path("src/match.txt"),
+        ], fixture: {})
+        #expect(explicitFilesWithMatchesOutput == Data("\(root.path("src/match.txt"))\n".utf8))
         let noMmapFilesWithMatchesOutput = try runExecutableData([
             "--no-mmap",
             "-l",

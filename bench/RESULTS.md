@@ -8,6 +8,41 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Explicit fixed ASCII class files-with-matches executable preflight — 2026-06-02
+
+Single-file `--files-with-matches` / `-l` searches for plain ASCII fixed-class
+regex sequences such as `[A-Z]{5}` now have a Swift executable preflight. The
+preflight parses the same `[A-Z]`, `[a-z]`, and `[0-9]` repeated-class shape as
+the core raw fixed-class scanner, maps the file, checks only the binary
+detection prefix window, and writes the path directly when a match is found in
+that prefix. Large misses and late hits fall back to the existing implementation
+instead of taking over the whole search. The change stays Swift-only and does
+not add a C shim.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched checkpoint `b5e3ddc` and Rust for
+  explicit `-l '[A-Z]{5}'` text early hit, late NUL after early hit, early NUL
+  after early hit, NUL before match, late NUL miss, no-uppercase miss, and late
+  text hit controls.
+- Added regression coverage for explicit fixed-class `-l` output on text and
+  binary-window cases in `MiscTests/quietFixedASCIIClassRegexMatchesRecursively`.
+- `swift build -c release` and
+  `swift test --filter MiscTests/quietFixedASCIIClassRegexMatchesRecursively`
+  passed before recording these results.
+
+A same-session hyperfine A/B against checkpoint `b5e3ddc`, with Rust included
+as the oracle, measured:
+
+| Case | Current Swift | Checkpoint `b5e3ddc` | Rust |
+| --- | ---: | ---: | ---: |
+| `-l '[A-Z]{5}' fixed-early-uppercase-46m.txt` | 4.5 ms mean / 4.3-5.0 ms range | 43.4 ms / 25.9-83.2 ms | 2.5 ms / 2.2-4.0 ms |
+| `-l '[A-Z]{5}' no-uppercase-46m.txt` guardrail | 42.6 ms / 25.9-61.1 ms | 43.0 ms / 16.9-76.2 ms | 18.6 ms / 17.5-22.4 ms |
+| `-l '[A-Z]{5}' fixed-late-uppercase-46m.txt` guardrail | 32.8 ms / 16.4-43.1 ms | 39.0 ms / 30.1-57.3 ms | 18.2 ms / 17.5-20.5 ms |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/fixed-fileswithmatches-exec-preflight-1780398923.json`.
+
 ## Quiet ASCII fixed-class first-match binary precheck window — 2026-06-02
 
 Plain quiet ASCII fixed-class sequence searches now use a dedicated first-match
