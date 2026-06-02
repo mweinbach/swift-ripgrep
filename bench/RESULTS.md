@@ -70,6 +70,20 @@ Follow-up rejected probe:
 Rejected probe export:
 `/tmp/swift-rg-bench/run-suffix-count-cache-hit-1780385897.json`.
 
+Follow-up rejected probe:
+
+- Moving quiet first-match run validation ahead of the backwards line-start
+  search preserved stdout/stderr/status against the previous Swift binary and
+  Rust for `[A-Z]+_RESUME` hits/misses, `[A-Z]{3}_RESUME`,
+  `[A]{1}_RESUME`, `[Z]{3}_RESUME`, and the binary-after-window control. Quiet
+  `--stats` output also matched the previous Swift binary because it stayed on
+  the line-aware branch. The target row was flat: a 100-run A/B measured
+  `-q '[A-Z]+_RESUME' linux` at 7.7 ms for both baseline and the probe, with
+  Rust at 5.6 ms. The direct first-match branch was not kept.
+
+Rejected probe export:
+`/tmp/swift-rg-bench/run-suffix-firstmatch-direct-1780387234.json`.
+
 ## Rare proof-byte memchr gate for staged literals — 2026-06-02
 
 The no-C-shim Swift memmem fallback now routes 13-byte through 32-byte exact
