@@ -100,6 +100,27 @@ Rejected probe exports:
 `/tmp/swift-rg-bench/run-suffix-bom-direct-hit-1780387531.json` and
 `/tmp/swift-rg-bench/run-suffix-bom-direct-guardrails-1780387545.json`.
 
+Follow-up rejected fixed-class probe:
+
+- A pre-binary fixed ASCII class proof tried to avoid the generic binary-NUL
+  pass before the `[A-Z]{5}` no-candidate fast path. The first variant scanned
+  once for both NUL and the first class before the binary branch; a narrower
+  follow-up limited the shortcut to explicit, plain matching-line output and
+  reused the existing first-class SIMD proof. Both variants preserved
+  stdout/stderr/status against the previous Swift binary and Rust for
+  `[A-Z]{5}` no-candidate output, sparse uppercase no-run output,
+  `[a-z][A-Z]{4}` later-class absence, files-without-match, positive matches,
+  binary no-candidate fallback, binary positive fallback, and stats fallback.
+  Neither variant was retained. The combined scan was flat on the headline and
+  slower on sparse/path guardrails; the narrower candidate-only version
+  regressed the same session A/B as well, with `[A-Z]{5}` no-candidate moving
+  from 50.0 ms median baseline to 58.0 ms and sparse uppercase from 43.6 ms to
+  55.2 ms. The existing binary scan followed by the fixed-class proof stayed.
+
+Rejected probe exports:
+`/tmp/swift-rg-bench/fixed-prebinary-combined-1780388478.json` and
+`/tmp/swift-rg-bench/fixed-prebinary-candidate-only-1780388701.json`.
+
 ## Rare proof-byte memchr gate for staged literals — 2026-06-02
 
 The no-C-shim Swift memmem fallback now routes 13-byte through 32-byte exact
