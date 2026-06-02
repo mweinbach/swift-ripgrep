@@ -979,7 +979,7 @@ private func rgMemmemSIMD16(
     if needleLength == 12 {
         return rgMemmem12SIMD16(haystack: haystack, haystackLength: haystackLength, needle: needle)
     }
-    if needleLength >= 13, needleLength <= 20 {
+    if needleLength >= 13, needleLength <= 32 {
         if rgMemmemProofScore(needle[1]) <= 1 {
             return rgMemmemStagedExactSIMD16(
                 haystack: haystack,
@@ -2090,7 +2090,7 @@ func rg_memmem_count_byte_before(
     if needleLength == 12 {
         return rgMemmem12CountByteBeforeSIMD16(haystack: haystack, haystackLength: haystackLength, needle: needle, byte: byte)
     }
-    if needleLength >= 13, needleLength <= 20 {
+    if needleLength >= 13, needleLength <= 32 {
         if rgMemmemProofScore(needle[1]) <= 1 {
             return rgMemmemStagedExactCountByteBeforeSIMD16(
                 haystack: haystack,

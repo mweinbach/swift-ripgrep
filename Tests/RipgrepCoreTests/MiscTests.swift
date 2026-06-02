@@ -554,13 +554,17 @@ struct MiscTests {
         """)
     }
 
-    @Test("seventeen-through-twenty-byte literal SIMD candidates remain exact")
-    func seventeenThroughTwentyByteLiteralSIMDCandidatesRemainExact() throws {
+    @Test("seventeen-through-thirty-two-byte literal SIMD candidates remain exact")
+    func seventeenThroughThirtyTwoByteLiteralSIMDCandidatesRemainExact() throws {
         let cases = [
             (literal: "tqeta zqta eta k ", bytes: 17, miss: "tqeta zqxa eta k "),
             (literal: "tqeta zqta eta kap", bytes: 18, miss: "tqeta zqxa eta kap"),
             (literal: "tqeta zqta eta kapp", bytes: 19, miss: "tqeta zqxa eta kapp"),
             (literal: "tqeta zqta eta kappa", bytes: 20, miss: "tqeta zqxx xta kappa"),
+            (literal: "tqeta zqta eta kappa ", bytes: 21, miss: "tqeta zqta zta kappa "),
+            (literal: "tqeta zqta eta kappa ome", bytes: 24, miss: "tqeta zqta zta kappa ome"),
+            (literal: "tqeta zqta eta kappa omega s", bytes: 28, miss: "tqeta zqta zta kappa omega s"),
+            (literal: "tqeta zqta eta kappa omega sigma", bytes: 32, miss: "tqeta zqta zta kappa omega sigma"),
         ]
 
         for testCase in cases {
@@ -568,8 +572,9 @@ struct MiscTests {
             #expect(testCase.miss.utf8.count == testCase.bytes)
 
             let root = try TemporaryDirectory()
-            try root.write("\(testCase.miss)\n", to: "miss.txt")
-            try root.write("\(testCase.miss)\n\(testCase.literal) exact\n", to: "hit.txt")
+            let repeatedMisses = String(repeating: "\(testCase.miss) ", count: 4)
+            try root.write("\(repeatedMisses)\n", to: "miss.txt")
+            try root.write("\(repeatedMisses)\n\(testCase.literal) exact\n", to: "hit.txt")
 
             let missLineOutput = try runExecutableData([
                 "-n",

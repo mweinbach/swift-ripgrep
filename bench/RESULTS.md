@@ -8,6 +8,59 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Twenty-one-through-thirty-two-byte rare second-byte staged SIMD helper — 2026-06-02
+
+The no-C-shim Swift memmem fallback now extends the rare-second-byte staged
+SIMD16 helper through 32-byte exact literals. This keeps the same rare second
+byte gate used by the 13-byte through 20-byte path; common literals still fall
+through to the generic verifier. The existing scalar middle-span proof keeps
+the longer candidates exact after the SIMD first/middle/tail masks narrow the
+candidate set.
+
+Validation:
+
+- Extended the 17-byte through 20-byte exactness regression to cover 21-byte,
+  24-byte, 28-byte, and 32-byte false candidates plus positive hit and
+  `--files-without-match` output checks.
+- Current Swift stdout/stderr/status matched checkpoint
+  `/tmp/swift-rg-bench/baseline-d684cad-marker-probe-1780365080-ripgrep`
+  and Rust for 21-byte, 22-byte, 24-byte, 28-byte, and 32-byte miss and hit
+  line output. Stats output matched both after normalizing elapsed-time fields.
+- `swift build -c release`, `swift test --filter LiteralSIMD`, full
+  `swift test`, `SWIFT_RIPGREP_PARITY=1 swift test --filter ParityHarnessTests`,
+  `scripts/check-no-external-deps.sh --skip-build`, and `git diff --check`
+  passed.
+
+A same-session hyperfine A/B against committed checkpoint `d684cad`, with Rust
+included as the oracle, measured:
+
+| Case | Current Swift | Checkpoint `d684cad` | Rust |
+| --- | ---: | ---: | ---: |
+| 21-byte rare literal miss | 11.5 ms mean / 10.2-12.9 ms range | 19.7 ms / 18.8-21.0 ms | 9.1 ms / 8.4-9.9 ms |
+| 22-byte rare literal miss | 11.0 ms / 10.2-11.8 ms | 11.5 ms / 10.1-12.1 ms | 9.2 ms / 8.4-10.1 ms |
+| 23-byte rare literal miss | 11.0 ms / 10.0-11.8 ms | 11.5 ms / 10.5-12.6 ms | 9.0 ms / 8.4-9.8 ms |
+| 24-byte rare literal miss | 11.3 ms / 10.1-12.2 ms | 11.6 ms / 10.5-12.6 ms | 9.2 ms / 8.3-10.4 ms |
+| 25-byte rare literal miss | 11.4 ms / 10.2-12.3 ms | 11.6 ms / 10.5-12.4 ms | 9.6 ms / 8.9-10.7 ms |
+| 28-byte rare literal miss | 11.5 ms / 10.7-12.4 ms | 11.7 ms / 10.7-12.6 ms | 9.4 ms / 8.5-10.7 ms |
+| 32-byte rare literal miss | 11.5 ms / 10.3-12.8 ms | 11.6 ms / 10.0-12.7 ms | 9.0 ms / 8.1-9.6 ms |
+| 21-byte `--stats --files-without-match` | 10.5 ms / 9.4-11.4 ms | 19.2 ms / 18.2-20.0 ms | 8.6 ms / 7.8-10.7 ms |
+| 32-byte `--stats --files-without-match` | 9.9 ms / 8.9-10.6 ms | 10.1 ms / 9.3-10.9 ms | 8.2 ms / 7.6-9.0 ms |
+| 20-byte rare literal guardrail | 11.2 ms / 10.1-12.6 ms | 10.9 ms / 9.9-11.4 ms | not remeasured in this pass |
+| common-byte `missingliteral` guardrail | 11.5 ms / 10.6-12.1 ms | 11.5 ms / 10.7-12.2 ms | not remeasured in this pass |
+
+The 20-byte path was unchanged by this range extension; the small movement
+there is treated as rebuild/run noise.
+
+A companion selective VCS-marker collection and terminator-hoist traversal
+probe was rejected in the same session because file-list timings were flat to
+slightly worse. No Haystack source changes were kept from that probe.
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/twentyone-thirtytwo-staged-literal-only-1780365624.json`,
+`/tmp/swift-rg-bench/twentyone-thirtytwo-staged-stats-guard-1780365651.json`,
+and
+`/tmp/swift-rg-bench/marker-and-32byte-probe-1780365413.json`.
+
 ## Eager rare-byte proof for staged SIMD literals — 2026-06-02
 
 The rare-second-byte staged SIMD helper now includes byte 1 in the initial
