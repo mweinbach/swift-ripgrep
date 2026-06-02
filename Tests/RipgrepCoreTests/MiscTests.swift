@@ -554,6 +554,46 @@ struct MiscTests {
         """)
     }
 
+    @Test("seventeen-through-twenty-byte literal SIMD candidates remain exact")
+    func seventeenThroughTwentyByteLiteralSIMDCandidatesRemainExact() throws {
+        let cases = [
+            (literal: "tqeta zqta eta k ", bytes: 17, miss: "tqeta zqxa eta k "),
+            (literal: "tqeta zqta eta kap", bytes: 18, miss: "tqeta zqxa eta kap"),
+            (literal: "tqeta zqta eta kapp", bytes: 19, miss: "tqeta zqxa eta kapp"),
+            (literal: "tqeta zqta eta kappa", bytes: 20, miss: "tqeta zqxx xta kappa"),
+        ]
+
+        for testCase in cases {
+            #expect(testCase.literal.utf8.count == testCase.bytes)
+            #expect(testCase.miss.utf8.count == testCase.bytes)
+
+            let root = try TemporaryDirectory()
+            try root.write("\(testCase.miss)\n", to: "miss.txt")
+            try root.write("\(testCase.miss)\n\(testCase.literal) exact\n", to: "hit.txt")
+
+            let missLineOutput = try runExecutableData([
+                "-n",
+                testCase.literal,
+                root.path("miss.txt"),
+            ], fixture: {})
+            #expect(missLineOutput.isEmpty)
+
+            let hitLineOutput = try runExecutableData([
+                "-n",
+                testCase.literal,
+                root.path("hit.txt"),
+            ], fixture: {})
+            #expect(String(decoding: hitLineOutput, as: UTF8.self) == "2:\(testCase.literal) exact\n")
+
+            let filesWithoutMatchOutput = try runExecutableData([
+                "--files-without-match",
+                testCase.literal,
+                root.url.path,
+            ], fixture: {})
+            #expect(String(decoding: filesWithoutMatchOutput, as: UTF8.self) == "\(root.path("miss.txt"))\n")
+        }
+    }
+
     @Test("case-insensitive alternation preserves recursive line output")
     func caseInsensitiveAlternationPreservesRecursiveLineOutput() throws {
         let root = try TemporaryDirectory()

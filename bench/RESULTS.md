@@ -8,6 +8,55 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Seventeen-through-twenty-byte rare second-byte staged SIMD helper — 2026-06-02
+
+The no-C-shim Swift memmem fallback now extends the shared rare-second-byte
+staged SIMD16 helper through 20-byte exact literals. The scalar tail verifier
+keeps the first/tail word checks used by the 13-byte through 16-byte path and
+adds a middle-span proof for bytes between those words, which keeps 18-byte
+through 20-byte tail candidates exact without adding a C shim. The guard remains
+limited to rare second bytes so common literals such as `missingliteral` keep
+falling through to the generic verifier.
+
+Validation:
+
+- Added a 17-byte through 20-byte exactness regression with false candidates
+  that share the first word, middle byte, and tail word while differing in the
+  newly covered middle span, plus positive hit and `--files-without-match`
+  output checks.
+- Current Swift stdout/stderr/status matched checkpoint
+  `/tmp/swift-rg-bench/baseline-c02971b-1780362062-ripgrep` and Rust for
+  17-byte through 20-byte miss and hit line output. Stats output matched both
+  after normalizing elapsed-time fields.
+- `swift build -c release`,
+  `swift test --filter seventeenThroughTwentyByteLiteralSIMDCandidatesRemainExact`,
+  full `swift test`, `SWIFT_RIPGREP_PARITY=1 swift test --filter ParityHarnessTests`,
+  `scripts/check-no-external-deps.sh --skip-build`, and `git diff --check`
+  passed.
+
+A same-session 30-run hyperfine A/B against checkpoint `c02971b`, with five
+warmups, measured:
+
+| Command | Current Swift | Checkpoint `c02971b` | Rust |
+| --- | ---: | ---: | ---: |
+| `-n "tqeta zqta eta k " no-match-ascii-46m.txt` | 10.7 ms mean / 9.8-11.5 ms range | 11.7 ms / 10.1-12.4 ms | 8.9 ms / 8.2-9.8 ms |
+| `-n "tqeta zqta eta kap" no-match-ascii-46m.txt` | 11.9 ms / 11.0-13.0 ms | 19.8 ms / 18.8-20.9 ms | 9.1 ms / 8.4-9.8 ms |
+| `-n "tqeta zqta eta kapp" no-match-ascii-46m.txt` | 12.0 ms / 11.0-12.6 ms | 19.9 ms / 18.8-21.0 ms | 9.1 ms / 8.1-9.9 ms |
+| `-n "tqeta zqta eta kappa" no-match-ascii-46m.txt` | 11.9 ms / 10.8-12.6 ms | 19.6 ms / 18.2-20.6 ms | 9.0 ms / 8.1-10.6 ms |
+| `--stats --files-without-match "tqeta zqta eta kap" no-match-ascii-46m.txt` | 11.6 ms / 9.8-13.5 ms | 19.1 ms / 17.5-20.5 ms | 8.3 ms / 7.5-9.1 ms |
+| `--stats --files-without-match "tqeta zqta eta kappa" no-match-ascii-46m.txt` | 10.9 ms / 10.0-12.1 ms | 18.6 ms / 17.4-19.8 ms | 8.4 ms / 7.5-9.3 ms |
+| `-n missingliteral match-ascii-46m.txt` guardrail | 73.3 ms / 72.1-75.5 ms | 73.6 ms / 71.8-75.3 ms | not remeasured in this pass |
+
+A quick 15-run neighboring-length probe left the staged gate capped at 20:
+current Swift already measured 11.9/11.9/11.6/11.5 ms for 21/24/28/32-byte
+rare-second-byte misses on the generic path, with Rust in the 8.9-9.2 ms band.
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/seventeen-twenty-staged-exact-probe-1780363816.json`,
+`/tmp/swift-rg-bench/seventeen-twenty-staged-exact-stats-1780363838.json`,
+and
+`/tmp/swift-rg-bench/twentyone-thirtytwo-current-gap-1780363967.json`.
+
 ## Thirteen-through-sixteen-byte rare second-byte staged SIMD helper — 2026-06-01
 
 The no-C-shim Swift memmem fallback now routes 13-byte through 16-byte exact

@@ -873,6 +873,8 @@ private func rgMemmemStagedExactSIMD16(
     let tailWordOffset = needleLength - 8
     let tailWord = UnsafeRawPointer(needle.advanced(by: tailWordOffset))
         .loadUnaligned(as: UInt64.self)
+    let middleSpanOffset = 8
+    let middleSpanLength = max(0, tailWordOffset - middleSpanOffset)
     let proofOffset = 1
     let proofVector = SIMD16<UInt8>(repeating: needle[proofOffset])
 
@@ -922,7 +924,13 @@ private func rgMemmemStagedExactSIMD16(
            haystack[cursor + needleLength - 1] == tail {
             let candidate = haystack.advanced(by: cursor)
             if UnsafeRawPointer(candidate).loadUnaligned(as: UInt64.self) == firstWord,
-               UnsafeRawPointer(candidate.advanced(by: tailWordOffset)).loadUnaligned(as: UInt64.self) == tailWord {
+               UnsafeRawPointer(candidate.advanced(by: tailWordOffset)).loadUnaligned(as: UInt64.self) == tailWord,
+               (middleSpanLength == 0
+                || memcmp(
+                    candidate.advanced(by: middleSpanOffset),
+                    needle.advanced(by: middleSpanOffset),
+                    middleSpanLength
+                ) == 0) {
                 return candidate
             }
         }
@@ -970,7 +978,7 @@ private func rgMemmemSIMD16(
     if needleLength == 12 {
         return rgMemmem12SIMD16(haystack: haystack, haystackLength: haystackLength, needle: needle)
     }
-    if needleLength >= 13, needleLength <= 16 {
+    if needleLength >= 13, needleLength <= 20 {
         if rgMemmemProofScore(needle[1]) <= 1 {
             return rgMemmemStagedExactSIMD16(
                 haystack: haystack,
@@ -1958,6 +1966,8 @@ private func rgMemmemStagedExactCountByteBeforeSIMD16(
     let tailWordOffset = needleLength - 8
     let tailWord = UnsafeRawPointer(needle.advanced(by: tailWordOffset))
         .loadUnaligned(as: UInt64.self)
+    let middleSpanOffset = 8
+    let middleSpanLength = max(0, tailWordOffset - middleSpanOffset)
     let proofOffset = 1
     let proofVector = SIMD16<UInt8>(repeating: needle[proofOffset])
 
@@ -2012,7 +2022,13 @@ private func rgMemmemStagedExactCountByteBeforeSIMD16(
            haystack[cursor + needleLength - 1] == tail {
             let candidate = haystack.advanced(by: cursor)
             if UnsafeRawPointer(candidate).loadUnaligned(as: UInt64.self) == firstWord,
-               UnsafeRawPointer(candidate.advanced(by: tailWordOffset)).loadUnaligned(as: UInt64.self) == tailWord {
+               UnsafeRawPointer(candidate.advanced(by: tailWordOffset)).loadUnaligned(as: UInt64.self) == tailWord,
+               (middleSpanLength == 0
+                || memcmp(
+                    candidate.advanced(by: middleSpanOffset),
+                    needle.advanced(by: middleSpanOffset),
+                    middleSpanLength
+                ) == 0) {
                 return (candidate, count)
             }
         }
@@ -2072,7 +2088,7 @@ func rg_memmem_count_byte_before(
     if needleLength == 12 {
         return rgMemmem12CountByteBeforeSIMD16(haystack: haystack, haystackLength: haystackLength, needle: needle, byte: byte)
     }
-    if needleLength >= 13, needleLength <= 16 {
+    if needleLength >= 13, needleLength <= 20 {
         if rgMemmemProofScore(needle[1]) <= 1 {
             return rgMemmemStagedExactCountByteBeforeSIMD16(
                 haystack: haystack,
