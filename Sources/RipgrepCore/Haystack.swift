@@ -3997,7 +3997,7 @@ public struct FileWalker: @unchecked Sendable {
             ?? precomputedScope
             ?? ignoreScope(for: scopeDirectory ?? fileURL.deletingLastPathComponent(), rootBase: rootBase)
         let matchSlashPatternsAnywhere = slashPatternsMatchAnywhere ?? false
-        let patterns = ignoreExplicitRootMatch
+        let scopedPatterns = ignoreExplicitRootMatch
             ? patternsIgnoringExplicitRootMatch(
                 parsed.patterns,
                 scope: scope,
@@ -4005,6 +4005,13 @@ public struct FileWalker: @unchecked Sendable {
                 caseInsensitive: caseInsensitive
             )
             : parsed.patterns
+        let patterns = pathPrefix.map {
+            patternsIgnoringUnmatchableExplicitAnchors(
+                scopedPatterns,
+                pathPrefix: $0,
+                caseInsensitive: caseInsensitive
+            )
+        } ?? scopedPatterns
         let diagnostics = collectDiagnostics
             ? ignoreLoadDiagnostics(
                 fileURL: fileURL,
@@ -4114,6 +4121,58 @@ public struct FileWalker: @unchecked Sendable {
             )
             return matcher.decision(relativePath: "", isDirectory: true) != .exclude
         }
+    }
+
+    private func patternsIgnoringUnmatchableExplicitAnchors(
+        _ patterns: [String],
+        pathPrefix: String,
+        caseInsensitive: Bool
+    ) -> [String] {
+        guard !pathPrefix.isEmpty,
+              let prefixComponent = pathPrefix.split(separator: "/", maxSplits: 1).first,
+              !prefixComponent.isEmpty else {
+            return patterns
+        }
+
+        return patterns.filter { pattern in
+            guard let anchorComponent = explicitAnchorFirstLiteralComponent(pattern) else {
+                return true
+            }
+            if caseInsensitive {
+                return anchorComponent.lowercased() == prefixComponent.lowercased()
+            }
+            return anchorComponent == prefixComponent
+        }
+    }
+
+    private func explicitAnchorFirstLiteralComponent(_ rawPattern: String) -> Substring? {
+        let trimmed = rawPattern.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else {
+            return nil
+        }
+        var pattern = trimmed
+        if pattern.hasPrefix("\\#") || pattern.hasPrefix("\\!") {
+            pattern.removeFirst()
+        } else if pattern.hasPrefix("!") {
+            pattern.removeFirst()
+        }
+        guard pattern.hasPrefix("/") else {
+            return nil
+        }
+        pattern.removeFirst()
+        while pattern.hasSuffix("/") {
+            pattern.removeLast()
+        }
+        guard let firstComponent = pattern.split(separator: "/", maxSplits: 1).first,
+              !firstComponent.isEmpty,
+              !firstComponent.contains("*"),
+              !firstComponent.contains("?"),
+              !firstComponent.contains("["),
+              !firstComponent.contains("{"),
+              !firstComponent.contains("\\") else {
+            return nil
+        }
+        return firstComponent
     }
 
     private func ignoreFileLoadMessage(for fileURL: URL, displayPath: String?) -> String {

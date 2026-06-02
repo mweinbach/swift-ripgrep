@@ -5416,6 +5416,20 @@ struct FeatureTests {
             root.url.path,
         ])) == ["skip.txt", "nested.txt"])
 
+        try root.createDirectory("explicit-prefix/vendor")
+        try root.createDirectory("explicit-prefix/src")
+        try root.write("needle\n", to: "explicit-prefix/vendor/skip.rs")
+        try root.write("needle\n", to: "explicit-prefix/src/keep.rs")
+        try root.write("/unrelated/\n/explicit-prefix/vendor/\n", to: "anchored-prefix.ignore")
+        #expect(pathBasenames(try run([
+            "--sort",
+            "path",
+            "--ignore-file",
+            root.path("anchored-prefix.ignore"),
+            "needle",
+            root.path("explicit-prefix"),
+        ])) == ["keep.rs"])
+
         let overrideDirectoryRoot = try TemporaryDirectory()
         try overrideDirectoryRoot.createDirectory(".hidden")
         try overrideDirectoryRoot.write("needle\n", to: ".hidden/child.txt")

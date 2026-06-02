@@ -8,6 +8,42 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Explicit ignore anchor prefilter - 2026-06-02
+
+Explicit `--ignore-file` matchers now drop anchored rules whose first literal
+path component cannot match the cwd-relative target prefix. This keeps rules
+with wildcard or escaped first components on the existing path, preserves
+matching anchored rules, and only applies to explicit ignore files that receive
+the cwd-relative `pathPrefix`.
+
+Validation:
+
+- Patched Swift matched Rust `rg` sorted file output for default `--files`,
+  `--hidden --files`, `--no-ignore-vcs --files`, explicit
+  `--no-ignore-vcs --ignore-file ... --files`, and the NUL-terminated explicit
+  ignore-file path mode on the Linux benchmark tree.
+- Added executable regression coverage for an explicit ignore file containing
+  both an unmatchable anchored rule and a matching anchored rule under the
+  cwd-relative target prefix.
+- `swift build -c release`, `swift test --filter
+  FeatureTests/honorsCustomIgnoreFileAndOverrideGlobs`, `swift test`,
+  `SWIFT_RIPGREP_PARITY=1 swift test --filter ParityHarnessTests`,
+  `scripts/check-no-external-deps.sh --skip-build`, and `git diff --check`
+  passed before recording these results.
+
+The retained focused A/B used 12 warm-ups and 100 timed runs. The first broad
+guard matrix also covered default, hidden, and no-ignore file listing; those
+code paths do not receive the explicit `pathPrefix` filter, and their observed
+differences were run-to-run noise.
+
+| Case | Current Swift | Pre-change Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `--no-ignore-vcs --ignore-file linux/.gitignore --files linux` | 99.0 ms mean / 92.9-125.1 ms range | 100.8 ms / 95.4-113.7 ms | 77.6 ms / 71.0-188.2 ms |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/explicit-anchor-filter-ab-1780431853.json` and
+`/tmp/swift-rg-bench/explicit-anchor-filter-focused-1780432043.json`.
+
 ## Uppercase suffix impossible-match precheck - 2026-06-02
 
 The quiet `[A-Z]+suffix` scanner now checks that a found suffix is immediately
