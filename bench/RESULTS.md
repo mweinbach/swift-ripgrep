@@ -93,6 +93,24 @@ Raw hyperfine exports:
 `/tmp/swift-rg-bench/greekquiet-tmp-copy-1780394555.json` and
 `/tmp/swift-rg-bench/greekquiet-recursive-copy-1780394570.json`.
 
+Follow-up rejected probe:
+
+- Returning directly from the Greek byte-candidate proof for first-match output,
+  plus an explicit path-only `-l` / `--files-without-match` Greek entry point
+  that used the same 64 KiB binary NUL precheck window, preserved
+  stdout/stderr/status against checkpoint `8390ccb` and Rust for quiet,
+  files-with-matches, files-without-match, NUL-before-window,
+  NUL-after-window, and invalid-UTF8 controls. The performance did not hold:
+  a 40-run direct-return A/B measured quiet early hit at 4.6 ms for the probe
+  versus 4.5 ms baseline, while a 30-run path-only A/B regressed
+  `-l '\p{Greek}' early-greek-unicode-64m.txt` to 37.5 ms from 30.7 ms.
+  The small files-without-match miss nudge, 37.2 ms versus 41.1 ms, was too
+  noisy to justify keeping the source change.
+
+Rejected probe exports:
+`/tmp/swift-rg-bench/greekdirect-firstmatch-probe-1780395946.json` and
+`/tmp/swift-rg-bench/greek-pathonly-window-probe-1780396192.json`.
+
 ## Interior rare-byte proof for long Swift memmem literals — 2026-06-02
 
 The no-C-shim Swift memmem fallback now lets 13-byte through 32-byte literals
