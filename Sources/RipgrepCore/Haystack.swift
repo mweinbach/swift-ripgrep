@@ -1089,27 +1089,41 @@ public struct FileWalker: @unchecked Sendable {
         orderedChildren.reserveCapacity(contents.children.count)
         var directoryCount = 0
         var rootFiltered = false
-        for child in contents.children.reversed() {
-            if child.kind == .symbolicLink {
-                continue
+        if directoryIgnoreStack.isEmpty {
+            for child in contents.children.reversed() {
+                if child.kind == .symbolicLink || (!options.hidden && child.isHidden) {
+                    continue
+                }
+                if child.kind.isDirectory {
+                    directoryCount += 1
+                    orderedChildren.append(child)
+                } else if child.kind.isFile {
+                    orderedChildren.append(child)
+                }
             }
-            let childRelativePath = child.name
-            let isDirectory = child.kind.isDirectory
-            guard shouldEmitFastFilePath(
-                child: child,
-                childRelativePath: childRelativePath,
-                isDirectory: isDirectory,
-                ignoreStack: directoryIgnoreStack,
-                options: options,
-                filtered: &rootFiltered
-            ) else {
-                continue
-            }
-            if child.kind.isDirectory {
-                directoryCount += 1
-                orderedChildren.append(child)
-            } else if child.kind.isFile {
-                orderedChildren.append(child)
+        } else {
+            for child in contents.children.reversed() {
+                if child.kind == .symbolicLink {
+                    continue
+                }
+                let childRelativePath = child.name
+                let isDirectory = child.kind.isDirectory
+                guard shouldEmitFastFilePath(
+                    child: child,
+                    childRelativePath: childRelativePath,
+                    isDirectory: isDirectory,
+                    ignoreStack: directoryIgnoreStack,
+                    options: options,
+                    filtered: &rootFiltered
+                ) else {
+                    continue
+                }
+                if child.kind.isDirectory {
+                    directoryCount += 1
+                    orderedChildren.append(child)
+                } else if child.kind.isFile {
+                    orderedChildren.append(child)
+                }
             }
         }
         guard directoryCount >= 2 else {
