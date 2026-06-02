@@ -8,6 +8,48 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Explicit fixed ASCII class JSON no-output preflight - 2026-06-02
+
+Single-file JSON count, count-matches, and path-only output modes for plain
+ASCII fixed-class regex sequences now use the Swift no-match/path proof instead
+of falling through to the heavier search path. JSON count/count-matches misses
+return the silent no-match status, JSON `--include-zero` count modes keep
+writing `0`, and JSON path-only modes keep using ripgrep's plain path output.
+Stats count include-zero also now reaches the fixed-class count preflight. This
+remains Swift-only and does not add a C shim.
+
+Validation:
+
+- Patched Swift matched Rust for JSON count no-match, JSON count-matches
+  no-match, JSON files-with-matches no-match, JSON files-without-match
+  no-match, JSON+stats include-zero count no-match, JSON matching-line summary
+  no-match, JSON path-only hit controls, JSON count hit fallback, and UTF-8 BOM
+  path-only hit fallback.
+- Added regression coverage for fixed-class JSON files-with-matches,
+  files-without-match, count, count-matches, include-zero count, and
+  include-zero count-matches outputs/status.
+- `swift build -c release` and
+  `swift test --filter MiscTests/darwinExecutableLiteralPreflightDenseLines`
+  passed before recording these results.
+
+A same-session hyperfine A/B used the pre-change `c1effb0` probe export for the
+three originally identified slow JSON no-output cases, with Rust included as
+the oracle:
+
+| Case | Current Swift | Pre-change `c1effb0` | Rust |
+| --- | ---: | ---: | ---: |
+| `--json -c '[A-Z]{5}' no-uppercase-46m.txt` | 8.6 ms mean / 7.7-11.1 ms range | 53.2 ms / 27.8-85.8 ms | 19.6 ms / 18.5-23.6 ms |
+| `--json --count-matches '[A-Z]{5}' sparse-uppercase-no-five-46m.txt` | 12.2 ms / 11.4-13.0 ms | 70.9 ms / 39.2-95.0 ms | 18.7 ms / 18.2-19.1 ms |
+| `--json -l '[A-Z]{5}' no-uppercase-46m.txt` | 8.6 ms / 7.4-11.6 ms | 62.3 ms / 45.7-82.7 ms | 18.3 ms / 17.9-18.6 ms |
+
+Additional patched-only rows measured `--json --files-without-match` at 8.0 ms
+vs Rust 18.3 ms, and `--json --stats -c --include-zero` at 8.3 ms vs Rust
+18.5 ms.
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/fixed-json-nooutput-gap-current-c1effb0.json` and
+`/tmp/swift-rg-bench/fixed-json-nooutput-patched-c1effb0.json`.
+
 ## Explicit fixed ASCII class summary no-match preflight - 2026-06-02
 
 Single-file stats and JSON summary searches for plain ASCII fixed-class regex

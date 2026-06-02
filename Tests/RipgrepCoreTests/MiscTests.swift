@@ -2853,12 +2853,26 @@ struct MiscTests {
             "missingliteral",
             root.path("summary.txt"),
         ])
+        let fixedJsonFilesWithMatchesNoMatch = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "-l",
+            "[A-Z]{5}",
+            root.path("fixed-summary.txt"),
+        ])
         let jsonFilesWithMatchesMatch = try runExecutableResult([
             "--no-config",
             "--json",
             "-l",
             "alpha",
             root.path("summary.txt"),
+        ])
+        let fixedJsonFilesWithMatchesMatch = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "-l",
+            "[A-Z]{5}",
+            root.path("summary-match.txt"),
         ])
         let jsonFilesWithMatchesIgnoreCaseWordMatch = try runExecutableResult([
             "--no-config",
@@ -2884,12 +2898,26 @@ struct MiscTests {
             "missingliteral",
             root.path("summary.txt"),
         ])
+        let fixedJsonFilesWithoutMatchNoMatch = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "--files-without-match",
+            "[A-Z]{5}",
+            root.path("fixed-summary.txt"),
+        ])
         let jsonFilesWithoutMatchMatch = try runExecutableResult([
             "--no-config",
             "--json",
             "--files-without-match",
             "alpha",
             root.path("summary.txt"),
+        ])
+        let fixedJsonFilesWithoutMatchMatch = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "--files-without-match",
+            "[A-Z]{5}",
+            root.path("summary-match.txt"),
         ])
         let jsonFilesWithoutMatchIgnoreCaseWordMatch = try runExecutableResult([
             "--no-config",
@@ -2907,12 +2935,26 @@ struct MiscTests {
             "missingliteral",
             root.path("summary.txt"),
         ])
+        let fixedJsonCountNoMatch = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "-c",
+            "[A-Z]{5}",
+            root.path("fixed-summary.txt"),
+        ])
         let jsonCountMatchesNoMatch = try runExecutableResult([
             "--no-config",
             "--json",
             "--count-matches",
             "missingliteral",
             root.path("summary.txt"),
+        ])
+        let fixedJsonCountMatchesNoMatch = try runExecutableResult([
+            "--no-config",
+            "--json",
+            "--count-matches",
+            "[A-Z]{5}",
+            root.path("fixed-summary.txt"),
         ])
         let jsonCountMatch = try runExecutableResult([
             "--no-config",
@@ -3285,6 +3327,8 @@ struct MiscTests {
         let expectedZeroCountStatsNoMatchSummary = Data("0\n".utf8) + expectedStatsNoMatchSummary
         let expectedCrlfZeroCountStatsNoMatchSummary = Data("0\r\n".utf8) + expectedStatsNoMatchSummary
         let expectedPathNoMatch = Data((root.path("summary.txt") + "\n").utf8)
+        let expectedFixedPathNoMatch = Data((root.path("fixed-summary.txt") + "\n").utf8)
+        let expectedFixedMatchPath = Data((root.path("summary-match.txt") + "\n").utf8)
         let expectedPathStatsNoMatchSummary = expectedPathNoMatch + expectedStatsNoMatchSummary
         let expectedCrlfPathStatsNoMatchSummary = Data((root.path("summary.txt") + "\r\n").utf8)
             + expectedStatsNoMatchSummary
@@ -3409,6 +3453,9 @@ struct MiscTests {
         #expect(jsonFilesWithoutMatchNoMatch.status == 0)
         #expect(jsonFilesWithoutMatchNoMatch.stderr.isEmpty)
         #expect(jsonFilesWithoutMatchNoMatch.stdout == expectedPathNoMatch)
+        #expect(fixedJsonFilesWithoutMatchNoMatch.status == 0)
+        #expect(fixedJsonFilesWithoutMatchNoMatch.stderr.isEmpty)
+        #expect(fixedJsonFilesWithoutMatchNoMatch.stdout == expectedFixedPathNoMatch)
         for result in [
             jsonFilesWithMatchesMatch,
             jsonFilesWithMatchesIgnoreCaseWordMatch,
@@ -3417,9 +3464,13 @@ struct MiscTests {
             #expect(result.stderr.isEmpty)
             #expect(result.stdout == expectedPathNoMatch)
         }
+        #expect(fixedJsonFilesWithMatchesMatch.status == 0)
+        #expect(fixedJsonFilesWithMatchesMatch.stderr.isEmpty)
+        #expect(fixedJsonFilesWithMatchesMatch.stdout == expectedFixedMatchPath)
         for result in [
             jsonFilesWithoutMatchMatch,
             jsonFilesWithoutMatchIgnoreCaseWordMatch,
+            fixedJsonFilesWithoutMatchMatch,
         ] {
             #expect(result.status == 1)
             #expect(result.stderr.isEmpty)
@@ -3474,8 +3525,11 @@ struct MiscTests {
         for result in [
             jsonFilesWithMatchesNoMatch,
             jsonFilesWithMatchesExactLineMismatch,
+            fixedJsonFilesWithMatchesNoMatch,
             jsonCountNoMatch,
             jsonCountMatchesNoMatch,
+            fixedJsonCountNoMatch,
+            fixedJsonCountMatchesNoMatch,
         ] {
             #expect(result.status == 1)
             #expect(result.stderr.isEmpty)
