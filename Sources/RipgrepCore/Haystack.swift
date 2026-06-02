@@ -1554,9 +1554,63 @@ public struct FileWalker: @unchecked Sendable {
 
         let directoryPathPrefix = directoryPath + "/"
         let relativePathPrefix = relativePath.isEmpty ? "" : relativePath + "/"
+        let canUseBasenameOnlyIgnoreDecisions = directoryIgnoreStack.canUseUnscopedBasenameDecisions
         if directoryIgnoreStack.isEmpty {
             for child in contents.children.reversed() {
                 if child.kind == .symbolicLink || (!options.hidden && child.isHidden) {
+                    continue
+                }
+                if child.kind.isDirectory {
+                    let childRelativePath = relativePathPrefix + child.name
+                    var childLogicalPathBytes = logicalPathBytes
+                    childLogicalPathBytes.append(UInt8(ascii: "/"))
+                    appendUTF8(child.name, to: &childLogicalPathBytes)
+                    try walkFilePathsInOutputOrderData(
+                        directoryPath: directoryPathPrefix + child.name,
+                        logicalPathBytes: childLogicalPathBytes,
+                        logicalDirectoryPathIsASCII: logicalDirectoryPathIsASCII && child.isASCII,
+                        relativePath: childRelativePath,
+                        rootBase: rootBase,
+                        rootDebugDisplayPath: rootDebugDisplayPath,
+                        rootArgumentIsAbsolute: rootArgumentIsAbsolute,
+                        vcsContext: directoryVCSContext,
+                        messages: &messages,
+                        warnings: &warnings,
+                        diagnostics: &diagnostics,
+                        filtered: &filtered,
+                        ignoreStack: directoryIgnoreStack,
+                        options: options,
+                        emittedCount: &emittedCount,
+                        outputBuffer: &outputBuffer
+                    )
+                } else if child.kind.isFile {
+                    emittedCount += 1
+                    appendDarwinFilePathLine(
+                        logicalPathBytes: logicalPathBytes,
+                        logicalPathIsASCII: logicalDirectoryPathIsASCII,
+                        childName: child.name,
+                        childNameIsASCII: child.isASCII,
+                        outputBuffer: &outputBuffer,
+                        terminator: options.nullPathTerminator ? UInt8(0) : UInt8(ascii: "\n")
+                    )
+                }
+            }
+            return
+        }
+        if canUseBasenameOnlyIgnoreDecisions {
+            for child in contents.children.reversed() {
+                if child.kind == .symbolicLink {
+                    continue
+                }
+                let isDirectory = child.kind.isDirectory
+                guard shouldEmitFastFilePath(
+                    child: child,
+                    childRelativePath: child.name,
+                    isDirectory: isDirectory,
+                    ignoreStack: directoryIgnoreStack,
+                    options: options,
+                    filtered: &filtered
+                ) else {
                     continue
                 }
                 if child.kind.isDirectory {
@@ -1781,6 +1835,66 @@ public struct FileWalker: @unchecked Sendable {
         let directoryPathPrefix = directoryPath + "/"
         let logicalDirectoryPathPrefix = pathPrefix(logicalDirectoryPath)
         let relativePathPrefix = relativePath.isEmpty ? "" : relativePath + "/"
+        let canUseBasenameOnlyIgnoreDecisions = options.loggingMode == nil
+            && directoryIgnoreStack.canUseUnscopedBasenameDecisions
+        if canUseBasenameOnlyIgnoreDecisions {
+            for child in contents.children.reversed() {
+                if child.kind == .symbolicLink {
+                    continue
+                }
+                let isDirectory = child.kind.isDirectory
+                if !options.hidden,
+                   child.isHidden,
+                   !isIncludedByIgnore(
+                       relativePath: child.name,
+                       basename: child.name,
+                       isDirectory: isDirectory,
+                       ignoreStack: directoryIgnoreStack
+                   ) {
+                    continue
+                }
+                if !directoryIgnoreStack.allows(relativePath: child.name, basename: child.name, isDirectory: isDirectory) {
+                    filtered = true
+                    continue
+                }
+                if child.kind.isDirectory {
+                    let childRelativePath = relativePathPrefix + child.name
+                    try walkFilePathsInOutputOrder(
+                        directoryPath: directoryPathPrefix + child.name,
+                        logicalDirectoryPath: joinedPath(logicalDirectoryPath, child.name),
+                        logicalDirectoryPathIsASCII: logicalDirectoryPathIsASCII && child.isASCII,
+                        relativePath: childRelativePath,
+                        rootBase: rootBase,
+                        rootDebugDisplayPath: rootDebugDisplayPath,
+                        rootArgumentIsAbsolute: rootArgumentIsAbsolute,
+                        vcsContext: directoryVCSContext,
+                        messages: &messages,
+                        warnings: &warnings,
+                        diagnostics: &diagnostics,
+                        filtered: &filtered,
+                        ignoreStack: directoryIgnoreStack,
+                        options: options,
+                        stopAfterFirst: stopAfterFirst,
+                        didStop: &didStop,
+                        emit: emit
+                    )
+                    if didStop {
+                        return
+                    }
+                } else if child.kind.isFile {
+                    emit(outputPath(
+                        logicalDirectoryPathPrefix: logicalDirectoryPathPrefix,
+                        logicalDirectoryPathIsASCII: logicalDirectoryPathIsASCII,
+                        child: child
+                    ))
+                    if stopAfterFirst {
+                        didStop = true
+                        return
+                    }
+                }
+            }
+            return
+        }
         for child in contents.children.reversed() {
             if child.kind == .symbolicLink {
                 continue
@@ -2041,6 +2155,67 @@ public struct FileWalker: @unchecked Sendable {
         let directoryPathPrefix = directoryPath + "/"
         let logicalDirectoryPathPrefix = pathPrefix(logicalDirectoryPath)
         let relativePathPrefix = relativePath.isEmpty ? "" : relativePath + "/"
+        let canUseBasenameOnlyIgnoreDecisions = directoryIgnoreStack.canUseUnscopedBasenameDecisions
+        func visitChildUsingBasenameDecisionPath(_ child: FastDirectoryChild) throws {
+            if child.kind == .symbolicLink {
+                return
+            }
+            let isDirectory = child.kind.isDirectory
+            if !options.hidden,
+               child.isHidden,
+               !isIncludedByIgnore(
+                   relativePath: child.name,
+                   basename: child.name,
+                   isDirectory: isDirectory,
+                   ignoreStack: directoryIgnoreStack
+               ) {
+                return
+            }
+            if !directoryIgnoreStack.allows(relativePath: child.name, basename: child.name, isDirectory: isDirectory) {
+                filtered = true
+                return
+            }
+            if child.kind.isDirectory {
+                let childRelativePath = relativePathPrefix + child.name
+                try walkFastSearchFilesInOutputOrder(
+                    directoryPath: directoryPathPrefix + child.name,
+                    logicalDirectoryPath: joinedPath(logicalDirectoryPath, child.name),
+                    logicalDirectoryPathIsASCII: logicalDirectoryPathIsASCII && child.isASCII,
+                    relativePath: childRelativePath,
+                    rootBase: rootBase,
+                    rootDebugDisplayPath: rootDebugDisplayPath,
+                    rootArgumentIsAbsolute: rootArgumentIsAbsolute,
+                    vcsContext: directoryVCSContext,
+                    messages: &messages,
+                    warnings: &warnings,
+                    diagnostics: &diagnostics,
+                    filtered: &filtered,
+                    ignoreStack: directoryIgnoreStack,
+                    options: options,
+                    lexicalOrder: lexicalOrder,
+                    didStop: &didStop,
+                    visit: visit
+                )
+                if didStop {
+                    return
+                }
+            } else if child.kind.isFile {
+                let haystack = Haystack(
+                    url: URL(fileURLWithPath: directoryPathPrefix + child.name, isDirectory: false),
+                    isExplicit: false,
+                    overridePath: outputPath(
+                        logicalDirectoryPathPrefix: logicalDirectoryPathPrefix,
+                        logicalDirectoryPathIsASCII: logicalDirectoryPathIsASCII,
+                        child: child
+                    ),
+                    isRegularFile: true
+                )
+                if visit(haystack) {
+                    didStop = true
+                    return
+                }
+            }
+        }
         func visitChild(_ child: FastDirectoryChild) throws {
             if child.kind == .symbolicLink {
                 return
@@ -2103,17 +2278,35 @@ public struct FileWalker: @unchecked Sendable {
         }
         if lexicalOrder {
             let children = contents.children.sorted { $0.name < $1.name }
-            for child in children {
-                try visitChild(child)
-                if didStop {
-                    return
+            if canUseBasenameOnlyIgnoreDecisions {
+                for child in children {
+                    try visitChildUsingBasenameDecisionPath(child)
+                    if didStop {
+                        return
+                    }
+                }
+            } else {
+                for child in children {
+                    try visitChild(child)
+                    if didStop {
+                        return
+                    }
                 }
             }
         } else {
-            for child in contents.children.reversed() {
-                try visitChild(child)
-                if didStop {
-                    return
+            if canUseBasenameOnlyIgnoreDecisions {
+                for child in contents.children.reversed() {
+                    try visitChildUsingBasenameDecisionPath(child)
+                    if didStop {
+                        return
+                    }
+                }
+            } else {
+                for child in contents.children.reversed() {
+                    try visitChild(child)
+                    if didStop {
+                        return
+                    }
                 }
             }
         }
@@ -3811,6 +4004,7 @@ public struct FileWalker: @unchecked Sendable {
                 reportLoadErrors: true,
                 displayPath: offset < options.ignoreFileDisplayPaths.count ? options.ignoreFileDisplayPaths[offset] : nil,
                 caseInsensitive: false,
+                ignoreExplicitRootMatch: true,
                 options: options
             )
         }

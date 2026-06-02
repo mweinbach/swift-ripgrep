@@ -492,6 +492,50 @@ struct BinaryTests {
         )
         #expect(binaryStatsExitCode == 0)
         #expect(binaryStatsOutput.isEmpty)
+
+        try assertExplicitIgnoreFileDoesNotExcludeExplicitSearchRoot()
     }
 
+}
+
+private func assertExplicitIgnoreFileDoesNotExcludeExplicitSearchRoot() throws {
+    let root = try TemporaryDirectory()
+    try root.createDirectory("target/sub")
+    try root.write("needle\n", to: "target/sub/file.txt")
+    try root.write("/target\n", to: "root.ignore")
+    try root.write("/target/sub\n", to: "sub.ignore")
+    try root.write("/target/sub/file.txt\n", to: "file.ignore")
+
+    let originalDirectory = FileManager.default.currentDirectoryPath
+    defer { FileManager.default.changeCurrentDirectoryPath(originalDirectory) }
+    #expect(FileManager.default.changeCurrentDirectoryPath(root.url.path))
+
+    #expect(try run([
+        "--sort",
+        "path",
+        "--ignore-file",
+        "root.ignore",
+        "needle",
+        "target",
+    ]) == ["target/sub/file.txt:needle"])
+    #expect(try run([
+        "--sort",
+        "path",
+        "--ignore-file",
+        "root.ignore",
+        "--files",
+        "target",
+    ]) == ["target/sub/file.txt"])
+    #expect(try runAllowingNoMatch([
+        "--ignore-file",
+        "sub.ignore",
+        "needle",
+        "target",
+    ]) == [])
+    #expect(try runAllowingNoMatch([
+        "--ignore-file",
+        "file.ignore",
+        "needle",
+        "target",
+    ]) == [])
 }

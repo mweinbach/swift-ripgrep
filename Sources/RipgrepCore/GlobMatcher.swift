@@ -317,6 +317,10 @@ public struct GlobMatcher: Equatable {
         hasIncludeRules
     }
 
+    var canUseUnscopedBasenameDecisions: Bool {
+        allRulesUnanchoredBasenameOnly
+    }
+
     public var excludesOnlyHiddenPaths: Bool {
         guard !rules.isEmpty else {
             return false
@@ -1266,6 +1270,10 @@ public struct IgnoreStack: @unchecked Sendable {
 
     public var canIncludePaths: Bool {
         canInclude
+    }
+
+    var canUseUnscopedBasenameDecisions: Bool {
+        !matchers.isEmpty && matchers.allSatisfy { $0.canUseUnscopedBasenameDecisions }
     }
 
     public mutating func append(_ matcher: GlobMatcher) {
