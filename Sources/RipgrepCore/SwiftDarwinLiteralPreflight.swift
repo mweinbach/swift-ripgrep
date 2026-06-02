@@ -12134,8 +12134,9 @@ private func rgSwiftDarwinWriteLiteralBytes(
         return nil
     }
 
-    var output = emitLines ? rgSwiftStdoutBuffer(capacity: 1024 * 1024) : nil
-    if emitLines, output == nil {
+    let simpleLineOutput = emitLines && !lineNumber && linePrefix.isEmpty && headingPrefix.isEmpty
+    var output = emitLines && !simpleLineOutput ? rgSwiftStdoutBuffer(capacity: 1024 * 1024) : nil
+    if emitLines, !simpleLineOutput, output == nil {
         return nil
     }
     defer {
@@ -12162,10 +12163,20 @@ private func rgSwiftDarwinWriteLiteralBytes(
     var declinedFastPath = false
     var confirmedTextHaystack = knownTextHaystack
     var bytesSearched = haystackLength
-    let simpleLineOutput = emitLines && !lineNumber && linePrefix.isEmpty && headingPrefix.isEmpty
     var pendingSimpleOutputStart: Int?
     var pendingSimpleOutputEnd = 0
     var pendingSimpleOutputNeedsFinalNewline = false
+
+    func ensureOutputBuffer() -> Bool {
+        if output == nil {
+            guard let buffer = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+                writeFailed = true
+                return false
+            }
+            output = buffer
+        }
+        return true
+    }
 
     func ensureTextHaystack() -> Bool {
         if confirmedTextHaystack {
@@ -12181,6 +12192,9 @@ private func rgSwiftDarwinWriteLiteralBytes(
     func flushPendingSimpleOutput() -> Bool {
         guard let start = pendingSimpleOutputStart else {
             return true
+        }
+        guard ensureOutputBuffer() else {
+            return false
         }
         guard output?.write(base.advanced(by: start), count: pendingSimpleOutputEnd - start) == true else {
             writeFailed = true
@@ -12372,7 +12386,7 @@ private func rgSwiftDarwinWriteLiteralBytes(
         }
     }
     if emitLines {
-        guard output?.flush() == true else {
+        guard output?.flush() ?? true else {
             return nil
         }
     }
