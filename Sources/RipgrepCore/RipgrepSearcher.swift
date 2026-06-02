@@ -1700,9 +1700,10 @@ public struct RipgrepSearcher: @unchecked Sendable {
                    let literal = literals.first {
                     var searchOffset = 0
                     var foldedLiteral: [UInt8] = []
-                    var caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
+                    var caseInsensitiveShifts: [Int] = []
                     if fastPath.caseInsensitiveASCII {
                         foldedLiteral = literal.map(asciiLowercase)
+                        caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
                         if literal.count > 1 {
                             for index in 0..<(foldedLiteral.count - 1) {
                                 caseInsensitiveShifts[Int(foldedLiteral[index])] = literal.count - 1 - index
@@ -2430,9 +2431,10 @@ public struct RipgrepSearcher: @unchecked Sendable {
                    let literal = literals.first {
                     var searchOffset = 0
                     var foldedLiteral: [UInt8] = []
-                    var caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
+                    var caseInsensitiveShifts: [Int] = []
                     if fastPath.caseInsensitiveASCII {
                         foldedLiteral = literal.map(asciiLowercase)
+                        caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
                         if literal.count > 1 {
                             for index in 0..<(foldedLiteral.count - 1) {
                                 caseInsensitiveShifts[Int(foldedLiteral[index])] = literal.count - 1 - index
@@ -3674,9 +3676,10 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 var lastEmittedLineStart: Int?
                 var lastMatchedLineStart: Int?
                 var foldedLiteral: [UInt8] = []
-                var caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
+                var caseInsensitiveShifts: [Int] = []
                 if fastPath.caseInsensitiveASCII {
                     foldedLiteral = literal.map(asciiLowercase)
+                    caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
                     if literal.count > 1 {
                         for index in 0..<(foldedLiteral.count - 1) {
                             caseInsensitiveShifts[Int(foldedLiteral[index])] = literal.count - 1 - index
@@ -4516,9 +4519,10 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let stopAfterFirstMatch = options.quiet || filesWithMatches || filesWithoutMatch
         let maxCount = options.maxCount ?? Int.max
         let literalBytesStorage: [UInt8]
-        var caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
+        var caseInsensitiveShifts: [Int] = []
         if caseInsensitiveASCII {
             literalBytesStorage = literal.map(asciiLowercase)
+            caseInsensitiveShifts = [Int](repeating: literal.count, count: 256)
             if literal.count > 1 {
                 for index in 0..<(literalBytesStorage.count - 1) {
                     caseInsensitiveShifts[Int(literalBytesStorage[index])] = literal.count - 1 - index
