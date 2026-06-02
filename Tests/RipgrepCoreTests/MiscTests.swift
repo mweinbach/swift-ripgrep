@@ -3142,6 +3142,29 @@ struct MiscTests {
             "[A-Z]{5}",
             root.path("fixed-summary.txt"),
         ])
+        let fixedMaxColumnsLineMatch = try runExecutableResult([
+            "--no-config",
+            "--max-columns",
+            "10",
+            "[A-Z]{5}",
+            root.path("fixed-max.txt"),
+        ])
+        let fixedMaxColumnsPreviewLineMatch = try runExecutableResult([
+            "--no-config",
+            "--max-columns",
+            "10",
+            "--max-columns-preview",
+            "[A-Z]{5}",
+            root.path("fixed-max.txt"),
+        ])
+        let fixedNumberedMaxColumnsLineMatch = try runExecutableResult([
+            "--no-config",
+            "-n",
+            "--max-columns",
+            "10",
+            "[A-Z]{5}",
+            root.path("fixed-max.txt"),
+        ])
         let fixedJsonMaxCountLineMatch = try runExecutableResult([
             "--no-config",
             "--json",
@@ -3456,6 +3479,33 @@ struct MiscTests {
             "[A-Z]{5}",
             root.path("fixed-summary.txt"),
         ])
+        let fixedStatsMaxColumnsLineMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "--max-columns",
+            "10",
+            "[A-Z]{5}",
+            root.path("fixed-max.txt"),
+        ])
+        let fixedStatsMaxColumnsPreviewLineMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "--max-columns",
+            "10",
+            "--max-columns-preview",
+            "[A-Z]{5}",
+            root.path("fixed-max.txt"),
+        ])
+        let fixedStatsMaxColumnsMaxCountLineMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "--max-columns",
+            "10",
+            "-m",
+            "1",
+            "[A-Z]{5}",
+            root.path("fixed-max.txt"),
+        ])
         let statsContextNoMatchSummary = try runExecutableResult([
             "--no-config",
             "--stats",
@@ -3622,6 +3672,31 @@ struct MiscTests {
 
             """.utf8
         )
+        let expectedFixedMaxColumnsOutput = Data("""
+        [Omitted long matching line]
+        [Omitted long matching line]
+
+        """.utf8)
+        let expectedFixedMaxColumnsPreviewOutput = Data("""
+        one ALPHA  [... omitted end of long line]
+        three CHAR [... omitted end of long line]
+
+        """.utf8)
+        let expectedFixedNumberedMaxColumnsOutput = Data("""
+        1:[Omitted long matching line]
+        2:[Omitted long matching line]
+
+        """.utf8)
+        let expectedFixedStatsMaxColumnsOutput = Data("""
+        [Omitted long line with 2 matches]
+        [Omitted long line with 1 matches]
+
+        """.utf8)
+        let expectedFixedStatsMaxColumnsPreviewOutput = Data("""
+        one ALPHA  [... 1 more match]
+        three CHAR [... 0 more matches]
+
+        """.utf8)
         func expectedFixedJSONMatchOutput(noLineNumber: Bool = false) -> Data {
             let path = root.path("summary-match.txt")
             let lineNumber = noLineNumber ? "null" : "3"
@@ -3891,6 +3966,30 @@ struct MiscTests {
                 matchedLines: 1,
                 bytesPrinted: 0
             ))
+        #expect(fixedStatsMaxColumnsLineMatchSummary.status == 0)
+        #expect(fixedStatsMaxColumnsLineMatchSummary.stderr.isEmpty)
+        #expect(fixedStatsMaxColumnsLineMatchSummary.stdout == expectedFixedStatsMaxColumnsOutput
+            + expectedStatsMatchSummary(
+                matches: 3,
+                matchedLines: 2,
+                bytesPrinted: expectedFixedStatsMaxColumnsOutput.count
+            ))
+        #expect(fixedStatsMaxColumnsPreviewLineMatchSummary.status == 0)
+        #expect(fixedStatsMaxColumnsPreviewLineMatchSummary.stderr.isEmpty)
+        #expect(fixedStatsMaxColumnsPreviewLineMatchSummary.stdout == expectedFixedStatsMaxColumnsPreviewOutput
+            + expectedStatsMatchSummary(
+                matches: 3,
+                matchedLines: 2,
+                bytesPrinted: expectedFixedStatsMaxColumnsPreviewOutput.count
+            ))
+        #expect(fixedStatsMaxColumnsMaxCountLineMatchSummary.status == 0)
+        #expect(fixedStatsMaxColumnsMaxCountLineMatchSummary.stderr.isEmpty)
+        #expect(fixedStatsMaxColumnsMaxCountLineMatchSummary.stdout == Data("[Omitted long line with 2 matches]\n".utf8)
+            + expectedStatsMaxCountSummary(
+                matches: 2,
+                matchedLines: 1,
+                bytesPrinted: Data("[Omitted long line with 2 matches]\n".utf8).count
+            ))
         for result in [
             fixedStatsCountMatchSummary,
             fixedStatsCountMatchesMatchSummary,
@@ -4052,6 +4151,15 @@ struct MiscTests {
         #expect(fixedMaxCountIncludeZeroNoMatch.status == 1)
         #expect(fixedMaxCountIncludeZeroNoMatch.stderr.isEmpty)
         #expect(fixedMaxCountIncludeZeroNoMatch.stdout == Data("0\n".utf8))
+        #expect(fixedMaxColumnsLineMatch.status == 0)
+        #expect(fixedMaxColumnsLineMatch.stderr.isEmpty)
+        #expect(fixedMaxColumnsLineMatch.stdout == expectedFixedMaxColumnsOutput)
+        #expect(fixedMaxColumnsPreviewLineMatch.status == 0)
+        #expect(fixedMaxColumnsPreviewLineMatch.stderr.isEmpty)
+        #expect(fixedMaxColumnsPreviewLineMatch.stdout == expectedFixedMaxColumnsPreviewOutput)
+        #expect(fixedNumberedMaxColumnsLineMatch.status == 0)
+        #expect(fixedNumberedMaxColumnsLineMatch.stderr.isEmpty)
+        #expect(fixedNumberedMaxColumnsLineMatch.stdout == expectedFixedNumberedMaxColumnsOutput)
         #expect(fixedJsonMaxCountLineMatch.status == 0)
         #expect(fixedJsonMaxCountLineMatch.stderr.isEmpty)
         #expect(fixedJsonMaxCountLineMatch.stdout == expectedFixedJSONMaxCountOutput())

@@ -1154,6 +1154,7 @@ struct RipgrepCommand {
         var parsedBeforeContext = 0
         var parsedBeforeContextWasSet = false
         var parsedMaxColumns = 0
+        var parsedMaxColumnsPreview = false
         var parsedNullPathTerminator = false
         var parsedNoMmap = false
         var parsedOnlyMatching = false
@@ -1266,6 +1267,10 @@ struct RipgrepCommand {
                 parsedTrim = true
             } else if isNoTrimFlag(argument) {
                 parsedTrim = false
+            } else if argument == "--max-columns-preview" {
+                parsedMaxColumnsPreview = true
+            } else if argument == "--no-max-columns-preview" {
+                parsedMaxColumnsPreview = false
             } else if argument == "-l" || argument == "--files-with-matches" {
                 parsedPrintMode = .filesWithMatches
             } else if argument == "--files-without-match" {
@@ -2905,6 +2910,91 @@ struct RipgrepCommand {
            !parsedOnlyMatching,
            !parsedVimgrep,
            !parsedJson,
+           !parsedStats,
+           parsedMaxCount != 0,
+           parsedAfterContext == 0,
+           parsedBeforeContext == 0,
+           !parsedInvertMatch,
+           !parsedNullData,
+           !parsedPassthru,
+           !parsedReplacement,
+           !parsedStopOnNonmatch,
+           !parsedSearchZipAffectsPreflight,
+           parsedEncodingIsAutomatic,
+           !parsedColorAffectsPreflightOutput,
+           !parsedByteOffset,
+           !parsedColumn,
+           !lineNumber,
+           parsedLinePrefix.isEmpty,
+           parsedHeadingPrefix.isEmpty,
+           parsedMaxColumns > 0,
+           !parsedMaxColumnsPreview,
+           !parsedTrim,
+           !parsedCrlf,
+           (patternCanStartWithDash || !pattern.hasPrefix("-")),
+           path != "-",
+           isReadableRegularFile(path),
+           let exitCode = SwiftDarwinLiteralPreflight.asciiFixedClassOmittedLongLineOutputExitCode(
+            path: path,
+            pattern: pattern,
+            maxCount: parsedMaxCount,
+            maxColumns: parsedMaxColumns
+           ) {
+            return exitCode
+        }
+        if parsedPrintMode == .matchingLines,
+           paths.count == 1,
+           !parsedQuiet,
+           !fixedStrings,
+           !asciiCaseInsensitive,
+           !wordRegexp,
+           !parsedLineRegexp,
+           !parsedOnlyMatching,
+           !parsedVimgrep,
+           !parsedJson,
+           !parsedStats,
+           parsedMaxCount != 0,
+           parsedAfterContext == 0,
+           parsedBeforeContext == 0,
+           !parsedInvertMatch,
+           !parsedNullData,
+           !parsedPassthru,
+           !parsedReplacement,
+           !parsedStopOnNonmatch,
+           !parsedSearchZipAffectsPreflight,
+           parsedEncodingIsAutomatic,
+           !parsedColorAffectsPreflightOutput,
+           !parsedByteOffset,
+           !parsedColumn,
+           parsedMaxColumns > 0,
+           !parsedTrim,
+           !parsedCrlf,
+           (patternCanStartWithDash || !pattern.hasPrefix("-")),
+           path != "-",
+           isReadableRegularFile(path),
+           let exitCode = SwiftDarwinLiteralPreflight.asciiFixedClassMaxColumnsLineOutputExitCode(
+            path: path,
+            pattern: pattern,
+            lineNumber: lineNumber,
+            maxCount: parsedMaxCount,
+            maxColumns: parsedMaxColumns,
+            maxColumnsPreview: parsedMaxColumnsPreview,
+            lineNumberFieldSeparator: parsedFieldMatchSeparator,
+            linePrefix: parsedLinePrefix,
+            headingPrefix: parsedHeadingPrefix
+           ) {
+            return exitCode
+        }
+        if parsedPrintMode == .matchingLines,
+           paths.count == 1,
+           !parsedQuiet,
+           !fixedStrings,
+           !asciiCaseInsensitive,
+           !wordRegexp,
+           !parsedLineRegexp,
+           !parsedOnlyMatching,
+           !parsedVimgrep,
+           !parsedJson,
            parsedStats,
            parsedMaxCount != 0,
            parsedAfterContext == 0,
@@ -3089,6 +3179,49 @@ struct RipgrepCommand {
             lineNumberFieldSeparator: parsedFieldMatchSeparator,
             linePrefix: parsedVimgrep ? parsedVimgrepLinePrefix : parsedLinePrefix,
             headingPrefix: parsedVimgrep ? [] : parsedHeadingPrefix
+           ) {
+            return exitCode
+        }
+        if parsedPrintMode == .matchingLines,
+           paths.count == 1,
+           !parsedQuiet,
+           !fixedStrings,
+           !asciiCaseInsensitive,
+           !wordRegexp,
+           !parsedLineRegexp,
+           !parsedOnlyMatching,
+           !parsedVimgrep,
+           !parsedJson,
+           parsedStats,
+           parsedMaxCount != 0,
+           parsedAfterContext == 0,
+           parsedBeforeContext == 0,
+           !parsedInvertMatch,
+           !parsedNullData,
+           !parsedPassthru,
+           !parsedReplacement,
+           !parsedStopOnNonmatch,
+           !parsedSearchZipAffectsPreflight,
+           parsedEncodingIsAutomatic,
+           !parsedColorAffectsPreflightOutput,
+           !parsedByteOffset,
+           !parsedColumn,
+           parsedMaxColumns > 0,
+           !parsedTrim,
+           !parsedCrlf,
+           (patternCanStartWithDash || !pattern.hasPrefix("-")),
+           path != "-",
+           isReadableRegularFile(path),
+           let exitCode = SwiftDarwinLiteralPreflight.asciiFixedClassMaxColumnsLineStatsExitCode(
+            path: path,
+            pattern: pattern,
+            lineNumber: lineNumber,
+            maxCount: parsedMaxCount,
+            maxColumns: parsedMaxColumns,
+            maxColumnsPreview: parsedMaxColumnsPreview,
+            lineNumberFieldSeparator: parsedFieldMatchSeparator,
+            linePrefix: parsedLinePrefix,
+            headingPrefix: parsedHeadingPrefix
            ) {
             return exitCode
         }

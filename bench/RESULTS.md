@@ -8,6 +8,47 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Explicit fixed ASCII class max-columns preflight - 2026-06-02
+
+Single-file `--max-columns` matching-line searches for plain ASCII fixed-class
+regex sequences now use Swift-only max-column preflights. The simplest omitted
+line route avoids walking every previous newline by looking back only far
+enough to prove the matched line exceeds the configured column limit, while the
+general route handles line numbers, prefixes, `--max-columns-preview`, stats,
+and positive max-count. Preview output falls back on non-ASCII inputs so it
+does not split multibyte text differently from the main printer. No C shim is
+added.
+
+Validation:
+
+- Patched Swift matched Rust after normalizing elapsed stats lines for
+  `--max-columns 10`, `--max-columns 10 --max-columns-preview`, `-n
+  --max-columns 10`, `--max-columns 10 -m 1`, `--stats --max-columns 10`,
+  `--stats --max-columns 10 --max-columns-preview`,
+  `--stats --max-columns 10 -m 1`, and no-match controls.
+- Added executable regression coverage for fixed-class omitted-line output,
+  preview output, numbered omitted-line output, stats summaries with
+  match-count-aware omitted text, preview stats text, and bounded max-count
+  stats bytes.
+- `swift build -c release` and
+  `swift test --filter MiscTests/darwinExecutableLiteralPreflightDenseLines`
+  passed before recording these results.
+
+The pre-change probe used `a830077`, 5 warm-ups, and 25 timed runs. The final
+current-vs-Rust pass used 8 warm-ups and 40 timed runs with stdout redirected
+to `/dev/null`:
+
+| Case | Current Swift | Pre-change `a830077` | Rust |
+| --- | ---: | ---: | ---: |
+| `--max-columns 10 '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 18.5 ms mean / 17.7-19.5 ms range | 54.3 ms / 36.8-66.3 ms | 22.6 ms / 21.6-23.5 ms |
+| `--max-columns 10 --max-columns-preview '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 28.4 ms / 27.3-29.3 ms | 57.3 ms / 36.6-68.9 ms | 22.7 ms / 21.7-23.5 ms |
+| `--stats --max-columns 10 '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 22.6 ms / 21.4-24.1 ms | 53.8 ms / 36.9-63.5 ms | 22.6 ms / 21.7-24.0 ms |
+| `--stats --max-columns 10 --max-columns-preview '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 24.5 ms / 23.7-26.5 ms | not measured | 22.6 ms / 21.5-23.9 ms |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/fixed-remaining-current-a830077.json` and
+`/tmp/swift-rg-bench/fixed-maxcolumns-final-a830077.json`.
+
 ## Explicit fixed ASCII class max-count count preflight - 2026-06-02
 
 Single-file `-c -m 1` and `--count-matches -m 1` searches for plain ASCII

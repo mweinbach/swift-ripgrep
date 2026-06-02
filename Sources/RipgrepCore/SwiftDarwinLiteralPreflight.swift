@@ -172,6 +172,13 @@ public enum SwiftDarwinLiteralPreflight {
     private static let statsElapsedSuffix = Array(
         "0.000000 seconds spent searching\n0.000000 seconds total\n".utf8
     )
+    private static let omittedLongMatchingLine = Array("[Omitted long matching line]\n".utf8)
+    private static let omittedLongLineWithPrefix = Array("[Omitted long line with ".utf8)
+    private static let omittedLongLineWithSuffix = Array(" matches]\n".utf8)
+    private static let previewOmittedEndSuffix = Array(" [... omitted end of long line]\n".utf8)
+    private static let previewMoreMatchesPrefix = Array(" [... ".utf8)
+    private static let previewMoreMatchSuffix = Array(" more match]\n".utf8)
+    private static let previewMoreMatchesSuffix = Array(" more matches]\n".utf8)
     private static let jsonNoMatchSummaryPrefix = Array(
         #"{"data":{"elapsed_total":{"human":"0.000000s","nanos":0,"secs":0},"stats":{"bytes_printed":0,"bytes_searched":"#.utf8
     )
@@ -1168,6 +1175,94 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         guard fflush(Darwin.stdout) == 0 else {
+            return nil
+        }
+        let exitCode: Int32 = stats.matchedLines > 0 ? 0 : 1
+        return writeStatsSummary(
+            totalMatches: stats.totalMatches,
+            matchedLines: stats.matchedLines,
+            filesWithMatches: stats.matchedLines > 0 ? 1 : 0,
+            filesSearched: 1,
+            bytesPrinted: stats.bytesPrinted,
+            bytesSearched: stats.bytesSearched,
+            exitCode: exitCode
+        )
+    }
+
+    public static func asciiFixedClassMaxColumnsLineOutputExitCode(
+        path: String,
+        pattern: String,
+        lineNumber: Bool,
+        maxCount: Int?,
+        maxColumns: Int,
+        maxColumnsPreview: Bool,
+        lineNumberFieldSeparator: [UInt8],
+        linePrefix: [UInt8],
+        headingPrefix: [UInt8]
+    ) -> Int32? {
+        guard maxCount.map({ $0 > 0 }) ?? true,
+              let classes = asciiFixedClassSequenceClasses(pattern: pattern),
+              let stats = asciiFixedClassMaxColumnsLineOutput(
+                path: path,
+                classes: classes,
+                lineNumber: lineNumber,
+                maxCount: maxCount ?? Int.max,
+                maxColumns: maxColumns,
+                maxColumnsPreview: maxColumnsPreview,
+                lineNumberFieldSeparator: lineNumberFieldSeparator,
+                linePrefix: linePrefix,
+                headingPrefix: headingPrefix,
+                collectTotalMatches: false
+              ) else {
+            return nil
+        }
+        return stats.matchedLines > 0 ? 0 : 1
+    }
+
+    public static func asciiFixedClassOmittedLongLineOutputExitCode(
+        path: String,
+        pattern: String,
+        maxCount: Int?,
+        maxColumns: Int
+    ) -> Int32? {
+        guard maxCount.map({ $0 > 0 }) ?? true,
+              let classes = asciiFixedClassSequenceClasses(pattern: pattern),
+              let matchedLineCount = asciiFixedClassOmittedLongLineOutput(
+                path: path,
+                classes: classes,
+                maxCount: maxCount ?? Int.max,
+                maxColumns: maxColumns
+              ) else {
+            return nil
+        }
+        return matchedLineCount > 0 ? 0 : 1
+    }
+
+    public static func asciiFixedClassMaxColumnsLineStatsExitCode(
+        path: String,
+        pattern: String,
+        lineNumber: Bool,
+        maxCount: Int?,
+        maxColumns: Int,
+        maxColumnsPreview: Bool,
+        lineNumberFieldSeparator: [UInt8],
+        linePrefix: [UInt8],
+        headingPrefix: [UInt8]
+    ) -> Int32? {
+        guard maxCount.map({ $0 > 0 }) ?? true,
+              let classes = asciiFixedClassSequenceClasses(pattern: pattern),
+              let stats = asciiFixedClassMaxColumnsLineOutput(
+                path: path,
+                classes: classes,
+                lineNumber: lineNumber,
+                maxCount: maxCount ?? Int.max,
+                maxColumns: maxColumns,
+                maxColumnsPreview: maxColumnsPreview,
+                lineNumberFieldSeparator: lineNumberFieldSeparator,
+                linePrefix: linePrefix,
+                headingPrefix: headingPrefix,
+                collectTotalMatches: true
+              ) else {
             return nil
         }
         let exitCode: Int32 = stats.matchedLines > 0 ? 0 : 1
@@ -5029,6 +5124,358 @@ public enum SwiftDarwinLiteralPreflight {
             if newlinePointer != nil {
                 lineNumberAtLineStart += 1
             } else {
+                break
+            }
+        }
+
+        guard output.flush() else {
+            return nil
+        }
+        return matchedLineCount
+    }
+
+    private static func asciiFixedClassMaxColumnsLineOutput(
+        path: String,
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass],
+        lineNumber: Bool,
+        maxCount: Int,
+        maxColumns: Int,
+        maxColumnsPreview: Bool,
+        lineNumberFieldSeparator: [UInt8],
+        linePrefix: [UInt8],
+        headingPrefix: [UInt8],
+        collectTotalMatches: Bool
+    ) -> MatchedOutputStats? {
+        guard !classes.isEmpty,
+              maxCount > 0,
+              maxColumns > 0,
+              let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !startsWithUTFBOM(data),
+              !hasBinaryDetectionPrefix(data),
+              !containsNULByte(data) else {
+            return nil
+        }
+        if maxColumnsPreview,
+           containsNonASCIIByte(data) {
+            return nil
+        }
+        return data.withUnsafeBytes { rawData -> MatchedOutputStats? in
+            guard let rawBase = rawData.baseAddress else {
+                return MatchedOutputStats(
+                    totalMatches: 0,
+                    matchedLines: 0,
+                    bytesPrinted: 0,
+                    bytesSearched: data.count
+                )
+            }
+            return asciiFixedClassMaxColumnsLineOutput(
+                baseAddress: rawBase.assumingMemoryBound(to: UInt8.self),
+                dataCount: rawData.count,
+                classes: classes,
+                lineNumber: lineNumber,
+                maxCount: maxCount,
+                maxColumns: maxColumns,
+                maxColumnsPreview: maxColumnsPreview,
+                lineNumberFieldSeparator: lineNumberFieldSeparator,
+                linePrefix: linePrefix,
+                headingPrefix: headingPrefix,
+                collectTotalMatches: collectTotalMatches
+            )
+        }
+    }
+
+    private static func asciiFixedClassMaxColumnsLineOutput(
+        baseAddress: UnsafePointer<UInt8>,
+        dataCount: Int,
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass],
+        lineNumber: Bool,
+        maxCount: Int,
+        maxColumns: Int,
+        maxColumnsPreview: Bool,
+        lineNumberFieldSeparator: [UInt8],
+        linePrefix: [UInt8],
+        headingPrefix: [UInt8],
+        collectTotalMatches: Bool
+    ) -> MatchedOutputStats? {
+        let width = classes.count
+        guard width > 0, maxColumns > 0, dataCount >= width else {
+            return MatchedOutputStats(
+                totalMatches: 0,
+                matchedLines: 0,
+                bytesPrinted: 0,
+                bytesSearched: dataCount
+            )
+        }
+        guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+            return nil
+        }
+        defer {
+            output.deallocate()
+        }
+
+        let newline = UInt8(ascii: "\n")
+        var searchOffset = 0
+        var lineStart = 0
+        var lineNumberAtLineStart = 1
+        var matchedLineCount = 0
+        var totalMatches = 0
+        var bytesSearched = dataCount
+        var synthesizedLineTerminators = 0
+        var emittedHeading = false
+
+        func advanceLineStart(to matchOffset: Int) {
+            while lineStart < matchOffset {
+                let distance = matchOffset - lineStart
+                guard let newlinePointer = memchr(
+                    baseAddress.advanced(by: lineStart),
+                    Int32(newline),
+                    distance
+                ) else {
+                    return
+                }
+                let newlineOffset = baseAddress.distance(
+                    to: newlinePointer.assumingMemoryBound(to: UInt8.self)
+                )
+                lineNumberAtLineStart += 1
+                lineStart = newlineOffset + 1
+            }
+        }
+
+        func writePreviewSuffix(remainingMatches: Int?) -> Bool {
+            guard let remainingMatches else {
+                return output.writeBytes(previewOmittedEndSuffix)
+            }
+            return output.writeBytes(previewMoreMatchesPrefix)
+                && output.writeLineNumberPrefix(
+                    remainingMatches,
+                    fieldSeparator: remainingMatches == 1 ? previewMoreMatchSuffix : previewMoreMatchesSuffix
+                )
+        }
+
+        while let matchOffset = asciiFixedClassNextSequenceMatch(
+            baseAddress: baseAddress,
+            endExclusive: dataCount,
+            classes: classes,
+            from: searchOffset
+        ) {
+            guard matchedLineCount < maxCount else {
+                break
+            }
+            advanceLineStart(to: matchOffset)
+
+            let newlinePointer = memchr(
+                baseAddress.advanced(by: matchOffset),
+                Int32(newline),
+                dataCount - matchOffset
+            )
+            let lineEnd = newlinePointer.map {
+                baseAddress.distance(to: $0.assumingMemoryBound(to: UInt8.self))
+            } ?? dataCount
+            let outputEnd = newlinePointer == nil ? dataCount : lineEnd + 1
+            let lineByteCount = lineEnd - lineStart
+            var lineMatchCount = 1
+            var remainingLineMatches = matchOffset - lineStart >= maxColumns ? 1 : 0
+
+            if collectTotalMatches {
+                lineMatchCount = 0
+                remainingLineMatches = 0
+                var spanSearchOffset = matchOffset
+                while let spanStart = asciiFixedClassNextSequenceMatch(
+                    baseAddress: baseAddress,
+                    endExclusive: lineEnd,
+                    classes: classes,
+                    from: spanSearchOffset
+                ) {
+                    lineMatchCount += 1
+                    if spanStart - lineStart >= maxColumns {
+                        remainingLineMatches += 1
+                    }
+                    spanSearchOffset = spanStart + width
+                }
+                totalMatches += lineMatchCount
+            }
+
+            guard output.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading),
+                  output.writeBytes(linePrefix) else {
+                return nil
+            }
+            if lineNumber,
+               !output.writeLineNumberPrefix(
+                lineNumberAtLineStart,
+                fieldSeparator: lineNumberFieldSeparator
+               ) {
+                return nil
+            }
+
+            if lineByteCount >= maxColumns {
+                if maxColumnsPreview {
+                    guard output.write(baseAddress.advanced(by: lineStart), count: maxColumns),
+                          writePreviewSuffix(
+                            remainingMatches: collectTotalMatches ? remainingLineMatches : nil
+                          ) else {
+                        return nil
+                    }
+                } else if collectTotalMatches {
+                    guard output.writeBytes(omittedLongLineWithPrefix),
+                          output.writeLineNumberPrefix(lineMatchCount, fieldSeparator: omittedLongLineWithSuffix) else {
+                        return nil
+                    }
+                } else if !output.writeBytes(omittedLongMatchingLine) {
+                    return nil
+                }
+            } else {
+                guard output.write(baseAddress.advanced(by: lineStart), count: outputEnd - lineStart) else {
+                    return nil
+                }
+                if newlinePointer == nil,
+                   !output.writeByte(newline) {
+                    return nil
+                }
+                if newlinePointer == nil {
+                    synthesizedLineTerminators += 1
+                }
+            }
+
+            matchedLineCount += 1
+            if matchedLineCount >= maxCount {
+                bytesSearched = outputEnd
+                break
+            }
+            searchOffset = outputEnd
+            lineStart = outputEnd
+            if newlinePointer != nil {
+                lineNumberAtLineStart += 1
+            } else {
+                break
+            }
+        }
+
+        guard output.flush() else {
+            return nil
+        }
+        return MatchedOutputStats(
+            totalMatches: collectTotalMatches ? totalMatches : matchedLineCount,
+            matchedLines: matchedLineCount,
+            bytesPrinted: output.statsBytesWritten + synthesizedLineTerminators,
+            bytesSearched: bytesSearched
+        )
+    }
+
+    private static func asciiFixedClassOmittedLongLineOutput(
+        path: String,
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass],
+        maxCount: Int,
+        maxColumns: Int
+    ) -> Int? {
+        guard !classes.isEmpty,
+              maxCount > 0,
+              maxColumns > 0,
+              let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !startsWithUTFBOM(data),
+              !hasBinaryDetectionPrefix(data),
+              !containsNULByte(data) else {
+            return nil
+        }
+        return data.withUnsafeBytes { rawData -> Int? in
+            guard let rawBase = rawData.baseAddress else {
+                return 0
+            }
+            return asciiFixedClassOmittedLongLineOutput(
+                baseAddress: rawBase.assumingMemoryBound(to: UInt8.self),
+                dataCount: rawData.count,
+                classes: classes,
+                maxCount: maxCount,
+                maxColumns: maxColumns
+            )
+        }
+    }
+
+    private static func asciiFixedClassOmittedLongLineOutput(
+        baseAddress: UnsafePointer<UInt8>,
+        dataCount: Int,
+        classes: [ASCIIFixedClassSequenceFastPath.ByteClass],
+        maxCount: Int,
+        maxColumns: Int
+    ) -> Int? {
+        let width = classes.count
+        guard width > 0, maxColumns > 0, dataCount >= width else {
+            return 0
+        }
+        guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+            return nil
+        }
+        defer {
+            output.deallocate()
+        }
+
+        let newline = UInt8(ascii: "\n")
+        var searchOffset = 0
+        var matchedLineCount = 0
+
+        while let matchOffset = asciiFixedClassNextSequenceMatch(
+            baseAddress: baseAddress,
+            endExclusive: dataCount,
+            classes: classes,
+            from: searchOffset
+        ) {
+            let newlinePointer = memchr(
+                baseAddress.advanced(by: matchOffset),
+                Int32(newline),
+                dataCount - matchOffset
+            )
+            let lineEnd = newlinePointer.map {
+                baseAddress.distance(to: $0.assumingMemoryBound(to: UInt8.self))
+            } ?? dataCount
+            let outputEnd = newlinePointer == nil ? dataCount : lineEnd + 1
+
+            let backLimit = max(0, matchOffset - maxColumns)
+            var cursor = matchOffset
+            var previousNewline: Int?
+            while cursor > backLimit {
+                cursor -= 1
+                if baseAddress[cursor] == newline {
+                    previousNewline = cursor
+                    break
+                }
+            }
+
+            let lineIsLong: Bool
+            let lineStart: Int
+            if let previousNewline {
+                lineStart = previousNewline + 1
+                lineIsLong = lineEnd - lineStart >= maxColumns
+            } else if matchOffset >= maxColumns {
+                lineStart = 0
+                lineIsLong = true
+            } else {
+                lineStart = 0
+                lineIsLong = lineEnd >= maxColumns
+            }
+
+            if lineIsLong {
+                guard output.writeBytes(omittedLongMatchingLine) else {
+                    return nil
+                }
+            } else {
+                guard output.write(baseAddress.advanced(by: lineStart), count: outputEnd - lineStart) else {
+                    return nil
+                }
+                if newlinePointer == nil,
+                   !output.writeByte(newline) {
+                    return nil
+                }
+            }
+
+            matchedLineCount += 1
+            if matchedLineCount >= maxCount {
+                break
+            }
+            searchOffset = outputEnd
+            if newlinePointer == nil {
                 break
             }
         }
