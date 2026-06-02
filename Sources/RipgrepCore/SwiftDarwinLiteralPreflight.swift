@@ -1228,7 +1228,7 @@ public enum SwiftDarwinLiteralPreflight {
     ) -> Int32? {
         guard maxCount.map({ $0 > 0 }) ?? true,
               let classes = asciiFixedClassSequenceClasses(pattern: pattern),
-              let matchCount = asciiFixedClassVimgrepLineOutput(
+              let stats = asciiFixedClassVimgrepLineOutput(
                 path: path,
                 classes: classes,
                 lineNumber: lineNumber,
@@ -1240,7 +1240,46 @@ public enum SwiftDarwinLiteralPreflight {
               ) else {
             return nil
         }
-        return matchCount > 0 ? 0 : 1
+        return stats.totalMatches > 0 ? 0 : 1
+    }
+
+    public static func asciiFixedClassVimgrepLineStatsExitCode(
+        path: String,
+        pattern: String,
+        lineNumber: Bool,
+        byteOffset: Bool,
+        column: Bool,
+        maxCount: Int?,
+        lineNumberFieldSeparator: [UInt8],
+        linePrefix: [UInt8]
+    ) -> Int32? {
+        guard maxCount.map({ $0 > 0 }) ?? true,
+              let classes = asciiFixedClassSequenceClasses(pattern: pattern),
+              let stats = asciiFixedClassVimgrepLineOutput(
+                path: path,
+                classes: classes,
+                lineNumber: lineNumber,
+                byteOffset: byteOffset,
+                column: column,
+                maxCount: maxCount ?? Int.max,
+                lineNumberFieldSeparator: lineNumberFieldSeparator,
+                linePrefix: linePrefix
+              ) else {
+            return nil
+        }
+        guard fflush(Darwin.stdout) == 0 else {
+            return nil
+        }
+        let exitCode: Int32 = stats.totalMatches > 0 ? 0 : 1
+        return writeStatsSummary(
+            totalMatches: stats.totalMatches,
+            matchedLines: stats.matchedLines,
+            filesWithMatches: stats.matchedLines > 0 ? 1 : 0,
+            filesSearched: 1,
+            bytesPrinted: stats.bytesPrinted,
+            bytesSearched: stats.bytesSearched,
+            exitCode: exitCode
+        )
     }
 
     public static func asciiFixedClassMatchedQuietStatsExitCode(
@@ -5330,7 +5369,7 @@ public enum SwiftDarwinLiteralPreflight {
         maxCount: Int,
         lineNumberFieldSeparator: [UInt8],
         linePrefix: [UInt8]
-    ) -> Int? {
+    ) -> MatchedOutputStats? {
         guard !classes.isEmpty,
               maxCount > 0,
               let data = mappedPreflightData(path: path) else {
@@ -5341,9 +5380,14 @@ public enum SwiftDarwinLiteralPreflight {
               !containsNULByte(data) else {
             return nil
         }
-        return data.withUnsafeBytes { rawData -> Int? in
+        return data.withUnsafeBytes { rawData -> MatchedOutputStats? in
             guard let rawBase = rawData.baseAddress else {
-                return 0
+                return MatchedOutputStats(
+                    totalMatches: 0,
+                    matchedLines: 0,
+                    bytesPrinted: 0,
+                    bytesSearched: data.count
+                )
             }
             return asciiFixedClassVimgrepLineOutput(
                 baseAddress: rawBase.assumingMemoryBound(to: UInt8.self),
@@ -5369,10 +5413,15 @@ public enum SwiftDarwinLiteralPreflight {
         maxCount: Int,
         lineNumberFieldSeparator: [UInt8],
         linePrefix: [UInt8]
-    ) -> Int? {
+    ) -> MatchedOutputStats? {
         let width = classes.count
         guard width > 0, dataCount >= width else {
-            return 0
+            return MatchedOutputStats(
+                totalMatches: 0,
+                matchedLines: 0,
+                bytesPrinted: 0,
+                bytesSearched: dataCount
+            )
         }
         guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
             return nil
@@ -5472,7 +5521,12 @@ public enum SwiftDarwinLiteralPreflight {
         guard output.flush() else {
             return nil
         }
-        return matchCount
+        return MatchedOutputStats(
+            totalMatches: matchCount,
+            matchedLines: matchedLineCount,
+            bytesPrinted: output.statsBytesWritten + matchCount,
+            bytesSearched: dataCount
+        )
     }
 
     private static func asciiFixedClassMatchedCounts(

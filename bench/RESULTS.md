@@ -8,6 +8,47 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Explicit fixed ASCII class stats vimgrep preflight - 2026-06-02
+
+Single-file `--stats --vimgrep` searches for plain ASCII fixed-class regex
+sequences now reuse the Swift-only vimgrep line writer and return the total
+match count, unique matched-line count, searched bytes, and printed bytes
+needed for the stats summary. The route preserves vimgrep line-number, column,
+byte-offset, and filename field toggles, while falling back for only-matching
+vimgrep, quiet mode, JSON, color, trim, CRLF conversion, context, replacement,
+passthru, semantic modes, UTF BOM inputs, and files with NUL bytes. This
+remains Swift-only and does not add a C shim.
+
+Validation:
+
+- Patched Swift matched Rust after normalizing elapsed stats lines for
+  `--stats --vimgrep` default, `--no-line-number`, `--no-column`, `-b`,
+  multiple matches on one line, final no-newline output, no-match, UTF-8 BOM
+  fallback, and early NUL fallback controls.
+- Added regression coverage for fixed-class `--stats --vimgrep` matched
+  output/status, including nonzero `bytes printed` accounting.
+- `swift build -c release`,
+  `swift test --filter MiscTests/darwinExecutableLiteralPreflightDenseLines`,
+  full `swift test`,
+  `SWIFT_RIPGREP_PARITY=1 swift test --filter ParityHarnessTests`,
+  `scripts/check-no-external-deps.sh --skip-build`, and `git diff --check`
+  passed before recording these results.
+
+Same-session probe at `868e645` measured `--stats --vimgrep` before this slice
+at 70.9 ms mean for the late-hit fixture versus Rust at 23.2 ms, and 39.2 ms
+for the no-hit fixture versus Rust at 22.9 ms. The patched run used 5 warm-ups
+and 30 timed runs with stdout redirected to `/dev/null`. After the stats
+vimgrep preflight:
+
+| Case | Current Swift | Pre-change `868e645` | Rust |
+| --- | ---: | ---: | ---: |
+| `--stats --vimgrep '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 23.3 ms mean / 22.3-24.4 ms range | 70.9 ms / 50.7-94.1 ms | 23.6 ms / 22.4-24.5 ms |
+| `--stats --vimgrep '[A-Z]{5}' no-uppercase-46m.txt` | 14.2 ms / 13.9-14.7 ms | 39.2 ms / 23.7-57.1 ms | 24.4 ms / 23.2-27.2 ms |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/fixed-formatted-visible-sweep-868e645.json` and
+`/tmp/swift-rg-bench/fixed-stats-vimgrep-patched-868e645.json`.
+
 ## Explicit fixed ASCII class JSON preflight - 2026-06-02
 
 Single-file `--json` and `--json -o` searches for plain ASCII fixed-class

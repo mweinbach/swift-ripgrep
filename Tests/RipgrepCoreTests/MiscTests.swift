@@ -3330,6 +3330,13 @@ struct MiscTests {
             "missingliteral",
             root.path("summary.txt"),
         ])
+        let fixedStatsVimgrepLineMatchSummary = try runExecutableResult([
+            "--no-config",
+            "--stats",
+            "--vimgrep",
+            "[A-Z]{5}",
+            root.path("summary-match.txt"),
+        ])
         let fixedStatsVimgrepOnlyMatchingMatchSummary = try runExecutableResult([
             "--no-config",
             "--stats",
@@ -3683,6 +3690,14 @@ struct MiscTests {
         #expect(fixedStatsVimgrepOnlyMatchingMatchSummary.status == 0)
         #expect(fixedStatsVimgrepOnlyMatchingMatchSummary.stderr.isEmpty)
         #expect(fixedStatsVimgrepOnlyMatchingMatchSummary.stdout == expectedFixedVimgrepOnlyMatchingOutput
+            + expectedStatsMatchSummary(
+                matches: 1,
+                matchedLines: 1,
+                bytesPrinted: expectedFixedVimgrepOnlyMatchingOutput.count
+            ))
+        #expect(fixedStatsVimgrepLineMatchSummary.status == 0)
+        #expect(fixedStatsVimgrepLineMatchSummary.stderr.isEmpty)
+        #expect(fixedStatsVimgrepLineMatchSummary.stdout == expectedFixedVimgrepOnlyMatchingOutput
             + expectedStatsMatchSummary(
                 matches: 1,
                 matchedLines: 1,
