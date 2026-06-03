@@ -1519,6 +1519,20 @@ public enum SwiftDarwinLiteralPreflight {
         return 1
     }
 
+    public static func greekScriptASCIIFileNoMatchExitCode(
+        path: String,
+        pattern: String
+    ) -> Int32? {
+        guard isDefaultGreekScriptPattern(pattern: pattern),
+              let data = mappedPreflightData(path: path),
+              !startsWithUTFBOM(data),
+              !hasBinaryDetectionPrefix(data),
+              !containsNonASCIIByte(data) else {
+            return nil
+        }
+        return 1
+    }
+
     public static func asciiFixedClassNoMatchCountOutputExitCode(
         path: String,
         pattern: String,
@@ -1587,6 +1601,15 @@ public enum SwiftDarwinLiteralPreflight {
             patternBytes.removeFirst(noUnicodePrefix.count)
         }
         return PatternMatcher.asciiFixedClassSequence(in: patternBytes)?.classes
+    }
+
+    private static func isDefaultGreekScriptPattern(pattern: String) -> Bool {
+        switch pattern {
+        case #"\p{Greek}"#, #"\p{Greek}+"#:
+            return true
+        default:
+            return false
+        }
     }
 
     public static func fixedLookbehindQuietExitCode(

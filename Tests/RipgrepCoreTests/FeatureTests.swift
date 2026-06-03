@@ -496,6 +496,40 @@ struct FeatureTests {
         #expect(earlyBinaryOutput.isEmpty)
     }
 
+    @Test("ASCII-only Greek script executable misses return no-match status")
+    func asciiOnlyGreekScriptExecutableMissesReturnNoMatchStatus() throws {
+        let root = try TemporaryDirectory()
+        try root.write("plain\nlatin only\n", to: "ascii.txt")
+        try root.write("π line\n", to: "hit.txt")
+
+        let missArguments = [
+            [#"\p{Greek}"#, root.path("ascii.txt")],
+            ["-n", #"\p{Greek}"#, root.path("ascii.txt")],
+            ["-i", #"\p{Greek}"#, root.path("ascii.txt")],
+            ["-n", "-i", #"\p{Greek}"#, root.path("ascii.txt")],
+            [#"\p{Greek}+"#, root.path("ascii.txt")],
+        ]
+        for arguments in missArguments {
+            let output = try runExecutableData(["--no-config"] + arguments, fixture: {})
+            #expect(output.isEmpty)
+        }
+
+        let hitOutput = try runExecutableData(
+            ["--no-config", "-n", #"\p{Greek}"#, root.path("hit.txt")],
+            fixture: {}
+        )
+        #expect(hitOutput == Data("1:π line\n".utf8))
+
+        let noUnicodeResult = try runExecutableResult(
+            ["--no-config", "--no-unicode", #"\p{Greek}"#, root.path("ascii.txt")],
+            fixture: {}
+        )
+        #expect(noUnicodeResult.output.isEmpty)
+        let noUnicodeError = String(decoding: noUnicodeResult.error, as: UTF8.self)
+        #expect(noUnicodeError.contains("Unicode not allowed here"))
+        #expect(noUnicodeResult.exitCode == 2)
+    }
+
     @Test("supports smart case and inverted matches")
     func supportsSmartCaseAndInvertedMatches() throws {
         let root = try TemporaryDirectory()

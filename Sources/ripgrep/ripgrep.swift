@@ -1173,6 +1173,7 @@ struct RipgrepCommand {
         var parsedLineNumber = false
         var parsedNoLineNumber = false
         var parsedLineRegexp = false
+        var parsedNoUnicode = false
         var parsedAfterContext = 0
         var parsedAfterContextWasSet = false
         var parsedBeforeContext = 0
@@ -1685,6 +1686,10 @@ struct RipgrepCommand {
                 guard parsedUnrestrictedCount <= 3 else {
                     return nil
                 }
+            } else if argument == "--no-unicode" {
+                parsedNoUnicode = true
+            } else if argument == "--unicode" {
+                parsedNoUnicode = false
             } else if isOutputNeutralSingleFileFlag(argument) {
                 continue
             } else if let cluster = shortFlagCluster(argument) {
@@ -2878,6 +2883,36 @@ struct RipgrepCommand {
            path != "-",
            isReadableRegularFile(path),
            let exitCode = SwiftDarwinLiteralPreflight.asciiFixedClassNoMatchExitCode(
+            path: path,
+            pattern: pattern
+           ) {
+            return exitCode
+        }
+        if parsedPrintMode == .matchingLines,
+           paths.count == 1,
+           !parsedNoUnicode,
+           !fixedStrings,
+           !wordRegexp,
+           !parsedLineRegexp,
+           !parsedOnlyMatching,
+           !parsedVimgrep,
+           !parsedJson,
+           !parsedStats,
+           parsedMaxCount == nil,
+           parsedAfterContext == 0,
+           parsedBeforeContext == 0,
+           !parsedInvertMatch,
+           !parsedNullData,
+           !parsedPassthru,
+           !parsedReplacement,
+           !parsedStopOnNonmatch,
+           !parsedSearchZipAffectsPreflight,
+           parsedEncodingIsAutomatic,
+           !parsedColorAffectsPreflightOutput,
+           (patternCanStartWithDash || !pattern.hasPrefix("-")),
+           path != "-",
+           isReadableRegularFile(path),
+           let exitCode = SwiftDarwinLiteralPreflight.greekScriptASCIIFileNoMatchExitCode(
             path: path,
             pattern: pattern
            ) {

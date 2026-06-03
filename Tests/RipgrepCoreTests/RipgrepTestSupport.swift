@@ -73,6 +73,17 @@ func runExecutableData(
     environment: [String: String] = [:],
     fixture: () throws -> Void
 ) throws -> Data {
+    let result = try runExecutableResult(arguments, environment: environment, fixture: fixture)
+    #expect(result.error.isEmpty)
+    #expect(result.exitCode == (result.output.isEmpty ? 1 : 0))
+    return result.output
+}
+
+func runExecutableResult(
+    _ arguments: [String],
+    environment: [String: String] = [:],
+    fixture: () throws -> Void
+) throws -> (output: Data, error: Data, exitCode: Int32) {
     try fixture()
     let executable = ripgrepPackageRootURL().appendingPathComponent(".build/debug/ripgrep")
     let process = Process()
@@ -89,9 +100,7 @@ func runExecutableData(
     let data = output.fileHandleForReading.readDataToEndOfFile()
     let errorData = error.fileHandleForReading.readDataToEndOfFile()
     process.waitUntilExit()
-    #expect(errorData.isEmpty)
-    #expect(process.terminationStatus == (data.isEmpty ? 1 : 0))
-    return data
+    return (data, errorData, process.terminationStatus)
 }
 
 func ripgrepPackageRootURL() -> URL {
