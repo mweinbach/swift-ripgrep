@@ -6370,31 +6370,34 @@ struct RipgrepCommand {
         arguments: [String],
         allowPCREQuotedLiterals: Bool
     ) -> Int32? {
-        let lineNumber: Bool
-        let quiet: Bool
-        let pattern: String
-        let path: String
-        if arguments.count == 2 {
-            lineNumber = false
-            quiet = false
-            pattern = arguments[0]
-            path = arguments[1]
-        } else if arguments.count == 3 {
-            if arguments[0] == "-n" || arguments[0] == "--line-number" {
+        guard arguments.count >= 2 else {
+            return nil
+        }
+        var lineNumber = false
+        var quiet = false
+        var wordRegexp = false
+        let pattern = arguments[arguments.count - 2]
+        let path = arguments[arguments.count - 1]
+        for argument in arguments.dropLast(2) {
+            switch argument {
+            case "-n", "--line-number":
                 lineNumber = true
-                quiet = false
-                pattern = arguments[1]
-                path = arguments[2]
-            } else if arguments[0] == "-q" || arguments[0] == "--quiet" {
-                lineNumber = false
+            case "-q", "--quiet":
                 quiet = true
-                pattern = arguments[1]
-                path = arguments[2]
-            } else {
+            case "-w", "--word-regexp":
+                wordRegexp = true
+            case "-qn", "-nq":
+                quiet = true
+                lineNumber = true
+            case "-qw", "-wq":
+                quiet = true
+                wordRegexp = true
+            case "-nw", "-wn":
+                lineNumber = true
+                wordRegexp = true
+            default:
                 return nil
             }
-        } else {
-            return nil
         }
         guard !pattern.hasPrefix("-"),
               path != "-",
@@ -6408,6 +6411,19 @@ struct RipgrepCommand {
         guard !literal.isEmpty,
               !literal.contains(UInt8(ascii: "\n")) else {
             return nil
+        }
+        if wordRegexp {
+            if quiet {
+                return SwiftDarwinLiteralPreflight.wordQuietExitCode(
+                    path: path,
+                    literal: literal
+                )
+            }
+            return SwiftDarwinLiteralPreflight.wordLineExitCode(
+                path: path,
+                literal: literal,
+                lineNumber: lineNumber
+            )
         }
         if quiet {
             return SwiftDarwinLiteralPreflight.quietExitCode(

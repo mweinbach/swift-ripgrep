@@ -8035,11 +8035,6 @@ public enum SwiftDarwinLiteralPreflight {
             haystackLength: haystackLength,
             foldedByte: rgSwiftASCIILower(literal[0])
            ) == nil {
-            if requireASCIIHaystack,
-               (memchr(base, 0, haystackLength) != nil
-                || rgSwiftContainsNonASCIIByte(base, count: haystackLength)) {
-                return nil
-            }
             return 0
         }
 
@@ -12232,11 +12227,6 @@ private func rgSwiftDarwinWriteLiteralBytes(
         || base[0] == 0xFE && base[1] == 0xFF) {
         return nil
     }
-    if requireASCIIHaystack,
-       rgSwiftContainsNonASCIIByte(base, count: haystackLength) {
-        return nil
-    }
-
     let simpleLineOutput = emitLines && !lineNumber && linePrefix.isEmpty && headingPrefix.isEmpty
     let output: rgSwiftLazyStdoutBuffer?
     if emitLines {
@@ -12273,6 +12263,7 @@ private func rgSwiftDarwinWriteLiteralBytes(
     var writeFailed = false
     var declinedFastPath = false
     var confirmedTextHaystack = knownTextHaystack
+    var confirmedASCIIHaystack = !requireASCIIHaystack
     var bytesSearched = haystackLength
     var pendingSimpleOutputStart: Int?
     var pendingSimpleOutputEnd = 0
@@ -12286,6 +12277,17 @@ private func rgSwiftDarwinWriteLiteralBytes(
             return false
         }
         confirmedTextHaystack = true
+        return true
+    }
+
+    func ensureASCIIHaystack() -> Bool {
+        if confirmedASCIIHaystack {
+            return true
+        }
+        guard !rgSwiftContainsNonASCIIByte(base, count: haystackLength) else {
+            return false
+        }
+        confirmedASCIIHaystack = true
         return true
     }
 
@@ -12345,6 +12347,10 @@ private func rgSwiftDarwinWriteLiteralBytes(
             return true
         }
 
+        guard ensureASCIIHaystack() else {
+            declinedFastPath = true
+            return false
+        }
         guard ensureTextHaystack() else {
             declinedFastPath = true
             return false
