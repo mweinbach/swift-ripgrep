@@ -2870,6 +2870,9 @@ struct MiscTests {
         try root.write("lower lower\n", to: "fixed-summary.txt")
         try root.write("alpha alpha\nquiet\nALPHA\nwordalpha alpha\n", to: "summary-match.txt")
         try root.write("one ALPHA two BRAVO\nthree CHARLIE\nquiet\n", to: "fixed-max.txt")
+        try root.write("warmup\nnear ALPHA tail\nquiet\n", to: "fixed-bounded.txt")
+        let fixedLongLine = String(repeating: "a", count: 5_000) + "ABCDE\n"
+        try root.write("short\n" + fixedLongLine, to: "fixed-long-line.txt")
 
         func runExecutableResult(_ arguments: [String]) throws -> (stdout: Data, stderr: Data, status: Int32) {
             let executable = ripgrepPackageRootURL().appendingPathComponent(".build/debug/ripgrep")
@@ -3166,6 +3169,16 @@ struct MiscTests {
             "--no-config",
             "[A-Z]{5}",
             root.path("summary-match.txt"),
+        ])
+        let fixedBoundedLineMatch = try runExecutableResult([
+            "--no-config",
+            "[A-Z]{5}",
+            root.path("fixed-bounded.txt"),
+        ])
+        let fixedLongLineMatch = try runExecutableResult([
+            "--no-config",
+            "[A-Z]{5}",
+            root.path("fixed-long-line.txt"),
         ])
         let fixedNumberedLineMatch = try runExecutableResult([
             "--no-config",
@@ -3803,6 +3816,8 @@ struct MiscTests {
         let expectedFixedVimgrepOnlyMatchingOutput = Data(
             "\(root.path("summary-match.txt")):3:1:ALPHA\n".utf8
         )
+        let expectedFixedBoundedLineOutput = Data("near ALPHA tail\n".utf8)
+        let expectedFixedLongLineOutput = Data(fixedLongLine.utf8)
         let expectedFixedMaxLineOutput = Data("one ALPHA two BRAVO\n".utf8)
         let expectedFixedMaxOnlyMatchingOutput = Data("ALPHA\nBRAVO\n".utf8)
         let expectedFixedMaxVimgrepOutput = Data(
@@ -4243,6 +4258,12 @@ struct MiscTests {
         #expect(fixedLineMatch.status == 0)
         #expect(fixedLineMatch.stderr.isEmpty)
         #expect(fixedLineMatch.stdout == Data("ALPHA\n".utf8))
+        #expect(fixedBoundedLineMatch.status == 0)
+        #expect(fixedBoundedLineMatch.stderr.isEmpty)
+        #expect(fixedBoundedLineMatch.stdout == expectedFixedBoundedLineOutput)
+        #expect(fixedLongLineMatch.status == 0)
+        #expect(fixedLongLineMatch.stderr.isEmpty)
+        #expect(fixedLongLineMatch.stdout == expectedFixedLongLineOutput)
         #expect(fixedNumberedLineMatch.status == 0)
         #expect(fixedNumberedLineMatch.stderr.isEmpty)
         #expect(fixedNumberedLineMatch.stdout == Data("3:ALPHA\n".utf8))

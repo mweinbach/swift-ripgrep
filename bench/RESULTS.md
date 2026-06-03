@@ -8,6 +8,39 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Fixed-class bounded line-start output - 2026-06-03
+
+Unnumbered fixed-class matching-line output now tries a bounded backward scan
+from each match to find a nearby newline before falling back to the existing
+forward line-start scan. Late matches in large files often have short source
+lines, so this avoids recounting every preceding newline when line numbers are
+not requested. Numbered output still takes the existing path because it needs
+the prior newline count.
+
+Validation:
+
+- Patched Swift matched Rust for `[A-Z]{5}` on the 46 MiB fixed-late fixture
+  and for a long-line fallback control whose previous newline is outside the
+  bounded scan window.
+- Added executable regression coverage for both the short-line bounded path
+  and long-line fallback.
+- `swift test --quiet --filter
+  MiscTests/darwinExecutableLiteralPreflightDenseLines` passed before
+  recording these results.
+
+The retained A/B used a saved `f71cfcc` baseline binary and the current release
+binary. The unnumbered line and stats rows improve sharply; the numbered row is
+flat as expected because numbered output still has to count preceding lines.
+
+| Case | Current Swift | Prior Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `'[A-Z]{5}' fixed-late-uppercase-46m.txt` | 14.1 ms mean / 12.7-18.4 ms range | 21.9 ms / 20.8-28.5 ms | 19.6 ms / 18.5-22.1 ms |
+| `-n '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 21.8 ms / 20.7-31.5 ms | 22.0 ms / 20.7-25.1 ms | not remeasured |
+| `--stats '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 10.6 ms / 10.0-14.3 ms | 18.6 ms / 18.3-19.2 ms | not remeasured |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/fixed-line-bounded-start-ab-1780462019.json`.
+
 ## Fixed-class max-columns preview ASCII guard - 2026-06-03
 
 Fixed-class `--max-columns-preview` output no longer scans the whole mapped

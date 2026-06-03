@@ -4904,6 +4904,18 @@ public enum SwiftDarwinLiteralPreflight {
         var synthesizedLineTerminators = 0
         var emittedHeading = false
 
+        func recentLineStart(before matchOffset: Int) -> Int? {
+            let scanLimit = max(0, matchOffset - 4096)
+            var cursor = matchOffset
+            while cursor > scanLimit {
+                cursor -= 1
+                if baseAddress[cursor] == newline {
+                    return cursor + 1
+                }
+            }
+            return cursor == 0 ? 0 : nil
+        }
+
         func advanceLineStart(to matchOffset: Int) {
             while lineStart < matchOffset {
                 let distance = matchOffset - lineStart
@@ -4931,7 +4943,12 @@ public enum SwiftDarwinLiteralPreflight {
             guard matchedLineCount < maxCount else {
                 break
             }
-            advanceLineStart(to: matchOffset)
+            if !lineNumber,
+               let boundedLineStart = recentLineStart(before: matchOffset) {
+                lineStart = boundedLineStart
+            } else {
+                advanceLineStart(to: matchOffset)
+            }
 
             let newlinePointer = memchr(
                 baseAddress.advanced(by: matchOffset),
@@ -5067,6 +5084,18 @@ public enum SwiftDarwinLiteralPreflight {
         var matchedLineCount = 0
         var emittedHeading = false
 
+        func recentLineStart(before matchOffset: Int) -> Int? {
+            let scanLimit = max(0, matchOffset - 4096)
+            var cursor = matchOffset
+            while cursor > scanLimit {
+                cursor -= 1
+                if baseAddress[cursor] == newline {
+                    return cursor + 1
+                }
+            }
+            return cursor == 0 ? 0 : nil
+        }
+
         func advanceLineStart(to matchOffset: Int) {
             while lineStart < matchOffset {
                 let distance = matchOffset - lineStart
@@ -5091,7 +5120,12 @@ public enum SwiftDarwinLiteralPreflight {
             classes: classes,
             from: searchOffset
         ) {
-            advanceLineStart(to: matchOffset)
+            if !lineNumber,
+               let boundedLineStart = recentLineStart(before: matchOffset) {
+                lineStart = boundedLineStart
+            } else {
+                advanceLineStart(to: matchOffset)
+            }
 
             let newlinePointer = memchr(
                 baseAddress.advanced(by: matchOffset),
