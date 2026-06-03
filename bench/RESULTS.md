@@ -8,6 +8,41 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Quiet literal summary-only first match - 2026-06-03
+
+Quiet no-stats/no-json first-match search now returns a summary-only
+`SearchResults` value once the fast byte-literal scanner has already found a
+match. Quiet output only needs the exit-status summary, so this avoids carrying
+and reducing a matched file payload that the CLI never prints. Visible output,
+stats, JSON, and non-quiet searches stay on the existing result path.
+
+Validation:
+
+- Patched Swift matched Rust status for quiet `SCHED`,
+  `THIS_LITERAL_SHOULD_NOT_EXIST`, and `[A-Z]+_RESUME` searches on the Linux
+  benchmark tree.
+- Sorted visible output for those same patterns matched Rust byte-for-byte.
+- `swift test --filter
+  FeatureTests/quietLiteralRecursiveSearchReturnsOnlyExitStatus`,
+  `swift build -c release`, full `swift test`,
+  `SWIFT_RIPGREP_PARITY=1 swift test --filter
+  ParityHarnessTests/testMatchesRustRipgrepOnSelectedFixtures`,
+  `scripts/check-no-external-deps.sh --skip-build`, and `git diff --check`
+  passed before recording these results.
+
+The retained confirmation used 8 warm-ups and 60 timed runs. The pre-change
+hit refresh was a same-session 30-run scan before the summary-only result was
+added; the absent row is a guard that still demonstrates the recursive literal
+miss remains ahead of Rust.
+
+| Case | Current Swift | Pre-change / guard | Rust |
+| --- | ---: | ---: | ---: |
+| `-q SCHED linux` | 8.3 ms mean / 7.8-9.7 ms range | 9.2 ms / 8.1-12.0 ms | 5.2 ms / 4.4-7.1 ms |
+| `-q THIS_LITERAL_SHOULD_NOT_EXIST linux` | 1.303 s / 1.133-1.532 s | retained guard | 3.823 s / 3.290-5.039 s |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/quiet-literal-summary-result-1780455861.json`.
+
 ## Quiet uppercase-run suffix first match - 2026-06-03
 
 Quiet `[A-Z]+suffix` searches now use a first-match-only scanner after the file

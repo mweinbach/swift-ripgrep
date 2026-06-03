@@ -486,6 +486,22 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
 
         func searchResults(walkResults: FileWalkResults) -> SearchResults {
+            if options.quiet && !options.stats && !options.json {
+                let hasMatch = matchedResult != nil
+                return SearchResults(
+                    files: [],
+                    summary: SearchSummary(
+                        filesSearched: filesSearched,
+                        filesWithMatches: hasMatch ? 1 : 0,
+                        matchedLines: hasMatch ? 1 : 0,
+                        totalMatches: hasMatch ? 1 : 0
+                    ),
+                    messages: walkResults.messages + searchMessages,
+                    warnings: walkResults.warnings,
+                    diagnostics: walkResults.diagnostics,
+                    filtered: walkResults.filtered
+                )
+            }
             let files = matchedResult.map { [$0] } ?? []
             let matchedLines = matchedResult.map { result in
                 result.matches.reduce(0) { $0 + MatchedLineCounter.count($1, options: options) }
