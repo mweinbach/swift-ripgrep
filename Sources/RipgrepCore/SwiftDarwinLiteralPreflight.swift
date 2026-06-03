@@ -15224,6 +15224,79 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
         return selectedStart == Int.max ? nil : selectedIndex
     }
 
+    func denseLineScanLikely() -> Bool {
+        guard emitLines,
+              !lineNumber,
+              linePrefix.isEmpty,
+              headingPrefix.isEmpty,
+              !trimLeadingWhitespace,
+              maxCount == Int.max,
+              haystackLength >= 1024 * 1024 else {
+            return false
+        }
+
+        let sampleLimit = min(haystackLength, 256 * 1024)
+        var lineStart = 0
+        var sampledLineCount = 0
+        var matchedLineCount = 0
+
+        while lineStart < sampleLimit, sampledLineCount < 512 {
+            let newline = memchr(
+                base.advanced(by: lineStart),
+                Int32(UInt8(ascii: "\n")),
+                haystackLength - lineStart
+            )
+            let lineEnd: Int
+            let outputEnd: Int
+            if let newline {
+                lineEnd = base.distance(to: newline.assumingMemoryBound(to: UInt8.self))
+                outputEnd = lineEnd + 1
+            } else {
+                lineEnd = haystackLength
+                outputEnd = haystackLength
+            }
+            if firstLiteralMatch(inLineStart: lineStart, lineEnd: lineEnd) != nil {
+                matchedLineCount += 1
+            }
+            sampledLineCount += 1
+            lineStart = outputEnd
+        }
+
+        return sampledLineCount >= 32 && matchedLineCount * 3 >= sampledLineCount * 2
+    }
+
+    func emitDenseLineMatches() -> Bool {
+        var lineStart = 0
+        while matchedLineCount < maxCount, lineStart < haystackLength {
+            let newline = memchr(
+                base.advanced(by: lineStart),
+                Int32(UInt8(ascii: "\n")),
+                haystackLength - lineStart
+            )
+            let lineEnd: Int
+            let outputEnd: Int
+            if let newline {
+                lineEnd = base.distance(to: newline.assumingMemoryBound(to: UInt8.self))
+                outputEnd = lineEnd + 1
+            } else {
+                lineEnd = haystackLength
+                outputEnd = haystackLength
+            }
+            if firstLiteralMatch(inLineStart: lineStart, lineEnd: lineEnd) != nil {
+                guard output.write(base.advanced(by: lineStart), count: outputEnd - lineStart) else {
+                    return false
+                }
+                if newline == nil, !output.writeByte(UInt8(ascii: "\n")) {
+                    return false
+                }
+                matchedLineCount += 1
+                bytesSearched = outputEnd
+            }
+            lineStart = outputEnd
+        }
+        return true
+    }
+
     let prefixLength = commonPrefixLength()
     if let prefixMatches = boundedPrefixLineMatches() {
         for matchStart in prefixMatches {
@@ -15236,7 +15309,9 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
         if memchr(base, 0, haystackLength) != nil {
             return nil
         }
-        if prefixLength >= 4 {
+        if denseLineScanLikely() {
+            writeFailed = !emitDenseLineMatches()
+        } else if prefixLength >= 4 {
             var searchOffset = 0
             while matchedLineCount < maxCount, searchOffset < haystackLength {
                 let foundPointer = literals[0].withUnsafeBufferPointer { literalBuffer in

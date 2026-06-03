@@ -2310,6 +2310,17 @@ struct MiscTests {
         ], fixture: {})
         #expect(String(decoding: boundedUnterminatedMultiByteOutput, as: UTF8.self) == "last delta\n")
 
+        let denseLine = "needle quiet tail"
+        let denseLineCount = 70_000
+        let denseUnterminatedText = String(repeating: denseLine + "\n", count: denseLineCount - 1) + denseLine
+        try root.write(denseUnterminatedText, to: "dense-multi-unterminated.txt")
+        let denseUnterminatedOutput = try runExecutableData([
+            "needle|quiet",
+            root.path("dense-multi-unterminated.txt"),
+        ], fixture: {})
+        let expectedDenseUnterminatedOutput = String(repeating: denseLine + "\n", count: denseLineCount)
+        #expect(String(decoding: denseUnterminatedOutput, as: UTF8.self) == expectedDenseUnterminatedOutput)
+
         let manyMultiLines = (1...20).map { index in
             "\(index.isMultiple(of: 2) ? "delta" : "bravo") \(index)"
         }.joined(separator: "\n") + "\n"
