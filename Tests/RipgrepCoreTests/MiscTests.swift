@@ -2786,6 +2786,91 @@ struct MiscTests {
             """.utf8
         ))
 
+        func runExecutableStatusData(_ arguments: [String]) throws -> (stdout: Data, stderr: Data, status: Int32) {
+            let executable = ripgrepPackageRootURL().appendingPathComponent(".build/debug/ripgrep")
+            let process = Process()
+            process.executableURL = executable
+            process.arguments = arguments
+            let output = Pipe()
+            let error = Pipe()
+            process.standardOutput = output
+            process.standardError = error
+            try process.run()
+            process.waitUntilExit()
+            return (
+                output.fileHandleForReading.readDataToEndOfFile(),
+                error.fileHandleForReading.readDataToEndOfFile(),
+                process.terminationStatus
+            )
+        }
+
+        let statsFilesWithoutNoMatch = try runExecutableStatusData([
+            "--no-config",
+            "--stats",
+            "--files-without-match",
+            "missing",
+            root.path("simple.txt"),
+        ])
+        let statsFilesWithoutNoMatchText = String(decoding: statsFilesWithoutNoMatch.stdout, as: UTF8.self)
+        #expect(statsFilesWithoutNoMatch.status == 0)
+        #expect(statsFilesWithoutNoMatchText.contains(root.path("simple.txt")))
+        #expect(statsFilesWithoutNoMatchText.contains("0 matched lines"))
+        #expect(statsFilesWithoutNoMatch.stderr.isEmpty)
+
+        let jsonFilesWithoutNoMatch = try runExecutableData([
+            "--no-config",
+            "--json",
+            "--files-without-match",
+            "missing",
+            root.path("simple.txt"),
+        ], fixture: {})
+        #expect(jsonFilesWithoutNoMatch == Data("\(root.path("simple.txt"))\n".utf8))
+
+        let statsFilesWithNoMatch = try runExecutableStatusData([
+            "--no-config",
+            "--stats",
+            "-l",
+            "missing",
+            root.path("simple.txt"),
+        ])
+        let statsFilesWithNoMatchText = String(decoding: statsFilesWithNoMatch.stdout, as: UTF8.self)
+        #expect(statsFilesWithNoMatch.status == 1)
+        #expect(statsFilesWithNoMatchText.contains("0 files contained matches"))
+        #expect(statsFilesWithNoMatchText.contains("1 files searched"))
+        #expect(statsFilesWithNoMatch.stderr.isEmpty)
+
+        let statsFilesWithMatch = try runExecutableStatusData([
+            "--no-config",
+            "--stats",
+            "-l",
+            "literal",
+            root.path("simple.txt"),
+        ])
+        let statsFilesWithMatchText = String(decoding: statsFilesWithMatch.stdout, as: UTF8.self)
+        #expect(statsFilesWithMatch.status == 0)
+        #expect(statsFilesWithMatchText.contains(root.path("simple.txt")))
+        #expect(statsFilesWithMatchText.contains("4 matched lines"))
+        #expect(statsFilesWithMatch.stderr.isEmpty)
+
+        let jsonFilesWithNoMatch = try runExecutableData([
+            "--no-config",
+            "--json",
+            "-l",
+            "missing",
+            root.path("simple.txt"),
+        ], fixture: {})
+        #expect(jsonFilesWithNoMatch.isEmpty)
+
+        let noJsonPathOnlyOutput = try runExecutableData([
+            "--no-config",
+            "--json",
+            "--no-json",
+            "--files-without-match",
+            "missing",
+            root.path("simple.txt"),
+        ], fixture: {})
+        #expect(noJsonPathOnlyOutput == Data("\(root.path("simple.txt"))\n".utf8))
+
         try root.write("--line-number\n", to: "ripgreprc")
         let configOutput = try runExecutableData([
             "literal",

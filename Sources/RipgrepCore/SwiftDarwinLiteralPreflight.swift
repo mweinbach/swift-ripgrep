@@ -417,6 +417,41 @@ public enum SwiftDarwinLiteralPreflight {
         )
     }
 
+    public static func matchedPathStatsExitCode(
+        path: String,
+        literal: [UInt8],
+        asciiCaseInsensitive: Bool,
+        wordRegexp: Bool,
+        nullTerminated: Bool,
+        crlfTerminated: Bool,
+        outputPath: [UInt8]?
+    ) -> Int32? {
+        guard let stats = matchedSummaryStats(
+            path: path,
+            literal: literal,
+            asciiCaseInsensitive: asciiCaseInsensitive,
+            wordRegexp: wordRegexp
+        ), stats.matchedLines > 0 else {
+            return nil
+        }
+        guard writePathOnlyOutput(
+            path: path,
+            outputPath: outputPath,
+            nullTerminated: nullTerminated,
+            crlfTerminated: crlfTerminated
+        ), fflush(Darwin.stdout) == 0 else {
+            return nil
+        }
+        return writeStatsSummary(
+            totalMatches: stats.totalMatches,
+            matchedLines: stats.matchedLines,
+            filesWithMatches: 1,
+            filesSearched: 1,
+            bytesSearched: stats.bytesSearched,
+            exitCode: 0
+        )
+    }
+
     public static func matchedCountStatsExitCode(
         path: String,
         literal: [UInt8],

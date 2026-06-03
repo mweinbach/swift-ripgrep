@@ -77,6 +77,36 @@ binary and the sibling Rust oracle byte-for-byte.
 Raw hyperfine export:
 `/tmp/swift-rg-bench/simple-summary-early-preflight-ab-1780469572.json`.
 
+## Retained simple path-only stats/JSON preflight - 2026-06-03
+
+The simple Darwin executable path-only preflight now accepts `--stats` and
+`--json` for single-file literal `-l` / `--files-with-matches` and
+`--files-without-match` searches. JSON path-only modes reuse the existing
+plain path-only writer directly. Stats modes now complete both branches in the
+simple preflight: no-match files-without writes path plus summary, matched
+files-without writes only the matched summary, no-match files-with-matches
+writes the no-match summary, and matched files-with-matches writes path plus
+matched summary. This avoids the broad option parser and avoids repeating the
+no-match probe on matched files. A same-session A/B against checkpoint
+`a78c7c5`, with Rust included for the primary absent stats row, measured:
+
+| Case | Current Swift | Baseline `a78c7c5` | Rust |
+| --- | ---: | ---: | ---: |
+| `--stats --files-without-match absentliteral match-ascii-46m.txt` | 7.42 ms median / 7.48 ms mean | 9.38 ms / 9.58 ms | 5.99 ms / 6.07 ms |
+| `--json --files-without-match absentliteral match-ascii-46m.txt` | 7.57 ms / 7.67 ms | 9.39 ms / 9.77 ms | not remeasured |
+| `--stats -l absentliteral match-ascii-46m.txt` | 7.57 ms / 8.11 ms | 9.40 ms / 9.60 ms | not remeasured |
+| `--json -l absentliteral match-ascii-46m.txt` | 7.56 ms / 7.66 ms | 9.37 ms / 9.69 ms | not remeasured |
+| `--stats --files-without-match literal match-ascii-46m.txt` control | 14.41 ms / 14.49 ms | 16.36 ms / 16.51 ms | not measured |
+| `--json --files-without-match literal match-ascii-46m.txt` control | 2.50 ms / 2.73 ms | 5.42 ms / 5.30 ms | not measured |
+| `--stats -l literal match-ascii-46m.txt` control | 14.52 ms / 14.55 ms | 36.91 ms / 37.89 ms | not measured |
+
+Output, stderr, and status matched the previous Swift binary exactly. JSON
+path-only modes matched the sibling Rust oracle byte-for-byte; stats modes
+matched Rust after normalizing elapsed fields.
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/simple-path-stats-complete-ab-1780471003.json`.
+
 ## Rejected word/path no-match preflight probes - 2026-06-03
 
 A follow-up probe tried to reuse the no-match byte-count primitives before the

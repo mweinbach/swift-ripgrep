@@ -6581,8 +6581,10 @@ struct RipgrepCommand {
             return nil
         }
         var printWhenMatched: Bool?
+        var json = false
         var nullTerminated = false
         var crlfTerminated = false
+        var stats = false
         let pattern = arguments[arguments.count - 2]
         let path = arguments[arguments.count - 1]
         for argument in arguments.dropLast(2) {
@@ -6597,6 +6599,14 @@ struct RipgrepCommand {
                 crlfTerminated = true
             case "--no-crlf", "--null-data":
                 crlfTerminated = false
+            case "--json":
+                json = true
+            case "--no-json":
+                json = false
+            case "--stats":
+                stats = true
+            case "--no-stats":
+                stats = false
             case "--no-config",
                  "--line-buffered",
                  "--block-buffered",
@@ -6620,9 +6630,71 @@ struct RipgrepCommand {
               !literal.contains(UInt8(ascii: "\n")) else {
             return nil
         }
+        guard !json || !stats else {
+            return nil
+        }
         let outputPath = path.utf8.allSatisfy { $0 < 0x80 }
             ? nil
             : Self.preflightDisplayPathBytes(path, pathSeparator: nil)
+        if json || stats {
+            if printWhenMatched {
+                if stats {
+                    if let exitCode = SwiftDarwinLiteralPreflight.literalNoMatchSummaryExitCode(
+                        path: path,
+                        literal: literal,
+                        json: false,
+                        stats: true
+                    ) {
+                        return exitCode
+                    }
+                    return SwiftDarwinLiteralPreflight.matchedPathStatsExitCode(
+                        path: path,
+                        literal: literal,
+                        asciiCaseInsensitive: false,
+                        wordRegexp: false,
+                        nullTerminated: nullTerminated,
+                        crlfTerminated: crlfTerminated,
+                        outputPath: outputPath
+                    )
+                }
+                return SwiftDarwinLiteralPreflight.pathOnlyExitCode(
+                    path: path,
+                    literal: literal,
+                    printWhenMatched: true,
+                    nullTerminated: nullTerminated,
+                    crlfTerminated: crlfTerminated,
+                    outputPath: outputPath
+                )
+            }
+            if stats {
+                if let exitCode = SwiftDarwinLiteralPreflight.noMatchPathOutputExitCode(
+                    path: path,
+                    literal: literal,
+                    asciiCaseInsensitive: false,
+                    wordRegexp: false,
+                    nullTerminated: nullTerminated,
+                    crlfTerminated: crlfTerminated,
+                    outputPath: outputPath,
+                    stats: true
+                ) {
+                    return exitCode
+                }
+                return SwiftDarwinLiteralPreflight.matchedFilesWithoutMatchStatsExitCode(
+                    path: path,
+                    literal: literal,
+                    asciiCaseInsensitive: false,
+                    wordRegexp: false
+                )
+            }
+            return SwiftDarwinLiteralPreflight.pathOnlyExitCode(
+                path: path,
+                literal: literal,
+                printWhenMatched: false,
+                nullTerminated: nullTerminated,
+                crlfTerminated: crlfTerminated,
+                outputPath: outputPath
+            )
+        }
         return SwiftDarwinLiteralPreflight.pathOnlyExitCode(
             path: path,
             literal: literal,
