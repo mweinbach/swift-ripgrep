@@ -606,7 +606,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         matcher: PatternMatcher,
         asciiRunSuffixFastPath: ASCIIRunSuffixPattern? = nil
     ) throws -> SearchResults? {
-        let quietRequiredLiteralProbeFileLimit = 160
+        let quietRequiredLiteralProbeFileLimit = asciiRunSuffixFastPath == nil ? 160 : 512
         var filesSearched = 0
         var matchedResult: SearchFileResult?
         var searchMessages: [String] = []

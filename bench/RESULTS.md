@@ -8,6 +8,41 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Quiet ASCII run-suffix prefix window - 2026-06-03
+
+Quiet ASCII run-suffix searches now spend a 512-file output-order prefix
+budget before falling back to the broader fast-search order. Non-suffix
+required-literal probes keep the older 160-file budget. On the Linux benchmark
+tree this catches common `[A-Z]+suffix` matches that sit just past the old
+prefix, avoiding a second search pass whose lexical order found them much
+later.
+
+Validation:
+
+- Patched Swift matched Rust status for `[A-Z]+_RESUME`, `[A-Z]+_MISSING`,
+  `[A-Z]+_NEVERMATCHTOKEN`, and `[A-Z]{3}_RESUME` on the Linux benchmark tree.
+- Sorted visible output for those same patterns matched Rust byte-for-byte.
+- `swift test --filter
+  FeatureTests/quietRequiredLiteralRegexRecursiveSearchReturnsOnlyExitStatus`,
+  `swift test`, `SWIFT_RIPGREP_PARITY=1 swift test --filter
+  ParityHarnessTests/testMatchesRustRipgrepOnSelectedFixtures`,
+  `scripts/check-no-external-deps.sh --skip-build`, and `git diff --check`
+  passed before recording these results.
+
+The direct A/B used a clean `c8b70cd` baseline binary built in
+`/tmp/swift-rg-baseline-c8b70cd`, 8 warm-ups, and 60 timed runs. Rust rows are
+same-session guard comparisons with 60-80 timed runs.
+
+| Case | Current Swift | Prior Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `-q '[A-Z]+_RESUME' linux` | 9.0 ms mean / 8.6-9.8 ms range | 9.1 ms / 8.5-10.9 ms | 5.6 ms / 5.2-6.8 ms |
+| `-q '[A-Z]+_MISSING' linux` | 16.4 ms / 15.5-18.7 ms | 20.4 ms / 19.7-22.5 ms | 15.0 ms / 5.8-22.7 ms |
+| `-q '[A-Z]+_NEVERMATCHTOKEN' linux` | 990.5 ms / 967.7-1035.4 ms | 995.2 ms / 962.2-1222.7 ms | 2.760 s / 2.539-3.344 s |
+| `-q '[A-Z]{3}_RESUME' linux` | 8.7 ms / 8.4-9.2 ms | 9.4 ms / 8.5-12.9 ms | 5.5 ms / 5.0-7.6 ms |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/suffix-prefix512-ab-1780457067.json`.
+
 ## Quiet literal summary-only first match - 2026-06-03
 
 Quiet no-stats/no-json first-match search now returns a summary-only
