@@ -4943,8 +4943,14 @@ public enum SwiftDarwinLiteralPreflight {
             guard matchedLineCount < maxCount else {
                 break
             }
-            if !lineNumber,
-               let boundedLineStart = recentLineStart(before: matchOffset) {
+            if let boundedLineStart = recentLineStart(before: matchOffset) {
+                if lineNumber, boundedLineStart > lineStart {
+                    lineNumberAtLineStart += rg_memcount_byte(
+                        baseAddress.advanced(by: lineStart),
+                        boundedLineStart - lineStart,
+                        newline
+                    )
+                }
                 lineStart = boundedLineStart
             } else {
                 advanceLineStart(to: matchOffset)
@@ -5120,8 +5126,14 @@ public enum SwiftDarwinLiteralPreflight {
             classes: classes,
             from: searchOffset
         ) {
-            if !lineNumber,
-               let boundedLineStart = recentLineStart(before: matchOffset) {
+            if let boundedLineStart = recentLineStart(before: matchOffset) {
+                if lineNumber, boundedLineStart > lineStart {
+                    lineNumberAtLineStart += rg_memcount_byte(
+                        baseAddress.advanced(by: lineStart),
+                        boundedLineStart - lineStart,
+                        newline
+                    )
+                }
                 lineStart = boundedLineStart
             } else {
                 advanceLineStart(to: matchOffset)

@@ -3180,6 +3180,18 @@ struct MiscTests {
             "[A-Z]{5}",
             root.path("fixed-long-line.txt"),
         ])
+        let fixedBoundedNumberedLineMatch = try runExecutableResult([
+            "--no-config",
+            "-n",
+            "[A-Z]{5}",
+            root.path("fixed-bounded.txt"),
+        ])
+        let fixedLongNumberedLineMatch = try runExecutableResult([
+            "--no-config",
+            "-n",
+            "[A-Z]{5}",
+            root.path("fixed-long-line.txt"),
+        ])
         let fixedNumberedLineMatch = try runExecutableResult([
             "--no-config",
             "-n",
@@ -3818,6 +3830,8 @@ struct MiscTests {
         )
         let expectedFixedBoundedLineOutput = Data("near ALPHA tail\n".utf8)
         let expectedFixedLongLineOutput = Data(fixedLongLine.utf8)
+        let expectedFixedBoundedNumberedLineOutput = Data("2:near ALPHA tail\n".utf8)
+        let expectedFixedLongNumberedLineOutput = Data(("2:" + fixedLongLine).utf8)
         let expectedFixedMaxLineOutput = Data("one ALPHA two BRAVO\n".utf8)
         let expectedFixedMaxOnlyMatchingOutput = Data("ALPHA\nBRAVO\n".utf8)
         let expectedFixedMaxVimgrepOutput = Data(
@@ -4264,6 +4278,12 @@ struct MiscTests {
         #expect(fixedLongLineMatch.status == 0)
         #expect(fixedLongLineMatch.stderr.isEmpty)
         #expect(fixedLongLineMatch.stdout == expectedFixedLongLineOutput)
+        #expect(fixedBoundedNumberedLineMatch.status == 0)
+        #expect(fixedBoundedNumberedLineMatch.stderr.isEmpty)
+        #expect(fixedBoundedNumberedLineMatch.stdout == expectedFixedBoundedNumberedLineOutput)
+        #expect(fixedLongNumberedLineMatch.status == 0)
+        #expect(fixedLongNumberedLineMatch.stderr.isEmpty)
+        #expect(fixedLongNumberedLineMatch.stdout == expectedFixedLongNumberedLineOutput)
         #expect(fixedNumberedLineMatch.status == 0)
         #expect(fixedNumberedLineMatch.stderr.isEmpty)
         #expect(fixedNumberedLineMatch.stdout == Data("3:ALPHA\n".utf8))

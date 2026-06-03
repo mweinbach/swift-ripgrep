@@ -8,6 +8,37 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Fixed-class bounded numbered line counting - 2026-06-03
+
+The fixed-class matching-line route now reuses the bounded backward line-start
+probe for numbered output too. When the probe finds the current line start, the
+path counts skipped newlines with the existing Swift SIMD byte-count helper
+instead of walking newline-by-newline with repeated `memchr` calls. Long lines
+that fall outside the bounded window still use the previous full scan.
+
+Validation:
+
+- Patched Swift matched Rust for `-n '[A-Z]{5}'` on the 46 MiB fixed-late
+  fixture and for a numbered long-line fallback control.
+- Added executable regression coverage for numbered short-line bounded output
+  and numbered long-line fallback.
+- `swift test --quiet --filter
+  MiscTests/darwinExecutableLiteralPreflightDenseLines` passed before
+  recording these results.
+
+The retained A/B used a detached `d7cc84e` baseline release binary, the current
+release binary, 10 warm-ups, and 80 timed runs. Unnumbered output stays flat,
+while numbered output and numbered stats move ahead of Rust.
+
+| Case | Current Swift | Prior Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `'[A-Z]{5}' fixed-late-uppercase-46m.txt` | 14.3 ms mean / 13.1-16.9 ms range | 14.4 ms / 13.2-18.6 ms | not remeasured |
+| `-n '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 16.8 ms / 16.4-18.7 ms | 23.5 ms / 22.3-27.0 ms | 20.8 ms / 19.9-25.3 ms |
+| `--stats -n '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 13.7 ms / 13.0-15.2 ms | 20.2 ms / 19.4-22.7 ms | not remeasured |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/fixed-numbered-bounded-count-ab-1780462837.json`.
+
 ## Fixed-class bounded line-start output - 2026-06-03
 
 Unnumbered fixed-class matching-line output now tries a bounded backward scan
