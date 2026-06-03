@@ -4878,6 +4878,48 @@ struct FeatureTests {
             indexedSlashRules.path("nested/foo/bar"),
         ])
 
+        let duplicateExplicitVCSIgnore = try TemporaryDirectory()
+        try duplicateExplicitVCSIgnore.createDirectory("sub/.git")
+        try duplicateExplicitVCSIgnore.createDirectory("sub/sub")
+        try duplicateExplicitVCSIgnore.createDirectory("sub/other")
+        try duplicateExplicitVCSIgnore.write("/sub/foo\nfoo2\n", to: "sub/.gitignore")
+        try duplicateExplicitVCSIgnore.write("needle\n", to: "sub/foo")
+        try duplicateExplicitVCSIgnore.write("needle\n", to: "sub/sub/foo")
+        try duplicateExplicitVCSIgnore.write("needle\n", to: "sub/foo2")
+        try duplicateExplicitVCSIgnore.write("needle\n", to: "sub/other/foo2")
+        do {
+            let originalDirectory = FileManager.default.currentDirectoryPath
+            defer { FileManager.default.changeCurrentDirectoryPath(originalDirectory) }
+            #expect(FileManager.default.changeCurrentDirectoryPath(duplicateExplicitVCSIgnore.url.path))
+            #expect(try run([
+                "--sort",
+                "path",
+                "--files",
+                "--ignore-file",
+                "sub/.gitignore",
+                "sub",
+            ]) == [])
+            #expect(try run([
+                "--sort",
+                "path",
+                "--no-ignore-vcs",
+                "--files",
+                "--ignore-file",
+                "sub/.gitignore",
+                "sub",
+            ]) == [
+                "sub/sub/foo",
+            ])
+            #expect(try run([
+                "--sort",
+                "path",
+                "--files",
+                "sub",
+            ]) == [
+                "sub/foo",
+            ])
+        }
+
         let utf8ByteGlob = try TemporaryDirectory()
         try utf8ByteGlob.createDirectory(".git")
         try utf8ByteGlob.write("?.txt\n", to: ".gitignore")

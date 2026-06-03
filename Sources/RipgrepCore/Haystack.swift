@@ -375,17 +375,18 @@ public struct FileWalker: @unchecked Sendable {
             )
         }
 
+        let rootVCSContext = options.noRequireGit || isInGitRepository(rootPlan.rootBase)
         var rootIgnoreStack = IgnoreStack()
         appendExplicitIgnoreFiles(
             to: &rootIgnoreStack,
             rootBase: rootPlan.rootBase,
+            rootVCSContext: rootVCSContext,
             warnings: &warnings,
             diagnostics: &diagnostics,
             options: options
         )
         appendGlobalIgnoreFile(to: &rootIgnoreStack, rootBase: rootPlan.rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
         appendParentIgnoreFiles(to: &rootIgnoreStack, rootBase: rootPlan.rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
-        let rootVCSContext = options.noRequireGit || isInGitRepository(rootPlan.rootBase)
         if stopAfterFirst, options.quiet, options.loggingMode == nil {
             let hasFile = try fastDirectoryTreeContainsAllowedFile(
                 directoryPath: rootPlan.rootURL.path,
@@ -631,17 +632,18 @@ public struct FileWalker: @unchecked Sendable {
             return nil
         }
 
+        let rootVCSContext = options.noRequireGit || isInGitRepository(rootPlan.rootBase)
         var rootIgnoreStack = IgnoreStack()
         appendExplicitIgnoreFiles(
             to: &rootIgnoreStack,
             rootBase: rootPlan.rootBase,
+            rootVCSContext: rootVCSContext,
             warnings: &warnings,
             diagnostics: &diagnostics,
             options: options
         )
         appendGlobalIgnoreFile(to: &rootIgnoreStack, rootBase: rootPlan.rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
         appendParentIgnoreFiles(to: &rootIgnoreStack, rootBase: rootPlan.rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
-        let rootVCSContext = options.noRequireGit || isInGitRepository(rootPlan.rootBase)
 
         guard let parallelResults = try writeFilePathsInOutputOrderParallel(
             rootURL: rootPlan.rootURL,
@@ -3996,6 +3998,7 @@ public struct FileWalker: @unchecked Sendable {
     private func appendExplicitIgnoreFiles(
         to ignoreStack: inout IgnoreStack,
         rootBase: URL,
+        rootVCSContext: Bool = false,
         warnings: inout [String],
         diagnostics: inout [String],
         options: RipgrepOptions
@@ -4004,7 +4007,9 @@ public struct FileWalker: @unchecked Sendable {
             return
         }
         let pathPrefix = cwdRelativePathPrefix(for: rootBase)
+        let rootVCSGitignorePath = rootVCSCoveredGitignorePath(rootBase: rootBase, rootVCSContext: rootVCSContext, options: options)
         for (offset, ignoreFile) in options.ignoreFiles.enumerated() {
+            let dropRootVCSCoveredBasenameRules = rootVCSGitignorePath == ignoreFile.standardizedFileURL.path
             appendLoadedMatcher(
                 from: ignoreFile,
                 to: &ignoreStack,
@@ -4017,9 +4022,27 @@ public struct FileWalker: @unchecked Sendable {
                 displayPath: offset < options.ignoreFileDisplayPaths.count ? options.ignoreFileDisplayPaths[offset] : nil,
                 caseInsensitive: false,
                 ignoreExplicitRootMatch: true,
+                dropRootVCSCoveredBasenameRules: dropRootVCSCoveredBasenameRules,
                 options: options
             )
         }
+    }
+
+    private func rootVCSCoveredGitignorePath(rootBase: URL, rootVCSContext: Bool, options: RipgrepOptions) -> String? {
+        guard options.mode == .files,
+              options.loggingMode == nil,
+              !options.noIgnore,
+              !options.noIgnoreVCS,
+              rootVCSContext else {
+            return nil
+        }
+        let gitignoreURL = rootBase.appendingPathComponent(".gitignore")
+        var isDirectory = ObjCBool(false)
+        guard fileManager.fileExists(atPath: gitignoreURL.path, isDirectory: &isDirectory),
+              !isDirectory.boolValue else {
+            return nil
+        }
+        return gitignoreURL.standardizedFileURL.path
     }
 
     private func cwdRelativePathPrefix(for rootBase: URL) -> String {
@@ -4142,6 +4165,7 @@ public struct FileWalker: @unchecked Sendable {
         displayPath: String? = nil,
         caseInsensitive: Bool? = nil,
         ignoreExplicitRootMatch: Bool = false,
+        dropRootVCSCoveredBasenameRules: Bool = false,
         emitDiagnostics: Bool = true,
         skipMissingFileCheck: Bool = false,
         options: RipgrepOptions
@@ -4157,6 +4181,7 @@ public struct FileWalker: @unchecked Sendable {
             displayPath: displayPath,
             caseInsensitive: caseInsensitive ?? options.ignoreFileCaseInsensitive,
             ignoreExplicitRootMatch: ignoreExplicitRootMatch,
+            dropRootVCSCoveredBasenameRules: dropRootVCSCoveredBasenameRules,
             skipMissingFileCheck: skipMissingFileCheck,
             collectDiagnostics: emitDiagnostics && options.loggingMode != .none
         )
@@ -4180,6 +4205,7 @@ public struct FileWalker: @unchecked Sendable {
         displayPath: String? = nil,
         caseInsensitive: Bool = false,
         ignoreExplicitRootMatch: Bool = false,
+        dropRootVCSCoveredBasenameRules: Bool = false,
         skipMissingFileCheck: Bool = false,
         collectDiagnostics: Bool = false
     ) -> LoadedIgnoreMatcher {
@@ -4199,18 +4225,21 @@ public struct FileWalker: @unchecked Sendable {
             return LoadedIgnoreMatcher(matcher: GlobMatcher(patterns: []), messages: messages, diagnostics: [])
         }
         let parsed = parseIgnorePatterns(contents, fileURL: fileURL)
+        let parsedPatterns = dropRootVCSCoveredBasenameRules
+            ? parsed.patterns.filter { !isUnanchoredBasenameIgnorePattern($0) }
+            : parsed.patterns
         let scope = pathPrefix.map { (stripBasePath: String?.none, pathPrefix: $0) }
             ?? precomputedScope
             ?? ignoreScope(for: scopeDirectory ?? fileURL.deletingLastPathComponent(), rootBase: rootBase)
         let matchSlashPatternsAnywhere = slashPatternsMatchAnywhere ?? false
         let scopedPatterns = ignoreExplicitRootMatch
             ? patternsIgnoringExplicitRootMatch(
-                parsed.patterns,
+                parsedPatterns,
                 scope: scope,
                 slashPatternsMatchAnywhere: matchSlashPatternsAnywhere,
                 caseInsensitive: caseInsensitive
             )
-            : parsed.patterns
+            : parsedPatterns
         let patterns = pathPrefix.map {
             patternsIgnoringUnmatchableExplicitAnchors(
                 scopedPatterns,
@@ -4233,6 +4262,29 @@ public struct FileWalker: @unchecked Sendable {
             slashPatternsMatchAnywhere: matchSlashPatternsAnywhere,
             sourcePath: collectDiagnostics ? ignoreDiagnosticPath(fileURL, displayPath: displayPath) : nil
         ), messages: parsed.messages, diagnostics: diagnostics)
+    }
+
+    private func isUnanchoredBasenameIgnorePattern(_ rawPattern: String) -> Bool {
+        let trimmed = rawPattern.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else {
+            return false
+        }
+        let normalized: String
+        if trimmed.hasPrefix("\\#") || trimmed.hasPrefix("\\!") {
+            normalized = String(trimmed.dropFirst())
+        } else if trimmed.hasPrefix("!") {
+            normalized = String(trimmed.dropFirst())
+        } else {
+            normalized = trimmed
+        }
+        var pattern = normalized.replacingOccurrences(of: #"\/"#, with: "/")
+        if pattern.hasPrefix("/") {
+            return false
+        }
+        if pattern.hasSuffix("/") {
+            pattern.removeLast()
+        }
+        return !pattern.isEmpty && !pattern.contains("/")
     }
 
     private func ignoreLoadDiagnostics(fileURL: URL, displayPath: String?, patterns: [String]) -> [String] {
