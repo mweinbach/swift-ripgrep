@@ -6904,10 +6904,7 @@ struct RipgrepCommand {
                 headingPrefix: heading && withFilename ? displayPath + [UInt8(ascii: "\n")] : []
             )
         }
-        if !lineNumber,
-           literal.count >= 10,
-           !withFilename,
-           !heading,
+        if literal.count >= 10,
            let noMatchExitCode = SwiftDarwinLiteralPreflight.rareAnchorLiteralNoMatchExitCode(
             path: path,
             literal: literal

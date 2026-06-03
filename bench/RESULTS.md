@@ -8,6 +8,30 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Retained prefixed rare-anchor no-match preflight - 2026-06-03
+
+Simple Darwin literal matching-line preflight now lets the long-literal
+rare-anchor no-match proof run before the numbered, filename-prefixed, and
+heading writers. The proof only returns when it can prove there is no match;
+matched output and unproved misses still fall through to the existing writers,
+so line numbers and prefixes remain owned by the normal output path.
+
+A same-session no-shell A/B against checkpoint `b6dc101`, with Rust included
+as the oracle, measured:
+
+| Case | Current Swift | Baseline `b6dc101` | Rust |
+| --- | ---: | ---: | ---: |
+| `-n absentliteral match-ascii-46m.txt` | 9.37 ms median / 9.66 ms mean | 9.98 ms / 9.95 ms | 9.59 ms / 9.92 ms |
+| `-H absentliteral match-ascii-46m.txt` | 8.32 ms / 8.39 ms | 9.28 ms / 9.29 ms | 8.29 ms / 8.40 ms |
+| `--heading --with-filename absentliteral match-ascii-46m.txt` | 8.45 ms / 8.50 ms | 9.81 ms / 10.19 ms | 7.98 ms / 8.04 ms |
+
+Release stdout, stderr, and status matched Rust for numbered, prefixed, and
+heading no-match rows, plus matching numbered, prefixed, and heading controls
+on the same fixture.
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/rare-anchor-prefixed-ab-1780503131.json`.
+
 ## Retained max-count zero simple preflight - 2026-06-03
 
 Simple Darwin executable literal line preflight now returns immediately for
