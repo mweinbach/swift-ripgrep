@@ -666,8 +666,22 @@ public struct FileWalker: @unchecked Sendable {
             diagnostics: &diagnostics,
             options: options
         )
-        appendGlobalIgnoreFile(to: &rootIgnoreStack, rootBase: rootPlan.rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
-        appendParentIgnoreFiles(to: &rootIgnoreStack, rootBase: rootPlan.rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
+        appendGlobalIgnoreFile(
+            to: &rootIgnoreStack,
+            rootBase: rootPlan.rootBase,
+            rootVCSContext: rootVCSContext,
+            warnings: &warnings,
+            diagnostics: &diagnostics,
+            options: options
+        )
+        appendParentIgnoreFiles(
+            to: &rootIgnoreStack,
+            rootBase: rootPlan.rootBase,
+            rootVCSContext: rootVCSContext,
+            warnings: &warnings,
+            diagnostics: &diagnostics,
+            options: options
+        )
 
         guard let parallelResults = try writeFilePathsInOutputOrderParallel(
             rootURL: rootPlan.rootURL,
@@ -926,12 +940,14 @@ public struct FileWalker: @unchecked Sendable {
             let rootArgument = offset < options.rootPathArguments.count ? options.rootPathArguments[offset] : ""
             let rootArgumentIsAbsolute = (rootArgument as NSString).isAbsolutePath
             let rootDebugDisplayPath = rootDisplayPath(at: offset, root: root, options: options)
+            let rootVCSContext = options.noRequireGit || isInGitRepository(rootBase)
             var rootIgnoreStack = baseIgnoreStack
             if reportedExplicitIgnoreFileWarnings {
                 var ignoredWarnings: [String] = []
                 appendExplicitIgnoreFiles(
                     to: &rootIgnoreStack,
                     rootBase: rootBase,
+                    rootVCSContext: rootVCSContext,
                     warnings: &ignoredWarnings,
                     diagnostics: &diagnostics,
                     options: options
@@ -940,14 +956,29 @@ public struct FileWalker: @unchecked Sendable {
                 appendExplicitIgnoreFiles(
                     to: &rootIgnoreStack,
                     rootBase: rootBase,
+                    rootVCSContext: rootVCSContext,
                     warnings: &warnings,
                     diagnostics: &diagnostics,
                     options: options
                 )
             }
             reportedExplicitIgnoreFileWarnings = true
-            appendGlobalIgnoreFile(to: &rootIgnoreStack, rootBase: rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
-            appendParentIgnoreFiles(to: &rootIgnoreStack, rootBase: rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
+            appendGlobalIgnoreFile(
+                to: &rootIgnoreStack,
+                rootBase: rootBase,
+                rootVCSContext: rootVCSContext,
+                warnings: &warnings,
+                diagnostics: &diagnostics,
+                options: options
+            )
+            appendParentIgnoreFiles(
+                to: &rootIgnoreStack,
+                rootBase: rootBase,
+                rootVCSContext: rootVCSContext,
+                warnings: &warnings,
+                diagnostics: &diagnostics,
+                options: options
+            )
             appendLogicalParentIgnoreFiles(
                 for: root.standardizedFileURL,
                 rootBase: rootBase,
@@ -963,7 +994,6 @@ public struct FileWalker: @unchecked Sendable {
             let rootBasePrefix = rootBasePath.hasSuffix("/") ? rootBasePath : "\(rootBasePath)/"
             let rootPath = root.standardizedFileURL.path
             let rootRelativePathOverride = rootPath == rootBasePath ? "" : nil
-            let rootVCSContext = options.noRequireGit || isInGitRepository(rootBase)
             let cwdPath = URL(fileURLWithPath: fileManager.currentDirectoryPath, isDirectory: true)
                 .standardizedFileURL
                 .path
