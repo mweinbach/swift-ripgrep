@@ -15715,6 +15715,106 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
         return true
     }
 
+    func emitWholeFile(lineCount: Int, endsWithNewline: Bool) -> Bool {
+        guard lineCount > 0,
+              output.write(base, count: haystackLength) else {
+            return false
+        }
+        if !endsWithNewline, !output.writeByte(UInt8(ascii: "\n")) {
+            return false
+        }
+        matchedLineCount = lineCount
+        bytesSearched = haystackLength
+        return true
+    }
+
+    func emitWholeFileIfRepeatedLineStartsWithLiteral(
+        _ lineStartLiteral: [UInt8]
+    ) -> Bool? {
+        let newline = memchr(
+            base,
+            Int32(UInt8(ascii: "\n")),
+            haystackLength
+        )
+        guard let newline else {
+            return emitWholeFile(lineCount: 1, endsWithNewline: false)
+        }
+
+        let firstLineEnd = base.distance(to: newline.assumingMemoryBound(to: UInt8.self))
+        let lineStride = firstLineEnd + 1
+        let remainder = haystackLength % lineStride
+        guard remainder == 0 || remainder == firstLineEnd else {
+            return nil
+        }
+
+        var sampleOffset = lineStride
+        var sampledLineCount = 0
+        while sampleOffset + lineStride <= haystackLength,
+              sampledLineCount < 64 {
+            guard memcmp(base, base.advanced(by: sampleOffset), lineStride) == 0 else {
+                return nil
+            }
+            sampleOffset += lineStride
+            sampledLineCount += 1
+        }
+
+        if haystackLength > lineStride,
+           memcmp(base, base.advanced(by: lineStride), haystackLength - lineStride) != 0 {
+            return nil
+        }
+
+        if remainder == firstLineEnd,
+           !literal(lineStartLiteral, matchesAt: haystackLength - firstLineEnd) {
+            return nil
+        }
+
+        let lineCount = haystackLength / lineStride + (remainder == firstLineEnd ? 1 : 0)
+        return emitWholeFile(lineCount: lineCount, endsWithNewline: remainder == 0)
+    }
+
+    func emitWholeFileIfEveryLineStartsWithLiteral() -> Bool? {
+        guard emitLines,
+              !lineNumber,
+              linePrefix.isEmpty,
+              headingPrefix.isEmpty,
+              !trimLeadingWhitespace,
+              maxCount == Int.max,
+              haystackLength >= 1024 * 1024,
+              literals.allSatisfy({ !$0.contains(UInt8(ascii: "\n")) }) else {
+            return nil
+        }
+
+        guard let lineStartLiteral = literals.first(where: { literal($0, matchesAt: 0) }) else {
+            return nil
+        }
+        if let emittedRepeatedLineFile = emitWholeFileIfRepeatedLineStartsWithLiteral(lineStartLiteral) {
+            return emittedRepeatedLineFile
+        }
+
+        var lineStart = 0
+        var lineCount = 0
+        var endsWithNewline = false
+        while lineStart < haystackLength {
+            guard literal(lineStartLiteral, matchesAt: lineStart) else {
+                return nil
+            }
+            let newline = memchr(
+                base.advanced(by: lineStart),
+                Int32(UInt8(ascii: "\n")),
+                haystackLength - lineStart
+            )
+            lineCount += 1
+            guard let newline else {
+                endsWithNewline = false
+                break
+            }
+            lineStart = base.distance(to: newline.assumingMemoryBound(to: UInt8.self)) + 1
+            endsWithNewline = true
+        }
+
+        return emitWholeFile(lineCount: lineCount, endsWithNewline: endsWithNewline)
+    }
+
     let prefixLength = commonPrefixLength()
     if let prefixMatches = boundedPrefixLineMatches() {
         for matchStart in prefixMatches {
@@ -15727,7 +15827,9 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
         if memchr(base, 0, haystackLength) != nil {
             return nil
         }
-        if denseLineScanLikely() {
+        if let emittedWholeFile = emitWholeFileIfEveryLineStartsWithLiteral() {
+            writeFailed = !emittedWholeFile
+        } else if denseLineScanLikely() {
             writeFailed = !emitDenseLineMatches()
         } else if prefixLength >= 4 {
             var searchOffset = 0
