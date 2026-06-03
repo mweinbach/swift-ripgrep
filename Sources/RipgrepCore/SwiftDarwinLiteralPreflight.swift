@@ -10294,6 +10294,51 @@ public enum SwiftDarwinLiteralPreflight {
         }
 
         let base = UnsafeRawPointer(mapped).assumingMemoryBound(to: UInt8.self)
+        if emitLines,
+           maxCount == nil,
+           !lineNumber,
+           linePrefix.isEmpty,
+           headingPrefix.isEmpty,
+           !trimLeadingWhitespace,
+           let prunedLiterals = rgSwiftDarwinPrunePlainLineLiteralsWithAbsentBytes(
+            base,
+            haystackLength: haystackLength,
+            literals: literals
+           ) {
+            if prunedLiterals.isEmpty {
+                return rg_darwin_literal_file_result(
+                    status: 0,
+                    matched_line_count: 0,
+                    total_match_count: 0,
+                    bytes_searched: haystackLength
+                )
+            }
+            if prunedLiterals.count == 1 {
+                return rgSwiftDarwinWriteSingleActiveMultiLiteralLines(
+                    base,
+                    haystackLength: haystackLength,
+                    literal: prunedLiterals[0],
+                    maxCount: Int.max,
+                    lineNumber: false,
+                    lineNumberFieldSeparator: lineNumberFieldSeparator,
+                    linePrefix: [],
+                    headingPrefix: [],
+                    emitLines: true
+                )
+            }
+            return rgSwiftDarwinWriteMultiLiteralLines(
+                base,
+                haystackLength: haystackLength,
+                literals: prunedLiterals,
+                maxCount: Int.max,
+                lineNumber: false,
+                lineNumberFieldSeparator: lineNumberFieldSeparator,
+                linePrefix: [],
+                headingPrefix: [],
+                emitLines: true,
+                trimLeadingWhitespace: false
+            )
+        }
         return rgSwiftDarwinWriteMultiLiteralLines(
             base,
             haystackLength: haystackLength,
@@ -15107,6 +15152,70 @@ private func rgSwiftDarwinWriteSingleActiveMultiLiteralLines(
             bytes_searched: stats.bytesSearched
         )
     }
+}
+
+private func rgSwiftDarwinPrunePlainLineLiteralsWithAbsentBytes(
+    _ base: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    literals: [[UInt8]]
+) -> [[UInt8]]? {
+    guard haystackLength >= 1024 * 1024,
+          (2...8).contains(literals.count) else {
+        return nil
+    }
+
+    let sampleCount = min(haystackLength, 256 * 1024)
+    var sampleContainsByte = [Bool](repeating: false, count: 256)
+    for offset in 0..<sampleCount {
+        sampleContainsByte[Int(base[offset])] = true
+    }
+
+    var prunedLiterals: [[UInt8]] = []
+    prunedLiterals.reserveCapacity(literals.count)
+    var prunedAnyLiteral = false
+    for literal in literals {
+        var literalContainsByte = [Bool](repeating: false, count: 256)
+        var literalIsImpossible = false
+        for byte in literal {
+            let byteIndex = Int(byte)
+            guard !literalContainsByte[byteIndex] else {
+                continue
+            }
+            literalContainsByte[byteIndex] = true
+            guard !sampleContainsByte[byteIndex] else {
+                continue
+            }
+            if memchr(base, Int32(byte), haystackLength) == nil {
+                literalIsImpossible = true
+                break
+            }
+        }
+        if literalIsImpossible {
+            prunedAnyLiteral = true
+        } else {
+            prunedLiterals.append(literal)
+        }
+    }
+
+    guard prunedAnyLiteral else {
+        return nil
+    }
+    if haystackLength >= 3,
+       base[0] == 0xEF,
+       base[1] == 0xBB,
+       base[2] == 0xBF {
+        return nil
+    }
+    if haystackLength >= 2,
+       (base[0] == 0xFF && base[1] == 0xFE
+        || base[0] == 0xFE && base[1] == 0xFF) {
+        return nil
+    }
+    guard memchr(base, 0, haystackLength) == nil else {
+        return nil
+    }
+
+    return prunedLiterals
 }
 
 private func rgSwiftDarwinWriteMultiLiteralLines(
