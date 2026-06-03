@@ -2912,9 +2912,10 @@ struct RipgrepCommand {
            (patternCanStartWithDash || !pattern.hasPrefix("-")),
            path != "-",
            isReadableRegularFile(path),
-           let exitCode = SwiftDarwinLiteralPreflight.greekScriptASCIIFileNoMatchExitCode(
+           let exitCode = SwiftDarwinLiteralPreflight.greekScriptNoMatchExitCode(
             path: path,
-            pattern: pattern
+            pattern: pattern,
+            caseInsensitive: asciiCaseInsensitive
            ) {
             return exitCode
         }

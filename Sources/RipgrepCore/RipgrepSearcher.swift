@@ -9855,13 +9855,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 )
             }
 
-            let greekLeadC2Vector = SIMD16<UInt8>(repeating: 0xC2)
-            let greekLeadCDVector = SIMD16<UInt8>(repeating: 0xCD)
-            let greekLeadCFVector = SIMD16<UInt8>(repeating: 0xCF)
-            let greekLeadE1Vector = SIMD16<UInt8>(repeating: 0xE1)
-            let greekLeadE2Vector = SIMD16<UInt8>(repeating: 0xE2)
-            let greekLeadF0Vector = SIMD16<UInt8>(repeating: 0xF0)
-
             func isGreekScriptUTF8Scalar(
                 first: UInt8,
                 second: UInt8,
@@ -10015,97 +10008,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 return (hasMatch, true)
             }
 
-            @inline(__always)
-            func isGreekScriptCandidateLeadByte(_ byte: UInt8) -> Bool {
-                if byte >= 0xCD && byte <= 0xCF {
-                    return true
-                }
-                if byte == 0xE1 || byte == 0xE2 || byte == 0xF0 {
-                    return true
-                }
-                return fastPath.caseInsensitive && byte == 0xC2
-            }
-
-            @inline(__always)
-            func greekScriptCandidateLeadByteOffset(start: Int, end: Int) -> Int? {
-                var offset = start
-                guard offset < end else {
-                    return nil
-                }
-
-                if end - offset >= 16 {
-                    let vectorLimit = end - 15
-                    while offset < vectorLimit {
-                        let byteVector = UnsafeRawPointer(baseAddress.advanced(by: offset))
-                            .loadUnaligned(as: SIMD16<UInt8>.self)
-                        var matches = (byteVector .>= greekLeadCDVector) .& (byteVector .<= greekLeadCFVector)
-                        matches = matches
-                            .| (byteVector .== greekLeadE1Vector)
-                            .| (byteVector .== greekLeadE2Vector)
-                            .| (byteVector .== greekLeadF0Vector)
-                        if fastPath.caseInsensitive {
-                            matches = matches .| (byteVector .== greekLeadC2Vector)
-                        }
-                        let candidateStorage = matches._storage
-                        if candidateStorage.min() < 0 {
-                            for lane in 0..<16 where candidateStorage[lane] != 0 {
-                                return offset + lane
-                            }
-                        }
-                        offset += 16
-                    }
-                }
-
-                while offset < end {
-                    if isGreekScriptCandidateLeadByte(bytes[offset]) {
-                        return offset
-                    }
-                    offset += 1
-                }
-                return nil
-            }
-
-            func greekScriptByteCandidateMatchOffset(start: Int, end: Int) -> Int? {
-                var offset = start
-                while let candidate = greekScriptCandidateLeadByteOffset(start: offset, end: end) {
-                    let first = bytes[candidate]
-                    if first == 0xC2 || first == 0xCD || first == 0xCE || first == 0xCF {
-                        if candidate + 2 <= end,
-                           isGreekScriptUTF8Scalar(
-                               first: first,
-                               second: bytes[candidate + 1],
-                               length: 2
-                           ) {
-                            return candidate
-                        }
-                    } else if first == 0xE1 || first == 0xE2 {
-                        if candidate + 3 <= end,
-                           (0x80...0xBF).contains(bytes[candidate + 2]),
-                           isGreekScriptUTF8Scalar(
-                               first: first,
-                               second: bytes[candidate + 1],
-                               third: bytes[candidate + 2],
-                               length: 3
-                           ) {
-                            return candidate
-                        }
-                    } else if first == 0xF0 {
-                        if candidate + 4 <= end,
-                           isGreekScriptUTF8Scalar(
-                               first: first,
-                               second: bytes[candidate + 1],
-                               third: bytes[candidate + 2],
-                               fourth: bytes[candidate + 3],
-                               length: 4
-                           ) {
-                            return candidate
-                        }
-                    }
-                    offset = candidate + 1
-                }
-                return nil
-            }
-
             func greekScriptLineStatus(start: Int, end: Int) -> (hasMatch: Bool, validUTF8: Bool) {
                 var offset = start
                 var hasMatch = false
@@ -10161,7 +10063,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             }
 
             if useWholeBufferCandidateProof,
-               greekScriptByteCandidateMatchOffset(start: 0, end: dataCount) == nil {
+               !GreekScriptByteProof.containsMatch(in: bytes, caseInsensitive: fastPath.caseInsensitive) {
                 return SearchFileResult(
                     fileURL: fileURL,
                     matches: [],

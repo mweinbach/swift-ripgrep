@@ -8,33 +8,32 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
-## Retained Greek script ASCII no-match preflight - 2026-06-03
+## Retained Greek script no-match byte proof - 2026-06-03
 
 Single-file default-engine `\p{Greek}` and `\p{Greek}+` matching-line searches
-now prove ASCII-only files cannot match before entering the full Greek script
-matcher. The proof is deliberately narrow: it is disabled for `--no-unicode`,
-binary/BOM-prefixed files, and any file containing a non-ASCII byte, so Greek
-hits and non-Greek Unicode files still fall through to the existing matcher.
-A same-session A/B against the pre-patch release binary, with Rust included as
-the oracle, measured the 46 MiB ASCII no-match corpus:
+now prove no-match files before entering the full Greek script matcher. The
+executable preflight first keeps the cheap ASCII-only proof, then reuses the
+same Greek byte-candidate proof as the core searcher for non-ASCII files that
+contain no Greek scalar. The shortcut remains disabled for `--no-unicode` and
+binary/BOM-prefixed files; Greek hits and case-insensitive micro-sign hits still
+fall through to the matcher. Same-session A/B measurements, with Rust included
+as the oracle, showed:
 
 | Case | Current Swift | Baseline Swift | Rust |
 | --- | ---: | ---: | ---: |
-| `\p{Greek} no-match-ascii-46m.txt` | 7.56 ms median / 7.53 ms mean | 54.38 ms / 56.19 ms | 17.50 ms / 17.52 ms |
-| `-n \p{Greek} no-match-ascii-46m.txt` | 7.41 ms / 7.40 ms | 37.11 ms / 40.00 ms | 18.34 ms / 18.37 ms |
-| `-i \p{Greek} no-match-ascii-46m.txt` | 7.42 ms / 7.44 ms | 35.58 ms / 40.55 ms | 17.54 ms / 17.53 ms |
-| `-n -i \p{Greek} no-match-ascii-46m.txt` | 7.55 ms / 7.49 ms | 32.20 ms / 34.57 ms | 18.34 ms / 18.36 ms |
+| `-n \p{Greek} non-greek-unicode-64m.txt` | 13.43 ms median / 13.58 ms mean | 39.82 ms / 38.21 ms | 25.33 ms / 25.65 ms |
+| `-n \p{Greek} no-match-ascii-46m.txt` | 7.98 ms / 8.03 ms | 7.86 ms / 8.14 ms | 18.90 ms / 18.96 ms |
 
-Output, stderr, and status matched Rust for the ASCII miss rows and for a
-large Greek-hit spot check. The `--no-unicode \p{Greek}` executable guardrail
-still returns the expected parse error. A noisy fallback check on
-`non-greek-unicode-64m.txt` showed the existing Unicode no-match path unchanged
-within overlap: current Swift 41.83 ms median / 42.34 ms mean, saved baseline
-40.73 ms / 39.83 ms, Rust 26.43 ms / 26.46 ms.
+The original ASCII-only A/B against the pre-patch release binary measured the
+full ASCII miss grid at 7.4-7.6 ms median, down from 32-54 ms, with Rust at
+17-18 ms. Output, stderr, and status matched Rust for the large non-Greek
+Unicode miss, the large ASCII miss, and a large Greek-hit spot check. The
+`--no-unicode \p{Greek}` executable guardrail still returns the expected parse
+error.
 
 Raw hyperfine exports:
-`/tmp/swift-rg-bench/greek-ascii-nomatch-preflight-1780477963.json` and
-`/tmp/swift-rg-bench/greek-nongreek-unicode-regression-1780477980.json`.
+`/tmp/swift-rg-bench/greek-byte-proof-preflight-final-1780478684.json` and
+`/tmp/swift-rg-bench/greek-ascii-nomatch-preflight-1780477963.json`.
 
 ## Current upstream Linux refresh - 2026-06-03
 

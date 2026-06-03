@@ -500,7 +500,9 @@ struct FeatureTests {
     func asciiOnlyGreekScriptExecutableMissesReturnNoMatchStatus() throws {
         let root = try TemporaryDirectory()
         try root.write("plain\nlatin only\n", to: "ascii.txt")
+        try root.write("café snow ☃\n", to: "non-greek-unicode.txt")
         try root.write("π line\n", to: "hit.txt")
+        try root.write("micro µ\n", to: "micro.txt")
 
         let missArguments = [
             [#"\p{Greek}"#, root.path("ascii.txt")],
@@ -508,6 +510,7 @@ struct FeatureTests {
             ["-i", #"\p{Greek}"#, root.path("ascii.txt")],
             ["-n", "-i", #"\p{Greek}"#, root.path("ascii.txt")],
             [#"\p{Greek}+"#, root.path("ascii.txt")],
+            ["-n", #"\p{Greek}"#, root.path("non-greek-unicode.txt")],
         ]
         for arguments in missArguments {
             let output = try runExecutableData(["--no-config"] + arguments, fixture: {})
@@ -519,6 +522,12 @@ struct FeatureTests {
             fixture: {}
         )
         #expect(hitOutput == Data("1:π line\n".utf8))
+
+        let microOutput = try runExecutableData(
+            ["--no-config", "-n", "-i", #"\p{Greek}"#, root.path("micro.txt")],
+            fixture: {}
+        )
+        #expect(microOutput == Data("1:micro µ\n".utf8))
 
         let noUnicodeResult = try runExecutableResult(
             ["--no-config", "--no-unicode", #"\p{Greek}"#, root.path("ascii.txt")],

@@ -1519,15 +1519,21 @@ public enum SwiftDarwinLiteralPreflight {
         return 1
     }
 
-    public static func greekScriptASCIIFileNoMatchExitCode(
+    public static func greekScriptNoMatchExitCode(
         path: String,
-        pattern: String
+        pattern: String,
+        caseInsensitive: Bool
     ) -> Int32? {
         guard isDefaultGreekScriptPattern(pattern: pattern),
               let data = mappedPreflightData(path: path),
               !startsWithUTFBOM(data),
-              !hasBinaryDetectionPrefix(data),
-              !containsNonASCIIByte(data) else {
+              !hasBinaryDetectionPrefix(data) else {
+            return nil
+        }
+        if !containsNonASCIIByte(data) {
+            return 1
+        }
+        guard !GreekScriptByteProof.containsMatch(in: data, caseInsensitive: caseInsensitive) else {
             return nil
         }
         return 1
