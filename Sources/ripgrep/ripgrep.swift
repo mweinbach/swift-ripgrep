@@ -6384,6 +6384,53 @@ struct RipgrepCommand {
         }
     }
 
+    private static func simpleSwiftDarwinLiteralPattern(
+        _ pattern: String,
+        fixedStrings: Bool,
+        allowPCREQuotedLiterals: Bool
+    ) -> String? {
+        fixedStrings
+            ? pattern
+            : RegexLiteralParser.literal(
+                fromPlainRegexPattern: pattern,
+                allowPCREQuotedLiterals: allowPCREQuotedLiterals
+              )
+    }
+
+    private static func applySimpleSwiftDarwinLiteralCommonOption(
+        _ argument: String,
+        arguments: [String],
+        argumentIndex: inout Int,
+        optionEndIndex: Int,
+        fixedStrings: inout Bool,
+        noUnicode: inout Bool
+    ) -> Bool? {
+        switch argument {
+        case "-F", "--fixed-strings":
+            fixedStrings = true
+            return true
+        case "--no-fixed-strings":
+            fixedStrings = false
+            return true
+        case "--mmap", "--no-mmap", "--unicode":
+            return true
+        case "--no-unicode":
+            noUnicode = true
+            return true
+        case "--encoding=auto", "-Eauto":
+            return true
+        case "--encoding", "-E":
+            argumentIndex += 1
+            guard argumentIndex < optionEndIndex,
+                  arguments[argumentIndex] == "auto" else {
+                return false
+            }
+            return true
+        default:
+            return nil
+        }
+    }
+
     private static func runSimpleSwiftDarwinLiteralLinePreflight(
         arguments: [String],
         allowPCREQuotedLiterals: Bool
@@ -6391,12 +6438,31 @@ struct RipgrepCommand {
         guard arguments.count >= 2 else {
             return nil
         }
+        var fixedStrings = false
         var lineNumber = false
+        var noUnicode = false
         var quiet = false
         var wordRegexp = false
         let pattern = arguments[arguments.count - 2]
         let path = arguments[arguments.count - 1]
-        for argument in arguments.dropLast(2) {
+        let optionEndIndex = arguments.count - 2
+        var argumentIndex = 0
+        while argumentIndex < optionEndIndex {
+            let argument = arguments[argumentIndex]
+            if let handled = applySimpleSwiftDarwinLiteralCommonOption(
+                argument,
+                arguments: arguments,
+                argumentIndex: &argumentIndex,
+                optionEndIndex: optionEndIndex,
+                fixedStrings: &fixedStrings,
+                noUnicode: &noUnicode
+            ) {
+                guard handled else {
+                    return nil
+                }
+                argumentIndex += 1
+                continue
+            }
             switch argument {
             case "-n", "--line-number":
                 lineNumber = true
@@ -6416,13 +6482,19 @@ struct RipgrepCommand {
             default:
                 return nil
             }
+            argumentIndex += 1
         }
         guard !pattern.hasPrefix("-"),
               path != "-",
-              let literalPattern = RegexLiteralParser.literal(
-                fromPlainRegexPattern: pattern,
-                allowPCREQuotedLiterals: allowPCREQuotedLiterals
-              ) else {
+              !(noUnicode && wordRegexp) else {
+            return nil
+        }
+        let literalPattern = simpleSwiftDarwinLiteralPattern(
+            pattern,
+            fixedStrings: fixedStrings,
+            allowPCREQuotedLiterals: allowPCREQuotedLiterals
+        )
+        guard let literalPattern else {
             return nil
         }
         let literal = Array(literalPattern.utf8)
@@ -6465,10 +6537,29 @@ struct RipgrepCommand {
             return nil
         }
         var count = false
+        var fixedStrings = false
         var includeZero = false
+        var noUnicode = false
         let pattern = arguments[arguments.count - 2]
         let path = arguments[arguments.count - 1]
-        for argument in arguments.dropLast(2) {
+        let optionEndIndex = arguments.count - 2
+        var argumentIndex = 0
+        while argumentIndex < optionEndIndex {
+            let argument = arguments[argumentIndex]
+            if let handled = applySimpleSwiftDarwinLiteralCommonOption(
+                argument,
+                arguments: arguments,
+                argumentIndex: &argumentIndex,
+                optionEndIndex: optionEndIndex,
+                fixedStrings: &fixedStrings,
+                noUnicode: &noUnicode
+            ) {
+                guard handled else {
+                    return nil
+                }
+                argumentIndex += 1
+                continue
+            }
             switch argument {
             case "-c", "--count":
                 count = true
@@ -6478,23 +6569,28 @@ struct RipgrepCommand {
                 includeZero = false
             case "--json",
                  "--no-json":
-                continue
+                break
             case "--no-config",
                  "--line-buffered",
                  "--block-buffered",
                  "--no-line-buffered":
-                continue
+                break
             default:
                 return nil
             }
+            argumentIndex += 1
         }
         guard count,
               !pattern.hasPrefix("-"),
-              path != "-",
-              let literalPattern = RegexLiteralParser.literal(
-                fromPlainRegexPattern: pattern,
-                allowPCREQuotedLiterals: allowPCREQuotedLiterals
-              ) else {
+              path != "-" else {
+            return nil
+        }
+        let literalPattern = simpleSwiftDarwinLiteralPattern(
+            pattern,
+            fixedStrings: fixedStrings,
+            allowPCREQuotedLiterals: allowPCREQuotedLiterals
+        )
+        guard let literalPattern else {
             return nil
         }
         let literal = Array(literalPattern.utf8)
@@ -6528,11 +6624,30 @@ struct RipgrepCommand {
         guard arguments.count >= 3 else {
             return nil
         }
+        var fixedStrings = false
         var json = false
+        var noUnicode = false
         var stats = false
         let pattern = arguments[arguments.count - 2]
         let path = arguments[arguments.count - 1]
-        for argument in arguments.dropLast(2) {
+        let optionEndIndex = arguments.count - 2
+        var argumentIndex = 0
+        while argumentIndex < optionEndIndex {
+            let argument = arguments[argumentIndex]
+            if let handled = applySimpleSwiftDarwinLiteralCommonOption(
+                argument,
+                arguments: arguments,
+                argumentIndex: &argumentIndex,
+                optionEndIndex: optionEndIndex,
+                fixedStrings: &fixedStrings,
+                noUnicode: &noUnicode
+            ) {
+                guard handled else {
+                    return nil
+                }
+                argumentIndex += 1
+                continue
+            }
             switch argument {
             case "--json":
                 json = true
@@ -6546,18 +6661,23 @@ struct RipgrepCommand {
                  "--line-buffered",
                  "--block-buffered",
                  "--no-line-buffered":
-                continue
+                break
             default:
                 return nil
             }
+            argumentIndex += 1
         }
         guard json || stats,
               !pattern.hasPrefix("-"),
-              path != "-",
-              let literalPattern = RegexLiteralParser.literal(
-                fromPlainRegexPattern: pattern,
-                allowPCREQuotedLiterals: allowPCREQuotedLiterals
-              ) else {
+              path != "-" else {
+            return nil
+        }
+        let literalPattern = simpleSwiftDarwinLiteralPattern(
+            pattern,
+            fixedStrings: fixedStrings,
+            allowPCREQuotedLiterals: allowPCREQuotedLiterals
+        )
+        guard let literalPattern else {
             return nil
         }
         let literal = Array(literalPattern.utf8)
@@ -6580,14 +6700,33 @@ struct RipgrepCommand {
         guard arguments.count >= 3 else {
             return nil
         }
+        var fixedStrings = false
         var printWhenMatched: Bool?
         var json = false
+        var noUnicode = false
         var nullTerminated = false
         var crlfTerminated = false
         var stats = false
         let pattern = arguments[arguments.count - 2]
         let path = arguments[arguments.count - 1]
-        for argument in arguments.dropLast(2) {
+        let optionEndIndex = arguments.count - 2
+        var argumentIndex = 0
+        while argumentIndex < optionEndIndex {
+            let argument = arguments[argumentIndex]
+            if let handled = applySimpleSwiftDarwinLiteralCommonOption(
+                argument,
+                arguments: arguments,
+                argumentIndex: &argumentIndex,
+                optionEndIndex: optionEndIndex,
+                fixedStrings: &fixedStrings,
+                noUnicode: &noUnicode
+            ) {
+                guard handled else {
+                    return nil
+                }
+                argumentIndex += 1
+                continue
+            }
             switch argument {
             case "-l", "--files-with-matches":
                 printWhenMatched = true
@@ -6611,18 +6750,23 @@ struct RipgrepCommand {
                  "--line-buffered",
                  "--block-buffered",
                  "--no-line-buffered":
-                continue
+                break
             default:
                 return nil
             }
+            argumentIndex += 1
         }
         guard let printWhenMatched,
               !pattern.hasPrefix("-"),
-              path != "-",
-              let literalPattern = RegexLiteralParser.literal(
-                fromPlainRegexPattern: pattern,
-                allowPCREQuotedLiterals: allowPCREQuotedLiterals
-              ) else {
+              path != "-" else {
+            return nil
+        }
+        let literalPattern = simpleSwiftDarwinLiteralPattern(
+            pattern,
+            fixedStrings: fixedStrings,
+            allowPCREQuotedLiterals: allowPCREQuotedLiterals
+        )
+        guard let literalPattern else {
             return nil
         }
         let literal = Array(literalPattern.utf8)

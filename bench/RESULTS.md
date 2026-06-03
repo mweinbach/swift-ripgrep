@@ -107,6 +107,43 @@ matched Rust after normalizing elapsed fields.
 Raw hyperfine export:
 `/tmp/swift-rg-bench/simple-path-stats-complete-ab-1780471003.json`.
 
+## Retained simple neutral-flag preflight eligibility - 2026-06-03
+
+The simple Swift Darwin executable literal preflights now keep the fast path
+when explicit-file searches include output-neutral toggles that previously
+forced the broad option parser: `--no-mmap`, `--mmap`, `--unicode`,
+`--no-unicode` for non-word simple forms, and `--encoding auto` /
+`--encoding=auto`. The same simple parsers also honor `-F` /
+`--fixed-strings` and `--no-fixed-strings`, so fixed-string single-file
+literal line, count, summary, and path-only forms can use the same Swift
+preflight when the surrounding options are otherwise simple. The bare literal
+guardrail stayed flat in the focused follow-up, while the neutral-flag misses
+moved back toward the existing no-option fast band:
+
+| Case | Current Swift | Baseline `82ef84f` | Rust |
+| --- | ---: | ---: | ---: |
+| `absentliteral match-ascii-46m.txt` guardrail | 7.65 ms median / 7.85 ms mean | 7.64 ms / 7.68 ms | not remeasured |
+| `--mmap absentliteral match-ascii-46m.txt` | 10.28 ms / 9.79 ms | 11.34 ms / 11.47 ms | not remeasured |
+| `--no-mmap absentliteral match-ascii-46m.txt` | 8.09 ms / 9.45 ms | 12.19 ms / 16.41 ms | not remeasured |
+| `--encoding auto absentliteral match-ascii-46m.txt` | 7.96 ms / 8.24 ms | 10.74 ms / 10.97 ms | not remeasured |
+| `--no-unicode absentliteral match-ascii-46m.txt` | 7.91 ms / 8.06 ms | 9.78 ms / 9.79 ms | 6.29 ms / 6.31 ms |
+
+Output, stderr, and status matched the previous Swift binary and the sibling
+Rust oracle for neutral matched and no-match lines, fixed-string metacharacter
+output, fixed-string reset output, fixed path-only output, and stats output
+after normalizing elapsed fields. The `--mmap` row remained noisier than the
+others, but the follow-up kept it faster than the saved baseline and did not
+move the bare literal guardrail.
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/neutral-flags-simple-preflight-final-ab-1780471853.json`
+and
+`/tmp/swift-rg-bench/neutral-flags-simple-preflight-followup-1780471877.json`.
+A post-refactor smoke confirmed the retained shape, with bare literal flat and
+`--no-mmap` / `--encoding auto` at ~7.6 ms versus ~9.6-9.7 ms for the saved
+baseline:
+`/tmp/swift-rg-bench/neutral-flags-simple-preflight-postrefactor-smoke-1780472064.json`.
+
 ## Rejected word/path no-match preflight probes - 2026-06-03
 
 A follow-up probe tried to reuse the no-match byte-count primitives before the

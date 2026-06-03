@@ -2804,6 +2804,50 @@ struct MiscTests {
             )
         }
 
+        let noMmapNeutralOutput = try runExecutableData([
+            "--no-config",
+            "--no-mmap",
+            "literal",
+            root.path("simple.txt"),
+        ], fixture: {})
+        #expect(noMmapNeutralOutput == output)
+
+        let mmapNeutralOutput = try runExecutableData([
+            "--no-config",
+            "--mmap",
+            "literal",
+            root.path("simple.txt"),
+        ], fixture: {})
+        #expect(mmapNeutralOutput == output)
+
+        let encodingAutoNeutralOutput = try runExecutableData([
+            "--no-config",
+            "--encoding",
+            "auto",
+            "literal",
+            root.path("simple.txt"),
+        ], fixture: {})
+        #expect(encodingAutoNeutralOutput == output)
+
+        let noUnicodeNoMatch = try runExecutableStatusData([
+            "--no-config",
+            "--no-unicode",
+            "missing",
+            root.path("simple.txt"),
+        ])
+        #expect(noUnicodeNoMatch.status == 1)
+        #expect(noUnicodeNoMatch.stdout.isEmpty)
+        #expect(noUnicodeNoMatch.stderr.isEmpty)
+
+        try root.write("literal.*\nquiet\n", to: "fixed.txt")
+        let fixedStringOutput = try runExecutableData([
+            "--no-config",
+            "-F",
+            "literal.*",
+            root.path("fixed.txt"),
+        ], fixture: {})
+        #expect(fixedStringOutput == Data("literal.*\n".utf8))
+
         let statsFilesWithoutNoMatch = try runExecutableStatusData([
             "--no-config",
             "--stats",
