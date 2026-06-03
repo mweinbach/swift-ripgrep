@@ -8,6 +8,27 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Skipped VCS-context probes when VCS ignores are disabled - 2026-06-03
+
+File-path and fast-search walk setup now avoids the root Git/VCS repository
+probe when ignore processing or VCS ignore processing is disabled. `--no-ignore`
+and `--no-ignore-vcs` cannot load VCS/global ignore files, and explicit ignore
+root coverage is already gated off in those modes, so the repository context
+can safely resolve to false without hitting the filesystem.
+
+Status/stdout/stderr matched the saved `4efe857` Swift binary for default,
+hidden, no-ignore, no-vcs, no-global, explicit-ignore, and quiet file-listing
+controls. `swift build -c release` passed before benchmarking.
+
+| Case | Patched Swift | Baseline `4efe857` | Rust reference |
+| --- | ---: | ---: | ---: |
+| `--no-ignore-vcs --quiet --files linux` | 4.7 ms mean / 3.9-5.4 ms range | 6.5 ms / 5.8-7.9 ms | 5.7 ms / 4.8-9.8 ms |
+| `--no-ignore-vcs --files linux` | 80.6 ms / 69.8-117.5 ms | 83.0 ms / 71.6-121.2 ms | 86.9 ms / 68.7-213.2 ms |
+| `--quiet --files linux` guard | 6.8 ms / 6.1-7.7 ms | 7.4 ms / 6.4-11.6 ms | 6.2 ms / 5.2-7.4 ms |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/vcs-context-skip-ab-1780525704.json`.
+
 ## Extended root VCS-context reuse to file-path walks - 2026-06-03
 
 The direct Darwin file-path writer and the general recursive haystack walk now

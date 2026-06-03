@@ -381,7 +381,7 @@ public struct FileWalker: @unchecked Sendable {
             rootVCSContext = false
             rootIgnoreStack = IgnoreStack()
         } else {
-            rootVCSContext = options.noRequireGit || isInGitRepository(rootPlan.rootBase)
+            rootVCSContext = rootVCSContextForIgnoreLoading(rootBase: rootPlan.rootBase, options: options)
             var ignoreStack = IgnoreStack()
             appendExplicitIgnoreFiles(
                 to: &ignoreStack,
@@ -656,7 +656,7 @@ public struct FileWalker: @unchecked Sendable {
             return nil
         }
 
-        let rootVCSContext = options.noRequireGit || isInGitRepository(rootPlan.rootBase)
+        let rootVCSContext = rootVCSContextForIgnoreLoading(rootBase: rootPlan.rootBase, options: options)
         var rootIgnoreStack = IgnoreStack()
         appendExplicitIgnoreFiles(
             to: &rootIgnoreStack,
@@ -825,7 +825,7 @@ public struct FileWalker: @unchecked Sendable {
         }
 
         var rootIgnoreStack = IgnoreStack()
-        let rootVCSContext = options.noRequireGit || isInGitRepository(rootPlan.rootBase)
+        let rootVCSContext = rootVCSContextForIgnoreLoading(rootBase: rootPlan.rootBase, options: options)
         appendExplicitIgnoreFiles(
             to: &rootIgnoreStack,
             rootBase: rootPlan.rootBase,
@@ -940,7 +940,7 @@ public struct FileWalker: @unchecked Sendable {
             let rootArgument = offset < options.rootPathArguments.count ? options.rootPathArguments[offset] : ""
             let rootArgumentIsAbsolute = (rootArgument as NSString).isAbsolutePath
             let rootDebugDisplayPath = rootDisplayPath(at: offset, root: root, options: options)
-            let rootVCSContext = options.noRequireGit || isInGitRepository(rootBase)
+            let rootVCSContext = rootVCSContextForIgnoreLoading(rootBase: rootBase, options: options)
             var rootIgnoreStack = baseIgnoreStack
             if reportedExplicitIgnoreFileWarnings {
                 var ignoredWarnings: [String] = []
@@ -4017,6 +4017,13 @@ public struct FileWalker: @unchecked Sendable {
 
     private func hasGitMarker(in directoryURL: URL) -> Bool {
         fileManager.fileExists(atPath: directoryURL.appendingPathComponent(".git").path)
+    }
+
+    private func rootVCSContextForIgnoreLoading(rootBase: URL, options: RipgrepOptions) -> Bool {
+        guard !options.noIgnore, !options.noIgnoreVCS else {
+            return false
+        }
+        return options.noRequireGit || isInGitRepository(rootBase)
     }
 
     private func gitInfoExcludeURL(for directoryURL: URL) -> URL? {
