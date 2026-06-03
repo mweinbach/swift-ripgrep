@@ -55,6 +55,15 @@ Rejected follow-up probe:
   benchmark was stopped after the default-mmap miss completed at 1.419 s.
   Raw partial export:
   `/tmp/swift-rg-bench/quiet-mmap-isolation-1780526695.json`.
+- Passing each top-level Darwin file-list worker a child-scoped reload of the
+  root-local ignore files preserved sorted Rust parity and byte-for-byte output
+  against the saved `86e6af2` Swift binary for default, hidden, no-vcs,
+  no-ignore, and hidden no-vcs file listing. The extra matcher reload cost
+  outweighed the narrower anchored-rule stack: hidden `--files` regressed to
+  88.7 ms versus 83.1 ms baseline, default `--files` was effectively flat at
+  82.3 ms versus 83.1 ms, and `--no-ignore-vcs` stayed noise-level positive at
+  63.9 ms versus 64.7 ms. The source probe was reverted. Raw export:
+  `/tmp/swift-rg-bench/scoped-root-stack-ab-1780529217.json`.
 
 ## Extended root VCS-context reuse to file-path walks - 2026-06-03
 
