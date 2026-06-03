@@ -24,6 +24,29 @@ case slower:
 Raw hyperfine export:
 `/tmp/swift-rg-bench/hidden-worker-ab-1780466572.json`.
 
+## Rejected explicit-ignore load filters - 2026-06-03
+
+Two follow-up probes tried to reduce the remaining explicit `--ignore-file`
+file-listing gap on the Linux corpus without changing traversal behavior. The
+first added a conservative simple-pattern shortcut before the explicit-root
+matcher guard; the second kept the existing filters but ran the anchored-prefix
+prefilter before the explicit-root guard so fewer patterns reached the
+per-pattern matcher. Both source changes were reverted because load-only timing
+was flat and hidden explicit-ignore listing either failed to improve or moved
+the wrong way:
+
+| Probe | Case | Prototype Swift | Baseline `c3226f5` |
+| --- | --- | ---: | ---: |
+| Simple-pattern shortcut | `--no-ignore-vcs --ignore-file linux/.gitignore --files linux` | 72.46 ms median | 74.46 ms |
+| Simple-pattern shortcut | `-q --no-ignore-vcs --ignore-file linux/.gitignore --files linux` | 6.40 ms | 6.32 ms |
+| Existing-filter reorder | `--no-ignore-vcs --ignore-file linux/.gitignore --files linux` | 71.91 ms | 72.02 ms |
+| Existing-filter reorder | `--hidden --no-ignore-vcs --ignore-file linux/.gitignore --files linux` | 72.92 ms | 71.86 ms |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/explicit-root-simple-filter-ab-1780467320.json`,
+`/tmp/swift-rg-bench/explicit-root-simple-filter-focused-1780467491.json`, and
+`/tmp/swift-rg-bench/explicit-anchor-before-root-ab-1780467684.json`.
+
 ## Simple exact literal path-only preflight - 2026-06-03
 
 Exact literal path-only output now has the same kind of tiny executable
