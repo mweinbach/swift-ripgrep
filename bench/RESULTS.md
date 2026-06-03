@@ -8,6 +8,36 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Retained hidden no-ignore root setup skip - 2026-06-03
+
+For sorted hidden `--no-ignore --files` output, the string file-list stream now
+skips root git detection and explicit/global/parent ignore setup. The recursive
+walker's hidden no-ignore branch ignores the root ignore stack, so this removes
+dead setup work without changing emitted paths. A broader `options.noIgnore`
+skip was not retained: the first pass improved hidden no-ignore but made the
+visible target and ignore-aware guard flat-to-slower.
+
+Current Swift output matched the previous Swift binary for sorted visible
+no-ignore, reverse visible no-ignore, hidden no-ignore, default sorted files,
+explicit `--ignore-file` under `--no-ignore`, and debug hidden no-ignore
+stderr. Rust output also matched the ordinary sorted visible, reverse, hidden,
+and default file-list controls.
+
+A 60-run order-flipped confirmation against checkpoint `8c9b61b` measured:
+
+| Case | Current Swift | Baseline `8c9b61b` | Rust reference |
+| --- | ---: | ---: | ---: |
+| `--sort path --hidden --no-ignore --files linux` | 149.46 ms median / 151.12 ms mean | 150.49 ms / 152.11 ms | 145.14 ms / 147.18 ms from the 30-run pass |
+| `--sort path --files linux` guard | 122.63 ms / 125.17 ms | 127.26 ms / 129.28 ms | not remeasured |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/noignore-rootsetup-skip-ab-1780513460.json` for the
+rejected broad no-ignore skip,
+`/tmp/swift-rg-bench/noignore-hidden-rootsetup-skip-ab-1780513640.json` for the
+focused 30-run pass, and
+`/tmp/swift-rg-bench/noignore-hidden-rootsetup-skip-confirm-1780513707.json` for
+the retained confirmation.
+
 ## Rejected empty explicit-ignore root guard - 2026-06-03
 
 Tried returning early from `appendExplicitIgnoreFiles` when

@@ -375,18 +375,26 @@ public struct FileWalker: @unchecked Sendable {
             )
         }
 
-        let rootVCSContext = options.noRequireGit || isInGitRepository(rootPlan.rootBase)
-        var rootIgnoreStack = IgnoreStack()
-        appendExplicitIgnoreFiles(
-            to: &rootIgnoreStack,
-            rootBase: rootPlan.rootBase,
-            rootVCSContext: rootVCSContext,
-            warnings: &warnings,
-            diagnostics: &diagnostics,
-            options: options
-        )
-        appendGlobalIgnoreFile(to: &rootIgnoreStack, rootBase: rootPlan.rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
-        appendParentIgnoreFiles(to: &rootIgnoreStack, rootBase: rootPlan.rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
+        let rootVCSContext: Bool
+        let rootIgnoreStack: IgnoreStack
+        if options.noIgnore && options.hidden {
+            rootVCSContext = false
+            rootIgnoreStack = IgnoreStack()
+        } else {
+            rootVCSContext = options.noRequireGit || isInGitRepository(rootPlan.rootBase)
+            var ignoreStack = IgnoreStack()
+            appendExplicitIgnoreFiles(
+                to: &ignoreStack,
+                rootBase: rootPlan.rootBase,
+                rootVCSContext: rootVCSContext,
+                warnings: &warnings,
+                diagnostics: &diagnostics,
+                options: options
+            )
+            appendGlobalIgnoreFile(to: &ignoreStack, rootBase: rootPlan.rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
+            appendParentIgnoreFiles(to: &ignoreStack, rootBase: rootPlan.rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
+            rootIgnoreStack = ignoreStack
+        }
         if stopAfterFirst, options.quiet, options.loggingMode == nil {
             let hasFile = try fastDirectoryTreeContainsAllowedFile(
                 directoryPath: rootPlan.rootURL.path,
