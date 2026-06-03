@@ -1553,6 +1553,24 @@ struct MiscTests {
             root.path("src/match.txt"),
         ], fixture: {})
         #expect(maxColumnsPreviewOutput == Data("prefix Abc [... omitted end of long line]\n".utf8))
+        try root.write("cafe trail\nprefix Abcdefghi123 café\n", to: "src/nonascii-tail.txt")
+        let maxColumnsPreviewNonASCIITailOutput = try runExecutableData([
+            "--max-columns",
+            "10",
+            "--max-columns-preview",
+            pattern,
+            root.path("src/nonascii-tail.txt"),
+        ], fixture: {})
+        #expect(maxColumnsPreviewNonASCIITailOutput == Data("prefix Abc [... omitted end of long line]\n".utf8))
+        try root.write("préfix Abcdefghi123\n", to: "src/nonascii-prefix.txt")
+        let maxColumnsPreviewNonASCIIPrefixOutput = try runExecutableData([
+            "--max-columns",
+            "10",
+            "--max-columns-preview",
+            pattern,
+            root.path("src/nonascii-prefix.txt"),
+        ], fixture: {})
+        #expect(maxColumnsPreviewNonASCIIPrefixOutput == Data("préfix Abc [... omitted end of long line]\n".utf8))
         let maxColumnsColumnOutput = try runExecutableData([
             "--max-columns",
             "10",

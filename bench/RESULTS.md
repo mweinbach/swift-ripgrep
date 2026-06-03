@@ -8,6 +8,41 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Fixed-class max-columns preview ASCII guard - 2026-06-03
+
+Fixed-class `--max-columns-preview` output no longer scans the whole mapped
+file for non-ASCII bytes before using the Swift direct writer. The route now
+checks only the emitted preview slice for ASCII before writing it, so files
+with Unicode elsewhere in the haystack can still use the fast path while
+matched lines whose preview width needs Unicode column handling fall back to
+the generic printer. This keeps the change Swift-only and preserves the
+existing UTF/BOM and binary fallbacks.
+
+Validation:
+
+- Patched Swift matched Rust for a fixed-class max-columns preview hit on the
+  46 MiB fixed-late fixture.
+- Added regression coverage for fixed-class preview output when non-ASCII is
+  outside the emitted preview and for fallback when non-ASCII appears inside
+  the preview slice.
+- `swift test --quiet --filter
+  MiscTests/darwinExecutableLiteralPreflightDenseLines` passed before
+  recording these results.
+
+The retained A/B used a clean `3d83206` baseline binary built in
+`/tmp/swift-ripgrep-baseline-1780461077`, 15 warm-ups, and 100 timed runs.
+A bounded backward line-start probe was also tested and reverted after it did
+not move the plain preview row.
+
+| Case | Current Swift | Prior Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `--max-columns 10 --max-columns-preview '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 21.7 ms mean / 20.7-23.4 ms range | 22.6 ms / 21.8-26.1 ms | 19.3 ms / 18.5-22.1 ms |
+| `--stats --max-columns 10 --max-columns-preview '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 18.3 ms / 17.8-20.7 ms | 20.0 ms / 19.2-22.3 ms | not remeasured |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/fixed-preview-ascii-slice-ab-1780461187.json` and
+`/tmp/swift-rg-bench/fixed-preview-bounded-line-start-1780460831.json`.
+
 ## Rejected Greek and quiet-word probes - 2026-06-03
 
 Two follow-up probes were measured and not retained:

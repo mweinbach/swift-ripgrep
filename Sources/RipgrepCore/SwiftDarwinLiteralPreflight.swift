@@ -5164,10 +5164,6 @@ public enum SwiftDarwinLiteralPreflight {
               !containsNULByte(data) else {
             return nil
         }
-        if maxColumnsPreview,
-           containsNonASCIIByte(data) {
-            return nil
-        }
         return data.withUnsafeBytes { rawData -> MatchedOutputStats? in
             guard let rawBase = rawData.baseAddress else {
                 return MatchedOutputStats(
@@ -5318,6 +5314,12 @@ public enum SwiftDarwinLiteralPreflight {
 
             if lineByteCount >= maxColumns {
                 if maxColumnsPreview {
+                    guard !rgSwiftContainsNonASCIIByte(
+                        baseAddress.advanced(by: lineStart),
+                        count: maxColumns
+                    ) else {
+                        return nil
+                    }
                     guard output.write(baseAddress.advanced(by: lineStart), count: maxColumns),
                           writePreviewSuffix(
                             remainingMatches: collectTotalMatches ? remainingLineMatches : nil
