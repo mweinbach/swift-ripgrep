@@ -1105,7 +1105,7 @@ public struct FileWalker: @unchecked Sendable {
         stopAfterFirst: Bool,
         emit: (String) -> Void
     ) throws -> FilePathStreamResults? {
-        guard !options.noIgnore,
+        guard (!options.noIgnore || options.sortMode?.kind == .path),
               !stopAfterFirst,
               options.loggingMode == nil else {
             return nil

@@ -8,6 +8,32 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Retained sorted no-ignore parallel string walker - 2026-06-03
+
+Allowed path-sorted `--no-ignore` file listing to use the existing Darwin
+parallel string walker instead of falling back to the sequential output-order
+walk. Unsorted `--no-ignore --files` still uses the direct byte writer, while
+default ignore-aware sorted output keeps the same parallel path it already had.
+
+Output, stderr, and status matched the previous Swift binary and Rust reference
+for sorted visible, reverse-sorted visible, sorted hidden no-ignore, sorted
+default, and sorted no-vcs file-listing controls. The two-run A/B plus an
+order-flipped confirmation both showed the sorted no-ignore rows moving from
+roughly Rust parity to a clear Swift lead, with default and no-vcs guardrails
+effectively unchanged.
+
+| Case | Parallel no-ignore probe | Previous Swift `6a9f660` | Rust reference |
+| --- | ---: | ---: | ---: |
+| `--sort path --no-ignore --files linux` | 106.81 ms median / 107.34 ms mean | 148.76 ms / 150.09 ms | 142.29 ms / 143.23 ms |
+| `--sortr path --no-ignore --files linux` | 107.43 ms / 110.88 ms | 148.98 ms / 150.51 ms | not remeasured |
+| `--sort path --hidden --no-ignore --files linux` | 106.90 ms / 108.28 ms | 150.30 ms / 155.65 ms | not remeasured |
+| `--sort path --files linux` guard | 122.82 ms / 125.76 ms | 122.63 ms / 124.53 ms | not remeasured |
+| `--sort path --no-ignore-vcs --files linux` guard | 111.07 ms / 112.96 ms | 110.87 ms / 112.90 ms | not remeasured |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/noignore-sorted-parallel-string-ab-1780517506.json` and
+`/tmp/swift-rg-bench/noignore-sorted-parallel-string-confirm-1780517597.json`.
+
 ## Rejected direct SIMD literal no-match proof - 2026-06-03
 
 Tried bypassing the rare-anchor proof inside the shared literal no-match
