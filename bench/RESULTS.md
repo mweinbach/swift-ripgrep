@@ -28,6 +28,26 @@ case-insensitive alternation at 0.90x; the rest of the available Linux rows are
 Raw bench output:
 `/tmp/swift-rg-bench/current-wide-refresh-1780466744/summary.md`.
 
+## Rejected zero-count direct write - 2026-06-03
+
+A no-match count/stats probe checked whether the remaining absent-literal
+summary gap was caused by the heap-backed stdout buffer used for tiny `0\n`
+count output. The prototype wrote the common zero-count, no-prefix, LF-only
+line directly through `fwrite` and left count prefixes, CRLF, stats, and all
+search logic unchanged. Output matched the previous Swift binary for count,
+include-zero, prefixed count, CRLF count, and stats; Rust differed only in
+elapsed stats fields. The source change was reverted because the A/B was flat
+to slightly worse:
+
+| Case | Prototype Swift | Baseline `8e4a694` | Rust |
+| --- | ---: | ---: | ---: |
+| `-c absentliteral match-ascii-46m.txt` | 11.16 ms median | 10.86 ms | 7.23 ms |
+| `-c --include-zero absentliteral match-ascii-46m.txt` | 10.80 ms | 10.85 ms | not remeasured |
+| `--stats absentliteral match-ascii-46m.txt` | 10.47 ms | 10.55 ms | not remeasured |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/zero-count-fast-write-ab-1780468478.json`.
+
 ## Rejected hidden file-list worker expansion - 2026-06-03
 
 A traversal probe lifted the ignore-aware `--files` root worker cap from 8
