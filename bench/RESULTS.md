@@ -8,6 +8,28 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected seven-worker Darwin file-list cap - 2026-06-03
+
+Tried raising the shared Darwin file-list worker cap from the retained six
+workers to seven. Output stayed byte-for-byte identical to the six-worker Swift
+binary for default, hidden, no-vcs, no-ignore, NUL, NUL no-ignore, and debug
+file-listing, and sorted path output matched Rust for default, hidden, no-vcs,
+and no-ignore controls. The benchmark moved the wrong way on every key row, so
+the source change was reverted and six workers remains the current local
+optimum.
+
+| Case | Seven-worker probe | Six-worker baseline `b9a38a6` | Rust reference |
+| --- | ---: | ---: | ---: |
+| `--files linux` | 76.32 ms median / 78.12 ms mean | 74.24 ms / 75.54 ms | 74.09 ms / 74.58 ms |
+| `--null --files linux` | 77.25 ms / 78.60 ms | 76.07 ms / 77.74 ms | not remeasured |
+| `--hidden --files linux` guard | 78.17 ms / 79.04 ms | 75.69 ms / 77.22 ms | not remeasured |
+| `--no-ignore-vcs --files linux` guard | 63.90 ms / 66.47 ms | 60.84 ms / 64.37 ms | not remeasured |
+| `--no-ignore --files linux` guard | 63.80 ms / 66.01 ms | 59.92 ms / 62.13 ms | not remeasured |
+| `--null --no-ignore --files linux` guard | 61.72 ms / 62.23 ms | 58.35 ms / 59.17 ms | not remeasured |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/workerlimit7-ab-1780516517.json`.
+
 ## Rejected split no-ignore file-list cap - 2026-06-03
 
 Tried keeping the retained six-worker cap for ignore-aware file listing while
