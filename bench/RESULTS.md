@@ -8,6 +8,33 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected Greek and quiet-word probes - 2026-06-03
+
+Two follow-up probes were measured and not retained:
+
+- A Greek pre-binary no-match proof reused the raw Greek byte-candidate scanner
+  before the generic binary-NUL pass for large matching-line outputs. It
+  preserved stdout, stderr, and status against Rust for explicit non-Greek,
+  early Greek, ignore-case, late-omega, binary, and invalid-byte controls. The
+  no-match row improved only modestly, while a late positive regressed badly:
+  `-n '\p{Greek}' non-greek-unicode-64m.txt` measured 35.1 ms for the probe
+  versus a same-session current refresh around 38 ms, but a large false-candidate
+  file with late `Ω` measured 184.0 ms for the probe. The source change was
+  reverted.
+- Routing quiet `-w` status through the mapped line scanner with `emitLines:
+  false` preserved parity for absent, hit, Unicode fallback, and binary-prefix
+  controls, but the A/B was flat for absent words and regressed early hits:
+  `-q -w absentliteral match-ascii-46m.txt` stayed at 7.6 ms for both baseline
+  and probe, while `-q -w alpha match-ascii-46m.txt` moved from 3.0 ms baseline
+  to 6.6 ms. The source change was reverted.
+
+Raw exports:
+`/tmp/swift-rg-bench/greek-prebinary-prototype-1780459446.json`,
+`/tmp/swift-rg-bench/word-quiet-baseline-v-prototype-1780460032.json`, and
+the supporting parity artifacts under
+`/tmp/swift-rg-bench/greek-prebinary-parity` and
+`/tmp/swift-rg-bench/word-quiet-parity`.
+
 ## Fixed-class first-match proof skip - 2026-06-03
 
 ASCII fixed-class first-match outputs now skip the whole-buffer first-class and
