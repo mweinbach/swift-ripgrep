@@ -8,6 +8,33 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Fixed-class plain max-columns preview route - 2026-06-03
+
+Plain fixed-class `--max-columns-preview` output now has a lean route for the
+common no-line-number, no-prefix case. It writes preview rows directly with the
+bounded line-start probe and the fixed omitted-end suffix, while numbered,
+prefixed, and stats preview output keep the general max-columns writer. This is
+separate from the earlier rejected probe that only changed the general writer's
+line-start search.
+
+Validation:
+
+- Patched Swift matched Rust for `--max-columns 10 --max-columns-preview
+  '[A-Z]{5}'` on the 46 MiB fixed-late fixture.
+- Patched Swift matched Rust for a non-ASCII preview-prefix fallback control.
+
+The retained A/B used a detached `802ca7b` baseline release binary, the current
+prototype release binary, 10 warm-ups, and 100 timed runs. Stats preview was
+included as a guard and stayed on the general route.
+
+| Case | Current Swift | Prior Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `--max-columns 10 --max-columns-preview '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 13.2 ms mean / 12.7-15.7 ms range | 22.0 ms / 21.2-26.4 ms | 19.2 ms / 18.6-21.8 ms |
+| `--stats --max-columns 10 --max-columns-preview '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 19.6 ms / 18.2-23.6 ms | 19.1 ms / 18.0-24.2 ms | not remeasured |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/plain-preview-lean-route-ab-1780463611.json`.
+
 ## Fixed-class bounded numbered line counting - 2026-06-03
 
 The fixed-class matching-line route now reuses the bounded backward line-start

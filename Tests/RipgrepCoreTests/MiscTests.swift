@@ -2870,6 +2870,7 @@ struct MiscTests {
         try root.write("lower lower\n", to: "fixed-summary.txt")
         try root.write("alpha alpha\nquiet\nALPHA\nwordalpha alpha\n", to: "summary-match.txt")
         try root.write("one ALPHA two BRAVO\nthree CHARLIE\nquiet\n", to: "fixed-max.txt")
+        try root.write("préfix ABCDE tail\n", to: "fixed-preview-nonascii-prefix.txt")
         try root.write("warmup\nnear ALPHA tail\nquiet\n", to: "fixed-bounded.txt")
         let fixedLongLine = String(repeating: "a", count: 5_000) + "ABCDE\n"
         try root.write("short\n" + fixedLongLine, to: "fixed-long-line.txt")
@@ -3321,6 +3322,14 @@ struct MiscTests {
             "--max-columns-preview",
             "[A-Z]{5}",
             root.path("fixed-max.txt"),
+        ])
+        let fixedMaxColumnsPreviewNonASCIIPrefixLineMatch = try runExecutableResult([
+            "--no-config",
+            "--max-columns",
+            "10",
+            "--max-columns-preview",
+            "[A-Z]{5}",
+            root.path("fixed-preview-nonascii-prefix.txt"),
         ])
         let fixedNumberedMaxColumnsLineMatch = try runExecutableResult([
             "--no-config",
@@ -3851,6 +3860,9 @@ struct MiscTests {
         three CHAR [... omitted end of long line]
 
         """.utf8)
+        let expectedFixedMaxColumnsPreviewNonASCIIPrefixOutput = Data(
+            "préfix ABC [... omitted end of long line]\n".utf8
+        )
         let expectedFixedNumberedMaxColumnsOutput = Data("""
         1:[Omitted long matching line]
         2:[Omitted long matching line]
@@ -4338,6 +4350,10 @@ struct MiscTests {
         #expect(fixedMaxColumnsPreviewLineMatch.status == 0)
         #expect(fixedMaxColumnsPreviewLineMatch.stderr.isEmpty)
         #expect(fixedMaxColumnsPreviewLineMatch.stdout == expectedFixedMaxColumnsPreviewOutput)
+        #expect(fixedMaxColumnsPreviewNonASCIIPrefixLineMatch.status == 0)
+        #expect(fixedMaxColumnsPreviewNonASCIIPrefixLineMatch.stderr.isEmpty)
+        #expect(fixedMaxColumnsPreviewNonASCIIPrefixLineMatch.stdout
+            == expectedFixedMaxColumnsPreviewNonASCIIPrefixOutput)
         #expect(fixedNumberedMaxColumnsLineMatch.status == 0)
         #expect(fixedNumberedMaxColumnsLineMatch.stderr.isEmpty)
         #expect(fixedNumberedMaxColumnsLineMatch.stdout == expectedFixedNumberedMaxColumnsOutput)
