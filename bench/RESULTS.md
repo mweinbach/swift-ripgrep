@@ -8,6 +8,31 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected split no-ignore file-list cap - 2026-06-03
+
+Tried keeping the retained six-worker cap for ignore-aware file listing while
+lowering only visible no-ignore file-list workers to five. The probe was based
+on the global five-worker rejection, where the no-ignore guard improved while
+ignore-aware rows regressed. Current Swift output stayed byte-for-byte identical
+for default, hidden, no-vcs, no-ignore, NUL, NUL no-ignore, and debug
+file-listing, and sorted path output matched Rust for default, hidden, no-vcs,
+and no-ignore controls.
+
+The narrower split did not keep the earlier no-ignore improvement: both target
+rows moved slower, while ignore-aware guardrails stayed effectively flat, so the
+source change was reverted.
+
+| Case | Split-cap probe | Six-worker baseline `04f970b` | Rust reference |
+| --- | ---: | ---: | ---: |
+| `--no-ignore --files linux` | 58.60 ms median / 60.14 ms mean | 57.78 ms / 59.19 ms | 66.79 ms / 66.80 ms |
+| `--null --no-ignore --files linux` | 60.45 ms / 61.53 ms | 57.57 ms / 58.85 ms | not remeasured |
+| `--files linux` guard | 73.52 ms / 74.43 ms | 73.77 ms / 74.65 ms | not remeasured |
+| `--hidden --files linux` guard | 75.48 ms / 76.26 ms | 75.52 ms / 76.41 ms | not remeasured |
+| `--no-ignore-vcs --files linux` guard | 60.56 ms / 61.73 ms | 61.78 ms / 64.24 ms | not remeasured |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/split-noignore-cap-ab-1780516105.json`.
+
 ## Rejected five-worker Darwin file-list cap - 2026-06-03
 
 Tried lowering the shared Darwin file-list worker cap from the retained six
