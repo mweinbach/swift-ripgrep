@@ -6650,6 +6650,16 @@ struct RipgrepCommand {
             return 1
         }
         if wordRegexp {
+            if literal.count >= 10,
+               !lineNumber,
+               !withFilename,
+               !heading,
+               let noMatchExitCode = SwiftDarwinLiteralPreflight.rareAnchorLiteralNoMatchExitCode(
+                path: path,
+                literal: literal
+               ) {
+                return noMatchExitCode
+            }
             if quiet {
                 return SwiftDarwinLiteralPreflight.wordQuietExitCode(
                     path: path,
@@ -6676,6 +6686,13 @@ struct RipgrepCommand {
             )
         }
         if quiet {
+            if literal.count >= 10,
+               let noMatchExitCode = SwiftDarwinLiteralPreflight.rareAnchorLiteralNoMatchExitCode(
+                path: path,
+                literal: literal
+            ) {
+                return noMatchExitCode
+            }
             return SwiftDarwinLiteralPreflight.quietExitCode(
                 path: path,
                 literal: literal
@@ -6702,6 +6719,16 @@ struct RipgrepCommand {
                 linePrefix: withFilename && !heading ? displayPath + [UInt8(ascii: ":")] : [],
                 headingPrefix: heading && withFilename ? displayPath + [UInt8(ascii: "\n")] : []
             )
+        }
+        if !lineNumber,
+           literal.count >= 10,
+           !withFilename,
+           !heading,
+           let noMatchExitCode = SwiftDarwinLiteralPreflight.rareAnchorLiteralNoMatchExitCode(
+            path: path,
+            literal: literal
+           ) {
+            return noMatchExitCode
         }
         return SwiftDarwinLiteralPreflight.exitCode(
             path: path,
@@ -6976,6 +7003,23 @@ struct RipgrepCommand {
         let outputPath = path.utf8.allSatisfy { $0 < 0x80 }
             ? nil
             : Self.preflightDisplayPathBytes(path, pathSeparator: nil)
+        if literal.count >= 10,
+           !json,
+           !stats,
+           let exitCode = printWhenMatched
+            ? SwiftDarwinLiteralPreflight.rareAnchorLiteralNoMatchExitCode(
+                path: path,
+                literal: literal
+              )
+            : SwiftDarwinLiteralPreflight.rareAnchorLiteralNoMatchPathOutputExitCode(
+                path: path,
+                literal: literal,
+                nullTerminated: nullTerminated,
+                crlfTerminated: crlfTerminated,
+                outputPath: outputPath
+              ) {
+            return exitCode
+        }
         if json || stats {
             if printWhenMatched {
                 if stats {

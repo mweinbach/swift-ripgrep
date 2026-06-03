@@ -5279,6 +5279,50 @@ struct MiscTests {
         #expect(rareAnchorSingleLiteralCountOutput.stderr.isEmpty)
         #expect(rareAnchorSingleLiteralCountOutput.status == 1)
 
+        let rareAnchorPlainNoMatchOutput = try runExecutableResult([
+            "absentliteral",
+            root.path("rare-anchor-false-positive.txt"),
+        ])
+        #expect(rareAnchorPlainNoMatchOutput.stdout.isEmpty)
+        #expect(rareAnchorPlainNoMatchOutput.stderr.isEmpty)
+        #expect(rareAnchorPlainNoMatchOutput.status == 1)
+
+        let rareAnchorQuietNoMatchOutput = try runExecutableResult([
+            "-q",
+            "absentliteral",
+            root.path("rare-anchor-false-positive.txt"),
+        ])
+        #expect(rareAnchorQuietNoMatchOutput.stdout.isEmpty)
+        #expect(rareAnchorQuietNoMatchOutput.stderr.isEmpty)
+        #expect(rareAnchorQuietNoMatchOutput.status == 1)
+
+        let rareAnchorWordNoMatchOutput = try runExecutableResult([
+            "-w",
+            "absentliteral",
+            root.path("rare-anchor-false-positive.txt"),
+        ])
+        #expect(rareAnchorWordNoMatchOutput.stdout.isEmpty)
+        #expect(rareAnchorWordNoMatchOutput.stderr.isEmpty)
+        #expect(rareAnchorWordNoMatchOutput.status == 1)
+
+        let rareAnchorFilesWithMatchOutput = try runExecutableResult([
+            "-l",
+            "absentliteral",
+            root.path("rare-anchor-false-positive.txt"),
+        ])
+        #expect(rareAnchorFilesWithMatchOutput.stdout.isEmpty)
+        #expect(rareAnchorFilesWithMatchOutput.stderr.isEmpty)
+        #expect(rareAnchorFilesWithMatchOutput.status == 1)
+
+        let rareAnchorFilesWithoutMatchOutput = try runExecutableResult([
+            "--files-without-match",
+            "absentliteral",
+            root.path("rare-anchor-false-positive.txt"),
+        ])
+        #expect(rareAnchorFilesWithoutMatchOutput.stdout == Data("\(root.path("rare-anchor-false-positive.txt"))\n".utf8))
+        #expect(rareAnchorFilesWithoutMatchOutput.stderr.isEmpty)
+        #expect(rareAnchorFilesWithoutMatchOutput.status == 0)
+
         let allPresentMultiLiteralOutput = try runExecutableData([
             "-e",
             "needle",

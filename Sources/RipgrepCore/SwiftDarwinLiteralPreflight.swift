@@ -4,6 +4,8 @@ import Foundation
 import Darwin
 
 public enum SwiftDarwinLiteralPreflight {
+    private static let rareAnchorNoMatchShortcutMinimumLiteralLength = 10
+
     private final class QuietStatsProbeAccumulator: @unchecked Sendable {
         private let lock = NSLock()
         private var bytesSearched = 0
@@ -307,6 +309,16 @@ public enum SwiftDarwinLiteralPreflight {
         return 1
     }
 
+    public static func rareAnchorLiteralNoMatchExitCode(
+        path: String,
+        literal: [UInt8]
+    ) -> Int32? {
+        guard literalRareAnchorNoMatchByteCount(path: path, literal: literal) != nil else {
+            return nil
+        }
+        return 1
+    }
+
     public static func noMatchCountOutputExitCode(
         path: String,
         literal: [UInt8],
@@ -367,6 +379,27 @@ public enum SwiftDarwinLiteralPreflight {
                 return nil
             }
             return writeNoMatchSummary(bytesSearched: bytesSearched, json: false, exitCode: 0)
+        }
+        return 0
+    }
+
+    public static func rareAnchorLiteralNoMatchPathOutputExitCode(
+        path: String,
+        literal: [UInt8],
+        nullTerminated: Bool,
+        crlfTerminated: Bool = false,
+        outputPath: [UInt8]? = nil
+    ) -> Int32? {
+        guard literalRareAnchorNoMatchByteCount(path: path, literal: literal) != nil else {
+            return nil
+        }
+        guard writePathOnlyOutput(
+            path: path,
+            outputPath: outputPath,
+            nullTerminated: nullTerminated,
+            crlfTerminated: crlfTerminated
+        ) else {
+            return nil
         }
         return 0
     }
@@ -6923,6 +6956,22 @@ public enum SwiftDarwinLiteralPreflight {
         }
         guard !(dataContainsLiteralUsingRareAnchor(data, literal: literal)
                 ?? dataContainsLiteralUsingSIMD(data, literal: literal)) else {
+            return nil
+        }
+        return data.count
+    }
+
+    private static func literalRareAnchorNoMatchByteCount(path: String, literal: [UInt8]) -> Int? {
+        guard literal.count >= rareAnchorNoMatchShortcutMinimumLiteralLength else {
+            return nil
+        }
+        guard let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !hasBinaryDetectionPrefix(data) else {
+            return nil
+        }
+        guard dataContainsLiteralUsingRareAnchor(data, literal: literal) == false else {
             return nil
         }
         return data.count
