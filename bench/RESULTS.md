@@ -8,6 +8,26 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Current upstream Linux refresh - 2026-06-03
+
+After the retained fixed-class and literal-output slices, the available
+upstream `ripgrep/benchsuite` Linux cases are all at or ahead of Rust in a
+fresh one-run sweep. Subtitle corpora were still unavailable, so this refresh
+covered the 15 Linux rows collected by the local benchsuite. The closest row is
+case-insensitive alternation at 0.90x; the rest of the available Linux rows are
+0.86x or faster:
+
+| Benchmark | Label | Rust rg | Swift rg | Swift/Rust |
+| --- | --- | ---: | ---: | ---: |
+| `linux_alternates_casei` | rg | 2.754 s | 2.478 s | 0.90x |
+| `linux_no_literal` | rg | 2.471 s | 2.129 s | 0.86x |
+| `linux_alternates` | rg | 2.803 s | 1.860 s | 0.66x |
+| `linux_literal_default` | rg | 2.664 s | 1.613 s | 0.61x |
+| `linux_word` | rg | 3.158 s | 1.719 s | 0.54x |
+
+Raw bench output:
+`/tmp/swift-rg-bench/current-wide-refresh-1780466744/summary.md`.
+
 ## Rejected hidden file-list worker expansion - 2026-06-03
 
 A traversal probe lifted the ignore-aware `--files` root worker cap from 8
