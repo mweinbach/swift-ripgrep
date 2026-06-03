@@ -515,6 +515,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let fileWalker = FileWalker(fileManager: fileManager).withEnvironment(environment)
         if let quietByteLiteralFastPath {
             // Keep this prefix isolated so a miss does not spend the lexical probe budget.
+            let outputOrderPrefixLimit = 160
             var prefixFilesSearched = 0
             var prefixProbeBytes = 0
             var prefixSearchMessages: [String] = []
@@ -542,7 +543,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             }
             if let prefixWalkResults = try fileWalker.firstVisitedFastSearchFilePrefixWithMessages(
                 for: options,
-                prefixLimit: 2,
+                prefixLimit: outputOrderPrefixLimit,
                 visitHaystack: visitOutputOrderPrefix
             ) {
                 let prefixHadVisibleOutput = !prefixWalkResults.results.messages.isEmpty
@@ -8332,8 +8333,11 @@ public struct RipgrepSearcher: @unchecked Sendable {
     ) -> SearchFileResult? {
         let firstMatchOnly = options.quiet && !options.stats
         let statsOnly = options.quiet && options.stats
-        guard options.quiet,
-              firstMatchOnly || statsOnly,
+        let lineOutput = !options.quiet
+            && !options.json
+            && !options.stats
+            && options.printMode == .matchingLines
+        guard firstMatchOnly || statsOnly || lineOutput,
               options.printMode == .matchingLines,
               case .automatic = options.encodingMode,
               !options.json,
@@ -8354,9 +8358,11 @@ public struct RipgrepSearcher: @unchecked Sendable {
               options.beforeContext == 0,
               options.afterContext == 0,
               !options.passthru,
+              !options.trim,
               options.replacement == nil,
               options.maxColumns == nil,
               options.maxCount == nil,
+              !lineOutput || canOmitMatchSpans(options: options),
               !data.starts(with: [0xFF, 0xFE]),
               !data.starts(with: [0xFE, 0xFF]),
               let fastPath = asciiRunSuffixPattern(options: options) else {
@@ -8367,7 +8373,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
             fileURL: fileURL,
             options: options,
             fastPath: fastPath,
-            firstMatchOnly: firstMatchOnly
+            firstMatchOnly: firstMatchOnly,
+            lineOutput: lineOutput
         )
     }
 
@@ -8376,7 +8383,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
         fileURL: URL,
         options: RipgrepOptions,
         fastPath: ASCIIRunSuffixPattern,
-        firstMatchOnly: Bool
+        firstMatchOnly: Bool,
+        lineOutput: Bool = false
     ) -> SearchFileResult? {
         let suffix = fastPath.suffix
 
@@ -8402,8 +8410,57 @@ public struct RipgrepSearcher: @unchecked Sendable {
             var searchOffset = contentStart
             var lastMatchEnd = contentStart
             var lastMatchedLineStart: Int?
+            var lineNumber = 1
+            var lineNumberCountOffset = contentStart
             var matchedLines = 0
             var matches = 0
+            var lineMatches: [SearchMatch] = []
+
+            func matchStartForSuffix(at suffixStart: Int, lastMatchEnd: Int) -> Int? {
+                switch fastPath.run {
+                case .uppercasePlus:
+                    guard suffixStart > contentStart,
+                          isASCIIUppercase(bytes[suffixStart - 1]) else {
+                        return nil
+                    }
+                    if firstMatchOnly {
+                        return suffixStart - 1
+                    }
+                    var runStart = suffixStart
+                    while runStart > contentStart,
+                          isASCIIUppercase(bytes[runStart - 1]) {
+                        runStart -= 1
+                    }
+                    let start = max(runStart, lastMatchEnd)
+                    return suffixStart > start ? start : nil
+                case .exactUppercase(let count):
+                    let start = suffixStart - count
+                    guard start >= contentStart,
+                          start >= lastMatchEnd,
+                          asciiRunMatches(
+                            bytes: bytes,
+                            start: start,
+                            end: suffixStart,
+                            predicate: isASCIIUppercase
+                          ) else {
+                        return nil
+                    }
+                    return start
+                case .exactByte(let byte, let count):
+                    let start = suffixStart - count
+                    guard start >= contentStart,
+                          start >= lastMatchEnd,
+                          asciiRunMatches(
+                            bytes: bytes,
+                            start: start,
+                            end: suffixStart,
+                            predicate: { $0 == byte }
+                          ) else {
+                        return nil
+                    }
+                    return start
+                }
+            }
 
             while searchOffset + suffix.count <= dataCount {
                 let foundPointer = suffix.withUnsafeBufferPointer { needle -> UnsafePointer<UInt8>? in
@@ -8422,50 +8479,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 }
 
                 let suffixStart = baseAddress.distance(to: foundPointer)
-                let matchStart: Int?
-                switch fastPath.run {
-                case .uppercasePlus:
-                    guard suffixStart > contentStart,
-                          isASCIIUppercase(bytes[suffixStart - 1]) else {
-                        searchOffset = suffixStart + 1
-                        continue
-                    }
-                    var runStart = suffixStart
-                    while runStart > contentStart,
-                          isASCIIUppercase(bytes[runStart - 1]) {
-                        runStart -= 1
-                    }
-                    let start = max(runStart, lastMatchEnd)
-                    matchStart = suffixStart > start ? start : nil
-                case .exactUppercase(let count):
-                    let start = suffixStart - count
-                    if start >= contentStart,
-                       start >= lastMatchEnd,
-                       asciiRunMatches(
-                        bytes: bytes,
-                        start: start,
-                        end: suffixStart,
-                        predicate: isASCIIUppercase
-                       ) {
-                        matchStart = start
-                    } else {
-                        matchStart = nil
-                    }
-                case .exactByte(let byte, let count):
-                    let start = suffixStart - count
-                    if start >= contentStart,
-                       start >= lastMatchEnd,
-                       asciiRunMatches(
-                        bytes: bytes,
-                        start: start,
-                        end: suffixStart,
-                        predicate: { $0 == byte }
-                       ) {
-                        matchStart = start
-                    } else {
-                        matchStart = nil
-                    }
-                }
+                let matchStart = matchStartForSuffix(at: suffixStart, lastMatchEnd: lastMatchEnd)
 
                 if let matchStart {
                     var lineStart = matchStart
@@ -8490,6 +8504,81 @@ public struct RipgrepSearcher: @unchecked Sendable {
                             searched: true
                         )
                     }
+                    if lineOutput {
+                        let lineEnd: Int
+                        let terminator: String
+                        let terminatorBytes: Int
+                        if let newlinePointer = memchr(
+                            baseAddress.advanced(by: suffixStart + suffix.count),
+                            Int32(newline),
+                            dataCount - (suffixStart + suffix.count)
+                        ) {
+                            lineEnd = baseAddress.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self))
+                            terminator = "\n"
+                            terminatorBytes = 1
+                        } else {
+                            lineEnd = dataCount
+                            terminator = ""
+                            terminatorBytes = 0
+                        }
+
+                        var lineMatchCount = 1
+                        var lineSearchOffset = suffixStart + suffix.count
+                        var lineLastMatchEnd = suffixStart + suffix.count
+                        while lineSearchOffset + suffix.count <= lineEnd {
+                            let nextPointer = suffix.withUnsafeBufferPointer { needle -> UnsafePointer<UInt8>? in
+                                guard let needleBase = needle.baseAddress else {
+                                    return nil
+                                }
+                                return rg_memmem_simple(
+                                    baseAddress.advanced(by: lineSearchOffset),
+                                    lineEnd - lineSearchOffset,
+                                    needleBase,
+                                    suffix.count
+                                )
+                            }
+                            guard let nextPointer else {
+                                break
+                            }
+                            let nextSuffixStart = baseAddress.distance(to: nextPointer)
+                            if matchStartForSuffix(at: nextSuffixStart, lastMatchEnd: lineLastMatchEnd) != nil {
+                                lineMatchCount += 1
+                                lineLastMatchEnd = nextSuffixStart + suffix.count
+                                lineSearchOffset = lineLastMatchEnd
+                            } else {
+                                lineSearchOffset = nextSuffixStart + 1
+                            }
+                        }
+
+                        if lineNumberCountOffset < lineStart {
+                            lineNumber += Int(rg_memcount_byte(
+                                baseAddress.advanced(by: lineNumberCountOffset),
+                                lineStart - lineNumberCountOffset,
+                                newline
+                            ))
+                            lineNumberCountOffset = lineStart
+                        }
+                        let lineData = Data(
+                            bytes: baseAddress.advanced(by: lineStart),
+                            count: lineEnd - lineStart
+                        )
+                        guard let line = String(data: lineData, encoding: .utf8) else {
+                            return nil
+                        }
+                        lineMatches.append(SearchMatch(
+                            fileURL: fileURL,
+                            lineNumber: lineNumber,
+                            column: nil,
+                            line: line,
+                            lineTerminator: terminator,
+                            absoluteOffset: lineStart,
+                            matchCount: lineMatchCount,
+                            spans: []
+                        ))
+                        searchOffset = lineEnd + terminatorBytes
+                        lastMatchEnd = searchOffset
+                        continue
+                    }
                     matches += 1
                     if lastMatchedLineStart != lineStart {
                         matchedLines += 1
@@ -8502,6 +8591,14 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 }
             }
 
+            if lineOutput {
+                return SearchFileResult(
+                    fileURL: fileURL,
+                    matches: lineMatches,
+                    bytesSearched: searchableCount,
+                    searched: true
+                )
+            }
             return SearchFileResult(
                 fileURL: fileURL,
                 matches: [],

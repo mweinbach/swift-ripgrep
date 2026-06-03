@@ -42,6 +42,13 @@ struct FeatureTests {
         try root.write("task TWA_RESUME\n", to: "prefix/file-120.txt")
         try root.write("task lower_MISSING\n", to: "prefix/file-121.txt")
 
+        #expect(try run(["[A-Z]+_RESUME", root.url.path]) == [
+            "\(root.path("prefix/file-120.txt")):task TWA_RESUME",
+        ])
+        #expect(try run(["[A-Z]{3}_RESUME", root.url.path]) == [
+            "\(root.path("prefix/file-120.txt")):task TWA_RESUME",
+        ])
+
         var output: [String] = []
         var errors: [String] = []
         var exitCode = RipgrepCLI.run(
