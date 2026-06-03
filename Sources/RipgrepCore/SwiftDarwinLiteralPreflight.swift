@@ -6701,8 +6701,13 @@ public enum SwiftDarwinLiteralPreflight {
         guard let data = mappedPreflightData(path: path) else {
             return nil
         }
-        guard !hasBinaryDetectionPrefix(data),
-              let matchedLineCount = countASCIIWordMatchedLines(
+        guard !hasBinaryDetectionPrefix(data) else {
+            return nil
+        }
+        guard dataContainsLiteralUsingSIMD(data, literal: literal) else {
+            return data.count
+        }
+        guard let matchedLineCount = countASCIIWordMatchedLines(
                 in: data,
                 literal: literal,
                 maxCount: 1
@@ -7839,6 +7844,9 @@ public enum SwiftDarwinLiteralPreflight {
         guard !hasBinaryDetectionPrefix(data) else {
             return nil
         }
+        guard dataContainsLiteralUsingSIMD(data, literal: literal) else {
+            return false
+        }
 
         return countASCIIWordMatchedLines(in: data, literal: literal, maxCount: 1).map { $0 > 0 }
     }
@@ -7854,6 +7862,9 @@ public enum SwiftDarwinLiteralPreflight {
         }
         guard !hasBinaryDetectionPrefix(data) else {
             return nil
+        }
+        guard dataContainsAnyLiteral(data, literals: literals) else {
+            return false
         }
 
         return countASCIIWordMatchedLines(in: data, literals: literals, maxCount: 1).map { $0 > 0 }
@@ -12226,6 +12237,14 @@ private func rgSwiftDarwinWriteLiteralBytes(
        (base[0] == 0xFF && base[1] == 0xFE
         || base[0] == 0xFE && base[1] == 0xFF) {
         return nil
+    }
+    if !asciiCaseInsensitive,
+       rg_memmem_simple(base, haystackLength, literalBase, literal.count) == nil {
+        return LiteralLineWriteStats(
+            matchedLines: 0,
+            bytesPrinted: 0,
+            bytesSearched: haystackLength
+        )
     }
     let simpleLineOutput = emitLines && !lineNumber && linePrefix.isEmpty && headingPrefix.isEmpty
     let output: rgSwiftLazyStdoutBuffer?

@@ -1706,6 +1706,21 @@ struct MiscTests {
         ], fixture: {})
         #expect(plainNoFinalNewlineOutput == Data("Sherlock Holmes\n".utf8))
 
+        let absentWordOutput = try runExecutableData([
+            "-w",
+            "MissingLiteral",
+            root.path("ascii-word-literal.txt"),
+        ], fixture: {})
+        #expect(absentWordOutput.isEmpty)
+
+        let quietAbsentWordOutput = try runExecutableData([
+            "-q",
+            "-w",
+            "MissingLiteral",
+            root.path("ascii-word-literal.txt"),
+        ], fixture: {})
+        #expect(quietAbsentWordOutput.isEmpty)
+
         try root.write("""
         Sherlock Holmes
         éSherlock Holmes
@@ -1730,6 +1745,13 @@ struct MiscTests {
             root.path("unicode-word-literal.txt"),
         ], fixture: {})
         #expect(plainUnicodeBoundaryOutput == plainWordOutput)
+
+        let unicodeAbsentWordOutput = try runExecutableData([
+            "-w",
+            "MissingLiteral",
+            root.path("unicode-word-literal.txt"),
+        ], fixture: {})
+        #expect(unicodeAbsentWordOutput.isEmpty)
     }
 
     @Test("ASCII boundary literal regex preserves byte boundary output")
