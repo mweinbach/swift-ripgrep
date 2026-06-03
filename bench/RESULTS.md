@@ -206,6 +206,42 @@ order, and word-boundary prefixed/heading rows.
 Raw hyperfine export:
 `/tmp/swift-rg-bench/filename-heading-preflight-ab-1780473376.json`.
 
+## Retained simple neutral line-option preflight eligibility - 2026-06-03
+
+The shared simple Swift Darwin executable literal option parser now also treats
+`--no-config`, `--line-buffered`, `--block-buffered`, and
+`--no-line-buffered` as output-neutral for explicit single-file simple
+preflights. This primarily helps matching-line searches, because count,
+summary, and path-only simple preflights already handled these flags locally.
+Config handling still respects `RIPGREP_CONFIG_PATH`: preflight is allowed only
+when `--no-config` appears before the pattern, and a config file that would
+otherwise add line numbers remains suppressed. A same-session A/B against
+checkpoint `a865a84`, with Rust included, measured:
+
+| Case | Current Swift | Baseline `a865a84` | Rust |
+| --- | ---: | ---: | ---: |
+| `absentliteral match-ascii-46m.txt` guardrail | 9.69 ms median / 9.90 ms mean | 9.85 ms / 10.09 ms | 6.53 ms / 6.56 ms |
+| `--no-config absentliteral match-ascii-46m.txt` | 7.75 ms / 7.77 ms | 9.63 ms / 9.61 ms | 6.30 ms / 6.31 ms |
+| `--line-buffered absentliteral match-ascii-46m.txt` | 8.03 ms / 8.50 ms | 10.50 ms / 10.42 ms | 6.96 ms / 6.82 ms |
+| `--block-buffered absentliteral match-ascii-46m.txt` | 8.81 ms / 8.66 ms | 9.90 ms / 9.91 ms | 6.29 ms / 6.28 ms |
+| `--no-line-buffered absentliteral match-ascii-46m.txt` | 7.90 ms / 8.38 ms | 9.66 ms / 10.04 ms | 6.25 ms / 6.29 ms |
+| `--no-config -H absentliteral match-ascii-46m.txt` | 8.08 ms / 8.77 ms | 9.98 ms / 10.69 ms | 6.22 ms / 6.25 ms |
+| `--line-buffered literal match-ascii-46m.txt` control | 29.81 ms / 29.97 ms | 31.87 ms / 32.11 ms | 401.17 ms / 401.74 ms |
+| `--block-buffered literal match-ascii-46m.txt` control | 29.48 ms / 29.53 ms | 31.46 ms / 31.40 ms | 35.43 ms / 35.45 ms |
+
+The first A/B had a noisy `--no-config literal` control, so a focused rerun
+with more warmups/runs checked it directly and found the current fast path at
+29.64 ms median / 29.70 ms mean versus 33.56 ms / 33.86 ms for the saved
+baseline and 35.95 ms / 36.38 ms for Rust. Output, stderr, and status matched
+the previous Swift binary and the sibling Rust oracle for matched/missing
+neutral rows, prefixed no-config misses, config-file application without
+`--no-config`, and config suppression with both leading `--no-config` and
+neutral flags before `--no-config`.
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/simple-line-neutral-preflight-ab-1780473820.json` and
+`/tmp/swift-rg-bench/simple-line-neutral-followup-1780473845.json`.
+
 ## Rejected word/path no-match preflight probes - 2026-06-03
 
 A follow-up probe tried to reuse the no-match byte-count primitives before the

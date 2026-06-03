@@ -6421,9 +6421,13 @@ struct RipgrepCommand {
             return true
         case "-s",
              "--case-sensitive",
+             "--block-buffered",
              "--hidden",
+             "--line-buffered",
+             "--no-config",
              "--no-ignore",
              "--no-ignore-vcs",
+             "--no-line-buffered",
              "--no-messages",
              "--sort=none",
              "--sortr=none",

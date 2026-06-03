@@ -2885,12 +2885,15 @@ struct MiscTests {
 
         for neutralArguments in [
             ["--case-sensitive"],
+            ["--block-buffered"],
             ["--color", "never"],
             ["--color=never"],
             ["--hidden"],
+            ["--line-buffered"],
             ["--no-heading"],
             ["--no-ignore"],
             ["--no-ignore-vcs"],
+            ["--no-line-buffered"],
             ["--no-messages"],
             ["--sort", "none"],
             ["--sort=none"],
@@ -2996,6 +2999,15 @@ struct MiscTests {
             "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
         ], fixture: {})
         #expect(configOutput == Data("1:literal one\n2:literal two\n4:literal three\n5:literal four\n".utf8))
+
+        let noConfigEnvironmentOutput = try runExecutableData([
+            "--no-config",
+            "literal",
+            root.path("simple.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(noConfigEnvironmentOutput == output)
         #endif
     }
 
