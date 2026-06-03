@@ -1792,6 +1792,51 @@ public struct FileWalker: @unchecked Sendable {
             return
         }
 
+        if options.noIgnore && !options.hidden {
+            let directoryPathPrefix = directoryPath + "/"
+            let logicalDirectoryPathPrefix = pathPrefix(logicalDirectoryPath)
+            for child in contents.children.reversed() {
+                if child.kind == .symbolicLink || child.isHidden {
+                    continue
+                }
+                if child.kind.isDirectory {
+                    try walkFilePathsInOutputOrder(
+                        directoryPath: directoryPathPrefix + child.name,
+                        logicalDirectoryPath: joinedPath(logicalDirectoryPath, child.name),
+                        logicalDirectoryPathIsASCII: logicalDirectoryPathIsASCII && child.isASCII,
+                        relativePath: "",
+                        rootBase: rootBase,
+                        rootDebugDisplayPath: rootDebugDisplayPath,
+                        rootArgumentIsAbsolute: rootArgumentIsAbsolute,
+                        vcsContext: directoryVCSContext,
+                        messages: &messages,
+                        warnings: &warnings,
+                        diagnostics: &diagnostics,
+                        filtered: &filtered,
+                        ignoreStack: directoryIgnoreStack,
+                        options: options,
+                        stopAfterFirst: stopAfterFirst,
+                        didStop: &didStop,
+                        emit: emit
+                    )
+                    if didStop {
+                        return
+                    }
+                } else if child.kind.isFile {
+                    emit(outputPath(
+                        logicalDirectoryPathPrefix: logicalDirectoryPathPrefix,
+                        logicalDirectoryPathIsASCII: logicalDirectoryPathIsASCII,
+                        child: child
+                    ))
+                    if stopAfterFirst {
+                        didStop = true
+                        return
+                    }
+                }
+            }
+            return
+        }
+
         if options.noIgnore && options.hidden {
             let directoryPathPrefix = directoryPath + "/"
             let logicalDirectoryPathPrefix = pathPrefix(logicalDirectoryPath)

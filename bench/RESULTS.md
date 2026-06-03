@@ -8,6 +8,36 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Retained visible no-ignore sorted file-list shortcut - 2026-06-03
+
+The string file-list walker now has a direct branch for visible
+`--no-ignore --files` walks. That path already ignores all ignore rules, so it
+can skip the empty ignore-stack decision work while still filtering hidden
+entries and symbolic links exactly as before. The existing hidden no-ignore
+branch remains separate, and ignore-marker collection stays at the baseline
+shape for hidden/no-ignore behavior.
+
+A same-session alternating A/B against checkpoint `d5a6863` measured:
+
+| Case | Current Swift | Baseline `d5a6863` | Rust reference |
+| --- | ---: | ---: | ---: |
+| `--sort path --no-ignore --files linux` | 180.12 ms median / 186.62 ms mean | 186.64 ms / 194.61 ms | 141.90 ms / 146.75 ms |
+| `--sortr path --no-ignore --files linux` | 179.41 ms / 182.33 ms | 184.20 ms / 185.94 ms | 181.86 ms / 189.74 ms |
+| `--sort path --hidden --no-ignore --files linux` guard | 178.77 ms / 186.62 ms | 181.40 ms / 185.99 ms | not remeasured in the final A/B |
+| `--files linux` guard | 93.07 ms / 96.91 ms | 93.05 ms / 98.52 ms | not remeasured |
+| `--no-ignore-vcs --files linux` guard | 96.30 ms / 101.41 ms | 94.41 ms / 102.33 ms | not remeasured |
+
+Current Swift output matched the prior Swift binary and Rust for
+`--sort path --no-ignore --files linux`,
+`--sortr path --no-ignore --files linux`, and
+`--sort path --hidden --no-ignore --files linux`. The focused
+`sortsFilesByRequestedCriteria` test covers visible no-ignore sorting,
+reverse sorting, and the hidden no-ignore boundary.
+
+Raw timing exports:
+`/tmp/swift-rg-bench/noignore-string-walker-visible-only-1780510290.json` and
+`/tmp/swift-rg-bench/sorted-files-current-1780509013.json`.
+
 ## Rejected simple preflight dispatcher reorder - 2026-06-03
 
 Tried dispatching simple count, path-only, and summary executable preflights

@@ -1941,6 +1941,26 @@ struct FeatureTests {
         #expect(pathBasenames(try run(["--sort", "modified", "needle", root.path("a.txt"), root.path("b.txt")])) == ["b.txt", "a.txt"])
         #expect(pathBasenames(try run(["--sort-files", "--files", root.url.path])) == ["a.txt", "b.txt"])
 
+        let noIgnoreRoot = try TemporaryDirectory()
+        try noIgnoreRoot.write("", to: "z.txt")
+        try noIgnoreRoot.write("", to: "a.txt")
+        try noIgnoreRoot.write("", to: ".hidden")
+        try noIgnoreRoot.write("", to: ".hidden-dir/nested.txt")
+        #expect(try run(["--sort", "path", "--no-ignore", "--files", noIgnoreRoot.url.path]) == [
+            noIgnoreRoot.path("a.txt"),
+            noIgnoreRoot.path("z.txt"),
+        ])
+        #expect(try run(["--sortr", "path", "--no-ignore", "--files", noIgnoreRoot.url.path]) == [
+            noIgnoreRoot.path("z.txt"),
+            noIgnoreRoot.path("a.txt"),
+        ])
+        #expect(try run(["--sort", "path", "--hidden", "--no-ignore", "--files", noIgnoreRoot.url.path]) == [
+            noIgnoreRoot.path(".hidden"),
+            noIgnoreRoot.path(".hidden-dir/nested.txt"),
+            noIgnoreRoot.path("a.txt"),
+            noIgnoreRoot.path("z.txt"),
+        ])
+
         let componentRoot = try TemporaryDirectory()
         try componentRoot.createDirectory("a")
         try componentRoot.write("needle\n", to: "a/c")
