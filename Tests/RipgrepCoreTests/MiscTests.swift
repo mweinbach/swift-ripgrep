@@ -2854,6 +2854,49 @@ struct MiscTests {
         #expect(noIncludeZeroOverride.stdout.isEmpty)
         #expect(noIncludeZeroOverride.stderr.isEmpty)
 
+        let jsonCountNoMatch = try runExecutableStatusData([
+            "--json",
+            "-c",
+            "absent",
+            root.path("simple.txt"),
+        ])
+        #expect(jsonCountNoMatch.status == 1)
+        #expect(jsonCountNoMatch.stdout.isEmpty)
+        #expect(jsonCountNoMatch.stderr.isEmpty)
+
+        let jsonIncludeZeroCountNoMatch = try runExecutableStatusData([
+            "--json",
+            "-c",
+            "--include-zero",
+            "absent",
+            root.path("simple.txt"),
+        ])
+        #expect(jsonIncludeZeroCountNoMatch.status == 1)
+        #expect(jsonIncludeZeroCountNoMatch.stdout == Data("0\n".utf8))
+        #expect(jsonIncludeZeroCountNoMatch.stderr.isEmpty)
+
+        let statsNoMatch = try runExecutableStatusData([
+            "--stats",
+            "absent",
+            root.path("simple.txt"),
+        ])
+        let statsNoMatchText = String(decoding: statsNoMatch.stdout, as: UTF8.self)
+        #expect(statsNoMatch.status == 1)
+        #expect(statsNoMatchText.contains("0 matched lines"))
+        #expect(statsNoMatchText.contains("1 files searched"))
+        #expect(statsNoMatch.stderr.isEmpty)
+
+        let jsonSummaryNoMatch = try runExecutableStatusData([
+            "--json",
+            "absent",
+            root.path("simple.txt"),
+        ])
+        let jsonSummaryNoMatchText = String(decoding: jsonSummaryNoMatch.stdout, as: UTF8.self)
+        #expect(jsonSummaryNoMatch.status == 1)
+        #expect(jsonSummaryNoMatchText.contains(#""type":"summary""#))
+        #expect(jsonSummaryNoMatchText.contains(#""matched_lines":0"#))
+        #expect(jsonSummaryNoMatch.stderr.isEmpty)
+
         let matchedCount = try runExecutableData([
             "-c",
             "needle",

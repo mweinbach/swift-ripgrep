@@ -400,6 +400,12 @@ struct RipgrepCommand {
         ) {
             return exitCode
         }
+        if let exitCode = runSimpleSwiftDarwinLiteralSummaryPreflight(
+            arguments: arguments,
+            allowPCREQuotedLiterals: preflightArguments.allowPCREQuotedLiterals
+        ) {
+            return exitCode
+        }
         if let exitCode = runSimpleSwiftDarwinLiteralPathOnlyPreflight(
             arguments: arguments,
             allowPCREQuotedLiterals: preflightArguments.allowPCREQuotedLiterals
@@ -6470,6 +6476,9 @@ struct RipgrepCommand {
                 includeZero = true
             case "--no-include-zero":
                 includeZero = false
+            case "--json",
+                 "--no-json":
+                continue
             case "--no-config",
                  "--line-buffered",
                  "--block-buffered",
@@ -6509,6 +6518,58 @@ struct RipgrepCommand {
             literal: literal,
             asciiCaseInsensitive: false,
             wordRegexp: false
+        )
+    }
+
+    private static func runSimpleSwiftDarwinLiteralSummaryPreflight(
+        arguments: [String],
+        allowPCREQuotedLiterals: Bool
+    ) -> Int32? {
+        guard arguments.count >= 3 else {
+            return nil
+        }
+        var json = false
+        var stats = false
+        let pattern = arguments[arguments.count - 2]
+        let path = arguments[arguments.count - 1]
+        for argument in arguments.dropLast(2) {
+            switch argument {
+            case "--json":
+                json = true
+            case "--no-json":
+                json = false
+            case "--stats":
+                stats = true
+            case "--no-stats":
+                stats = false
+            case "--no-config",
+                 "--line-buffered",
+                 "--block-buffered",
+                 "--no-line-buffered":
+                continue
+            default:
+                return nil
+            }
+        }
+        guard json || stats,
+              !pattern.hasPrefix("-"),
+              path != "-",
+              let literalPattern = RegexLiteralParser.literal(
+                fromPlainRegexPattern: pattern,
+                allowPCREQuotedLiterals: allowPCREQuotedLiterals
+              ) else {
+            return nil
+        }
+        let literal = Array(literalPattern.utf8)
+        guard !literal.isEmpty,
+              !literal.contains(UInt8(ascii: "\n")) else {
+            return nil
+        }
+        return SwiftDarwinLiteralPreflight.literalNoMatchSummaryExitCode(
+            path: path,
+            literal: literal,
+            json: json,
+            stats: stats
         )
     }
 

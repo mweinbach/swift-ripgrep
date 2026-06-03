@@ -51,6 +51,32 @@ include-zero override, matched count fallback, and CRLF fallback.
 Raw hyperfine export:
 `/tmp/swift-rg-bench/simple-count-early-preflight-ab-1780469041.json`.
 
+## Retained simple no-match summary preflight - 2026-06-03
+
+The simple Darwin executable preflight now also handles single-file literal
+no-match summary modes before the broad option parser. Simple `--stats` and
+`--json` matching-line misses reuse the existing no-match summary writer, while
+simple `--json -c` misses can share the silent/include-zero count shortcut
+because Rust emits the same empty or `0\n` count output for those no-match
+forms. Matched summary searches and richer option combinations still fall
+through. A same-session A/B against checkpoint `3580727`, with Rust included as
+the oracle for the stats row, measured:
+
+| Case | Current Swift | Baseline `3580727` | Rust |
+| --- | ---: | ---: | ---: |
+| `--stats absentliteral match-ascii-46m.txt` | 7.61 ms median / 7.67 ms mean | 9.52 ms / 9.61 ms | 6.16 ms / 6.26 ms |
+| `--json absentliteral match-ascii-46m.txt` | 7.74 ms / 7.86 ms | 9.51 ms / 9.63 ms | not remeasured |
+| `--json -c absentliteral match-ascii-46m.txt` | 7.71 ms / 8.00 ms | 9.48 ms / 9.58 ms | not remeasured |
+| `--stats literal match-ascii-46m.txt` control | 43.06 ms / 43.56 ms | 42.87 ms / 43.06 ms | not measured |
+
+Output, stderr, and status matched the previous Swift binary exactly for stats
+and JSON no-match summaries, and matched Rust after normalizing elapsed fields.
+JSON count no-match and include-zero no-match matched both the previous Swift
+binary and the sibling Rust oracle byte-for-byte.
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/simple-summary-early-preflight-ab-1780469572.json`.
+
 ## Rejected zero-count direct write - 2026-06-03
 
 A no-match count/stats probe checked whether the remaining absent-literal
