@@ -10294,17 +10294,36 @@ public enum SwiftDarwinLiteralPreflight {
         }
 
         let base = UnsafeRawPointer(mapped).assumingMemoryBound(to: UInt8.self)
-        if emitLines,
-           maxCount == nil,
+        let plainLineOutput = emitLines && maxCount == nil
+        let countLineOutput = !emitLines
+        if countLineOutput,
            !lineNumber,
            linePrefix.isEmpty,
            headingPrefix.isEmpty,
            !trimLeadingWhitespace,
-           let prunedLiterals = rgSwiftDarwinPrunePlainLineLiteralsWithAbsentBytes(
+           rgSwiftDarwinAllMultiLiteralsImpossibleWithAbsentCommonUppercaseByte(
+            base,
+            haystackLength: haystackLength,
+            literals: literals
+           ) == true {
+            return rg_darwin_literal_file_result(
+                status: 0,
+                matched_line_count: 0,
+                total_match_count: 0,
+                bytes_searched: haystackLength
+            )
+        }
+        if plainLineOutput,
+           !lineNumber,
+           linePrefix.isEmpty,
+           headingPrefix.isEmpty,
+           !trimLeadingWhitespace,
+           let prunedLiterals = rgSwiftDarwinPruneMultiLiteralsWithAbsentBytes(
             base,
             haystackLength: haystackLength,
             literals: literals
            ) {
+            let resultMaxCount = maxCount ?? Int.max
             if prunedLiterals.isEmpty {
                 return rg_darwin_literal_file_result(
                     status: 0,
@@ -10318,24 +10337,24 @@ public enum SwiftDarwinLiteralPreflight {
                     base,
                     haystackLength: haystackLength,
                     literal: prunedLiterals[0],
-                    maxCount: Int.max,
+                    maxCount: resultMaxCount,
                     lineNumber: false,
                     lineNumberFieldSeparator: lineNumberFieldSeparator,
                     linePrefix: [],
                     headingPrefix: [],
-                    emitLines: true
+                    emitLines: emitLines
                 )
             }
             return rgSwiftDarwinWriteMultiLiteralLines(
                 base,
                 haystackLength: haystackLength,
                 literals: prunedLiterals,
-                maxCount: Int.max,
+                maxCount: resultMaxCount,
                 lineNumber: false,
                 lineNumberFieldSeparator: lineNumberFieldSeparator,
                 linePrefix: [],
                 headingPrefix: [],
-                emitLines: true,
+                emitLines: emitLines,
                 trimLeadingWhitespace: false
             )
         }
@@ -15154,7 +15173,7 @@ private func rgSwiftDarwinWriteSingleActiveMultiLiteralLines(
     }
 }
 
-private func rgSwiftDarwinPrunePlainLineLiteralsWithAbsentBytes(
+private func rgSwiftDarwinPruneMultiLiteralsWithAbsentBytes(
     _ base: UnsafePointer<UInt8>,
     haystackLength: Int,
     literals: [[UInt8]]
@@ -15168,6 +15187,33 @@ private func rgSwiftDarwinPrunePlainLineLiteralsWithAbsentBytes(
     var sampleContainsByte = [Bool](repeating: false, count: 256)
     for offset in 0..<sampleCount {
         sampleContainsByte[Int(base[offset])] = true
+    }
+
+    var commonBytes = [Bool](repeating: false, count: 256)
+    var seenBytes = [Bool](repeating: false, count: 256)
+    for byte in literals[0] {
+        commonBytes[Int(byte)] = true
+    }
+    for literal in literals.dropFirst() {
+        seenBytes = [Bool](repeating: false, count: 256)
+        for byte in literal {
+            seenBytes[Int(byte)] = true
+        }
+        for index in commonBytes.indices where commonBytes[index] && !seenBytes[index] {
+            commonBytes[index] = false
+        }
+    }
+    for index in commonBytes.indices
+        where commonBytes[index]
+            && index >= Int(UInt8(ascii: "A"))
+            && index <= Int(UInt8(ascii: "Z"))
+            && !sampleContainsByte[index] {
+        if memchr(base, Int32(index), haystackLength) == nil {
+            guard rgSwiftDarwinMappedTextCanUsePrunedLiterals(base, haystackLength: haystackLength) else {
+                return nil
+            }
+            return []
+        }
     }
 
     var prunedLiterals: [[UInt8]] = []
@@ -15200,22 +15246,75 @@ private func rgSwiftDarwinPrunePlainLineLiteralsWithAbsentBytes(
     guard prunedAnyLiteral else {
         return nil
     }
-    if haystackLength >= 3,
-       base[0] == 0xEF,
-       base[1] == 0xBB,
-       base[2] == 0xBF {
-        return nil
-    }
-    if haystackLength >= 2,
-       (base[0] == 0xFF && base[1] == 0xFE
-        || base[0] == 0xFE && base[1] == 0xFF) {
-        return nil
-    }
-    guard memchr(base, 0, haystackLength) == nil else {
+    guard rgSwiftDarwinMappedTextCanUsePrunedLiterals(base, haystackLength: haystackLength) else {
         return nil
     }
 
     return prunedLiterals
+}
+
+private func rgSwiftDarwinAllMultiLiteralsImpossibleWithAbsentCommonUppercaseByte(
+    _ base: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    literals: [[UInt8]]
+) -> Bool? {
+    guard haystackLength >= 1024 * 1024,
+          (2...8).contains(literals.count) else {
+        return nil
+    }
+
+    let sampleCount = min(haystackLength, 256 * 1024)
+    var sampleContainsByte = [Bool](repeating: false, count: 256)
+    for offset in 0..<sampleCount {
+        sampleContainsByte[Int(base[offset])] = true
+    }
+
+    var commonBytes = [Bool](repeating: false, count: 256)
+    var seenBytes = [Bool](repeating: false, count: 256)
+    for byte in literals[0] {
+        commonBytes[Int(byte)] = true
+    }
+    for literal in literals.dropFirst() {
+        seenBytes = [Bool](repeating: false, count: 256)
+        for byte in literal {
+            seenBytes[Int(byte)] = true
+        }
+        for index in commonBytes.indices where commonBytes[index] && !seenBytes[index] {
+            commonBytes[index] = false
+        }
+    }
+
+    for index in commonBytes.indices
+        where commonBytes[index]
+            && index >= Int(UInt8(ascii: "A"))
+            && index <= Int(UInt8(ascii: "Z"))
+            && !sampleContainsByte[index] {
+        if memchr(base, Int32(index), haystackLength) == nil {
+            return rgSwiftDarwinMappedTextCanUsePrunedLiterals(
+                base,
+                haystackLength: haystackLength
+            )
+        }
+    }
+    return nil
+}
+
+private func rgSwiftDarwinMappedTextCanUsePrunedLiterals(
+    _ base: UnsafePointer<UInt8>,
+    haystackLength: Int
+) -> Bool {
+    if haystackLength >= 3,
+       base[0] == 0xEF,
+       base[1] == 0xBB,
+       base[2] == 0xBF {
+        return false
+    }
+    if haystackLength >= 2,
+       (base[0] == 0xFF && base[1] == 0xFE
+        || base[0] == 0xFE && base[1] == 0xFF) {
+        return false
+    }
+    return memchr(base, 0, haystackLength) == nil
 }
 
 private func rgSwiftDarwinWriteMultiLiteralLines(

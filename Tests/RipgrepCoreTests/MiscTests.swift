@@ -5354,6 +5354,39 @@ struct MiscTests {
         #expect(rareAnchorMultiLiteralLineNoMatchOutput.stderr.isEmpty)
         #expect(rareAnchorMultiLiteralLineNoMatchOutput.status == 1)
 
+        let rareAnchorMultiLiteralCountNoMatchOutput = try runExecutableResult([
+            "-c",
+            "-e",
+            "ALPHA",
+            "-e",
+            "BRAVO",
+            "-e",
+            "CHARLIE",
+            "-e",
+            "DELTA",
+            root.path("rare-anchor-false-positive.txt"),
+        ])
+        #expect(rareAnchorMultiLiteralCountNoMatchOutput.stdout.isEmpty)
+        #expect(rareAnchorMultiLiteralCountNoMatchOutput.stderr.isEmpty)
+        #expect(rareAnchorMultiLiteralCountNoMatchOutput.status == 1)
+
+        let rareAnchorMultiLiteralIncludeZeroCountOutput = try runExecutableResult([
+            "-c",
+            "--include-zero",
+            "-e",
+            "ALPHA",
+            "-e",
+            "BRAVO",
+            "-e",
+            "CHARLIE",
+            "-e",
+            "DELTA",
+            root.path("rare-anchor-false-positive.txt"),
+        ])
+        #expect(rareAnchorMultiLiteralIncludeZeroCountOutput.stdout == Data("0\n".utf8))
+        #expect(rareAnchorMultiLiteralIncludeZeroCountOutput.stderr.isEmpty)
+        #expect(rareAnchorMultiLiteralIncludeZeroCountOutput.status == 1)
+
         let rareAnchorMultiLiteralFilesWithMatchOutput = try runExecutableResult([
             "-l",
             "-e",
