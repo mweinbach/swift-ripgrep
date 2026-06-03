@@ -8,6 +8,27 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected visible no-ignore marker-scan skip - 2026-06-03
+
+Tried skipping `.git`/ignore marker classification for the visible
+`--no-ignore` string walker. Output stayed byte-for-byte identical to the
+previous Swift binary and Rust for sorted visible no-ignore, reverse sorted
+visible no-ignore, hidden no-ignore, default sorted files, and sorted
+`--no-ignore-vcs` controls. The timing did not hold: the target forward row
+slowed slightly, reverse sorted no-ignore slowed sharply, and the guard rows
+all moved the wrong way. The source change was reverted.
+
+| Case | Probe Swift | Baseline `7e63f65` | Rust reference |
+| --- | ---: | ---: | ---: |
+| `--sort path --no-ignore --files linux` | 177.42 ms median / 184.71 ms mean | 172.80 ms / 183.17 ms | 170.13 ms / 181.87 ms |
+| `--sortr path --no-ignore --files linux` | 199.43 ms / 206.01 ms | 172.59 ms / 186.71 ms | 215.49 ms / 224.31 ms |
+| `--sort path --hidden --no-ignore --files linux` guard | 178.57 ms / 192.85 ms | 176.04 ms / 184.77 ms | not remeasured |
+| `--sort path --files linux` guard | 150.16 ms / 161.87 ms | 146.64 ms / 152.91 ms | not remeasured |
+| `--sort path --no-ignore-vcs --files linux` guard | 129.17 ms / 129.43 ms | 126.66 ms / 126.97 ms | not remeasured |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/noignore-marker-skip-ab-1780511600.json`.
+
 ## Retained visible no-ignore in-place sorted file-list emit - 2026-06-03
 
 For visible `--no-ignore --files` path sorting, the sorted file-list emitter now
