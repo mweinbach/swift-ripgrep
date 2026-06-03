@@ -6371,17 +6371,28 @@ struct RipgrepCommand {
         allowPCREQuotedLiterals: Bool
     ) -> Int32? {
         let lineNumber: Bool
+        let quiet: Bool
         let pattern: String
         let path: String
         if arguments.count == 2 {
             lineNumber = false
+            quiet = false
             pattern = arguments[0]
             path = arguments[1]
-        } else if arguments.count == 3,
-                  arguments[0] == "-n" || arguments[0] == "--line-number" {
-            lineNumber = true
-            pattern = arguments[1]
-            path = arguments[2]
+        } else if arguments.count == 3 {
+            if arguments[0] == "-n" || arguments[0] == "--line-number" {
+                lineNumber = true
+                quiet = false
+                pattern = arguments[1]
+                path = arguments[2]
+            } else if arguments[0] == "-q" || arguments[0] == "--quiet" {
+                lineNumber = false
+                quiet = true
+                pattern = arguments[1]
+                path = arguments[2]
+            } else {
+                return nil
+            }
         } else {
             return nil
         }
@@ -6397,6 +6408,12 @@ struct RipgrepCommand {
         guard !literal.isEmpty,
               !literal.contains(UInt8(ascii: "\n")) else {
             return nil
+        }
+        if quiet {
+            return SwiftDarwinLiteralPreflight.quietExitCode(
+                path: path,
+                literal: literal
+            )
         }
         return SwiftDarwinLiteralPreflight.exitCode(
             path: path,
