@@ -15214,6 +15214,87 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
         return (base.distance(to: foundPointer), literalIndex)
     }
 
+    struct AnchoredLiteral {
+        let literalIndex: Int
+        let anchorOffset: Int
+    }
+
+    func rareAnchoredLiterals() -> [AnchoredLiteral]? {
+        guard haystackLength >= 1024 * 1024,
+              !lineNumber,
+              linePrefix.isEmpty,
+              headingPrefix.isEmpty,
+              !trimLeadingWhitespace,
+              literals.allSatisfy({ $0.count >= 2 }) else {
+            return nil
+        }
+
+        let sampleCount = min(haystackLength, 256 * 1024)
+        var byteCounts = [Int](repeating: 0, count: 256)
+        for offset in 0..<sampleCount {
+            byteCounts[Int(base[offset])] += 1
+        }
+
+        var anchored: [AnchoredLiteral] = []
+        anchored.reserveCapacity(literals.count)
+        for literalIndex in literals.indices {
+            let literal = literals[literalIndex]
+            var bestOffset = 0
+            var bestCount = Int.max
+            for offset in 0..<(literal.count - 1) {
+                let count = byteCounts[Int(literal[offset])]
+                if count < bestCount {
+                    bestOffset = offset
+                    bestCount = count
+                }
+            }
+            guard bestCount * 64 <= sampleCount else {
+                return nil
+            }
+            anchored.append(AnchoredLiteral(
+                literalIndex: literalIndex,
+                anchorOffset: bestOffset
+            ))
+        }
+        return anchored
+    }
+
+    func nextAnchoredCandidate(
+        _ anchoredLiteral: AnchoredLiteral,
+        from offset: Int
+    ) -> (start: Int, literalIndex: Int) {
+        let candidateLiteral = literals[anchoredLiteral.literalIndex]
+        let safeOffset = min(offset, haystackLength)
+        guard candidateLiteral.count <= haystackLength - safeOffset else {
+            return (Int.max, anchoredLiteral.literalIndex)
+        }
+
+        var anchorSearchOffset = safeOffset + anchoredLiteral.anchorOffset
+        while anchorSearchOffset <= haystackLength - 2 {
+            let foundPointer = candidateLiteral.withUnsafeBufferPointer { literalBuffer in
+                rg_memmem_simple(
+                    base.advanced(by: anchorSearchOffset),
+                    haystackLength - anchorSearchOffset,
+                    literalBuffer.baseAddress?.advanced(by: anchoredLiteral.anchorOffset),
+                    2
+                )
+            }
+            guard let foundPointer else {
+                return (Int.max, anchoredLiteral.literalIndex)
+            }
+            let anchorStart = base.distance(to: foundPointer)
+            let matchStart = anchorStart - anchoredLiteral.anchorOffset
+            if matchStart >= safeOffset,
+               matchStart >= 0,
+               candidateLiteral.count <= haystackLength - matchStart,
+               literal(candidateLiteral, matchesAt: matchStart) {
+                return (matchStart, anchoredLiteral.literalIndex)
+            }
+            anchorSearchOffset = anchorStart + 1
+        }
+        return (Int.max, anchoredLiteral.literalIndex)
+    }
+
     func earliestCandidateIndex(in candidates: [(start: Int, literalIndex: Int)]) -> Int? {
         var selectedIndex: Int?
         var selectedStart = Int.max
@@ -15337,8 +15418,11 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
                 }
             }
         } else {
-            var candidates = literals.indices.map {
-                nextCandidate(literalIndex: $0, from: 0)
+            let anchoredLiterals = rareAnchoredLiterals()
+            var candidates = if let anchoredLiterals {
+                anchoredLiterals.map { nextAnchoredCandidate($0, from: 0) }
+            } else {
+                literals.indices.map { nextCandidate(literalIndex: $0, from: 0) }
             }
             if !trimLeadingWhitespace {
                 var activeCandidate: (start: Int, literalIndex: Int)?
@@ -15384,10 +15468,17 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
                     break
                 }
                 for index in candidates.indices where candidates[index].start < bytesSearched {
-                    candidates[index] = nextCandidate(
-                        literalIndex: candidates[index].literalIndex,
-                        from: bytesSearched
-                    )
+                    if let anchoredLiterals {
+                        candidates[index] = nextAnchoredCandidate(
+                            anchoredLiterals[index],
+                            from: bytesSearched
+                        )
+                    } else {
+                        candidates[index] = nextCandidate(
+                            literalIndex: candidates[index].literalIndex,
+                            from: bytesSearched
+                        )
+                    }
                 }
             }
         }
