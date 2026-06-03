@@ -8,6 +8,26 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected direct SIMD literal no-match proof - 2026-06-03
+
+Tried bypassing the rare-anchor proof inside the shared literal no-match
+byte-count helper and scanning the full literal directly. Output, stderr, and
+status matched the previous Swift binary and Rust for silent count,
+include-zero count, elapsed-normalized stats, and matched-count fallback rows.
+The benchmark showed the rare-anchor proof is still faster on the current
+46 MiB absent-literal target, so the source change was reverted.
+
+| Case | Direct-SIMD probe | Rare-anchor baseline `bbf0e3f` | Rust reference |
+| --- | ---: | ---: | ---: |
+| `-c absentliteral match-ascii-46m.txt` | 9.34 ms median / 9.38 ms mean | 8.25 ms / 8.37 ms | 7.91 ms / 8.39 ms |
+| `-c --include-zero absentliteral match-ascii-46m.txt` | 9.33 ms / 9.54 ms | 8.21 ms / 8.22 ms | not remeasured |
+| `--stats absentliteral match-ascii-46m.txt` | 9.28 ms / 9.49 ms | 8.18 ms / 8.23 ms | 7.78 ms / 7.77 ms |
+| `--files-without-match absentliteral match-ascii-46m.txt` guard | 8.29 ms / 8.35 ms | 8.17 ms / 8.19 ms | not remeasured |
+| `-c literal match-ascii-46m.txt` matched guard | 18.37 ms / 18.54 ms | 18.51 ms / 18.77 ms | not remeasured |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/literal-nomatch-direct-simd-ab-1780517111.json`.
+
 ## Rejected seven-worker Darwin file-list cap - 2026-06-03
 
 Tried raising the shared Darwin file-list worker cap from the retained six
