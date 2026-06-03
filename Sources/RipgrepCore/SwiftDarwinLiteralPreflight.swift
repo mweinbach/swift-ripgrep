@@ -2530,6 +2530,13 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literals: [[UInt8]]
     ) -> Int32? {
+        if textPrefixContainsAnyLiteral(path: path, literals: literals) == true {
+            return 0
+        }
+        if multiLiteralsHaveCommonUppercaseByte(literals),
+           allMultiLiteralsImpossibleWithAbsentCommonUppercaseByte(path: path, literals: literals) == true {
+            return 1
+        }
         guard let matched = containsAnyLiteral(path: path, literals: literals) else {
             return nil
         }
@@ -7169,6 +7176,161 @@ public enum SwiftDarwinLiteralPreflight {
             return true
         }
         return false
+    }
+
+    private static func multiLiteralsHaveCommonUppercaseByte(_ literals: [[UInt8]]) -> Bool {
+        guard (2...8).contains(literals.count),
+              literals.allSatisfy({
+                !$0.isEmpty && !$0.contains(UInt8(ascii: "\n"))
+              }) else {
+            return false
+        }
+
+        var commonBytes = [Bool](repeating: false, count: 256)
+        var seenBytes = [Bool](repeating: false, count: 256)
+        for byte in literals[0] {
+            commonBytes[Int(byte)] = true
+        }
+        for literal in literals.dropFirst() {
+            seenBytes = [Bool](repeating: false, count: 256)
+            for byte in literal {
+                seenBytes[Int(byte)] = true
+            }
+            for index in commonBytes.indices where commonBytes[index] && !seenBytes[index] {
+                commonBytes[index] = false
+            }
+        }
+
+        for index in Int(UInt8(ascii: "A"))...Int(UInt8(ascii: "Z"))
+            where commonBytes[index] {
+            return true
+        }
+        return false
+    }
+
+    private static func textPrefixContainsAnyLiteral(path: String, literals: [[UInt8]]) -> Bool? {
+        guard (2...8).contains(literals.count),
+              literals.allSatisfy({
+                !$0.isEmpty && !$0.contains(UInt8(ascii: "\n"))
+              }) else {
+            return nil
+        }
+
+        let fd = path.withCString { Darwin.open($0, O_RDONLY) }
+        guard fd >= 0 else {
+            return nil
+        }
+        defer {
+            Darwin.close(fd)
+        }
+
+        var fileStat = stat()
+        guard Darwin.fstat(fd, &fileStat) == 0 else {
+            return nil
+        }
+        guard (fileStat.st_mode & S_IFMT) == S_IFREG else {
+            return nil
+        }
+        guard fileStat.st_size > 0 else {
+            return false
+        }
+        guard UInt64(fileStat.st_size) <= UInt64(Int.max) else {
+            return nil
+        }
+
+        let readLength = min(Int(fileStat.st_size), 64 * 1024)
+        return withUnsafeTemporaryAllocation(of: UInt8.self, capacity: readLength) { buffer in
+            guard let base = buffer.baseAddress else {
+                return nil
+            }
+            let bytesRead = Darwin.pread(fd, base, readLength, 0)
+            guard bytesRead > 0 else {
+                return nil
+            }
+            let prefixLength = Int(bytesRead)
+            if prefixLength >= 3,
+               base[0] == 0xEF,
+               base[1] == 0xBB,
+               base[2] == 0xBF {
+                return nil
+            }
+            if prefixLength >= 2,
+               (base[0] == 0xFF && base[1] == 0xFE
+                || base[0] == 0xFE && base[1] == 0xFF) {
+                return nil
+            }
+            guard memchr(base, 0, prefixLength) == nil else {
+                return nil
+            }
+            for literal in literals where literal.count <= prefixLength {
+                let matchedAtStart = literal.withUnsafeBufferPointer { literalBuffer in
+                    guard let literalBase = literalBuffer.baseAddress else {
+                        return false
+                    }
+                    return memcmp(base, literalBase, literalBuffer.count) == 0
+                }
+                if matchedAtStart {
+                    return true
+                }
+            }
+            for literal in literals where literal.count <= prefixLength {
+                let matched = literal.withUnsafeBufferPointer { literalBuffer in
+                    rg_memmem_simple(
+                        base,
+                        prefixLength,
+                        literalBuffer.baseAddress,
+                        literalBuffer.count
+                    ) != nil
+                }
+                if matched {
+                    return true
+                }
+            }
+            return false
+        }
+    }
+
+    private static func allMultiLiteralsImpossibleWithAbsentCommonUppercaseByte(
+        path: String,
+        literals: [[UInt8]]
+    ) -> Bool? {
+        let fd = path.withCString { Darwin.open($0, O_RDONLY) }
+        guard fd >= 0 else {
+            return nil
+        }
+        defer {
+            Darwin.close(fd)
+        }
+
+        var fileStat = stat()
+        guard Darwin.fstat(fd, &fileStat) == 0 else {
+            return nil
+        }
+        guard (fileStat.st_mode & S_IFMT) == S_IFREG else {
+            return nil
+        }
+        guard fileStat.st_size > 0 else {
+            return true
+        }
+        guard UInt64(fileStat.st_size) <= UInt64(Int.max) else {
+            return nil
+        }
+
+        let haystackLength = Int(fileStat.st_size)
+        guard haystackLength >= 1024 * 1024,
+              let mapped = Darwin.mmap(nil, haystackLength, PROT_READ, MAP_PRIVATE, fd, 0),
+              mapped != MAP_FAILED else {
+            return nil
+        }
+        defer {
+            Darwin.munmap(mapped, haystackLength)
+        }
+
+        return rgSwiftDarwinAllMultiLiteralsImpossibleWithAbsentCommonUppercaseByte(
+            UnsafeRawPointer(mapped).assumingMemoryBound(to: UInt8.self),
+            haystackLength: haystackLength,
+            literals: literals
+        )
     }
 
     private static func dataContainsASCIICaseInsensitiveLiteral(
