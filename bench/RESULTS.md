@@ -8,6 +8,27 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected empty explicit-ignore root guard - 2026-06-03
+
+Tried returning early from `appendExplicitIgnoreFiles` when
+`options.ignoreFiles` was empty, avoiding root path-prefix setup in the common
+case with no explicit `--ignore-file` arguments. Current Swift output matched
+the previous Swift binary for unsorted `--files`; sorted default, visible
+no-ignore, no-vcs, and explicit `--ignore-file` controls also matched Rust
+byte-for-byte. The benchmark moved the wrong way on the common rows, so the
+source change was reverted.
+
+| Case | Probe Swift | Baseline `ac4fa7f` | Rust reference |
+| --- | ---: | ---: | ---: |
+| `--files linux` | 81.72 ms median / 83.22 ms mean | 80.00 ms / 80.26 ms | 75.06 ms / 76.32 ms |
+| `--sort path --files linux` | 123.85 ms / 125.57 ms | 124.27 ms / 125.61 ms | not remeasured |
+| `--sort path --no-ignore --files linux` | 157.30 ms / 161.21 ms | 152.06 ms / 153.26 ms | not remeasured |
+| `--no-ignore-vcs --ignore-file linux/.gitignore --sort path --files linux` guard | 119.16 ms / 119.59 ms | 119.33 ms / 120.35 ms | not remeasured |
+| `-c absentliteral match-ascii-46m.txt` guard | 8.25 ms / 8.44 ms | 8.05 ms / 8.05 ms | not remeasured |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/empty-explicit-ignore-guard-ab-1780512926.json`.
+
 ## Rejected sorted file-list entry pre-keying - 2026-06-03
 
 Tried collecting `(line, key)` entries during sorted file-list traversal instead
