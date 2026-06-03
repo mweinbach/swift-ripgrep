@@ -11,30 +11,34 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 ## Retained single-file quiet ASCII run-suffix preflight - 2026-06-03
 
 Simple Swift Darwin executable preflight now handles quiet single-file regexes
-shaped like `[A-Z]+<literal>` before the full CLI/searcher path. The shortcut is
-limited to automatic-encoding, case-sensitive, non-fixed, regular-file inputs;
-UTF/BOM and binary-detection-prefix cases still fall through to the existing
-searcher. Directory searches also skip the shortcut after a cheap regular-file
-check, preserving the recursive run-suffix path.
+shaped like `[A-Z]+<literal>`, `[A-Z]{N}<literal>`, and `[X]{N}<literal>`
+before the full CLI/searcher path. The shortcut is limited to
+automatic-encoding, case-sensitive, non-fixed, regular-file inputs; UTF/BOM and
+binary-detection-prefix cases still fall through to the existing searcher.
+Directory searches also skip the shortcut after a cheap regular-file check,
+preserving the recursive run-suffix path.
 
 A same-session no-shell A/B against checkpoint `5ab074d`, with Rust included as
 the oracle, measured:
 
 | Case | Current Swift | Baseline `5ab074d` | Rust |
 | --- | ---: | ---: | ---: |
-| `-q '[A-Z]+_RESUME' linux/net/iucv/iucv.c` | 4.59 ms median / 4.53 ms mean | 9.95 ms / 10.44 ms | 4.14 ms / 4.15 ms |
-| `-q '[A-Z]+_RESUME' linux/block/bfq-iosched.c` | 4.95 ms / 5.14 ms | 9.80 ms / 9.90 ms | 4.18 ms / 4.61 ms |
-| `-q '[A-Z]+_RESUME' linux` | 12.42 ms / 12.87 ms | 12.33 ms / 12.82 ms | 7.38 ms / 7.55 ms |
+| `-q '[A-Z]+_RESUME' linux/net/iucv/iucv.c` | 5.37 ms median / 5.67 ms mean | 11.15 ms / 11.33 ms | 4.52 ms / 4.76 ms |
+| `-q '[A-Z]{3}_RESUME' linux/net/iucv/iucv.c` | 5.13 ms / 5.16 ms | 10.70 ms / 11.04 ms | 4.48 ms / 4.80 ms |
+| `-q '[Z]{3}_RESUME' linux/net/iucv/iucv.c` | 5.06 ms / 5.03 ms | 10.53 ms / 10.93 ms | 4.30 ms / 4.61 ms |
+| `-q '[A-Z]{3}_RESUME' linux` | 13.31 ms / 13.67 ms | 13.25 ms / 13.72 ms | 7.70 ms / 8.44 ms |
 
 Release stdout, stderr, and status matched Rust for the single-file hit and
-miss, recursive hit, `[Z]{3}_RESUME` recursive false-positive miss, and binary
+miss, exact-count hit and false-positive miss, recursive hit,
+`[Z]{3}_RESUME` recursive false-positive miss, `[A]{1}_RESUME`, and binary
 before/after-window quiet controls. The focused executable preflight test
 `MiscTests/darwinExecutableASCIIRunSuffixQuietPreflightStatus`,
 `swift build -c release`, and `git diff --check` passed before recording these
 results.
 
-Raw benchmark export:
-`/tmp/swift-rg-bench/run-suffix-singlefile-preflight-ab-1780504734.json`.
+Raw benchmark exports:
+`/tmp/swift-rg-bench/run-suffix-singlefile-preflight-ab-1780504734.json` and
+`/tmp/swift-rg-bench/run-suffix-exact-singlefile-preflight-ab-1780505271.json`.
 
 ## Retained prefixed rare-anchor no-match preflight - 2026-06-03
 

@@ -6652,16 +6652,46 @@ struct RipgrepCommand {
         return nil
     }
 
-    private static func simpleSwiftDarwinASCIIRunSuffixLiteral(
+    private static func simpleSwiftDarwinASCIIRunSuffixPattern(
         _ pattern: String,
         allowPCREQuotedLiterals: Bool
-    ) -> [UInt8]? {
+    ) -> (run: SwiftDarwinLiteralPreflight.ASCIIRunSuffixPreflightRun, suffix: [UInt8])? {
         var pattern = pattern
-        let prefix = "[A-Z]+"
-        guard pattern.hasPrefix(prefix) else {
+        let run: SwiftDarwinLiteralPreflight.ASCIIRunSuffixPreflightRun
+        if pattern.hasPrefix("[A-Z]+") {
+            pattern.removeFirst("[A-Z]+".count)
+            run = .uppercasePlus
+        } else if pattern.hasPrefix("[A-Z]{") {
+            pattern.removeFirst("[A-Z]{".count)
+            guard let count = simpleSwiftDarwinPositiveDecimalPrefix(from: &pattern),
+                  pattern.hasPrefix("}") else {
+                return nil
+            }
+            pattern.removeFirst()
+            run = .exactUppercase(count)
+        } else if pattern.utf8.count >= 5,
+                  pattern.hasPrefix("[") {
+            let bytes = Array(pattern.utf8)
+            guard bytes[0] == UInt8(ascii: "["),
+                  bytes[2] == UInt8(ascii: "]"),
+                  bytes[1] >= UInt8(ascii: "A"),
+                  bytes[1] <= UInt8(ascii: "Z") else {
+                return nil
+            }
+            pattern.removeFirst(3)
+            guard pattern.hasPrefix("{") else {
+                return nil
+            }
+            pattern.removeFirst()
+            guard let count = simpleSwiftDarwinPositiveDecimalPrefix(from: &pattern),
+                  pattern.hasPrefix("}") else {
+                return nil
+            }
+            pattern.removeFirst()
+            run = .exactByte(bytes[1], count)
+        } else {
             return nil
         }
-        pattern.removeFirst(prefix.count)
         guard let suffix = RegexLiteralParser.literal(
             fromPlainRegexPattern: pattern,
             allowPCREQuotedLiterals: allowPCREQuotedLiterals
@@ -6673,7 +6703,27 @@ struct RipgrepCommand {
               suffixBytes.allSatisfy({ $0 < 0x80 && $0 != UInt8(ascii: "\n") }) else {
             return nil
         }
-        return suffixBytes
+        return (run, suffixBytes)
+    }
+
+    private static func simpleSwiftDarwinPositiveDecimalPrefix(from pattern: inout String) -> Int? {
+        var value = 0
+        var consumed = 0
+        while let first = pattern.utf8.first,
+              first >= UInt8(ascii: "0"),
+              first <= UInt8(ascii: "9") {
+            let digit = Int(first - UInt8(ascii: "0"))
+            guard value <= (Int.max - digit) / 10 else {
+                return nil
+            }
+            value = value * 10 + digit
+            consumed += 1
+            pattern.removeFirst()
+        }
+        guard consumed > 0, value > 0 else {
+            return nil
+        }
+        return value
     }
 
     private static func runSimpleSwiftDarwinASCIIRunSuffixQuietPreflight(
@@ -6722,15 +6772,16 @@ struct RipgrepCommand {
               !pattern.hasPrefix("-"),
               path != "-",
               simpleSwiftDarwinIsRegularFile(path),
-              let suffix = simpleSwiftDarwinASCIIRunSuffixLiteral(
+              let fastPattern = simpleSwiftDarwinASCIIRunSuffixPattern(
                 pattern,
                 allowPCREQuotedLiterals: allowPCREQuotedLiterals
               ) else {
             return nil
         }
-        return SwiftDarwinLiteralPreflight.asciiUppercaseRunSuffixQuietExitCode(
+        return SwiftDarwinLiteralPreflight.asciiRunSuffixQuietExitCode(
             path: path,
-            suffix: suffix
+            run: fastPattern.run,
+            suffix: fastPattern.suffix
         )
     }
 

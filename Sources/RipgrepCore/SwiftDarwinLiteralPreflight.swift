@@ -6,6 +6,12 @@ import Darwin
 public enum SwiftDarwinLiteralPreflight {
     private static let rareAnchorNoMatchShortcutMinimumLiteralLength = 10
 
+    public enum ASCIIRunSuffixPreflightRun {
+        case uppercasePlus
+        case exactUppercase(Int)
+        case exactByte(UInt8, Int)
+    }
+
     private final class QuietStatsProbeAccumulator: @unchecked Sendable {
         private let lock = NSLock()
         private var bytesSearched = 0
@@ -316,8 +322,21 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         suffix: [UInt8]
     ) -> Int32? {
+        asciiRunSuffixQuietExitCode(
+            path: path,
+            run: .uppercasePlus,
+            suffix: suffix
+        )
+    }
+
+    public static func asciiRunSuffixQuietExitCode(
+        path: String,
+        run: ASCIIRunSuffixPreflightRun,
+        suffix: [UInt8]
+    ) -> Int32? {
         guard !suffix.isEmpty,
               suffix.allSatisfy({ $0 < 0x80 && $0 != UInt8(ascii: "\n") }),
+              asciiRunSuffixPreflightRunIsValid(run),
               let data = mappedPreflightData(path: path),
               !hasBinaryDetectionPrefix(data) else {
             return nil
@@ -347,16 +366,62 @@ public enum SwiftDarwinLiteralPreflight {
                     }
 
                     let suffixStart = base.distance(to: found)
-                    if suffixStart > 0 {
-                        let before = base[suffixStart - 1]
-                        if before >= UInt8(ascii: "A") && before <= UInt8(ascii: "Z") {
-                            return 0
-                        }
+                    if asciiRunSuffixPreflightRunMatches(
+                        run,
+                        base: base,
+                        suffixStart: suffixStart
+                    ) {
+                        return 0
                     }
                     searchOffset = suffixStart + 1
                 }
                 return 1
             }
+        }
+    }
+
+    private static func asciiRunSuffixPreflightRunIsValid(_ run: ASCIIRunSuffixPreflightRun) -> Bool {
+        switch run {
+        case .uppercasePlus:
+            return true
+        case .exactUppercase(let count), .exactByte(_, let count):
+            return count > 0
+        }
+    }
+
+    private static func asciiRunSuffixPreflightRunMatches(
+        _ run: ASCIIRunSuffixPreflightRun,
+        base: UnsafePointer<UInt8>,
+        suffixStart: Int
+    ) -> Bool {
+        switch run {
+        case .uppercasePlus:
+            guard suffixStart > 0 else {
+                return false
+            }
+            let before = base[suffixStart - 1]
+            return before >= UInt8(ascii: "A") && before <= UInt8(ascii: "Z")
+        case .exactUppercase(let count):
+            let runStart = suffixStart - count
+            guard runStart >= 0 else {
+                return false
+            }
+            for index in runStart..<suffixStart {
+                let byte = base[index]
+                guard byte >= UInt8(ascii: "A") && byte <= UInt8(ascii: "Z") else {
+                    return false
+                }
+            }
+            return true
+        case .exactByte(let byte, let count):
+            let runStart = suffixStart - count
+            guard runStart >= 0 else {
+                return false
+            }
+            for index in runStart..<suffixStart where base[index] != byte {
+                return false
+            }
+            return true
         }
     }
 

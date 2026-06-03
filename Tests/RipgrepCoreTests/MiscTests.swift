@@ -11966,6 +11966,26 @@ struct MiscTests {
         #expect(miss.exitCode == 1)
         #expect(miss.output.isEmpty)
         #expect(miss.error.isEmpty)
+
+        let exactUppercaseHit = try runExecutableResult([
+            "--no-config",
+            "-q",
+            "[A-Z]{3}_RESUME",
+            root.path("run-suffix-hit.txt"),
+        ]) {}
+        #expect(exactUppercaseHit.exitCode == 0)
+        #expect(exactUppercaseHit.output.isEmpty)
+        #expect(exactUppercaseHit.error.isEmpty)
+
+        let exactByteMiss = try runExecutableResult([
+            "--no-config",
+            "-q",
+            "[Z]{3}_RESUME",
+            root.path("run-suffix-hit.txt"),
+        ]) {}
+        #expect(exactByteMiss.exitCode == 1)
+        #expect(exactByteMiss.output.isEmpty)
+        #expect(exactByteMiss.error.isEmpty)
         #endif
     }
 
