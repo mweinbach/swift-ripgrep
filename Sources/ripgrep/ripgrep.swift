@@ -394,6 +394,12 @@ struct RipgrepCommand {
         ) {
             return exitCode
         }
+        if let exitCode = runSimpleSwiftDarwinLiteralPathOnlyPreflight(
+            arguments: arguments,
+            allowPCREQuotedLiterals: preflightArguments.allowPCREQuotedLiterals
+        ) {
+            return exitCode
+        }
 
         let asciiCaseInsensitive: Bool
         let lineNumber: Bool
@@ -6436,6 +6442,66 @@ struct RipgrepCommand {
             literal: literal,
             asciiCaseInsensitive: false,
             lineNumber: lineNumber
+        )
+    }
+
+    private static func runSimpleSwiftDarwinLiteralPathOnlyPreflight(
+        arguments: [String],
+        allowPCREQuotedLiterals: Bool
+    ) -> Int32? {
+        guard arguments.count >= 3 else {
+            return nil
+        }
+        var printWhenMatched: Bool?
+        var nullTerminated = false
+        var crlfTerminated = false
+        let pattern = arguments[arguments.count - 2]
+        let path = arguments[arguments.count - 1]
+        for argument in arguments.dropLast(2) {
+            switch argument {
+            case "-l", "--files-with-matches":
+                printWhenMatched = true
+            case "--files-without-match":
+                printWhenMatched = false
+            case "-0", "--null":
+                nullTerminated = true
+            case "--crlf":
+                crlfTerminated = true
+            case "--no-crlf", "--null-data":
+                crlfTerminated = false
+            case "--no-config",
+                 "--line-buffered",
+                 "--block-buffered",
+                 "--no-line-buffered":
+                continue
+            default:
+                return nil
+            }
+        }
+        guard let printWhenMatched,
+              !pattern.hasPrefix("-"),
+              path != "-",
+              let literalPattern = RegexLiteralParser.literal(
+                fromPlainRegexPattern: pattern,
+                allowPCREQuotedLiterals: allowPCREQuotedLiterals
+              ) else {
+            return nil
+        }
+        let literal = Array(literalPattern.utf8)
+        guard !literal.isEmpty,
+              !literal.contains(UInt8(ascii: "\n")) else {
+            return nil
+        }
+        let outputPath = path.utf8.allSatisfy { $0 < 0x80 }
+            ? nil
+            : Self.preflightDisplayPathBytes(path, pathSeparator: nil)
+        return SwiftDarwinLiteralPreflight.pathOnlyExitCode(
+            path: path,
+            literal: literal,
+            printWhenMatched: printWhenMatched,
+            nullTerminated: nullTerminated,
+            crlfTerminated: crlfTerminated,
+            outputPath: outputPath
         )
     }
 

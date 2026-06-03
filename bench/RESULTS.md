@@ -8,6 +8,32 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Simple exact literal path-only preflight - 2026-06-03
+
+Exact literal path-only output now has the same kind of tiny executable
+preflight as plain line and quiet output. The shortcut handles single-file
+`-l` / `--files-with-matches` and `--files-without-match` with optional
+path NUL termination, CRLF path termination, no-config, and buffering flags.
+Quiet, word, case-insensitive, custom path separator, explicit pattern-source,
+and multi-file forms keep the parser-backed routes.
+
+Validation:
+
+- Targeted `MiscTests` path-only rows passed, including new `--no-config`
+  `-l` and `--files-without-match` coverage.
+- Patched Swift matched Rust stdout, stderr, and exit status for path-only hit,
+  miss, files-without-match hit/miss, NUL, CRLF, and no-config controls.
+
+No-shell 60-run A/B on `/tmp/swift-rg-bench/swift-literal-stats.txt`:
+
+| Case | Prototype Swift | Baseline `db5dfe9` | Rust |
+| --- | ---: | ---: | ---: |
+| `-l missingliteral` | 4.26 ms median | 6.67 ms | 3.49 ms |
+| `--files-without-match absentliteral` | 10.54 ms median | 13.45 ms | 8.75 ms |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/simple-pathonly-preflight-final-noshell-ab-1780465376.json`.
+
 ## Rejected direct path-only literal containment - 2026-06-03
 
 A follow-up probe changed exact literal path-only output (`-l` and
