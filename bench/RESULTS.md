@@ -8,6 +8,30 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected quiet literal contains-only probe - 2026-06-03
+
+Tried routing plain quiet literal status through the mapped-file
+`containsLiteral` helper instead of `literalLineMatchCount(... maxCount: 1)`.
+The shortcut preserved Rust stdout, stderr, and status for single-file and
+recursive `SCHED`, `EXPORT_SYMBOL`, absent-literal, and binary quiet controls,
+but it was not a stable speedup. The shell-level pass improved the two
+recursive hit rows, then the no-shell rerun made `SCHED` slower and regressed
+the full-tree absent guardrail, so the source change was reverted.
+
+| Case | Probe Swift | Baseline `ebe21c5` | Rust |
+| --- | ---: | ---: | ---: |
+| `-q SCHED linux` no-shell rerun | 8.52 ms median / 8.50 ms mean | 7.82 ms / 8.29 ms | 5.03 ms / 5.33 ms |
+| `-q EXPORT_SYMBOL linux` no-shell rerun | 7.85 ms / 8.01 ms | 8.30 ms / 8.67 ms | 4.86 ms / 5.20 ms |
+| `-q ABSENT_LITERAL_NOPE linux` no-shell rerun | 1347.55 ms / 1340.40 ms | 1270.74 ms / 1291.14 ms | 4104.26 ms / 4103.66 ms |
+| `-q SCHED linux/block/bfq-iosched.c` no-shell single-file | 4.29 ms / 4.25 ms | 4.25 ms / 4.18 ms | 3.19 ms / 3.20 ms |
+| `-q EXPORT_SYMBOL linux/block/bsg.c` no-shell single-file | 4.03 ms / 4.37 ms | 4.02 ms / 4.03 ms | 3.27 ms / 3.26 ms |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/quiet-literal-contains-fastpath-ab-1780506365-*.json`,
+`/tmp/swift-rg-bench/quiet-literal-contains-fastpath-noshell-1780506446-*.json`,
+and
+`/tmp/swift-rg-bench/quiet-literal-contains-fastpath-recursive-noshell-1780506465-*.json`.
+
 ## Retained single-file quiet ASCII run-suffix preflight - 2026-06-03
 
 Simple Swift Darwin executable preflight now handles quiet single-file regexes
