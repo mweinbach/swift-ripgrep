@@ -8,6 +8,29 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected simple preflight dispatcher reorder - 2026-06-03
+
+Tried dispatching simple count, path-only, and summary executable preflights
+before the simple line-output preflight when their leading flags were present.
+The broad reorder preserved Rust stdout, stderr, and status for count,
+elapsed-normalized stats/JSON, path-only, files-without-match, and dense line
+guardrails, but it regressed the absent count row. A narrower summary-only
+follow-up kept elapsed-normalized parity, but the confirmation flipped against
+it: JSON no-match improved while stats and files-without-match guardrails moved
+the wrong way. The source change was reverted.
+
+| Case | Probe Swift | Baseline `fc6825c` | Rust |
+| --- | ---: | ---: | ---: |
+| broad `-c absentliteral` | 7.80 ms median / 7.85 ms mean | 7.40 ms / 7.39 ms | 6.86 ms / 7.17 ms |
+| broad `--stats absentliteral` | 7.23 ms / 7.37 ms | 7.99 ms / 7.97 ms | 7.47 ms / 7.78 ms |
+| summary-only `--stats absentliteral` | 7.90 ms / 7.92 ms | 6.88 ms / 6.92 ms | 6.62 ms / 7.06 ms |
+| summary-only `--json absentliteral` | 7.49 ms / 7.45 ms | 8.14 ms / 8.35 ms | 8.26 ms / 8.27 ms |
+| summary-only `--files-without-match absentliteral` guard | 7.74 ms / 7.91 ms | 7.15 ms / 7.23 ms | not remeasured |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/simple-preflight-dispatch-ab-1780508442.json` and
+`/tmp/swift-rg-bench/simple-summary-dispatch-ab-1780508567.json`.
+
 ## Rejected quiet literal contains-only probe - 2026-06-03
 
 Tried routing plain quiet literal status through the mapped-file
