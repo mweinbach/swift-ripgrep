@@ -391,8 +391,22 @@ public struct FileWalker: @unchecked Sendable {
                 diagnostics: &diagnostics,
                 options: options
             )
-            appendGlobalIgnoreFile(to: &ignoreStack, rootBase: rootPlan.rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
-            appendParentIgnoreFiles(to: &ignoreStack, rootBase: rootPlan.rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
+            appendGlobalIgnoreFile(
+                to: &ignoreStack,
+                rootBase: rootPlan.rootBase,
+                rootVCSContext: rootVCSContext,
+                warnings: &warnings,
+                diagnostics: &diagnostics,
+                options: options
+            )
+            appendParentIgnoreFiles(
+                to: &ignoreStack,
+                rootBase: rootPlan.rootBase,
+                rootVCSContext: rootVCSContext,
+                warnings: &warnings,
+                diagnostics: &diagnostics,
+                options: options
+            )
             rootIgnoreStack = ignoreStack
         }
         if stopAfterFirst, options.quiet, options.loggingMode == nil {
@@ -797,17 +811,31 @@ public struct FileWalker: @unchecked Sendable {
         }
 
         var rootIgnoreStack = IgnoreStack()
+        let rootVCSContext = options.noRequireGit || isInGitRepository(rootPlan.rootBase)
         appendExplicitIgnoreFiles(
             to: &rootIgnoreStack,
             rootBase: rootPlan.rootBase,
+            rootVCSContext: rootVCSContext,
             warnings: &warnings,
             diagnostics: &diagnostics,
             options: options
         )
-        appendGlobalIgnoreFile(to: &rootIgnoreStack, rootBase: rootPlan.rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
-        appendParentIgnoreFiles(to: &rootIgnoreStack, rootBase: rootPlan.rootBase, warnings: &warnings, diagnostics: &diagnostics, options: options)
-
-        let rootVCSContext = options.noRequireGit || isInGitRepository(rootPlan.rootBase)
+        appendGlobalIgnoreFile(
+            to: &rootIgnoreStack,
+            rootBase: rootPlan.rootBase,
+            rootVCSContext: rootVCSContext,
+            warnings: &warnings,
+            diagnostics: &diagnostics,
+            options: options
+        )
+        appendParentIgnoreFiles(
+            to: &rootIgnoreStack,
+            rootBase: rootPlan.rootBase,
+            rootVCSContext: rootVCSContext,
+            warnings: &warnings,
+            diagnostics: &diagnostics,
+            options: options
+        )
         var didStop = false
         var matchedHaystacks: [Haystack] = []
         try walkFastSearchFilesInOutputOrder(
@@ -3837,6 +3865,7 @@ public struct FileWalker: @unchecked Sendable {
     private func appendParentIgnoreFiles(
         to ignoreStack: inout IgnoreStack,
         rootBase: URL,
+        rootVCSContext: Bool? = nil,
         warnings: inout [String],
         diagnostics: inout [String],
         options: RipgrepOptions
@@ -3849,7 +3878,11 @@ public struct FileWalker: @unchecked Sendable {
         let parentURLs = ancestorPaths(of: rootPath).map { path in
             URL(fileURLWithPath: path, isDirectory: true)
         }
-        let gitBoundary = hasGitMarker(in: rootBase) ? rootBase : parentURLs.last { hasGitMarker(in: $0) }
+        let shouldLoadParentVCSIgnores = !options.noIgnoreVCS
+            && (options.noRequireGit || rootVCSContext != false)
+        let gitBoundary = shouldLoadParentVCSIgnores
+            ? (hasGitMarker(in: rootBase) ? rootBase : parentURLs.last { hasGitMarker(in: $0) })
+            : nil
         for parentURL in parentURLs {
             appendParentDotIgnoreFiles(
                 in: parentURL,
@@ -3859,15 +3892,17 @@ public struct FileWalker: @unchecked Sendable {
                 rootBase: rootBase,
                 options: options
             )
-            appendParentVCSIgnoreFiles(
-                in: parentURL,
-                gitBoundary: gitBoundary,
-                to: &ignoreStack,
-                warnings: &warnings,
-                diagnostics: &diagnostics,
-                rootBase: rootBase,
-                options: options
-            )
+            if shouldLoadParentVCSIgnores {
+                appendParentVCSIgnoreFiles(
+                    in: parentURL,
+                    gitBoundary: gitBoundary,
+                    to: &ignoreStack,
+                    warnings: &warnings,
+                    diagnostics: &diagnostics,
+                    rootBase: rootBase,
+                    options: options
+                )
+            }
         }
     }
 
@@ -4036,6 +4071,7 @@ public struct FileWalker: @unchecked Sendable {
     private func appendGlobalIgnoreFile(
         to ignoreStack: inout IgnoreStack,
         rootBase: URL,
+        rootVCSContext: Bool? = nil,
         warnings: inout [String],
         diagnostics: inout [String],
         options: RipgrepOptions
@@ -4043,7 +4079,7 @@ public struct FileWalker: @unchecked Sendable {
         guard !options.noIgnore,
               !options.noIgnoreVCS,
               !options.noIgnoreGlobal,
-              options.noRequireGit || isInGitRepository(rootBase),
+              options.noRequireGit || (rootVCSContext ?? isInGitRepository(rootBase)),
               let globalIgnoreFile = globalGitIgnoreFile() else {
             return
         }

@@ -8,6 +8,35 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Retained root VCS-context reuse for fast search walks - 2026-06-03
+
+Fast search file walks now compute the root Git/VCS context once and pass it
+through global and parent ignore setup instead of rechecking repository state
+inside each helper. When that cached context proves the root is outside a Git
+worktree, parent VCS-ignore probing is skipped while parent `.ignore` and
+`.rgignore` loading is preserved. This keeps the change limited to ignore setup
+and avoids changing the quiet byte-literal first-match ordering.
+
+Status/stdout/stderr matched the previous Swift binary and Rust for recursive
+quiet `SCHED`, `EXPORT_SYMBOL`, absent-literal, and `--no-ignore` controls.
+Explicit `--ignore-file` and `--no-ignore --ignore-file` file-list controls
+also matched the previous Swift binary. A separate no-ignore traversal shortcut
+was rejected after the hit row was noisy and the full-miss row was neutral to
+slower.
+
+| Case | Patched Swift | Baseline `cd12cb1` | Rust reference |
+| --- | ---: | ---: | ---: |
+| `-q SCHED linux` | 5.8 ms mean / 5.5-6.7 ms range | 6.4 ms / 5.6-16.6 ms | 5.0 ms / 4.2-8.2 ms |
+| `-q EXPORT_SYMBOL linux` guard | 6.1 ms / 5.7-8.1 ms | 6.0 ms / 5.5-8.8 ms | 5.1 ms / 4.2-7.2 ms |
+| `-q ABSENT_LITERAL_NOPE linux` | 949.5 ms / 937.1-977.8 ms | 967.4 ms / 947.7-1022.3 ms | 2.727 s / 2.611-2.827 s |
+| `--no-ignore -q SCHED linux` guard | 5.6 ms / 5.0-8.8 ms | 5.4 ms / 5.0-6.1 ms | not remeasured |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/root-vcs-cache-hit-noshell-1780520299.json`,
+`/tmp/swift-rg-bench/root-vcs-cache-miss-noshell-1780520316.json`,
+`/tmp/swift-rg-bench/noignore-quiet-hit-walk-skip-noshell-1780519882.json`,
+`/tmp/swift-rg-bench/noignore-quiet-miss-walk-skip-noshell-1780519892.json`.
+
 ## Rejected basename simple-glob index probe - 2026-06-03
 
 Tried moving basename simple-glob rules such as `*.tab.[ch]` and
