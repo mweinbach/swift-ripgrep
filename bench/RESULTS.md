@@ -8,6 +8,30 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected visible no-ignore ignore-load skip - 2026-06-03
+
+Tried keeping root git detection for visible `--no-ignore --files` while
+skipping only explicit/global/parent root ignore-file loading. The recursive
+visible no-ignore branch does not consult the root ignore stack, and current
+Swift output stayed byte-for-byte identical for sorted visible no-ignore,
+reverse visible no-ignore, hidden no-ignore, default sorted files, existing and
+missing explicit `--ignore-file` under `--no-ignore`, and debug visible
+no-ignore stderr. Rust output also matched the ordinary sorted visible,
+reverse, hidden, and default file-list controls.
+
+The benchmark did not hold: hidden no-ignore improved, but the primary visible
+target and reverse visible guard both slowed, so the source change was reverted.
+
+| Case | Probe Swift | Baseline `b06c38c` | Rust reference |
+| --- | ---: | ---: | ---: |
+| `--sort path --no-ignore --files linux` | 154.62 ms median / 159.68 ms mean | 150.37 ms / 155.10 ms | 141.12 ms / 143.98 ms |
+| `--sortr path --no-ignore --files linux` | 148.84 ms / 151.06 ms | 147.74 ms / 149.05 ms | not remeasured |
+| `--sort path --hidden --no-ignore --files linux` guard | 148.98 ms / 152.50 ms | 150.33 ms / 154.73 ms | not remeasured |
+| `--sort path --files linux` guard | 120.96 ms / 121.87 ms | 120.78 ms / 123.88 ms | not remeasured |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/visible-noignore-ignoreload-skip-ab-1780513985.json`.
+
 ## Retained hidden no-ignore root setup skip - 2026-06-03
 
 For sorted hidden `--no-ignore --files` output, the string file-list stream now
