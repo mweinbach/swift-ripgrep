@@ -8,6 +8,27 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected five-worker Darwin file-list cap - 2026-06-03
+
+Tried lowering the shared Darwin file-list worker cap from the retained six
+workers to five. Output stayed byte-for-byte identical to the six-worker Swift
+binary for default, hidden, no-vcs, no-ignore, NUL, and debug file-listing, and
+sorted path output matched Rust for default, hidden, no-vcs, and no-ignore
+controls. The benchmark did not beat six workers overall: no-ignore got a small
+guard improvement, but NUL, hidden, and no-vcs moved the wrong way, so the
+source change was reverted.
+
+| Case | Five-worker probe | Six-worker baseline `8c67c6b` | Rust reference |
+| --- | ---: | ---: | ---: |
+| `--files linux` | 75.57 ms median / 76.68 ms mean | 73.79 ms / 77.15 ms | 74.16 ms / 74.23 ms |
+| `--null --files linux` | 75.22 ms / 78.73 ms | 75.49 ms / 77.91 ms | not remeasured |
+| `--hidden --files linux` guard | 76.44 ms / 78.16 ms | 75.74 ms / 76.97 ms | not remeasured |
+| `--no-ignore-vcs --files linux` guard | 60.42 ms / 64.41 ms | 58.71 ms / 59.32 ms | not remeasured |
+| `--no-ignore --files linux` guard | 58.93 ms / 59.78 ms | 62.34 ms / 63.72 ms | not remeasured |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/workerlimit5-ab-1780515686.json`.
+
 ## Retained six-worker Darwin file-list cap - 2026-06-03
 
 The shared Darwin file-list worker cap is back to six workers instead of eight.
