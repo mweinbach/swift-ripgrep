@@ -8,6 +8,28 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected basename simple-glob index probe - 2026-06-03
+
+Tried moving basename simple-glob rules such as `*.tab.[ch]` and
+`*.asn1.[ch]` from the GlobMatcher reverse-scan fallback into the Darwin fast
+rule index, bucketed by each simple glob's required literal byte. The prototype
+preserved byte-for-byte output against the previous Swift binary for unsorted
+explicit-ignore, hidden explicit-ignore, default, and no-vcs file-listing, and
+the sorted explicit-ignore row still matched Rust exactly. The benchmark moved
+the explicit-ignore target and sorted guard the wrong way, so the source and
+test changes were reverted.
+
+| Case | Simple-glob index probe | Baseline `e6241da` | Rust reference |
+| --- | ---: | ---: | ---: |
+| `--no-ignore-vcs --ignore-file linux/.gitignore --files linux` | 71.13 ms median / 74.58 ms mean | 67.95 ms / 69.00 ms | 66.34 ms / 66.79 ms |
+| `--hidden --no-ignore-vcs --ignore-file linux/.gitignore --files linux` guard | 71.04 ms / 72.08 ms | 68.90 ms / 69.71 ms | not remeasured |
+| `--sort path --no-ignore-vcs --ignore-file linux/.gitignore --files linux` guard | 124.46 ms / 127.31 ms | 115.28 ms / 116.87 ms | not remeasured |
+| `--files linux` guard | 75.22 ms / 76.51 ms | 75.90 ms / 76.93 ms | not remeasured |
+| `--no-ignore-vcs --files linux` guard | 58.22 ms / 59.29 ms | 58.52 ms / 62.27 ms | not remeasured |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/simpleglob-index-explicit-ab-1780517927.json`.
+
 ## Retained sorted no-ignore parallel string walker - 2026-06-03
 
 Allowed path-sorted `--no-ignore` file listing to use the existing Darwin
