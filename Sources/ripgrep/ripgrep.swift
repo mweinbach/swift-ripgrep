@@ -6641,7 +6641,7 @@ struct RipgrepCommand {
             return nil
         }
         if maxCount == 0 {
-            return nil
+            return 1
         }
         if wordRegexp {
             if quiet {

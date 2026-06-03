@@ -1808,6 +1808,25 @@ struct MiscTests {
         """)
     }
 
+    @Test("executable max count zero simple literals emit no match output")
+    func executableMaxCountZeroSimpleLiteralsEmitNoMatchOutput() throws {
+        let root = try TemporaryDirectory()
+        try root.write("literal\nlit.er.al\n", to: "max-count-zero.txt")
+
+        for arguments in [
+            ["-m0", "literal", root.path("max-count-zero.txt")],
+            ["--max-count=0", "literal", root.path("max-count-zero.txt")],
+            ["-n", "-m0", "literal", root.path("max-count-zero.txt")],
+            ["-F", "-m0", "lit.er.al", root.path("max-count-zero.txt")],
+            ["-m0", "literal", root.path("missing.txt")],
+        ] {
+            let result = try runExecutableResult(arguments, fixture: {})
+            #expect(result.exitCode == 1)
+            #expect(result.output.isEmpty)
+            #expect(result.error.isEmpty)
+        }
+    }
+
     @Test("streams simple Darwin byte literal lines")
     func streamsSimpleDarwinByteLiteralLines() throws {
         #if canImport(Darwin)

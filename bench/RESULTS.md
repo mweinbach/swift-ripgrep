@@ -8,6 +8,30 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Retained max-count zero simple preflight - 2026-06-03
+
+Simple Darwin executable literal line preflight now returns immediately for
+validated `--max-count=0` / `-m0` single-file searches. Rust emits no stdout or
+stderr and exits with no match for these shapes, even when the file is missing
+or the literal exists, so the shortcut avoids both broad CLI setup and file
+mapping after the simple pattern guard has accepted the command. A same-session
+A/B against checkpoint `1446d15`, with Rust included as the oracle, measured:
+
+| Case | Current Swift | Baseline `1446d15` | Rust |
+| --- | ---: | ---: | ---: |
+| `-m0 absentliteral match-ascii-46m.txt` | 2.80 ms median / 2.89 ms mean | 4.04 ms / 4.26 ms | 2.87 ms / 3.04 ms |
+| `-m0 literal match-ascii-46m.txt` | 2.97 ms / 3.16 ms | 4.73 ms / 4.46 ms | 2.14 ms / 2.31 ms |
+| `-n -m0 literal match-ascii-46m.txt` | 2.98 ms / 3.24 ms | 4.13 ms / 4.11 ms | 2.13 ms / 2.32 ms |
+
+Output, stderr, and status matched Rust for absent, matched, long-form
+`--max-count=0`, numbered, fixed-string, missing-file, and invalid-regex
+forms. Hyperfine warns below 5 ms, so the exact numbers are process-level
+noise-sensitive, but the A/B keeps the same winner ordering across the
+refreshed rows.
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/maxcount-zero-head-v-patch-1780481816.json`.
+
 ## Retained Greek script no-match byte proof - 2026-06-03
 
 Single-file default-engine `\p{Greek}` and `\p{Greek}+` matching-line searches
