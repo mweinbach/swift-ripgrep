@@ -394,6 +394,12 @@ struct RipgrepCommand {
         ) {
             return exitCode
         }
+        if let exitCode = runSimpleSwiftDarwinLiteralCountPreflight(
+            arguments: arguments,
+            allowPCREQuotedLiterals: preflightArguments.allowPCREQuotedLiterals
+        ) {
+            return exitCode
+        }
         if let exitCode = runSimpleSwiftDarwinLiteralPathOnlyPreflight(
             arguments: arguments,
             allowPCREQuotedLiterals: preflightArguments.allowPCREQuotedLiterals
@@ -6442,6 +6448,67 @@ struct RipgrepCommand {
             literal: literal,
             asciiCaseInsensitive: false,
             lineNumber: lineNumber
+        )
+    }
+
+    private static func runSimpleSwiftDarwinLiteralCountPreflight(
+        arguments: [String],
+        allowPCREQuotedLiterals: Bool
+    ) -> Int32? {
+        guard arguments.count >= 3 else {
+            return nil
+        }
+        var count = false
+        var includeZero = false
+        let pattern = arguments[arguments.count - 2]
+        let path = arguments[arguments.count - 1]
+        for argument in arguments.dropLast(2) {
+            switch argument {
+            case "-c", "--count":
+                count = true
+            case "--include-zero":
+                includeZero = true
+            case "--no-include-zero":
+                includeZero = false
+            case "--no-config",
+                 "--line-buffered",
+                 "--block-buffered",
+                 "--no-line-buffered":
+                continue
+            default:
+                return nil
+            }
+        }
+        guard count,
+              !pattern.hasPrefix("-"),
+              path != "-",
+              let literalPattern = RegexLiteralParser.literal(
+                fromPlainRegexPattern: pattern,
+                allowPCREQuotedLiterals: allowPCREQuotedLiterals
+              ) else {
+            return nil
+        }
+        let literal = Array(literalPattern.utf8)
+        guard !literal.isEmpty,
+              !literal.contains(UInt8(ascii: "\n")) else {
+            return nil
+        }
+        if includeZero {
+            return SwiftDarwinLiteralPreflight.noMatchCountOutputExitCode(
+                path: path,
+                literal: literal,
+                asciiCaseInsensitive: false,
+                wordRegexp: false,
+                countPrefix: [],
+                crlfTerminated: false,
+                stats: false
+            )
+        }
+        return SwiftDarwinLiteralPreflight.noMatchExitCode(
+            path: path,
+            literal: literal,
+            asciiCaseInsensitive: false,
+            wordRegexp: false
         )
     }
 

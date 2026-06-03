@@ -28,6 +28,29 @@ case-insensitive alternation at 0.90x; the rest of the available Linux rows are
 Raw bench output:
 `/tmp/swift-rg-bench/current-wide-refresh-1780466744/summary.md`.
 
+## Retained simple no-match count preflight - 2026-06-03
+
+The simple Darwin executable preflight now has a narrow count-only no-match
+shortcut for single-file `-c` / `--count` literal searches with optional
+`--include-zero`. Plain no-match counts use the existing `noMatchExitCode`
+primitive so they remain silent, while include-zero no-match counts reuse the
+existing count writer. The shortcut falls through for matched files and richer
+output modes. A same-session A/B against checkpoint `f9002dd`, with Rust
+included as the oracle, measured:
+
+| Case | Current Swift | Baseline `f9002dd` | Rust |
+| --- | ---: | ---: | ---: |
+| `-c absentliteral match-ascii-46m.txt` | 7.77 ms median / 7.82 ms mean | 9.69 ms / 9.76 ms | 6.37 ms / 6.49 ms |
+| `-c --include-zero absentliteral match-ascii-46m.txt` | 7.93 ms / 7.93 ms | 9.84 ms / 10.42 ms | not remeasured |
+| `-c literal match-ascii-46m.txt` control | 16.47 ms / 16.58 ms | 16.40 ms / 16.54 ms | not measured |
+
+Output, stderr, and status matched the previous Swift binary and the sibling
+Rust oracle for silent no-match count, include-zero no-match count,
+include-zero override, matched count fallback, and CRLF fallback.
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/simple-count-early-preflight-ab-1780469041.json`.
+
 ## Rejected zero-count direct write - 2026-06-03
 
 A no-match count/stats probe checked whether the remaining absent-literal

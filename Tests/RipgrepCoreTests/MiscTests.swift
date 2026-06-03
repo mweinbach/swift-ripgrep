@@ -2797,6 +2797,86 @@ struct MiscTests {
         #endif
     }
 
+    @Test("Darwin executable literal preflight preserves simple count no-match output")
+    func darwinExecutableLiteralPreflightPreservesSimpleCountNoMatchOutput() throws {
+        #if canImport(Darwin)
+        let root = try TemporaryDirectory()
+        try root.write("needle one\nquiet\nneedle two\n", to: "simple.txt")
+        func runExecutableStatusData(
+            _ arguments: [String],
+            environment: [String: String] = [:]
+        ) throws -> (stdout: Data, stderr: Data, status: Int32) {
+            let executable = ripgrepPackageRootURL().appendingPathComponent(".build/debug/ripgrep")
+            let process = Process()
+            process.executableURL = executable
+            process.arguments = arguments
+            process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
+            let output = Pipe()
+            let error = Pipe()
+            process.standardOutput = output
+            process.standardError = error
+            try process.run()
+            process.waitUntilExit()
+            return (
+                output.fileHandleForReading.readDataToEndOfFile(),
+                error.fileHandleForReading.readDataToEndOfFile(),
+                process.terminationStatus
+            )
+        }
+
+        let silentNoMatch = try runExecutableStatusData([
+            "-c",
+            "absent",
+            root.path("simple.txt"),
+        ])
+        #expect(silentNoMatch.status == 1)
+        #expect(silentNoMatch.stdout.isEmpty)
+        #expect(silentNoMatch.stderr.isEmpty)
+
+        let includeZeroNoMatch = try runExecutableStatusData([
+            "--count",
+            "--include-zero",
+            "absent",
+            root.path("simple.txt"),
+        ])
+        #expect(includeZeroNoMatch.status == 1)
+        #expect(includeZeroNoMatch.stdout == Data("0\n".utf8))
+        #expect(includeZeroNoMatch.stderr.isEmpty)
+
+        let noIncludeZeroOverride = try runExecutableStatusData([
+            "--count",
+            "--include-zero",
+            "--no-include-zero",
+            "absent",
+            root.path("simple.txt"),
+        ])
+        #expect(noIncludeZeroOverride.status == 1)
+        #expect(noIncludeZeroOverride.stdout.isEmpty)
+        #expect(noIncludeZeroOverride.stderr.isEmpty)
+
+        let matchedCount = try runExecutableData([
+            "-c",
+            "needle",
+            root.path("simple.txt"),
+        ], fixture: {})
+        #expect(matchedCount == Data("2\n".utf8))
+
+        try root.write("--line-number\n", to: "ripgreprc")
+        let noConfigEnvironmentCount = try runExecutableStatusData([
+            "--no-config",
+            "--count",
+            "--include-zero",
+            "absent",
+            root.path("simple.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ])
+        #expect(noConfigEnvironmentCount.status == 1)
+        #expect(noConfigEnvironmentCount.stdout == Data("0\n".utf8))
+        #expect(noConfigEnvironmentCount.stderr.isEmpty)
+        #endif
+    }
+
     @Test("Darwin executable literal preflight emits dense matching lines once")
     func darwinExecutableLiteralPreflightDenseLines() throws {
         #if canImport(Darwin)
