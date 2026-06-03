@@ -1560,7 +1560,7 @@ public struct FileWalker: @unchecked Sendable {
 
         let directoryPathPrefix = directoryPath + "/"
         let relativePathPrefix = relativePath.isEmpty ? "" : relativePath + "/"
-        let canUseBasenameOnlyIgnoreDecisions = directoryIgnoreStack.canUseUnscopedBasenameDecisions
+        let canUseBasenameOnlyIgnoreDecisions = directoryIgnoreStack.canUseBasenameOnlyChildDecisions
         if directoryIgnoreStack.isEmpty {
             for child in contents.children.reversed() {
                 if child.kind == .symbolicLink || (!options.hidden && child.isHidden) {
@@ -1608,11 +1608,9 @@ public struct FileWalker: @unchecked Sendable {
                 if child.kind == .symbolicLink {
                     continue
                 }
-                let childRelativePath = relativePathPrefix + child.name
                 let isDirectory = child.kind.isDirectory
-                guard shouldEmitFastFilePath(
+                guard shouldEmitFastBasenameOnlyFilePath(
                     child: child,
-                    childRelativePath: childRelativePath,
                     isDirectory: isDirectory,
                     ignoreStack: directoryIgnoreStack,
                     options: options,
@@ -1621,6 +1619,7 @@ public struct FileWalker: @unchecked Sendable {
                     continue
                 }
                 if child.kind.isDirectory {
+                    let childRelativePath = relativePathPrefix + child.name
                     var childLogicalPathBytes = logicalPathBytes
                     childLogicalPathBytes.append(UInt8(ascii: "/"))
                     appendUTF8(child.name, to: &childLogicalPathBytes)
@@ -1842,33 +1841,24 @@ public struct FileWalker: @unchecked Sendable {
         let logicalDirectoryPathPrefix = pathPrefix(logicalDirectoryPath)
         let relativePathPrefix = relativePath.isEmpty ? "" : relativePath + "/"
         let canUseBasenameOnlyIgnoreDecisions = options.loggingMode == nil
-            && directoryIgnoreStack.canUseUnscopedBasenameDecisions
+            && directoryIgnoreStack.canUseBasenameOnlyChildDecisions
         if canUseBasenameOnlyIgnoreDecisions {
             for child in contents.children.reversed() {
                 if child.kind == .symbolicLink {
                     continue
                 }
-                let childRelativePath = relativePathPrefix + child.name
                 let isDirectory = child.kind.isDirectory
-                if !options.hidden,
-                   child.isHidden,
-                   !isIncludedByIgnore(
-                       relativePath: childRelativePath,
-                       basename: child.name,
-                       isDirectory: isDirectory,
-                       ignoreStack: directoryIgnoreStack
-                   ) {
-                    continue
-                }
-                if !directoryIgnoreStack.allows(
-                    relativePath: childRelativePath,
-                    basename: child.name,
-                    isDirectory: isDirectory
-                ) {
-                    filtered = true
+                guard shouldEmitFastBasenameOnlyFilePath(
+                    child: child,
+                    isDirectory: isDirectory,
+                    ignoreStack: directoryIgnoreStack,
+                    options: options,
+                    filtered: &filtered
+                ) else {
                     continue
                 }
                 if child.kind.isDirectory {
+                    let childRelativePath = relativePathPrefix + child.name
                     try walkFilePathsInOutputOrder(
                         directoryPath: directoryPathPrefix + child.name,
                         logicalDirectoryPath: joinedPath(logicalDirectoryPath, child.name),
@@ -2650,6 +2640,35 @@ public struct FileWalker: @unchecked Sendable {
         }
         let ignoreDecision = ignoreStack.decision(
             relativePath: childRelativePath,
+            basename: child.name,
+            isDirectory: isDirectory
+        )
+        if ignoreDecision == .exclude {
+            filtered = true
+            return false
+        }
+        return true
+    }
+
+    private func shouldEmitFastBasenameOnlyFilePath(
+        child: FastDirectoryChild,
+        isDirectory: Bool,
+        ignoreStack: IgnoreStack,
+        options: RipgrepOptions,
+        filtered: inout Bool
+    ) -> Bool {
+        if !options.hidden, child.isHidden {
+            guard ignoreStack.canIncludePaths else {
+                return false
+            }
+            return ignoreStack.decision(
+                relativePath: child.name,
+                basename: child.name,
+                isDirectory: isDirectory
+            ) == .include
+        }
+        let ignoreDecision = ignoreStack.decision(
+            relativePath: child.name,
             basename: child.name,
             isDirectory: isDirectory
         )

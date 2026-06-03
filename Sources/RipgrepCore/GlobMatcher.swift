@@ -321,6 +321,10 @@ public struct GlobMatcher: Equatable {
         isUnscoped && allRulesUnanchoredBasenameOnly
     }
 
+    var canUseBasenameOnlyChildDecisions: Bool {
+        stripBasePath == nil && allRulesUnanchoredBasenameOnly
+    }
+
     public var excludesOnlyHiddenPaths: Bool {
         guard !rules.isEmpty else {
             return false
@@ -1274,6 +1278,10 @@ public struct IgnoreStack: @unchecked Sendable {
 
     var canUseUnscopedBasenameDecisions: Bool {
         !matchers.isEmpty && matchers.allSatisfy { $0.canUseUnscopedBasenameDecisions }
+    }
+
+    var canUseBasenameOnlyChildDecisions: Bool {
+        !matchers.isEmpty && matchers.allSatisfy { $0.canUseBasenameOnlyChildDecisions }
     }
 
     public mutating func append(_ matcher: GlobMatcher) {
