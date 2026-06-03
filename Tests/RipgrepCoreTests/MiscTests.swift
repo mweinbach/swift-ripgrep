@@ -11934,6 +11934,41 @@ struct MiscTests {
         #endif
     }
 
+    @Test("Darwin executable ASCII run suffix quiet preflight returns status")
+    func darwinExecutableASCIIRunSuffixQuietPreflightStatus() throws {
+        #if canImport(Darwin)
+        let root = try TemporaryDirectory()
+        try root.write("""
+        task TWA_RESUME
+        x_RESUME
+        """, to: "run-suffix-hit.txt")
+        try root.write("""
+        _RESUME
+        x_RESUME
+        """, to: "run-suffix-miss.txt")
+
+        let hit = try runExecutableResult([
+            "--no-config",
+            "-q",
+            "[A-Z]+_RESUME",
+            root.path("run-suffix-hit.txt"),
+        ]) {}
+        #expect(hit.exitCode == 0)
+        #expect(hit.output.isEmpty)
+        #expect(hit.error.isEmpty)
+
+        let miss = try runExecutableResult([
+            "--no-config",
+            "-q",
+            "[A-Z]+_RESUME",
+            root.path("run-suffix-miss.txt"),
+        ]) {}
+        #expect(miss.exitCode == 1)
+        #expect(miss.output.isEmpty)
+        #expect(miss.error.isEmpty)
+        #endif
+    }
+
     @Test("supports regex fixed string word and line matching")
     func supportsMatcherModes() throws {
         let root = try TemporaryDirectory()

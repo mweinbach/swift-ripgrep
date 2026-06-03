@@ -508,6 +508,12 @@ struct RipgrepCommand {
         guard getenv("RIPGREP_CONFIG_PATH") == nil || leadingArgumentsDisableConfigForPreflight(arguments) else {
             return nil
         }
+        if let exitCode = runSimpleSwiftDarwinASCIIRunSuffixQuietPreflight(
+            arguments: arguments,
+            allowPCREQuotedLiterals: preflightArguments.allowPCREQuotedLiterals
+        ) {
+            return exitCode
+        }
         if let exitCode = runSimpleSwiftDarwinLiteralLinePreflight(
             arguments: arguments,
             allowPCREQuotedLiterals: preflightArguments.allowPCREQuotedLiterals
@@ -6644,6 +6650,97 @@ struct RipgrepCommand {
             return String(argument.dropFirst(2))
         }
         return nil
+    }
+
+    private static func simpleSwiftDarwinASCIIRunSuffixLiteral(
+        _ pattern: String,
+        allowPCREQuotedLiterals: Bool
+    ) -> [UInt8]? {
+        var pattern = pattern
+        let prefix = "[A-Z]+"
+        guard pattern.hasPrefix(prefix) else {
+            return nil
+        }
+        pattern.removeFirst(prefix.count)
+        guard let suffix = RegexLiteralParser.literal(
+            fromPlainRegexPattern: pattern,
+            allowPCREQuotedLiterals: allowPCREQuotedLiterals
+        ) else {
+            return nil
+        }
+        let suffixBytes = Array(suffix.utf8)
+        guard !suffixBytes.isEmpty,
+              suffixBytes.allSatisfy({ $0 < 0x80 && $0 != UInt8(ascii: "\n") }) else {
+            return nil
+        }
+        return suffixBytes
+    }
+
+    private static func runSimpleSwiftDarwinASCIIRunSuffixQuietPreflight(
+        arguments: [String],
+        allowPCREQuotedLiterals: Bool
+    ) -> Int32? {
+        guard arguments.count >= 3 else {
+            return nil
+        }
+        var fixedStrings = false
+        var noUnicode = false
+        var quiet = false
+        var unrestrictedCount = 0
+        let pattern = arguments[arguments.count - 2]
+        let path = arguments[arguments.count - 1]
+        let optionEndIndex = arguments.count - 2
+        var argumentIndex = 0
+        while argumentIndex < optionEndIndex {
+            let argument = arguments[argumentIndex]
+            if let handled = applySimpleSwiftDarwinLiteralCommonOption(
+                argument,
+                arguments: arguments,
+                argumentIndex: &argumentIndex,
+                optionEndIndex: optionEndIndex,
+                fixedStrings: &fixedStrings,
+                noUnicode: &noUnicode,
+                unrestrictedCount: &unrestrictedCount
+            ) {
+                guard handled else {
+                    return nil
+                }
+                argumentIndex += 1
+                continue
+            }
+            switch argument {
+            case "-q", "--quiet", "--no-heading", "--no-json", "--no-stats":
+                quiet = quiet || argument == "-q" || argument == "--quiet"
+            default:
+                return nil
+            }
+            argumentIndex += 1
+        }
+        guard quiet,
+              !fixedStrings,
+              !noUnicode,
+              !pattern.hasPrefix("-"),
+              path != "-",
+              simpleSwiftDarwinIsRegularFile(path),
+              let suffix = simpleSwiftDarwinASCIIRunSuffixLiteral(
+                pattern,
+                allowPCREQuotedLiterals: allowPCREQuotedLiterals
+              ) else {
+            return nil
+        }
+        return SwiftDarwinLiteralPreflight.asciiUppercaseRunSuffixQuietExitCode(
+            path: path,
+            suffix: suffix
+        )
+    }
+
+    private static func simpleSwiftDarwinIsRegularFile(_ path: String) -> Bool {
+        var fileStat = stat()
+        let status = path.withCString { stat($0, &fileStat) }
+        guard status == 0 else {
+            return false
+        }
+        return (fileStat.st_mode & S_IFMT) == S_IFREG
     }
 
     private static func applySimpleSwiftDarwinLiteralCommonOption(

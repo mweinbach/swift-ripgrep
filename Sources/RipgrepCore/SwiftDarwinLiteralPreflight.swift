@@ -312,6 +312,54 @@ public enum SwiftDarwinLiteralPreflight {
         return matchedLineCount > 0 ? 0 : 1
     }
 
+    public static func asciiUppercaseRunSuffixQuietExitCode(
+        path: String,
+        suffix: [UInt8]
+    ) -> Int32? {
+        guard !suffix.isEmpty,
+              suffix.allSatisfy({ $0 < 0x80 && $0 != UInt8(ascii: "\n") }),
+              let data = mappedPreflightData(path: path),
+              !hasBinaryDetectionPrefix(data) else {
+            return nil
+        }
+        guard data.count > suffix.count else {
+            return 1
+        }
+
+        return data.withUnsafeBytes { rawData -> Int32? in
+            guard let rawBase = rawData.baseAddress else {
+                return 1
+            }
+            let base = rawBase.assumingMemoryBound(to: UInt8.self)
+            return suffix.withUnsafeBufferPointer { suffixBuffer -> Int32? in
+                guard let suffixBase = suffixBuffer.baseAddress else {
+                    return 1
+                }
+                var searchOffset = 0
+                while searchOffset + suffixBuffer.count <= data.count {
+                    guard let found = rg_memmem_simple(
+                        base.advanced(by: searchOffset),
+                        data.count - searchOffset,
+                        suffixBase,
+                        suffixBuffer.count
+                    ) else {
+                        return 1
+                    }
+
+                    let suffixStart = base.distance(to: found)
+                    if suffixStart > 0 {
+                        let before = base[suffixStart - 1]
+                        if before >= UInt8(ascii: "A") && before <= UInt8(ascii: "Z") {
+                            return 0
+                        }
+                    }
+                    searchOffset = suffixStart + 1
+                }
+                return 1
+            }
+        }
+    }
+
     public static func noMatchExitCode(
         path: String,
         literal: [UInt8],
