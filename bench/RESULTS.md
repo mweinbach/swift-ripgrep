@@ -43,6 +43,25 @@ Raw hyperfine exports:
 `/tmp/swift-rg-bench/fixed-preview-ascii-slice-ab-1780461187.json` and
 `/tmp/swift-rg-bench/fixed-preview-bounded-line-start-1780460831.json`.
 
+## Rejected simple literal parser shortcut - 2026-06-03
+
+A follow-up probe changed the simple Darwin literal executable preflight to
+return byte-plain patterns directly instead of passing them through
+`RegexLiteralParser.literal`. The fallback parser still handled escaped
+literal forms. The source change was reverted because the no-shell A/B showed
+the parser shortcut was flat and slightly worse for quiet absent literals:
+
+| Case | Prototype Swift | Baseline `8b901aa` |
+| --- | ---: | ---: |
+| `absentliteral match-ascii-46m.txt` | 7.6 ms mean / 7.4-8.9 ms range | 7.7 ms / 7.4-9.4 ms |
+| `-q absentliteral match-ascii-46m.txt` | 7.7 ms / 7.4-8.7 ms | 7.5 ms / 7.4-8.2 ms |
+| `-w absentliteral match-ascii-46m.txt` | 7.5 ms / 7.4-8.1 ms | 7.6 ms / 7.4-8.0 ms |
+| `absent\\.literal match-ascii-46m.txt` | 7.6 ms / 7.4-8.7 ms | 7.6 ms / 7.4-8.0 ms |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/simple-literal-parser-shortcut-ab-1780461666.json` and
+`/tmp/swift-rg-bench/simple-literal-parser-shortcut-noshell-1780461689.json`.
+
 ## Rejected Greek and quiet-word probes - 2026-06-03
 
 Two follow-up probes were measured and not retained:
