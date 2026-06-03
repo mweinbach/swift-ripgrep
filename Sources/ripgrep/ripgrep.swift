@@ -388,6 +388,12 @@ struct RipgrepCommand {
         guard getenv("RIPGREP_CONFIG_PATH") == nil || leadingArgumentsDisableConfigForPreflight(arguments) else {
             return nil
         }
+        if let exitCode = runSimpleSwiftDarwinLiteralLinePreflight(
+            arguments: arguments,
+            allowPCREQuotedLiterals: preflightArguments.allowPCREQuotedLiterals
+        ) {
+            return exitCode
+        }
 
         let asciiCaseInsensitive: Bool
         let lineNumber: Bool
@@ -6358,6 +6364,46 @@ struct RipgrepCommand {
         default:
             return argument.hasPrefix("--generate=")
         }
+    }
+
+    private static func runSimpleSwiftDarwinLiteralLinePreflight(
+        arguments: [String],
+        allowPCREQuotedLiterals: Bool
+    ) -> Int32? {
+        let lineNumber: Bool
+        let pattern: String
+        let path: String
+        if arguments.count == 2 {
+            lineNumber = false
+            pattern = arguments[0]
+            path = arguments[1]
+        } else if arguments.count == 3,
+                  arguments[0] == "-n" || arguments[0] == "--line-number" {
+            lineNumber = true
+            pattern = arguments[1]
+            path = arguments[2]
+        } else {
+            return nil
+        }
+        guard !pattern.hasPrefix("-"),
+              path != "-",
+              let literalPattern = RegexLiteralParser.literal(
+                fromPlainRegexPattern: pattern,
+                allowPCREQuotedLiterals: allowPCREQuotedLiterals
+              ) else {
+            return nil
+        }
+        let literal = Array(literalPattern.utf8)
+        guard !literal.isEmpty,
+              !literal.contains(UInt8(ascii: "\n")) else {
+            return nil
+        }
+        return SwiftDarwinLiteralPreflight.exitCode(
+            path: path,
+            literal: literal,
+            asciiCaseInsensitive: false,
+            lineNumber: lineNumber
+        )
     }
 
     private static func leadingArgumentsDisableConfigForPreflight(_ arguments: [String]) -> Bool {

@@ -2745,6 +2745,15 @@ struct MiscTests {
 
             """.utf8
         ))
+
+        try root.write("--line-number\n", to: "ripgreprc")
+        let configOutput = try runExecutableData([
+            "literal",
+            root.path("simple.txt"),
+        ], environment: [
+            "RIPGREP_CONFIG_PATH": root.path("ripgreprc"),
+        ], fixture: {})
+        #expect(configOutput == Data("1:literal one\n2:literal two\n4:literal three\n5:literal four\n".utf8))
         #endif
     }
 

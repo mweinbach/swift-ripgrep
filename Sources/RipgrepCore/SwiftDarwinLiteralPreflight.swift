@@ -12098,6 +12098,100 @@ private struct rgSwiftStdoutBuffer {
     }
 }
 
+private final class rgSwiftLazyStdoutBuffer {
+    private var buffer: rgSwiftStdoutBuffer?
+    private let capacity: Int
+
+    init?(capacity: Int, allocateImmediately: Bool) {
+        self.capacity = capacity
+        if allocateImmediately {
+            guard let buffer = rgSwiftStdoutBuffer(capacity: capacity) else {
+                return nil
+            }
+            self.buffer = buffer
+        }
+    }
+
+    private func ensureBuffer() -> Bool {
+        guard buffer == nil else {
+            return true
+        }
+        guard let buffer = rgSwiftStdoutBuffer(capacity: capacity) else {
+            return false
+        }
+        self.buffer = buffer
+        return true
+    }
+
+    func write(_ bytes: UnsafePointer<UInt8>, count: Int) -> Bool {
+        guard ensureBuffer(),
+              var buffer else {
+            return false
+        }
+        let wrote = buffer.write(bytes, count: count)
+        self.buffer = buffer
+        return wrote
+    }
+
+    func writeByte(_ byte: UInt8) -> Bool {
+        guard ensureBuffer(),
+              var buffer else {
+            return false
+        }
+        let wrote = buffer.writeByte(byte)
+        self.buffer = buffer
+        return wrote
+    }
+
+    func writeBytes(_ bytes: [UInt8]) -> Bool {
+        guard ensureBuffer(),
+              var buffer else {
+            return false
+        }
+        let wrote = buffer.writeBytes(bytes)
+        self.buffer = buffer
+        return wrote
+    }
+
+    func writeHeadingPrefix(_ headingPrefix: [UInt8], emittedHeading: inout Bool) -> Bool {
+        guard ensureBuffer(),
+              var buffer else {
+            return false
+        }
+        let wrote = buffer.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading)
+        self.buffer = buffer
+        return wrote
+    }
+
+    func writeLineNumberPrefix(_ value: Int, fieldSeparator: [UInt8]) -> Bool {
+        guard ensureBuffer(),
+              var buffer else {
+            return false
+        }
+        let wrote = buffer.writeLineNumberPrefix(value, fieldSeparator: fieldSeparator)
+        self.buffer = buffer
+        return wrote
+    }
+
+    func flush() -> Bool {
+        guard var buffer else {
+            return true
+        }
+        let flushed = buffer.flush()
+        self.buffer = buffer
+        return flushed
+    }
+
+    var statsBytesWritten: Int {
+        buffer?.statsBytesWritten ?? 0
+    }
+
+    func deallocate() {
+        buffer?.deallocate()
+        buffer = nil
+    }
+}
+
 private func rgSwiftDarwinWriteLiteralBytes(
     _ base: UnsafePointer<UInt8>,
     haystackLength: Int,
@@ -12135,9 +12229,17 @@ private func rgSwiftDarwinWriteLiteralBytes(
     }
 
     let simpleLineOutput = emitLines && !lineNumber && linePrefix.isEmpty && headingPrefix.isEmpty
-    var output = emitLines && !simpleLineOutput ? rgSwiftStdoutBuffer(capacity: 1024 * 1024) : nil
-    if emitLines, !simpleLineOutput, output == nil {
-        return nil
+    let output: rgSwiftLazyStdoutBuffer?
+    if emitLines {
+        guard let lazyOutput = rgSwiftLazyStdoutBuffer(
+            capacity: 1024 * 1024,
+            allocateImmediately: !simpleLineOutput
+        ) else {
+            return nil
+        }
+        output = lazyOutput
+    } else {
+        output = nil
     }
     defer {
         output?.deallocate()
@@ -12167,17 +12269,6 @@ private func rgSwiftDarwinWriteLiteralBytes(
     var pendingSimpleOutputEnd = 0
     var pendingSimpleOutputNeedsFinalNewline = false
 
-    func ensureOutputBuffer() -> Bool {
-        if output == nil {
-            guard let buffer = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
-                writeFailed = true
-                return false
-            }
-            output = buffer
-        }
-        return true
-    }
-
     func ensureTextHaystack() -> Bool {
         if confirmedTextHaystack {
             return true
@@ -12192,9 +12283,6 @@ private func rgSwiftDarwinWriteLiteralBytes(
     func flushPendingSimpleOutput() -> Bool {
         guard let start = pendingSimpleOutputStart else {
             return true
-        }
-        guard ensureOutputBuffer() else {
-            return false
         }
         guard output?.write(base.advanced(by: start), count: pendingSimpleOutputEnd - start) == true else {
             writeFailed = true
@@ -12226,8 +12314,13 @@ private func rgSwiftDarwinWriteLiteralBytes(
     func emitMatchedLine(found: UnsafePointer<UInt8>, newlinesBeforeMatch: Int) -> Bool {
         let matchStart = base.distance(to: found)
         var lineStart = matchStart
-        while lineStart > 0, base[lineStart - 1] != UInt8(ascii: "\n") {
-            lineStart -= 1
+        if lineNumber, !asciiBoundary, newlinesBeforeMatch == 0 {
+            // The counted search keeps searchOffset at this line's start.
+            lineStart = searchOffset
+        } else {
+            while lineStart > 0, base[lineStart - 1] != UInt8(ascii: "\n") {
+                lineStart -= 1
+            }
         }
 
         let newline = memchr(found, Int32(UInt8(ascii: "\n")), haystackLength - matchStart)
