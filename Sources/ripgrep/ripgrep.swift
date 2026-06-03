@@ -412,6 +412,12 @@ struct RipgrepCommand {
         ) {
             return exitCode
         }
+        if let exitCode = runSimpleSwiftDarwinExplicitMultiLiteralPreflight(
+            arguments: arguments,
+            allowPCREQuotedLiterals: preflightArguments.allowPCREQuotedLiterals
+        ) {
+            return exitCode
+        }
 
         let asciiCaseInsensitive: Bool
         let lineNumber: Bool
@@ -7037,6 +7043,140 @@ struct RipgrepCommand {
             crlfTerminated: crlfTerminated,
             outputPath: outputPath
         )
+    }
+
+    private static func runSimpleSwiftDarwinExplicitMultiLiteralPreflight(
+        arguments: [String],
+        allowPCREQuotedLiterals: Bool
+    ) -> Int32? {
+        guard arguments.count >= 4 else {
+            return nil
+        }
+
+        enum SimplePrintMode {
+            case matchingLines
+            case count
+            case filesWithMatches
+            case filesWithoutMatch
+        }
+
+        var fixedStrings = false
+        var includeZero = false
+        var noUnicode = false
+        var nullTerminated = false
+        var crlfTerminated = false
+        var printMode = SimplePrintMode.matchingLines
+        var quiet = false
+        var unrestrictedCount = 0
+        var patterns: [String] = []
+        let path = arguments[arguments.count - 1]
+        let optionEndIndex = arguments.count - 1
+        var argumentIndex = 0
+
+        while argumentIndex < optionEndIndex {
+            let argument = arguments[argumentIndex]
+            if let handled = applySimpleSwiftDarwinLiteralCommonOption(
+                argument,
+                arguments: arguments,
+                argumentIndex: &argumentIndex,
+                optionEndIndex: optionEndIndex,
+                fixedStrings: &fixedStrings,
+                noUnicode: &noUnicode,
+                unrestrictedCount: &unrestrictedCount
+            ) {
+                guard handled else {
+                    return nil
+                }
+                argumentIndex += 1
+                continue
+            }
+
+            switch argument {
+            case "-e", "--regexp":
+                argumentIndex += 1
+                guard argumentIndex < optionEndIndex else {
+                    return nil
+                }
+                patterns.append(arguments[argumentIndex])
+            case "-q", "--quiet":
+                quiet = true
+            case "-l", "--files-with-matches":
+                printMode = .filesWithMatches
+            case "--files-without-match":
+                printMode = .filesWithoutMatch
+            case "-c", "--count":
+                printMode = .count
+            case "--include-zero":
+                includeZero = true
+            case "--no-include-zero":
+                includeZero = false
+            case "-0", "--null":
+                nullTerminated = true
+            case "--crlf":
+                crlfTerminated = true
+            case "--no-crlf":
+                crlfTerminated = false
+            case "--no-heading",
+                 "--no-json",
+                 "--no-stats",
+                 "--line-buffered",
+                 "--block-buffered",
+                 "--no-line-buffered":
+                break
+            case let inlineRegexp where inlineRegexp.hasPrefix("--regexp="):
+                patterns.append(String(inlineRegexp.dropFirst("--regexp=".count)))
+            case let inlineRegexp where inlineRegexp.hasPrefix("-e") && inlineRegexp.count > 2:
+                patterns.append(String(inlineRegexp.dropFirst(2)))
+            default:
+                return nil
+            }
+            argumentIndex += 1
+        }
+
+        guard patterns.count > 1,
+              path != "-",
+              let literals = explicitRegexpPatternLiterals(
+                patterns,
+                fixedStrings: fixedStrings,
+                allowPCREQuotedLiterals: allowPCREQuotedLiterals
+              ) else {
+            return nil
+        }
+
+        if quiet {
+            return SwiftDarwinLiteralPreflight.multiLiteralQuietExitCode(
+                path: path,
+                literals: literals
+            )
+        }
+
+        switch printMode {
+        case .matchingLines:
+            return SwiftDarwinLiteralPreflight.multiLiteralExitCode(
+                path: path,
+                literals: literals
+            )
+        case .count:
+            return SwiftDarwinLiteralPreflight.multiLiteralCountLineExitCode(
+                path: path,
+                literals: literals,
+                includeZero: includeZero,
+                maxCount: nil,
+                crlfTerminated: crlfTerminated
+            )
+        case .filesWithMatches, .filesWithoutMatch:
+            let outputPath = path.utf8.allSatisfy { $0 < 0x80 }
+                ? nil
+                : Self.preflightDisplayPathBytes(path, pathSeparator: nil)
+            return SwiftDarwinLiteralPreflight.multiLiteralPathOnlyExitCode(
+                path: path,
+                literals: literals,
+                printWhenMatched: printMode == .filesWithMatches,
+                nullTerminated: nullTerminated,
+                crlfTerminated: crlfTerminated,
+                outputPath: outputPath
+            )
+        }
     }
 
     private static func leadingArgumentsDisableConfigForPreflight(_ arguments: [String]) -> Bool {

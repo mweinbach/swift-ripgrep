@@ -10886,6 +10886,13 @@ struct MiscTests {
 
         """.utf8))
 
+        let inlineRepeatedRegexpOutput = try runExecutableData([
+            "-eneedle",
+            "--regexp=quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(inlineRepeatedRegexpOutput == repeatedRegexpOutput)
+
         let repeatedRegexpLineNumberOutput = try runExecutableData([
             "-n",
             "-e",
@@ -10947,6 +10954,17 @@ struct MiscTests {
         #expect(repeatedRegexpPathOnlyResult.status == 0)
         #expect(repeatedRegexpPathOnlyResult.stdout == Data("\(root.path("dense.txt"))\n".utf8))
         #expect(repeatedRegexpPathOnlyResult.stderr.isEmpty)
+
+        let inlineRepeatedRegexpNullPathOnlyResult = try runExecutableResult([
+            "--files-with-matches",
+            "--null",
+            "-emissing",
+            "--regexp=quiet",
+            root.path("dense.txt"),
+        ])
+        #expect(inlineRepeatedRegexpNullPathOnlyResult.status == 0)
+        #expect(inlineRepeatedRegexpNullPathOnlyResult.stdout == Data("\(root.path("dense.txt"))\0".utf8))
+        #expect(inlineRepeatedRegexpNullPathOnlyResult.stderr.isEmpty)
 
         let repeatedRegexpWithoutMatchResult = try runExecutableResult([
             "--files-without-match",
@@ -11185,6 +11203,14 @@ struct MiscTests {
         ], fixture: {})
         #expect(repeatedRegexpCountOutput == Data("4\n".utf8))
 
+        let inlineRepeatedRegexpCountOutput = try runExecutableData([
+            "-c",
+            "-eneedle",
+            "--regexp=quiet",
+            root.path("dense.txt"),
+        ], fixture: {})
+        #expect(inlineRepeatedRegexpCountOutput == repeatedRegexpCountOutput)
+
         let patternFileCountOutput = try runExecutableData([
             "-c",
             "-f",
@@ -11247,6 +11273,17 @@ struct MiscTests {
         #expect(quietCountResult.status == 0)
         #expect(quietCountResult.stdout.isEmpty)
         #expect(quietCountResult.stderr.isEmpty)
+
+        let invalidRepeatedRegexpResult = try runExecutableResult([
+            "-e",
+            "[",
+            "-e",
+            "needle",
+            root.path("dense.txt"),
+        ])
+        #expect(invalidRepeatedRegexpResult.status == 2)
+        #expect(invalidRepeatedRegexpResult.stdout.isEmpty)
+        #expect(!invalidRepeatedRegexpResult.stderr.isEmpty)
 
         let repeatedRegexpMaxCountCountOutput = try runExecutableData([
             "-c",
