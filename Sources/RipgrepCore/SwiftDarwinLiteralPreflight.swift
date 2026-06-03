@@ -6921,7 +6921,8 @@ public enum SwiftDarwinLiteralPreflight {
         guard !hasBinaryDetectionPrefix(data) else {
             return nil
         }
-        guard !dataContainsLiteralUsingSIMD(data, literal: literal) else {
+        guard !(dataContainsLiteralUsingRareAnchor(data, literal: literal)
+                ?? dataContainsLiteralUsingSIMD(data, literal: literal)) else {
             return nil
         }
         return data.count
@@ -6977,7 +6978,8 @@ public enum SwiftDarwinLiteralPreflight {
         guard !hasBinaryDetectionPrefix(data) else {
             return nil
         }
-        guard dataContainsLiteralUsingSIMD(data, literal: literal) else {
+        guard dataContainsLiteralUsingRareAnchor(data, literal: literal)
+                ?? dataContainsLiteralUsingSIMD(data, literal: literal) else {
             return data.count
         }
         guard let matchedLineCount = countASCIIWordMatchedLines(
@@ -7031,6 +7033,84 @@ public enum SwiftDarwinLiteralPreflight {
                     literalBase,
                     literal.count
                 ) != nil
+            }
+        }
+    }
+
+    private static func dataContainsLiteralUsingRareAnchor(_ data: Data, literal: [UInt8]) -> Bool? {
+        guard data.count >= 1024 * 1024,
+              literal.count >= 4,
+              data.count >= literal.count else {
+            return nil
+        }
+        return data.withUnsafeBytes { rawData in
+            guard let rawBase = rawData.baseAddress else {
+                return false
+            }
+            return literal.withUnsafeBufferPointer { literalBytes -> Bool? in
+                guard let literalBase = literalBytes.baseAddress else {
+                    return false
+                }
+                let haystack = rawBase.assumingMemoryBound(to: UInt8.self)
+                let sampleCount = min(data.count, 256 * 1024)
+                var byteCounts = [Int](repeating: 0, count: 256)
+                for offset in 0..<sampleCount {
+                    byteCounts[Int(haystack[offset])] += 1
+                }
+
+                var anchorOffset = 0
+                var anchorByteCount = Int.max
+                for offset in 0..<(literal.count - 1) {
+                    let count = byteCounts[Int(literalBase[offset])]
+                    if count < anchorByteCount {
+                        anchorOffset = offset
+                        anchorByteCount = count
+                    }
+                }
+                guard anchorByteCount * 32 <= sampleCount else {
+                    return nil
+                }
+
+                var anchorPairCount = 0
+                var sampleOffset = 0
+                while sampleOffset < sampleCount - 1 {
+                    if haystack[sampleOffset] == literalBase[anchorOffset],
+                       haystack[sampleOffset + 1] == literalBase[anchorOffset + 1] {
+                        anchorPairCount += 1
+                        guard anchorPairCount * 256 <= sampleCount else {
+                            return nil
+                        }
+                    }
+                    sampleOffset += 1
+                }
+
+                var anchorSearchOffset = anchorOffset
+                while anchorSearchOffset <= data.count - 2 {
+                    let foundPointer = rg_memmem_simple(
+                        haystack.advanced(by: anchorSearchOffset),
+                        data.count - anchorSearchOffset,
+                        literalBase.advanced(by: anchorOffset),
+                        2
+                    )
+                    guard let foundPointer else {
+                        return false
+                    }
+                    let anchorStart = haystack.distance(to: foundPointer)
+                    let matchStart = anchorStart - anchorOffset
+                    if matchStart >= 0,
+                       literal.count <= data.count - matchStart {
+                        var matched = true
+                        for index in 0..<literal.count where haystack[matchStart + index] != literalBase[index] {
+                            matched = false
+                            break
+                        }
+                        if matched {
+                            return true
+                        }
+                    }
+                    anchorSearchOffset = anchorStart + 1
+                }
+                return false
             }
         }
     }

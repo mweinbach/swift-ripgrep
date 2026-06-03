@@ -3260,6 +3260,7 @@ struct MiscTests {
         try root.write("   \n  needle space\n", to: "trim-space.txt")
         let lateOneActivePadding = String(repeating: "ordinary hay row\n", count: 140_000)
         try root.write(lateOneActivePadding + "prefix needle suffix\n", to: "late-one-active.txt")
+        try root.write(lateOneActivePadding + "nt false positive\n", to: "rare-anchor-false-positive.txt")
         try root.write("quiet one\nneedle skip\nquiet two\nneedle skip two\ntail quiet", to: "invert.txt")
         try root.write("quiet one\nNeedle skip\nafter one\nNEEDLE skip two\ntail quiet", to: "invert-case.txt")
         try root.write("needle\ntail\n", to: "invert-patterns.txt")
@@ -5267,6 +5268,16 @@ struct MiscTests {
             root.path("late-one-active.txt"),
         ], fixture: {})
         #expect(lateOneActiveMultiLiteralCountOutput == Data("1\n".utf8))
+
+        let rareAnchorSingleLiteralCountOutput = try runExecutableResult([
+            "-c",
+            "--include-zero",
+            "absentliteral",
+            root.path("rare-anchor-false-positive.txt"),
+        ])
+        #expect(rareAnchorSingleLiteralCountOutput.stdout == Data("0\n".utf8))
+        #expect(rareAnchorSingleLiteralCountOutput.stderr.isEmpty)
+        #expect(rareAnchorSingleLiteralCountOutput.status == 1)
 
         let allPresentMultiLiteralOutput = try runExecutableData([
             "-e",
