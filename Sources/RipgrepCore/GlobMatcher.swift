@@ -318,7 +318,7 @@ public struct GlobMatcher: Equatable {
     }
 
     var canUseUnscopedBasenameDecisions: Bool {
-        allRulesUnanchoredBasenameOnly
+        isUnscoped && allRulesUnanchoredBasenameOnly
     }
 
     public var excludesOnlyHiddenPaths: Bool {

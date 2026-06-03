@@ -1606,10 +1606,11 @@ public struct FileWalker: @unchecked Sendable {
                 if child.kind == .symbolicLink {
                     continue
                 }
+                let childRelativePath = relativePathPrefix + child.name
                 let isDirectory = child.kind.isDirectory
                 guard shouldEmitFastFilePath(
                     child: child,
-                    childRelativePath: child.name,
+                    childRelativePath: childRelativePath,
                     isDirectory: isDirectory,
                     ignoreStack: directoryIgnoreStack,
                     options: options,
@@ -1618,7 +1619,6 @@ public struct FileWalker: @unchecked Sendable {
                     continue
                 }
                 if child.kind.isDirectory {
-                    let childRelativePath = relativePathPrefix + child.name
                     var childLogicalPathBytes = logicalPathBytes
                     childLogicalPathBytes.append(UInt8(ascii: "/"))
                     appendUTF8(child.name, to: &childLogicalPathBytes)
@@ -1846,23 +1846,27 @@ public struct FileWalker: @unchecked Sendable {
                 if child.kind == .symbolicLink {
                     continue
                 }
+                let childRelativePath = relativePathPrefix + child.name
                 let isDirectory = child.kind.isDirectory
                 if !options.hidden,
                    child.isHidden,
                    !isIncludedByIgnore(
-                       relativePath: child.name,
+                       relativePath: childRelativePath,
                        basename: child.name,
                        isDirectory: isDirectory,
                        ignoreStack: directoryIgnoreStack
                    ) {
                     continue
                 }
-                if !directoryIgnoreStack.allows(relativePath: child.name, basename: child.name, isDirectory: isDirectory) {
+                if !directoryIgnoreStack.allows(
+                    relativePath: childRelativePath,
+                    basename: child.name,
+                    isDirectory: isDirectory
+                ) {
                     filtered = true
                     continue
                 }
                 if child.kind.isDirectory {
-                    let childRelativePath = relativePathPrefix + child.name
                     try walkFilePathsInOutputOrder(
                         directoryPath: directoryPathPrefix + child.name,
                         logicalDirectoryPath: joinedPath(logicalDirectoryPath, child.name),
@@ -2164,23 +2168,27 @@ public struct FileWalker: @unchecked Sendable {
             if child.kind == .symbolicLink {
                 return
             }
+            let childRelativePath = relativePathPrefix + child.name
             let isDirectory = child.kind.isDirectory
             if !options.hidden,
                child.isHidden,
                !isIncludedByIgnore(
-                   relativePath: child.name,
+                   relativePath: childRelativePath,
                    basename: child.name,
                    isDirectory: isDirectory,
                    ignoreStack: directoryIgnoreStack
                ) {
                 return
             }
-            if !directoryIgnoreStack.allows(relativePath: child.name, basename: child.name, isDirectory: isDirectory) {
+            if !directoryIgnoreStack.allows(
+                relativePath: childRelativePath,
+                basename: child.name,
+                isDirectory: isDirectory
+            ) {
                 filtered = true
                 return
             }
             if child.kind.isDirectory {
-                let childRelativePath = relativePathPrefix + child.name
                 try walkFastSearchFilesInOutputOrder(
                     directoryPath: directoryPathPrefix + child.name,
                     logicalDirectoryPath: joinedPath(logicalDirectoryPath, child.name),
