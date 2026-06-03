@@ -8,6 +8,115 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Word literal absent proof - 2026-06-03
+
+The simple Darwin literal preflight now skips the heavier regex-literal parser
+when a pattern is already byte-plain, and the word/literal no-match paths first
+prove that the raw literal bytes occur before doing boundary or line-output
+work. This keeps absent `-w` searches on the same cheap raw-byte proof as
+ordinary literals while preserving the existing Unicode-boundary fallback once
+the bytes are present.
+
+Validation:
+
+- Patched Swift stdout, stderr, and status matched Rust for ASCII word misses,
+  quiet word misses, Unicode-haystack word misses, and Unicode-boundary hits.
+- Added executable regression coverage for absent word output in the existing
+  word-literal preflight test.
+- `swift build -c release`, `xcrun swift test --filter
+  MiscTests/executableWordLiteralPreflightPreservesUnicodeFallbackOutput`,
+  and `xcrun swift test --filter
+  FeatureTests/quietRequiredLiteralRegexRecursiveSearchReturnsOnlyExitStatus`
+  passed before recording these results.
+
+The focused A/B used `--shell=none`, 10 warm-ups, and 100 timed runs against
+the existing `/tmp/swift-rg-bench/match-ascii-46m.txt` fixture. The baseline
+binary was built from committed `6204d15` in
+`/tmp/swift-rg-baseline-6204d15`.
+
+| Case | Current Swift | Baseline Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `-w absentliteral` | 9.75 ms median / 10.07 ms mean | 9.92 ms / 10.23 ms | 8.91 ms / 9.12 ms |
+| `-q -w absentliteral` | 9.75 ms / 10.07 ms | 9.90 ms / 10.21 ms | 8.91 ms / 9.03 ms |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/word-absent-baseline-v-current-noshell.json` and
+`/tmp/swift-rg-bench/word-absent-quiet-baseline-v-current-noshell.json`.
+
+## Simple executable literal preflight - 2026-06-03
+
+The Swift Darwin executable preflight now recognizes the default two-argument
+`pattern file` shape and the simple `-n`/`--line-number pattern file` shape
+before entering the full preflight option parser. It still uses the existing
+Swift literal writer and scanner; this only removes avoidable argument-state
+setup for the most common single-file literal searches. The lazy stdout buffer
+used by simple line output is now class-backed so Swift 6.2 can compile the
+release optimizer path while keeping no-match scans allocation-free.
+
+Line-numbered literal output also reuses the current scan offset as the line
+start when the combined literal/newline probe proves that no newline appeared
+before the match. This avoids walking backward across dense same-line spans.
+
+Validation:
+
+- Patched Swift stdout, stderr, and status matched Rust for absent, hit,
+  line-number hit, `--line-number`, line-number absent, no-final-newline,
+  `--no-mmap`, field-separator, line-prefix error, heading, and binary cases.
+- `swift build -c release` passed after reshaping the lazy stdout buffer away
+  from the Swift 6.2 boxed-optional verifier crash.
+- `xcrun swift test --filter MiscTests`,
+  `xcrun swift test --filter BinaryTests`, full `xcrun swift test`, and
+  `SWIFT_RIPGREP_PARITY=1 xcrun swift test --filter ParityHarnessTests` passed.
+
+The focused A/B used the existing
+`/tmp/swift-rg-bench/match-ascii-46m.txt` fixture. The saved baseline binary was
+`/tmp/swift-rg-bench/baseline-2797b21-numbered-ripgrep`.
+
+| Case | Current Swift | Baseline Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `-n literal` | 46.1 ms mean / 43.8-52.6 ms range | 84.5 ms / 80.5-90.6 ms | 78.0 ms / 74.8-83.7 ms |
+| `literal` guard | 34.7 ms / 33.4-38.4 ms | 38.1 ms / 36.4-43.9 ms | 40.9 ms / 39.1-45.2 ms |
+| `absentliteral` guard | 11.4 ms / 10.1-13.6 ms | 15.4 ms / 13.2-18.9 ms | 7.9 ms / 7.1-10.1 ms |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/numbered-simple-preflight-final-1780446079.json`,
+`/tmp/swift-rg-bench/swiftpreflight-plain-guard-1780445862.json`, and
+`/tmp/swift-rg-bench/swiftpreflight-absent-guard-1780445826.json`.
+
+## Searcher literal passthru and lazy line output - 2026-06-02
+
+The normal searcher path can reuse the Swift Darwin literal passthru writer for
+single-file, single-literal `--passthru` matching-line output when the
+executable preflight is bypassed by config handling. The same literal writer
+now also defers its stdout buffer allocation for simple matching-line output
+until the first pending line span is actually written. This keeps the path
+Swift-only, avoids materializing and rewalking the haystack through the generic
+matcher, and lets no-match simple-line scans finish without allocating the
+writer buffer. The passthru behavior is otherwise unchanged.
+
+Validation:
+
+- Patched Swift stdout, stderr, and status matched Rust for absent, hit,
+  no-final-newline, line-number passthru, and a `--trim` absent-literal guard.
+- `swift build -c release`, `swift test --filter MiscTests`, and
+  `swift test --filter BinaryTests` passed before recording these results.
+- A rejected score-1 proof-tail memmem experiment moved `absentliteral` only
+  from 16.1 ms to 15.2 ms while regressing a known 13-byte guardrail to 13.2
+  ms, so it was dropped.
+
+The retained A/B used a regenerated 250,000-line / 7.8 MiB
+`/tmp/swift-rg-candidates/passthru.txt` fixture with every tenth line matching.
+`RIPGREP_CONFIG_PATH=/tmp/none` forces the normal searcher route instead of the
+top-level executable preflight. The saved baseline binary was
+`/tmp/swift-rg-bench/baseline-3183200-combined-ripgrep`.
+
+| Case | Current Swift | Baseline Swift | Rust |
+| --- | ---: | ---: | ---: |
+| forced-searcher `--passthru needle` | 12.4 ms mean / 11.9-13.0 ms range | 34.132 s / 33.975-34.261 s | 13.4 ms / 13.2-13.7 ms |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/searcher-passthru-small-1780439001.json`.
+
 ## Explicit ignore anchor prefilter - 2026-06-02
 
 Explicit `--ignore-file` matchers now drop anchored rules whose first path
