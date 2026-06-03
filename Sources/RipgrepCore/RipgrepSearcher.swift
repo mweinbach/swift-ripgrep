@@ -8150,28 +8150,29 @@ public struct RipgrepSearcher: @unchecked Sendable {
             || lineOutput else {
             return nil
         }
-
         let classes = fastPath.classes
         let width = classes.count
         guard width > 0, data.count >= width else {
             return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: data.count, searched: true)
         }
-        let hasFirstClassCandidate = data.withUnsafeBytes { rawBuffer -> Bool in
-            let bytes = rawBuffer.bindMemory(to: UInt8.self)
-            guard let baseAddress = bytes.baseAddress else {
-                return false
+        if !firstMatchOutput {
+            let hasFirstClassCandidate = data.withUnsafeBytes { rawBuffer -> Bool in
+                let bytes = rawBuffer.bindMemory(to: UInt8.self)
+                guard let baseAddress = bytes.baseAddress else {
+                    return false
+                }
+                return asciiFixedClassContainsCandidate(
+                    baseAddress: baseAddress,
+                    dataCount: data.count,
+                    byteClass: classes[0]
+                )
             }
-            return asciiFixedClassContainsCandidate(
-                baseAddress: baseAddress,
-                dataCount: data.count,
-                byteClass: classes[0]
-            )
-        }
-        guard hasFirstClassCandidate else {
-            return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: data.count, searched: true)
-        }
-        guard asciiFixedClassHasRequiredLaterClassCandidate(data, classes: classes) else {
-            return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: data.count, searched: true)
+            guard hasFirstClassCandidate else {
+                return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: data.count, searched: true)
+            }
+            guard asciiFixedClassHasRequiredLaterClassCandidate(data, classes: classes) else {
+                return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: data.count, searched: true)
+            }
         }
 
         if countOutput || pathStatsOutput || jsonQuietSummaryOutput || quietStatsOutput {

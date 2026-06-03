@@ -8,6 +8,39 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Fixed-class first-match proof skip - 2026-06-03
+
+ASCII fixed-class first-match outputs now skip the whole-buffer first-class and
+later-class proof scans and go straight to the first-match scanner. Count,
+stats, and matching-line outputs keep the existing proof scans. This avoids an
+extra proof pass for path-only and quiet outputs that only need to know whether
+the file has a match.
+
+Validation:
+
+- Patched Swift stdout, stderr, and status matched Rust for `-l`,
+  `--files-without-match`, and `-q` `[A-Z]{5}` searches across fixed-early,
+  fixed-late, and no-uppercase 46 MiB fixtures.
+- Full `swift test`, `SWIFT_RIPGREP_PARITY=1 swift test --filter
+  ParityHarnessTests/testMatchesRustRipgrepOnSelectedFixtures`,
+  `scripts/check-no-external-deps.sh --skip-build`, and `git diff --check`
+  passed before recording these results.
+
+The retained A/B used a clean `28ce4c3` baseline binary built in
+`/tmp/swift-rg-baseline-28ce4c3`, 8 warm-ups, and 80 timed runs. A rejected
+follow-up that also skipped proofs for simple matching-line output barely moved
+fixed-late line rows, so the retained change stays first-match-only.
+
+| Case | Current Swift | Prior Swift |
+| --- | ---: | ---: |
+| `-l '[A-Z]{5}' fixed-early-uppercase-46m.txt` | 5.3 ms mean / 5.1-6.1 ms range | 5.4 ms / 5.0-6.8 ms |
+| `-l '[A-Z]{5}' fixed-late-uppercase-46m.txt` | 8.8 ms / 8.2-11.0 ms | 8.8 ms / 8.5-9.7 ms |
+| `-l '[A-Z]{5}' no-uppercase-46m.txt` | 8.4 ms / 8.1-8.8 ms | 8.8 ms / 8.5-10.0 ms |
+| `--files-without-match '[A-Z]{5}' no-uppercase-46m.txt` | 8.5 ms / 8.1-9.5 ms | 9.4 ms / 8.7-10.8 ms |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/fixed-class-firstmatch-skipproof-final-1780458382.json`.
+
 ## Quiet ASCII run-suffix prefix window - 2026-06-03
 
 Quiet ASCII run-suffix searches now spend a 512-file output-order prefix
