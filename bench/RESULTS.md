@@ -29,6 +29,18 @@ controls. `swift build -c release` passed before benchmarking.
 Raw hyperfine export:
 `/tmp/swift-rg-bench/vcs-context-skip-ab-1780525704.json`.
 
+Rejected follow-up probe:
+
+- A quiet file-listing existence probe checked allowed files in each directory
+  before recursing into allowed child directories, since `--quiet --files`
+  prints no paths. It preserved status/stdout/stderr against the saved
+  `be28a0d` binary for default, hidden, no-vcs, no-global, explicit-ignore,
+  and missing-root quiet file-listing controls, but the A/B was neutral to
+  slower: default measured 7.4 ms for the probe versus 7.2 ms baseline,
+  hidden was noisy at 6.5 ms versus 7.1 ms, and no-vcs regressed to 5.1 ms
+  versus 4.7 ms. The source probe was reverted. Raw export:
+  `/tmp/swift-rg-bench/file-first-quiet-ab-1780526377.json`.
+
 ## Extended root VCS-context reuse to file-path walks - 2026-06-03
 
 The direct Darwin file-path writer and the general recursive haystack walk now
