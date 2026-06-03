@@ -8,6 +8,22 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected direct path-only literal containment - 2026-06-03
+
+A follow-up probe changed exact literal path-only output (`-l` and
+`--files-without-match`) to use a direct `open`/`mmap` containment helper
+instead of the existing mapped `Data` containment helper. Targeted Swift output
+matched Rust for matching path output, files-without-match output, custom path
+separators, and BOM fallback controls, but the same-session A/B was flat:
+
+| Case | Prototype Swift | Baseline `b07bfa7` | Rust |
+| --- | ---: | ---: | ---: |
+| `-l literal match-ascii-46m.txt` | 5.4 ms mean / 5.1-7.7 ms range | 5.6 ms / 5.2-7.4 ms | 3.3 ms / 2.7-7.0 ms |
+| `--files-without-match absentliteral match-ascii-46m.txt` | 10.0 ms / 9.7-10.7 ms | 10.1 ms / 9.7-11.3 ms | 6.8 ms / 6.5-8.9 ms |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/direct-pathonly-ab-1780464478.json`.
+
 ## Fixed-class plain max-columns preview route - 2026-06-03
 
 Plain fixed-class `--max-columns-preview` output now has a lean route for the
