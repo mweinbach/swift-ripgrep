@@ -40,6 +40,21 @@ Rejected follow-up probe:
   hidden was noisy at 6.5 ms versus 7.1 ms, and no-vcs regressed to 5.1 ms
   versus 4.7 ms. The source probe was reverted. Raw export:
   `/tmp/swift-rg-bench/file-first-quiet-ab-1780526377.json`.
+- Extending the hidden-only global-ignore elision from file listing to search
+  preserved status/stdout/stderr against the saved `86e6af2` binary for quiet
+  hit, quiet miss, hidden quiet hit, no-global quiet hit, single-file hit,
+  hidden single-file hit, and file-listing controls. It regressed the current
+  early-hit target: `-q SCHED linux` measured 8.6 ms for the probe versus
+  8.0 ms baseline, while the absent-literal miss stayed neutral at 1.300 s
+  versus 1.302 s. The source probe was reverted. Raw export:
+  `/tmp/swift-rg-bench/search-hidden-global-skip-ab-1780527324.json`.
+- Forcing `--no-mmap` on quiet byte-literal search did not help the early-hit
+  target: `-q SCHED linux` measured 9.2 ms with `--no-mmap` versus 8.9 ms
+  automatic mmap, and Rust also slowed slightly with `--no-mmap`. The
+  full-tree absent-literal guard was much slower under `--no-mmap`, so the
+  benchmark was stopped after the default-mmap miss completed at 1.419 s.
+  Raw partial export:
+  `/tmp/swift-rg-bench/quiet-mmap-isolation-1780526695.json`.
 
 ## Extended root VCS-context reuse to file-path walks - 2026-06-03
 
