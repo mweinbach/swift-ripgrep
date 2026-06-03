@@ -6403,6 +6403,23 @@ struct RipgrepCommand {
         }
     }
 
+    private static func simpleSwiftDarwinLiteralNonNegativeInteger(_ value: String) -> Int? {
+        guard isSimpleSwiftDarwinLiteralNonNegativeInteger(value) else {
+            return nil
+        }
+        return Int(value)
+    }
+
+    private static func simpleSwiftDarwinLiteralInlineMaxCount(_ argument: String) -> String? {
+        if argument.hasPrefix("--max-count=") {
+            return String(argument.dropFirst("--max-count=".count))
+        }
+        if argument.hasPrefix("-m"), argument.count > 2 {
+            return String(argument.dropFirst(2))
+        }
+        return nil
+    }
+
     private static func applySimpleSwiftDarwinLiteralCommonOption(
         _ argument: String,
         arguments: [String],
@@ -6500,6 +6517,7 @@ struct RipgrepCommand {
         var fixedStrings = false
         var heading = false
         var lineNumber = false
+        var maxCount: Int?
         var noUnicode = false
         var quiet = false
         var unrestrictedCount = 0
@@ -6537,6 +6555,13 @@ struct RipgrepCommand {
                 heading = false
             case "-n", "--line-number":
                 lineNumber = true
+            case "-m", "--max-count":
+                argumentIndex += 1
+                guard argumentIndex < optionEndIndex,
+                      let parsedMaxCount = simpleSwiftDarwinLiteralNonNegativeInteger(arguments[argumentIndex]) else {
+                    return nil
+                }
+                maxCount = parsedMaxCount
             case "-q", "--quiet":
                 quiet = true
             case "-w", "--word-regexp":
@@ -6550,6 +6575,12 @@ struct RipgrepCommand {
             case "-nw", "-wn":
                 lineNumber = true
                 wordRegexp = true
+            case let inlineMaxCount where simpleSwiftDarwinLiteralInlineMaxCount(inlineMaxCount) != nil:
+                guard let rawMaxCount = simpleSwiftDarwinLiteralInlineMaxCount(inlineMaxCount),
+                      let parsedMaxCount = simpleSwiftDarwinLiteralNonNegativeInteger(rawMaxCount) else {
+                    return nil
+                }
+                maxCount = parsedMaxCount
             default:
                 return nil
             }
@@ -6573,6 +6604,9 @@ struct RipgrepCommand {
               !literal.contains(UInt8(ascii: "\n")) else {
             return nil
         }
+        if maxCount == 0 {
+            return nil
+        }
         if wordRegexp {
             if quiet {
                 return SwiftDarwinLiteralPreflight.wordQuietExitCode(
@@ -6581,6 +6615,16 @@ struct RipgrepCommand {
                 )
             }
             let displayPath = withFilename ? Self.preflightDisplayPathBytes(path, pathSeparator: nil) : []
+            if let maxCount {
+                return SwiftDarwinLiteralPreflight.multiLiteralWordLineExitCode(
+                    path: path,
+                    literals: [literal],
+                    maxCount: maxCount,
+                    lineNumber: lineNumber,
+                    linePrefix: withFilename && !heading ? displayPath + [UInt8(ascii: ":")] : [],
+                    headingPrefix: heading && withFilename ? displayPath + [UInt8(ascii: "\n")] : []
+                )
+            }
             return SwiftDarwinLiteralPreflight.wordLineExitCode(
                 path: path,
                 literal: literal,
@@ -6596,6 +6640,27 @@ struct RipgrepCommand {
             )
         }
         let displayPath = withFilename ? Self.preflightDisplayPathBytes(path, pathSeparator: nil) : []
+        if let maxCount {
+            guard maxCount > 0 else {
+                return nil
+            }
+            if let noMatchExitCode = SwiftDarwinLiteralPreflight.noMatchExitCode(
+                path: path,
+                literal: literal,
+                asciiCaseInsensitive: false,
+                wordRegexp: false
+            ) {
+                return noMatchExitCode
+            }
+            return SwiftDarwinLiteralPreflight.limitedLineExitCode(
+                path: path,
+                literal: literal,
+                maxCount: maxCount,
+                lineNumber: lineNumber,
+                linePrefix: withFilename && !heading ? displayPath + [UInt8(ascii: ":")] : [],
+                headingPrefix: heading && withFilename ? displayPath + [UInt8(ascii: "\n")] : []
+            )
+        }
         return SwiftDarwinLiteralPreflight.exitCode(
             path: path,
             literal: literal,

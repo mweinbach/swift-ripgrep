@@ -242,6 +242,43 @@ Raw hyperfine exports:
 `/tmp/swift-rg-bench/simple-line-neutral-preflight-ab-1780473820.json` and
 `/tmp/swift-rg-bench/simple-line-neutral-followup-1780473845.json`.
 
+## Retained simple max-count preflight routing - 2026-06-03
+
+The simple Swift Darwin executable literal line parser now recognizes positive
+`-m` / `--max-count` values, including inline `-mN` and
+`--max-count=N`. For non-word literal searches it first runs the existing fast
+no-match probe, then uses the existing bounded line writer only when a match is
+present. Word-regexp max-count rows use the existing bounded multi-literal word
+writer so absent word searches can also avoid the broad parser. Zero max-count
+still falls through to the established broad path to preserve validation and
+missing-file behavior. A same-session A/B against checkpoint `3994934`, with
+Rust included, measured:
+
+| Case | Current Swift | Baseline `3994934` | Rust |
+| --- | ---: | ---: | ---: |
+| `-m 1 absentliteral match-ascii-46m.txt` | 9.13 ms median / 10.45 ms mean | 27.67 ms / 27.88 ms | 8.23 ms / 8.19 ms |
+| `--max-count=1 absentliteral match-ascii-46m.txt` | 10.23 ms / 10.22 ms | 26.62 ms / 26.69 ms | 7.17 ms / 7.24 ms |
+| `-m 1 literal match-ascii-46m.txt` | 3.32 ms / 3.38 ms | 5.61 ms / 6.08 ms | 3.93 ms / 4.04 ms |
+| `-m 1 -H literal match-ascii-46m.txt` | 4.34 ms / 4.24 ms | 5.16 ms / 5.21 ms | 3.16 ms / 3.11 ms |
+| `-m 1 -n literal match-ascii-46m.txt` | 3.79 ms / 3.85 ms | 5.22 ms / 5.20 ms | 2.54 ms / 2.54 ms |
+| `-w -m 1 absentliteral match-ascii-46m.txt` | 9.25 ms / 9.28 ms | 2.294 s / 2.288 s | 6.60 ms / 6.64 ms |
+
+An earlier broader A/B also measured `-m 10 literal` at 2.69 ms median /
+2.69 ms mean versus 4.70 ms / 4.76 ms for the saved Swift baseline and
+2.10 ms / 2.14 ms for Rust. Output, stderr, and status matched the previous
+Swift binary and the sibling Rust oracle for separated and inline max-count
+matches and misses, zero max-count fallback, prefixed and numbered max-count
+output, word max-count matches and misses, and quiet max-count rows.
+
+The remaining `-w -m 1 literal` row on this corpus is still a boundary-rejected
+candidate hotspot: current Swift remains at roughly 6.59 s, matching the prior
+Swift behavior, while Rust is about 41 ms. That needs a separate boundary
+scanner improvement rather than parser routing.
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/simple-maxcount-preflight-ab-1780474362.json` and
+`/tmp/swift-rg-bench/simple-maxcount-word-followup-1780474602.json`.
+
 ## Rejected word/path no-match preflight probes - 2026-06-03
 
 A follow-up probe tried to reuse the no-match byte-count primitives before the

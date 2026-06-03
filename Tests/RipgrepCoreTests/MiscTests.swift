@@ -2754,6 +2754,14 @@ struct MiscTests {
         ], fixture: {})
         #expect(maxCountOutput == Data("literal one\nliteral two\nliteral three\n".utf8))
 
+        let inlineMaxCountOutput = try runExecutableData([
+            "--no-config",
+            "--max-count=2",
+            "literal",
+            root.path("simple.txt"),
+        ], fixture: {})
+        #expect(inlineMaxCountOutput == Data("literal one\nliteral two\n".utf8))
+
         let wordOutput = try runExecutableData([
             "--no-config",
             "-w",
@@ -2847,6 +2855,27 @@ struct MiscTests {
                 process.terminationStatus
             )
         }
+
+        let maxCountNoMatch = try runExecutableStatusData([
+            "--no-config",
+            "-m",
+            "1",
+            "missing",
+            root.path("simple.txt"),
+        ])
+        #expect(maxCountNoMatch.status == 1)
+        #expect(maxCountNoMatch.stdout.isEmpty)
+        #expect(maxCountNoMatch.stderr.isEmpty)
+
+        let wordMaxCountOutput = try runExecutableData([
+            "--no-config",
+            "-w",
+            "-m",
+            "1",
+            "literal",
+            root.path("word.txt"),
+        ], fixture: {})
+        #expect(wordMaxCountOutput == Data("literal\n".utf8))
 
         let noMmapNeutralOutput = try runExecutableData([
             "--no-config",
