@@ -2877,6 +2877,28 @@ struct MiscTests {
         ], fixture: {})
         #expect(wordMaxCountOutput == Data("literal\n".utf8))
 
+        let prefixedWordMaxCountOutput = try runExecutableData([
+            "--no-config",
+            "-H",
+            "-w",
+            "-m",
+            "1",
+            "literal",
+            root.path("word.txt"),
+        ], fixture: {})
+        #expect(prefixedWordMaxCountOutput == Data("\(root.path("word.txt")):literal\n".utf8))
+
+        let numberedWordMaxCountOutput = try runExecutableData([
+            "--no-config",
+            "-n",
+            "-w",
+            "-m",
+            "1",
+            "literal",
+            root.path("word.txt"),
+        ], fixture: {})
+        #expect(numberedWordMaxCountOutput == Data("1:literal\n".utf8))
+
         let noMmapNeutralOutput = try runExecutableData([
             "--no-config",
             "--no-mmap",

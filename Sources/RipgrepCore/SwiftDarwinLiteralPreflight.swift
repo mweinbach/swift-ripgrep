@@ -11598,8 +11598,6 @@ private func writeBoundedASCIIWordMatchedLines(
         }
         let base = rawBase.assumingMemoryBound(to: UInt8.self)
         var searchOffset = 0
-        var rejectedBoundaryCandidates = 0
-        let maxRejectedBoundaryCandidates = 128
         let newline = UInt8(ascii: "\n")
         var pendingLines: [PendingLine] = []
         pendingLines.reserveCapacity(min(maxCount, 1024))
@@ -11673,12 +11671,11 @@ private func writeBoundedASCIIWordMatchedLines(
                                 break
                             }
 
-                            rejectedBoundaryCandidates += 1
-                            guard rejectedBoundaryCandidates <= maxRejectedBoundaryCandidates else {
-                                needsFallback = true
-                                return
-                            }
-                            literalSearchOffset = matchStart + 1
+                            literalSearchOffset = rgSwiftNextASCIIWordSearchOffset(
+                                base: base,
+                                dataCount: data.count,
+                                matchEnd: matchEnd
+                            )
                         }
                     }
                     if needsFallback {
@@ -11785,7 +11782,6 @@ private func writeASCIIWordMatchedLines(
         var searchOffset = 0
         var matchedLineCount = 0
         var rejectedBoundaryCandidates = 0
-        let maxRejectedBoundaryCandidates = 128
         var currentLineNumber = 1
         var lineCountOffset = 0
         var emittedHeading = false
@@ -11793,6 +11789,7 @@ private func writeASCIIWordMatchedLines(
         var pendingOutputStart: Int?
         var pendingOutputEnd = 0
         var pendingNeedsFinalNewline = false
+        let maxRejectedBoundaryCandidates = maxCount == nil ? 128 : nil
 
         func flushPendingSimpleOutput() -> Bool {
             guard let start = pendingOutputStart else {
@@ -11904,11 +11901,16 @@ private func writeASCIIWordMatchedLines(
                             }
 
                             rejectedBoundaryCandidates += 1
-                            guard rejectedBoundaryCandidates <= maxRejectedBoundaryCandidates else {
+                            if let maxRejectedBoundaryCandidates,
+                               rejectedBoundaryCandidates > maxRejectedBoundaryCandidates {
                                 needsFallback = true
                                 return
                             }
-                            literalSearchOffset = matchStart + 1
+                            literalSearchOffset = rgSwiftNextASCIIWordSearchOffset(
+                                base: base,
+                                dataCount: data.count,
+                                matchEnd: matchEnd
+                            )
                         }
                     }
                     if needsFallback {
@@ -12072,6 +12074,20 @@ private func isASCIIWordBoundaryMatch(
         }
     }
     return true
+}
+
+@inline(__always)
+private func rgSwiftNextASCIIWordSearchOffset(
+    base: UnsafePointer<UInt8>,
+    dataCount: Int,
+    matchEnd: Int
+) -> Int {
+    var offset = matchEnd
+    while offset < dataCount,
+          rgSwiftIsASCIIRegexWordByte(base[offset]) {
+        offset += 1
+    }
+    return offset
 }
 
 private func rgSwiftContainsNonASCIIByte(_ base: UnsafePointer<UInt8>, count: Int) -> Bool {

@@ -270,14 +270,44 @@ Swift binary and the sibling Rust oracle for separated and inline max-count
 matches and misses, zero max-count fallback, prefixed and numbered max-count
 output, word max-count matches and misses, and quiet max-count rows.
 
-The remaining `-w -m 1 literal` row on this corpus is still a boundary-rejected
-candidate hotspot: current Swift remains at roughly 6.59 s, matching the prior
-Swift behavior, while Rust is about 41 ms. That needs a separate boundary
-scanner improvement rather than parser routing.
+At this checkpoint, the remaining `-w -m 1 literal` row on this corpus was
+still a boundary-rejected candidate hotspot: current Swift remained at roughly
+6.59 s, matching the prior Swift behavior, while Rust was about 41 ms. That
+needed a separate boundary scanner improvement rather than parser routing.
 
 Raw hyperfine exports:
 `/tmp/swift-rg-bench/simple-maxcount-preflight-ab-1780474362.json` and
 `/tmp/swift-rg-bench/simple-maxcount-word-followup-1780474602.json`.
+
+## Retained bounded word-boundary max-count candidate skipping - 2026-06-03
+
+Bounded Swift Darwin word-regexp line output now advances rejected ASCII
+word-boundary candidates to the end of the current ASCII regex word instead of
+probing every embedded suffix. The bounded no-prefix writer no longer needs the
+128 rejected-candidate fallback, and the general word writer keeps that fallback
+for unbounded output while allowing positive max-count searches to continue
+until the requested output limit or end of file. This preserves the existing
+Unicode-boundary fallback and only changes the dense ASCII candidate path. A
+same-session A/B against the saved prepatch binary, with Rust included,
+measured:
+
+| Case | Current Swift | Prepatch Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `-w -m 1 literal match-ascii-46m.txt` | 14.71 ms median / 14.72 ms mean | 6.727 s / 6.717 s | 43.33 ms / 43.27 ms |
+| `-w --max-count=1 literal match-ascii-46m.txt` | 16.70 ms / 16.87 ms | 6.716 s / 6.693 s | 43.72 ms / 43.70 ms |
+| `-w -m 1 absentliteral match-ascii-46m.txt` | 10.07 ms / 10.12 ms | 10.92 ms / 10.96 ms | 7.21 ms / 7.21 ms |
+| `-H -w -m 1 literal match-ascii-46m.txt` | 16.04 ms / 16.04 ms | 6.514 s / 6.549 s | 42.51 ms / 42.67 ms |
+| `-n -w -m 1 literal match-ascii-46m.txt` | 16.06 ms / 16.12 ms | 6.556 s / 6.590 s | 44.02 ms / 44.09 ms |
+
+Release stdout, stderr, and status matched the sibling Rust oracle on the dense
+ASCII fixture for separated and inline word max-count misses, absent word
+max-count misses, prefixed and numbered word max-count misses, plus non-word
+max-count match and miss controls. Executable regression coverage now includes
+word max-count output with filename and line-number prefixes.
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/word-boundary-skip-ab-1780475420.json` and
+`/tmp/swift-rg-bench/word-boundary-skip-prefixed-ab-1780475511.json`.
 
 ## Rejected word/path no-match preflight probes - 2026-06-03
 
