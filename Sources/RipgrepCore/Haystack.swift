@@ -431,6 +431,7 @@ public struct FileWalker: @unchecked Sendable {
                     sortedFilePathLines,
                     reverse: pathSortMode.reverse,
                     commonPrefixByteCount: sortedFilePathCommonPrefixByteCount,
+                    sortInPlace: options.noIgnore && !options.hidden,
                     emit: emit
                 )
             }
@@ -469,6 +470,7 @@ public struct FileWalker: @unchecked Sendable {
                 sortedFilePathLines,
                 reverse: pathSortMode.reverse,
                 commonPrefixByteCount: sortedFilePathCommonPrefixByteCount,
+                sortInPlace: options.noIgnore && !options.hidden,
                 emit: emit
             )
         }
@@ -1039,8 +1041,24 @@ public struct FileWalker: @unchecked Sendable {
         _ lines: [String],
         reverse: Bool,
         commonPrefixByteCount: Int = 0,
+        sortInPlace: Bool = false,
         emit: (String) -> Void
     ) {
+        if sortInPlace {
+            var keyed = lines.map { line in
+                (line: line, key: PathSort.byteKey(forPath: line, droppingFirstBytes: commonPrefixByteCount))
+            }
+            if reverse {
+                keyed.sort(by: { lhs, rhs in rhs.key.lexicographicallyPrecedes(lhs.key) })
+            } else {
+                keyed.sort(by: { lhs, rhs in lhs.key.lexicographicallyPrecedes(rhs.key) })
+            }
+            for entry in keyed {
+                emit(entry.line)
+            }
+            return
+        }
+
         let keyed = lines.map { line in
             (line: line, key: PathSort.byteKey(forPath: line, droppingFirstBytes: commonPrefixByteCount))
         }

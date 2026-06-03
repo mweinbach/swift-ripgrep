@@ -8,6 +8,32 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Retained visible no-ignore in-place sorted file-list emit - 2026-06-03
+
+For visible `--no-ignore --files` path sorting, the sorted file-list emitter now
+sorts the keyed path entries in place instead of materializing a second sorted
+array. A broad probe that used in-place sorting for every sorted file-list path
+helped visible no-ignore rows but regressed hidden/no-ignore and default sorted
+guards, so the retained branch is limited to visible no-ignore file-list output.
+
+A same-session 30-run hyperfine A/B against checkpoint `168b287` measured:
+
+| Case | Current Swift | Baseline `168b287` | Rust reference |
+| --- | ---: | ---: | ---: |
+| `--sort path --no-ignore --files linux` | 171.25 ms median / 180.02 ms mean | 175.01 ms / 190.13 ms | 175.98 ms / 187.01 ms |
+| `--sortr path --no-ignore --files linux` | 171.14 ms / 182.61 ms | 177.10 ms / 190.13 ms | 212.46 ms / 225.49 ms |
+| `--sort path --hidden --no-ignore --files linux` guard | 170.02 ms / 180.40 ms | 171.56 ms / 179.96 ms | not remeasured |
+| `--sort path --files linux` guard | 141.33 ms / 141.81 ms | 140.44 ms / 140.87 ms | not remeasured |
+
+Current Swift output matched both the previous Swift binary and Rust for
+forward/reverse visible no-ignore, hidden no-ignore, and default sorted file
+lists before benchmarking.
+
+Raw timing exports:
+`/tmp/swift-rg-bench/sorted-inplace-ab-1780510800.json` for the broad rejected
+probe and `/tmp/swift-rg-bench/sorted-inplace-visible-only-ab-1780511100.json`
+for the retained narrowed branch.
+
 ## Retained visible no-ignore sorted file-list shortcut - 2026-06-03
 
 The string file-list walker now has a direct branch for visible
