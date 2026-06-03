@@ -91,6 +91,16 @@ struct BinaryTests {
             #"binary file matches (found "\0" byte around offset 3)"#,
         ])
         #expect(try run(["-U", "--count", "[a-z]+", root.path("nul-anchors.dat")]) == ["3"])
+
+        var lateBinary = Data(repeating: UInt8(ascii: "a"), count: 70_000)
+        lateBinary.append(0)
+        lateBinary.append(contentsOf: Data("tail\n".utf8))
+        try root.write(lateBinary, to: "late-nul.dat")
+        #expect(try run(["--passthru", "aaaa", root.path("late-nul.dat")]) == [
+            #"binary file matches (found "\0" byte around offset 70000)"#,
+        ])
+        #expect(try runAllowingNoMatch(["--passthru", "tail", root.path("late-nul.dat")]) == [])
+
         let multilineBinaryReplacementStats = try run([
             "--stats",
             "-U",

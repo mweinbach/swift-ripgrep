@@ -277,10 +277,17 @@ public enum SwiftDarwinLiteralPreflight {
         path: String,
         literal: [UInt8]
     ) -> Int32? {
-        guard let matched = containsLiteral(path: path, literal: literal) else {
+        guard let matchedLineCount = literalLineMatchCount(
+            path: path,
+            literal: literal,
+            asciiCaseInsensitive: false,
+            emitLines: false,
+            maxCount: 1,
+            knownTextHaystack: true
+        ) else {
             return nil
         }
-        return matched ? 0 : 1
+        return matchedLineCount > 0 ? 0 : 1
     }
 
     public static func noMatchExitCode(
@@ -7977,7 +7984,8 @@ public enum SwiftDarwinLiteralPreflight {
         headingPrefix: [UInt8] = [],
         emitLines: Bool,
         maxCount: Int = Int.max,
-        requireASCIIHaystack: Bool = false
+        requireASCIIHaystack: Bool = false,
+        knownTextHaystack: Bool = false
     ) -> Int? {
         guard !literal.isEmpty,
               maxCount > 0 else {
@@ -8048,7 +8056,8 @@ public enum SwiftDarwinLiteralPreflight {
                 headingPrefix: headingPrefix,
                 emitLines: emitLines,
                 maxCount: maxCount,
-                requireASCIIHaystack: requireASCIIHaystack
+                requireASCIIHaystack: requireASCIIHaystack,
+                knownTextHaystack: knownTextHaystack
             )
         }
         return stats?.matchedLines
@@ -16804,7 +16813,29 @@ private func rgSwiftDarwinWritePassthruLiteralLines(
         || base[0] == 0xFE && base[1] == 0xFF) {
         return nil
     }
-    if memchr(base, 0, haystackLength) != nil {
+    if let rawBinaryByte = memchr(base, 0, haystackLength) {
+        let binaryByte = rawBinaryByte.assumingMemoryBound(to: UInt8.self)
+        let binaryOffset = base.distance(to: binaryByte)
+        if !asciiCaseInsensitive,
+           !lineNumber,
+           lineMatchPrefix.isEmpty,
+           lineContextPrefix.isEmpty,
+           headingPrefix.isEmpty,
+           binaryOffset >= 64 * 1024 {
+            let matchedBeforeBinary = rg_memmem_simple(
+                base,
+                binaryOffset,
+                literalBase,
+                literal.count
+            ) != nil
+            guard matchedBeforeBinary else {
+                return 0
+            }
+            guard rgSwiftDarwinWriteBinaryFileMatchesMessage(binaryOffset: binaryOffset) else {
+                return nil
+            }
+            return 1
+        }
         return nil
     }
     if asciiCaseInsensitive {
@@ -16931,6 +16962,18 @@ private func rgSwiftDarwinWritePassthruLiteralLines(
         return nil
     }
     return matchedLineCount
+}
+
+private func rgSwiftDarwinWriteBinaryFileMatchesMessage(binaryOffset: Int) -> Bool {
+    guard var output = rgSwiftStdoutBuffer(capacity: 128) else {
+        return false
+    }
+    defer {
+        output.deallocate()
+    }
+    return output.writeBytes(Array(#"binary file matches (found "\0" byte around offset "#.utf8))
+        && output.writeLineNumberPrefix(binaryOffset, fieldSeparator: Array(")\n".utf8))
+        && output.flush()
 }
 
 private func rgSwiftDarwinWritePassthruMultiLiteralLines(

@@ -12739,6 +12739,13 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 options: options
             ).isEmpty
         }
+        if options.passthru, binaryByteOffset >= Self.binaryDetectionBufferSize {
+            return !matchesBeforeBinarySpans(
+                result.matches,
+                cutoff: binaryByteOffset,
+                options: options
+            ).isEmpty
+        }
         let matchesBeforeNUL = matchesBeforeBinaryByte(
             result.matches,
             binaryByteOffset: binaryByteOffset,
