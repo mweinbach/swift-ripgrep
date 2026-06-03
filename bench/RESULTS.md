@@ -8,6 +8,35 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected PathSort bulk byte-key probe - 2026-06-03
+
+Tried building sorted file-list byte keys by bulk-copying the path UTF-8 suffix
+into an array and then rewriting slash bytes to NUL. A follow-up also changed
+reverse sorted emission to sort ascending and emit the array in reverse order.
+Both variants preserved current Swift output for sorted visible no-ignore,
+reverse visible no-ignore, hidden no-ignore, default sorted files, no-vcs, and
+NUL visible no-ignore controls, and matched Rust for the ordinary sorted
+visible, reverse, hidden, default, and no-vcs file-list controls.
+
+The first pass made hidden no-ignore faster but slowed reverse and nudged the
+default sorted guard. The order-flipped confirmation with the reverse-emission
+change still slowed reverse and did not hold a forward win, so the source
+changes were reverted.
+
+| Case | Probe Swift | Baseline `47554e6` | Rust reference |
+| --- | ---: | ---: | ---: |
+| `--sort path --no-ignore --files linux` bulk-key pass | 147.67 ms median / 149.50 ms mean | 147.65 ms / 151.12 ms | 139.40 ms / 141.93 ms |
+| `--sortr path --no-ignore --files linux` bulk-key pass | 148.41 ms / 151.09 ms | 145.97 ms / 148.67 ms | not remeasured |
+| `--sort path --hidden --no-ignore --files linux` bulk-key pass | 147.56 ms / 149.64 ms | 150.32 ms / 159.63 ms | not remeasured |
+| `--sort path --files linux` bulk-key guard | 120.73 ms / 122.26 ms | 120.44 ms / 120.91 ms | not remeasured |
+| `--sortr path --no-ignore --files linux` bulk-key plus reverse emit | 147.56 ms / 149.14 ms | 145.91 ms / 146.98 ms | not remeasured |
+| `--sort path --no-ignore --files linux` bulk-key plus reverse emit | 146.58 ms / 151.85 ms | 146.36 ms / 147.09 ms | not remeasured |
+| `--sort path --hidden --no-ignore --files linux` bulk-key plus reverse emit | 146.37 ms / 148.89 ms | 148.49 ms / 149.51 ms | not remeasured |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/pathsort-bulk-key-ab-1780514605.json` and
+`/tmp/swift-rg-bench/pathsort-bulk-key-reverse-ab-1780514791.json`.
+
 ## Rejected visible no-ignore ignore-load skip - 2026-06-03
 
 Tried keeping root git detection for visible `--no-ignore --files` while
