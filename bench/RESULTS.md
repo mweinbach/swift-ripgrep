@@ -77,6 +77,27 @@ binary and the sibling Rust oracle byte-for-byte.
 Raw hyperfine export:
 `/tmp/swift-rg-bench/simple-summary-early-preflight-ab-1780469572.json`.
 
+## Rejected word/path no-match preflight probes - 2026-06-03
+
+A follow-up probe tried to reuse the no-match byte-count primitives before the
+simple word-boundary and path-only executable preflights. The idea was to make
+`-w`, `-q -w`, `-l`, and `--files-without-match` absent-literal searches take
+the same early no-match route as the retained count and summary modes. The
+source change was reverted because the extra fallback-compatible checks made
+the target rows flat to slower:
+
+| Case | Prototype Swift | Baseline `2381817` | Rust |
+| --- | ---: | ---: | ---: |
+| `-w absentliteral match-ascii-46m.txt` | 7.72 ms median / 8.19 ms mean | 7.52 ms / 7.58 ms | 6.17 ms / 6.21 ms |
+| `-q -w absentliteral match-ascii-46m.txt` | 7.78 ms / 7.88 ms | 7.68 ms / 7.79 ms | not remeasured |
+| `-l absentliteral match-ascii-46m.txt` | 7.71 ms / 8.29 ms | 7.60 ms / 7.79 ms | not remeasured |
+| `--files-without-match absentliteral match-ascii-46m.txt` | 7.79 ms / 8.12 ms | 7.49 ms / 7.57 ms | not remeasured |
+| `-w literal match-ascii-46m.txt` control | 27.41 ms / 27.57 ms | 27.30 ms / 27.74 ms | not measured |
+| `-l literal match-ascii-46m.txt` control | 2.75 ms / 2.77 ms | 2.64 ms / 2.64 ms | not measured |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/word-path-nomatch-preflight-ab-1780470126.json`.
+
 ## Rejected zero-count direct write - 2026-06-03
 
 A no-match count/stats probe checked whether the remaining absent-literal
