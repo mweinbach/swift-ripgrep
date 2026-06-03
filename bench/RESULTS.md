@@ -8,6 +8,22 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected hidden file-list worker expansion - 2026-06-03
+
+A traversal probe lifted the ignore-aware `--files` root worker cap from 8
+workers to one worker per top-level directory when `--hidden` was enabled,
+mirroring the already-retained no-ignore hidden writer. The source change was
+reverted because it added scheduling overhead and made the hidden, ignore-aware
+case slower:
+
+| Case | Prototype Swift | Baseline `eae97cb` | Rust |
+| --- | ---: | ---: | ---: |
+| `--hidden --files linux` | 81.08 ms median | 77.67 ms | 73.92 ms |
+| `--files linux` control | 75.68 ms | 74.42 ms | not measured |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/hidden-worker-ab-1780466572.json`.
+
 ## Simple exact literal path-only preflight - 2026-06-03
 
 Exact literal path-only output now has the same kind of tiny executable
