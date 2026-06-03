@@ -3255,6 +3255,54 @@ struct RipgrepCommand {
         if parsedPrintMode == .matchingLines,
            paths.count == 1,
            !parsedQuiet,
+           !asciiCaseInsensitive,
+           !wordRegexp,
+           !parsedLineRegexp,
+           parsedJson,
+           !parsedStats,
+           !parsedVimgrep,
+           parsedMaxCount != 0,
+           parsedAfterContext == 0,
+           parsedBeforeContext == 0,
+           !parsedInvertMatch,
+           !parsedNullData,
+           !parsedPassthru,
+           !parsedReplacement,
+           !parsedStopOnNonmatch,
+           !parsedSearchZipAffectsPreflight,
+           parsedEncodingIsAutomatic,
+           !parsedColorAffectsPreflightOutput,
+           parsedMaxColumns == 0,
+           !parsedTrim,
+           !parsedCrlf,
+           explicitRegexpPatterns.count <= 1,
+           (patternCanStartWithDash || !pattern.hasPrefix("-")),
+           path != "-",
+           isReadableRegularFile(path) {
+            let literalJSONPattern = fixedStrings
+                ? pattern
+                : RegexLiteralParser.literal(
+                    fromPlainRegexPattern: pattern,
+                    allowPCREQuotedLiterals: allowPCREQuotedLiterals
+                )
+            if let literalJSONPattern {
+                let literal = Array(literalJSONPattern.utf8)
+                if !literal.isEmpty,
+                   !literal.contains(UInt8(ascii: "\n")),
+                   let exitCode = SwiftDarwinLiteralPreflight.literalJSONOutputExitCode(
+                    path: path,
+                    displayPath: parsedDisplayPath,
+                    literal: literal,
+                    noLineNumber: parsedNoLineNumber,
+                    maxCount: parsedMaxCount
+                   ) {
+                    return exitCode
+                }
+            }
+        }
+        if parsedPrintMode == .matchingLines,
+           paths.count == 1,
+           !parsedQuiet,
            !fixedStrings,
            !asciiCaseInsensitive,
            !wordRegexp,

@@ -1456,6 +1456,39 @@ public enum SwiftDarwinLiteralPreflight {
         )
     }
 
+    public static func literalJSONOutputExitCode(
+        path: String,
+        displayPath: [UInt8],
+        literal: [UInt8],
+        noLineNumber: Bool,
+        maxCount: Int?
+    ) -> Int32? {
+        guard !literal.isEmpty,
+              maxCount.map({ $0 > 0 }) ?? true,
+              let data = mappedPreflightData(path: path) else {
+            return nil
+        }
+        guard !startsWithUTFBOM(data),
+              !hasBinaryDetectionPrefix(data),
+              !containsNULByte(data),
+              !containsNonASCIIByte(data) else {
+            return nil
+        }
+        return data.withUnsafeBytes { rawData -> Int32? in
+            guard let rawBase = rawData.baseAddress else {
+                return writeNoMatchSummary(bytesSearched: data.count, json: true)
+            }
+            return literalJSONOutput(
+                baseAddress: rawBase.assumingMemoryBound(to: UInt8.self),
+                dataCount: rawData.count,
+                displayPath: displayPath,
+                literal: literal,
+                noLineNumber: noLineNumber,
+                maxCount: maxCount ?? Int.max
+            )
+        }
+    }
+
     public static func asciiFixedClassVimgrepLineOutputExitCode(
         path: String,
         pattern: String,
@@ -6158,6 +6191,161 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         return totalMatches > 0 ? 0 : 1
+    }
+
+    private static func literalJSONOutput(
+        baseAddress: UnsafePointer<UInt8>,
+        dataCount: Int,
+        displayPath: [UInt8],
+        literal: [UInt8],
+        noLineNumber: Bool,
+        maxCount: Int
+    ) -> Int32? {
+        guard !literal.isEmpty, dataCount >= literal.count, maxCount > 0 else {
+            return writeNoMatchSummary(bytesSearched: dataCount, json: true)
+        }
+        return literal.withUnsafeBufferPointer { literalBuffer -> Int32? in
+            guard let literalBaseAddress = literalBuffer.baseAddress,
+                  let firstMatchPointer = rg_memmem_simple(
+                    baseAddress,
+                    dataCount,
+                    literalBaseAddress,
+                    literal.count
+                  ) else {
+                return writeNoMatchSummary(bytesSearched: dataCount, json: true)
+            }
+            guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+                return nil
+            }
+            defer {
+                output.deallocate()
+            }
+
+            let newline = UInt8(ascii: "\n")
+            var fileBytesPrinted = 0
+            var totalMatches = 0
+            var matchedLineCount = 0
+            var currentLineNumber = 1
+            var currentLineStart = 0
+            var lineCountOffset = 0
+            var bytesSearched = dataCount
+
+            func advanceLineState(to matchStart: Int) {
+                while lineCountOffset < matchStart {
+                    let distance = matchStart - lineCountOffset
+                    guard let newlinePointer = memchr(
+                        baseAddress.advanced(by: lineCountOffset),
+                        Int32(newline),
+                        distance
+                    ) else {
+                        return
+                    }
+                    let newlineOffset = baseAddress.distance(
+                        to: newlinePointer.assumingMemoryBound(to: UInt8.self)
+                    )
+                    currentLineNumber += 1
+                    currentLineStart = newlineOffset + 1
+                    lineCountOffset = currentLineStart
+                }
+            }
+
+            func nextLiteralMatch(from offset: Int, endExclusive: Int) -> Int? {
+                guard offset <= endExclusive,
+                      literal.count <= endExclusive - offset,
+                      let found = rg_memmem_simple(
+                        baseAddress.advanced(by: offset),
+                        endExclusive - offset,
+                        literalBaseAddress,
+                        literal.count
+                      ) else {
+                    return nil
+                }
+                return baseAddress.distance(to: found)
+            }
+
+            guard let beginBytes = writeJSONBeginRecord(
+                displayPath: displayPath,
+                to: &output
+            ) else {
+                return nil
+            }
+            fileBytesPrinted += beginBytes
+
+            var searchOffset = baseAddress.distance(to: firstMatchPointer)
+            while let matchStart = nextLiteralMatch(from: searchOffset, endExclusive: dataCount) {
+                guard matchedLineCount < maxCount else {
+                    break
+                }
+                advanceLineState(to: matchStart)
+                let lineStart = currentLineStart
+                let lineNumber = currentLineNumber
+                let lineEnd: Int
+                let outputEnd: Int
+                if let newlinePointer = memchr(
+                    baseAddress.advanced(by: matchStart),
+                    Int32(newline),
+                    dataCount - matchStart
+                ) {
+                    lineEnd = baseAddress.distance(
+                        to: newlinePointer.assumingMemoryBound(to: UInt8.self)
+                    )
+                    outputEnd = lineEnd + 1
+                } else {
+                    lineEnd = dataCount
+                    outputEnd = dataCount
+                }
+
+                var spans: [(start: Int, end: Int)] = []
+                var spanSearchOffset = matchStart
+                while let spanStart = nextLiteralMatch(from: spanSearchOffset, endExclusive: lineEnd) {
+                    spans.append((spanStart - lineStart, spanStart - lineStart + literal.count))
+                    totalMatches += 1
+                    spanSearchOffset = spanStart + literal.count
+                }
+                guard !spans.isEmpty,
+                      let matchBytes = writeJSONMatchRecord(
+                        displayPath: displayPath,
+                        lineBaseAddress: baseAddress.advanced(by: lineStart),
+                        lineByteCount: outputEnd - lineStart,
+                        lineNumber: lineNumber,
+                        noLineNumber: noLineNumber,
+                        absoluteOffset: lineStart,
+                        spans: spans,
+                        to: &output
+                      ) else {
+                    return nil
+                }
+                matchedLineCount += 1
+                fileBytesPrinted += matchBytes
+                if matchedLineCount >= maxCount {
+                    bytesSearched = outputEnd
+                    break
+                }
+                searchOffset = outputEnd
+            }
+
+            guard writeJSONEndRecord(
+                displayPath: displayPath,
+                bytesSearched: bytesSearched,
+                bytesPrinted: fileBytesPrinted,
+                matchedLines: matchedLineCount,
+                matches: totalMatches,
+                to: &output
+            ),
+                  writeJSONSummaryRecord(
+                    bytesPrinted: fileBytesPrinted,
+                    bytesSearched: bytesSearched,
+                    matchedLines: matchedLineCount,
+                    matches: totalMatches,
+                    filesSearched: 1,
+                    filesWithMatches: matchedLineCount > 0 ? 1 : 0,
+                    to: &output
+                  ),
+                  output.flush() else {
+                return nil
+            }
+            return totalMatches > 0 ? 0 : 1
+        }
     }
 
     private static func writeJSONBeginRecord(

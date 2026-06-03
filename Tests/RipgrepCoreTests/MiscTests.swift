@@ -44,6 +44,78 @@ struct MiscTests {
         #expect(missOutput.isEmpty)
     }
 
+    @Test("simple literal JSON executable output keeps ripgrep records")
+    func simpleLiteralJSONExecutableOutputKeepsRipgrepRecords() throws {
+        let root = try TemporaryDirectory()
+        try root.write("literal literal\nother\nliteral again\n", to: "literal.txt")
+
+        let output = try runExecutableData([
+            "--json",
+            "literal",
+            root.path("literal.txt"),
+        ], fixture: {})
+        let messages = try String(decoding: output, as: UTF8.self)
+            .split(separator: "\n")
+            .map(String.init)
+            .map(jsonObject)
+        #expect(messages.map { $0["type"] as? String } == ["begin", "match", "match", "end", "summary"])
+
+        let matches = messages.compactMap { message -> [String: Any]? in
+            guard message["type"] as? String == "match" else { return nil }
+            return message["data"] as? [String: Any]
+        }
+        #expect(matches.compactMap { ($0["lines"] as? [String: String])?["text"] } == [
+            "literal literal\n",
+            "literal again\n",
+        ])
+        #expect(matches.map { $0["line_number"] as? Int } == [1, 3])
+        #expect(matches.map { $0["absolute_offset"] as? Int } == [0, 22])
+        let firstSubmatches = matches[0]["submatches"] as? [[String: Any]]
+        #expect(firstSubmatches?.compactMap { ($0["match"] as? [String: String])?["text"] } == ["literal", "literal"])
+        #expect(firstSubmatches?.map { $0["start"] as? Int } == [0, 8])
+        #expect(firstSubmatches?.map { $0["end"] as? Int } == [7, 15])
+
+        let endData = messages[3]["data"] as? [String: Any]
+        let endStats = endData?["stats"] as? [String: Any]
+        #expect(endStats?["bytes_searched"] as? Int == 36)
+        #expect(endStats?["matched_lines"] as? Int == 2)
+        #expect(endStats?["matches"] as? Int == 3)
+
+        let maxOutput = try runExecutableData([
+            "--json",
+            "-N",
+            "-m1",
+            "literal",
+            root.path("literal.txt"),
+        ], fixture: {})
+        let maxMessages = try String(decoding: maxOutput, as: UTF8.self)
+            .split(separator: "\n")
+            .map(String.init)
+            .map(jsonObject)
+        let maxMatchData = maxMessages[1]["data"] as? [String: Any]
+        #expect(maxMatchData?["line_number"] is NSNull)
+        let maxEndData = maxMessages[2]["data"] as? [String: Any]
+        let maxEndStats = maxEndData?["stats"] as? [String: Any]
+        #expect(maxEndStats?["bytes_searched"] as? Int == 16)
+        #expect(maxEndStats?["matched_lines"] as? Int == 1)
+        #expect(maxEndStats?["matches"] as? Int == 2)
+
+        try root.write("lit.er? lit.er?\n", to: "fixed.txt")
+        let fixedOutput = try runExecutableData([
+            "--json",
+            "-F",
+            "lit.er?",
+            root.path("fixed.txt"),
+        ], fixture: {})
+        let fixedMessages = try String(decoding: fixedOutput, as: UTF8.self)
+            .split(separator: "\n")
+            .map(String.init)
+            .map(jsonObject)
+        let fixedMatchData = fixedMessages[1]["data"] as? [String: Any]
+        let fixedSubmatches = fixedMatchData?["submatches"] as? [[String: Any]]
+        #expect(fixedSubmatches?.compactMap { ($0["match"] as? [String: String])?["text"] } == ["lit.er?", "lit.er?"])
+    }
+
     @Test("three-byte literal middle-byte candidates remain exact")
     func threeByteLiteralMiddleByteCandidatesRemainExact() throws {
         let root = try TemporaryDirectory()

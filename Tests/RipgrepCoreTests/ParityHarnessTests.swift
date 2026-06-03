@@ -545,6 +545,8 @@ private func miscParityCases() -> [ParityCase] {
         ParityCase(name: "misc::json_ascii_ignore_case_no_match_summary", fixture: caseInsensitiveASCIIProofFixture, arguments: ["--json", "-i", "missingliteral", "ascii"]),
         ParityCase(name: "misc::json_word_no_match_summary", fixture: caseInsensitiveASCIIProofFixture, arguments: ["--json", "-w", "missingliteral", "ascii"]),
         ParityCase(name: "misc::json_ascii_ignore_case_word_no_match_summary", fixture: caseInsensitiveASCIIProofFixture, arguments: ["--json", "-i", "-w", "missingliteral", "ascii"]),
+        ParityCase(name: "misc::json_literal_match_lines", fixture: caseInsensitiveASCIIProofFixture, arguments: ["--json", "Needle", "ascii"]),
+        ParityCase(name: "misc::json_fixed_literal_match_lines", fixture: { dir in try write("lit.er? lit.er?\n", to: "literal", in: dir) }, arguments: ["--json", "-F", "lit.er?", "literal"]),
         ParityCase(name: "misc::json_context_no_match_summary", fixture: caseInsensitiveASCIIProofFixture, arguments: ["--json", "-C", "2", "missingliteral", "ascii"]),
         ParityCase(name: "misc::json_max_columns_no_match_summary", fixture: caseInsensitiveASCIIProofFixture, arguments: ["--json", "--max-columns", "1", "missingliteral", "ascii"]),
         ParityCase(name: "misc::json_replacement_no_match_summary", fixture: caseInsensitiveASCIIProofFixture, arguments: ["--json", "-r", "x", "missingliteral", "ascii"]),
