@@ -9437,8 +9437,6 @@ public enum SwiftDarwinLiteralPreflight {
                     var matchedLineCount = 0
                     var matchCount = 0
                     var selectedLineEnd = -1
-                    var rejectedBoundaryCandidates = 0
-                    let maxRejectedBoundaryCandidates = 128
 
                     while searchOffset <= data.count - literal.count {
                         let found = if asciiCaseInsensitive {
@@ -9486,11 +9484,11 @@ public enum SwiftDarwinLiteralPreflight {
                             matchCount += 1
                             searchOffset = matchEnd
                         } else {
-                            rejectedBoundaryCandidates += 1
-                            guard rejectedBoundaryCandidates <= maxRejectedBoundaryCandidates else {
-                                return nil
-                            }
-                            searchOffset = matchStart + 1
+                            searchOffset = rgSwiftNextASCIIWordSearchOffset(
+                                base: base,
+                                dataCount: data.count,
+                                matchEnd: matchEnd
+                            )
                         }
                     }
 
@@ -11321,8 +11319,6 @@ private func countASCIIWordMatches(
 
             var searchOffset = 0
             var matchCount = 0
-            var rejectedBoundaryCandidates = 0
-            let maxRejectedBoundaryCandidates = 128
             while searchOffset < data.count {
                 let found: UnsafePointer<UInt8>?
                 if asciiCaseInsensitive {
@@ -11363,11 +11359,11 @@ private func countASCIIWordMatches(
                     matchCount += 1
                     searchOffset = matchEnd
                 } else {
-                    rejectedBoundaryCandidates += 1
-                    guard rejectedBoundaryCandidates <= maxRejectedBoundaryCandidates else {
-                        return nil
-                    }
-                    searchOffset = matchStart + 1
+                    searchOffset = rgSwiftNextASCIIWordSearchOffset(
+                        base: base,
+                        dataCount: data.count,
+                        matchEnd: matchEnd
+                    )
                 }
             }
             return matchCount
@@ -11397,8 +11393,6 @@ private func countASCIIWordMatchedLines(
 
             var searchOffset = 0
             var matchedLineCount = 0
-            var rejectedBoundaryCandidates = 0
-            let maxRejectedBoundaryCandidates = maxCount == nil ? 128 : nil
             while searchOffset < data.count,
                   matchedLineCount < limit {
                 guard let found = rg_memmem_simple(
@@ -11431,11 +11425,6 @@ private func countASCIIWordMatchedLines(
                     }
                     searchOffset = base.distance(to: newline.assumingMemoryBound(to: UInt8.self)) + 1
                 } else {
-                    rejectedBoundaryCandidates += 1
-                    if let maxRejectedBoundaryCandidates,
-                       rejectedBoundaryCandidates > maxRejectedBoundaryCandidates {
-                        return nil
-                    }
                     searchOffset = rgSwiftNextASCIIWordSearchOffset(
                         base: base,
                         dataCount: data.count,
@@ -11491,8 +11480,6 @@ private func countASCIIWordMatchedLines(
         }
         var searchOffset = 0
         var matchedLineCount = 0
-        var rejectedBoundaryCandidates = 0
-        let maxRejectedBoundaryCandidates = maxCount == nil ? 128 : nil
 
         while searchOffset < data.count,
               matchedLineCount < limit {
@@ -11551,12 +11538,6 @@ private func countASCIIWordMatchedLines(
                             break
                         }
 
-                        rejectedBoundaryCandidates += 1
-                        if let maxRejectedBoundaryCandidates,
-                           rejectedBoundaryCandidates > maxRejectedBoundaryCandidates {
-                            needsFallback = true
-                            return
-                        }
                         literalSearchOffset = rgSwiftNextASCIIWordSearchOffset(
                             base: base,
                             dataCount: data.count,

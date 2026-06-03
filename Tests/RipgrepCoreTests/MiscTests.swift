@@ -7496,6 +7496,16 @@ struct MiscTests {
         ], fixture: {})
         #expect(embeddedWordCountOutput == Data("1\n".utf8))
 
+        let boundaryRejectedWordCountResult = try runExecutableResult([
+            "-c",
+            "-w",
+            "literal",
+            root.path("boundary-count.txt"),
+        ])
+        #expect(boundaryRejectedWordCountResult.stdout.isEmpty)
+        #expect(boundaryRejectedWordCountResult.stderr.isEmpty)
+        #expect(boundaryRejectedWordCountResult.status == 1)
+
         let boundedBoundaryRejectedWordCountResult = try runExecutableResult([
             "-c",
             "-m1",
@@ -8433,6 +8443,16 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(wordCountMatchesOutput == countMatchesOutput)
+
+        let boundaryRejectedWordCountMatchesResult = try runExecutableResult([
+            "--count-matches",
+            "-w",
+            "literal",
+            root.path("boundary-count.txt"),
+        ])
+        #expect(boundaryRejectedWordCountMatchesResult.stdout.isEmpty)
+        #expect(boundaryRejectedWordCountMatchesResult.stderr.isEmpty)
+        #expect(boundaryRejectedWordCountMatchesResult.status == 1)
 
         let caseInsensitiveWordCountMatchesOutput = try runExecutableData([
             "--count-matches",
