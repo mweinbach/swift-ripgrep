@@ -2839,6 +2839,35 @@ struct MiscTests {
         #expect(noUnicodeNoMatch.stdout.isEmpty)
         #expect(noUnicodeNoMatch.stderr.isEmpty)
 
+        for neutralArguments in [
+            ["--case-sensitive"],
+            ["--color", "never"],
+            ["--color=never"],
+            ["--hidden"],
+            ["--no-heading"],
+            ["--no-ignore"],
+            ["--no-ignore-vcs"],
+            ["--no-messages"],
+            ["--sort", "none"],
+            ["--sort=none"],
+            ["--sortr", "none"],
+            ["--sortr=none"],
+            ["--threads", "1"],
+            ["--threads=1"],
+            ["--unrestricted"],
+            ["-s"],
+            ["-u"],
+        ] {
+            let neutralOutput = try runExecutableData(
+                ["--no-config"] + neutralArguments + [
+                    "literal",
+                    root.path("simple.txt"),
+                ],
+                fixture: {}
+            )
+            #expect(neutralOutput == output)
+        }
+
         try root.write("literal.*\nquiet\n", to: "fixed.txt")
         let fixedStringOutput = try runExecutableData([
             "--no-config",

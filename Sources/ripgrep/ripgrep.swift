@@ -6397,13 +6397,20 @@ struct RipgrepCommand {
               )
     }
 
+    private static func isSimpleSwiftDarwinLiteralNonNegativeInteger(_ value: String) -> Bool {
+        !value.isEmpty && value.utf8.allSatisfy { byte in
+            byte >= UInt8(ascii: "0") && byte <= UInt8(ascii: "9")
+        }
+    }
+
     private static func applySimpleSwiftDarwinLiteralCommonOption(
         _ argument: String,
         arguments: [String],
         argumentIndex: inout Int,
         optionEndIndex: Int,
         fixedStrings: inout Bool,
-        noUnicode: inout Bool
+        noUnicode: inout Bool,
+        unrestrictedCount: inout Int
     ) -> Bool? {
         switch argument {
         case "-F", "--fixed-strings":
@@ -6412,6 +6419,52 @@ struct RipgrepCommand {
         case "--no-fixed-strings":
             fixedStrings = false
             return true
+        case "-s",
+             "--case-sensitive",
+             "--hidden",
+             "--no-heading",
+             "--no-ignore",
+             "--no-ignore-vcs",
+             "--no-messages",
+             "--sort=none",
+             "--sortr=none",
+             "--unrestricted":
+            if argument == "--unrestricted" {
+                unrestrictedCount += 1
+                guard unrestrictedCount == 1 else {
+                    return false
+                }
+            }
+            return true
+        case "-u":
+            unrestrictedCount += 1
+            guard unrestrictedCount == 1 else {
+                return false
+            }
+            return true
+        case "--color=never":
+            return true
+        case "--color":
+            argumentIndex += 1
+            guard argumentIndex < optionEndIndex,
+                  arguments[argumentIndex] == "never" else {
+                return false
+            }
+            return true
+        case "--sort", "--sortr":
+            argumentIndex += 1
+            guard argumentIndex < optionEndIndex,
+                  arguments[argumentIndex] == "none" else {
+                return false
+            }
+            return true
+        case "--threads":
+            argumentIndex += 1
+            guard argumentIndex < optionEndIndex,
+                  isSimpleSwiftDarwinLiteralNonNegativeInteger(arguments[argumentIndex]) else {
+                return false
+            }
+            return true
         case "--mmap", "--no-mmap", "--unicode":
             return true
         case "--no-unicode":
@@ -6419,6 +6472,9 @@ struct RipgrepCommand {
             return true
         case "--encoding=auto", "-Eauto":
             return true
+        case _ where argument.hasPrefix("--threads="):
+            let value = String(argument.dropFirst("--threads=".count))
+            return isSimpleSwiftDarwinLiteralNonNegativeInteger(value)
         case "--encoding", "-E":
             argumentIndex += 1
             guard argumentIndex < optionEndIndex,
@@ -6442,6 +6498,7 @@ struct RipgrepCommand {
         var lineNumber = false
         var noUnicode = false
         var quiet = false
+        var unrestrictedCount = 0
         var wordRegexp = false
         let pattern = arguments[arguments.count - 2]
         let path = arguments[arguments.count - 1]
@@ -6455,7 +6512,8 @@ struct RipgrepCommand {
                 argumentIndex: &argumentIndex,
                 optionEndIndex: optionEndIndex,
                 fixedStrings: &fixedStrings,
-                noUnicode: &noUnicode
+                noUnicode: &noUnicode,
+                unrestrictedCount: &unrestrictedCount
             ) {
                 guard handled else {
                     return nil
@@ -6540,6 +6598,7 @@ struct RipgrepCommand {
         var fixedStrings = false
         var includeZero = false
         var noUnicode = false
+        var unrestrictedCount = 0
         let pattern = arguments[arguments.count - 2]
         let path = arguments[arguments.count - 1]
         let optionEndIndex = arguments.count - 2
@@ -6552,7 +6611,8 @@ struct RipgrepCommand {
                 argumentIndex: &argumentIndex,
                 optionEndIndex: optionEndIndex,
                 fixedStrings: &fixedStrings,
-                noUnicode: &noUnicode
+                noUnicode: &noUnicode,
+                unrestrictedCount: &unrestrictedCount
             ) {
                 guard handled else {
                     return nil
@@ -6628,6 +6688,7 @@ struct RipgrepCommand {
         var json = false
         var noUnicode = false
         var stats = false
+        var unrestrictedCount = 0
         let pattern = arguments[arguments.count - 2]
         let path = arguments[arguments.count - 1]
         let optionEndIndex = arguments.count - 2
@@ -6640,7 +6701,8 @@ struct RipgrepCommand {
                 argumentIndex: &argumentIndex,
                 optionEndIndex: optionEndIndex,
                 fixedStrings: &fixedStrings,
-                noUnicode: &noUnicode
+                noUnicode: &noUnicode,
+                unrestrictedCount: &unrestrictedCount
             ) {
                 guard handled else {
                     return nil
@@ -6707,6 +6769,7 @@ struct RipgrepCommand {
         var nullTerminated = false
         var crlfTerminated = false
         var stats = false
+        var unrestrictedCount = 0
         let pattern = arguments[arguments.count - 2]
         let path = arguments[arguments.count - 1]
         let optionEndIndex = arguments.count - 2
@@ -6719,7 +6782,8 @@ struct RipgrepCommand {
                 argumentIndex: &argumentIndex,
                 optionEndIndex: optionEndIndex,
                 fixedStrings: &fixedStrings,
-                noUnicode: &noUnicode
+                noUnicode: &noUnicode,
+                unrestrictedCount: &unrestrictedCount
             ) {
                 guard handled else {
                     return nil

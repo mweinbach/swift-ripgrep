@@ -144,6 +144,41 @@ A post-refactor smoke confirmed the retained shape, with bare literal flat and
 baseline:
 `/tmp/swift-rg-bench/neutral-flags-simple-preflight-postrefactor-smoke-1780472064.json`.
 
+## Retained simple common-flag preflight eligibility - 2026-06-03
+
+The shared simple Swift Darwin executable literal option parser now also keeps
+the fast path for additional explicit-file flags that do not change output in
+the simple single-file shape: `--case-sensitive`, `--color never` /
+`--color=never`, `-s` / `--no-messages`, `--hidden`, `--no-heading`,
+`--no-ignore`, `--no-ignore-vcs`, a single `-u` / `--unrestricted`,
+`--threads N`, and `--sort none` / `--sortr none`. Color is accepted only when
+it is explicitly disabled, sort only for `none`, thread counts are validated,
+and repeated unrestricted flags fall back to the full parser so `-uu` / `-uuu`
+semantics remain owned by the broad path. A same-session A/B against checkpoint
+`f349d4b`, with Rust included, measured:
+
+| Case | Current Swift | Baseline `f349d4b` | Rust |
+| --- | ---: | ---: | ---: |
+| `absentliteral match-ascii-46m.txt` guardrail | 7.54 ms median / 7.91 ms mean | 7.45 ms / 7.66 ms | 6.06 ms / 6.07 ms |
+| `--color=never absentliteral match-ascii-46m.txt` | 7.66 ms / 7.89 ms | 9.42 ms / 9.65 ms | 6.14 ms / 6.13 ms |
+| `--case-sensitive absentliteral match-ascii-46m.txt` | 7.62 ms / 7.65 ms | 9.48 ms / 9.52 ms | 6.12 ms / 6.14 ms |
+| `-s absentliteral match-ascii-46m.txt` | 7.62 ms / 7.67 ms | 9.69 ms / 9.95 ms | 6.07 ms / 6.09 ms |
+| `--no-ignore absentliteral match-ascii-46m.txt` | 7.65 ms / 7.65 ms | 9.44 ms / 9.46 ms | 6.74 ms / 6.56 ms |
+| `-u absentliteral match-ascii-46m.txt` | 7.61 ms / 7.61 ms | 9.51 ms / 9.53 ms | 5.73 ms / 5.74 ms |
+| `--threads 1 absentliteral match-ascii-46m.txt` | 7.65 ms / 7.64 ms | 9.49 ms / 9.49 ms | 6.03 ms / 6.02 ms |
+| `--sort none absentliteral match-ascii-46m.txt` | 7.65 ms / 7.64 ms | 9.52 ms / 9.51 ms | 6.02 ms / 6.04 ms |
+| `--hidden absentliteral match-ascii-46m.txt` | 7.84 ms / 7.86 ms | 11.91 ms / 11.74 ms | 6.12 ms / 6.10 ms |
+
+Output, stderr, and status matched the previous Swift binary and the sibling
+Rust oracle for matched and missing rows across the accepted flag matrix,
+including hidden explicit files and repeated unrestricted flags that must fall
+back. A post-safety smoke kept the same shape after the repeated-`-u` guard.
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/simple-common-flags-preflight-ab-1780472511.json`
+and
+`/tmp/swift-rg-bench/simple-common-flags-postsafety-smoke-1780472615.json`.
+
 ## Rejected word/path no-match preflight probes - 2026-06-03
 
 A follow-up probe tried to reuse the no-match byte-count primitives before the
