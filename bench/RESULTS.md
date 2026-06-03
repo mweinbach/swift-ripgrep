@@ -34,6 +34,26 @@ No-shell 60-run A/B on `/tmp/swift-rg-bench/swift-literal-stats.txt`:
 Raw hyperfine export:
 `/tmp/swift-rg-bench/simple-pathonly-preflight-final-noshell-ab-1780465376.json`.
 
+## Rejected path-only byte-plain parser bypass - 2026-06-03
+
+A follow-up probe changed only the simple path-only executable preflight to
+return UTF-8 bytes directly when a pattern contained no regex syntax
+characters, falling back to `RegexLiteralParser.literal` for escaped literals
+and regex syntax. This was distinct from the earlier simple line/quiet parser
+shortcut and targeted the fast `-l` hit path where parser overhead could have
+been visible. The source and added escaped-literal regression row were reverted
+because the no-shell A/B was flat to slightly worse:
+
+| Case | Prototype Swift | Baseline `d71084c` | Rust |
+| --- | ---: | ---: | ---: |
+| `-l missingliteral` | 2.81 ms median | 2.80 ms | 2.49 ms |
+| `--files-without-match absentliteral` | 7.56 ms | 7.53 ms | 6.28 ms |
+| `-l 'missing\\.literal'` fallback miss | 7.87 ms | 7.86 ms | not measured |
+| `-l 'missingliteral|absentliteral'` alternation guard | 4.66 ms | 4.60 ms | not measured |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/pathonly-byteplain-parser-ab-1780466113.json`.
+
 ## Rejected direct path-only literal containment - 2026-06-03
 
 A follow-up probe changed exact literal path-only output (`-l` and
