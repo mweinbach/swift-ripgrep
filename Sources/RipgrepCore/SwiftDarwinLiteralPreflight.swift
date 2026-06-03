@@ -178,6 +178,26 @@ public enum SwiftDarwinLiteralPreflight {
     private static let omittedLongLineWithPrefix = Array("[Omitted long line with ".utf8)
     private static let omittedLongLineWithSuffix = Array(" matches]\n".utf8)
     private static let previewOmittedEndSuffix = Array(" [... omitted end of long line]\n".utf8)
+    private static let jsonBeginRecordPrefix = Array(#"{"type":"begin","data":{"path":{"text":"#.utf8)
+    private static let jsonBeginRecordSuffix = Array(#"}}}"#.utf8)
+    private static let jsonMatchRecordPrefix = Array(#"{"type":"match","data":{"path":{"text":"#.utf8)
+    private static let jsonMatchLinesPrefix = Array(#"},"lines":{"text":"#.utf8)
+    private static let jsonMatchLineNumberPrefix = Array(#"},"line_number":"#.utf8)
+    private static let jsonNullBytes = Array("null".utf8)
+    private static let jsonMatchAbsoluteOffsetPrefix = Array(#","absolute_offset":"#.utf8)
+    private static let jsonSubmatchesPrefix = Array(#","submatches":["#.utf8)
+    private static let jsonSubmatchPrefix = Array(#"{"match":{"text":"#.utf8)
+    private static let jsonSubmatchStartPrefix = Array(#"},"start":"#.utf8)
+    private static let jsonSubmatchEndPrefix = Array(#","end":"#.utf8)
+    private static let jsonMatchRecordSuffix = Array(#"]}}"#.utf8)
+    private static let jsonEscapedQuote = Array(#"\""#.utf8)
+    private static let jsonEscapedBackslash = Array(#"\\"#.utf8)
+    private static let jsonEscapedBackspace = Array(#"\b"#.utf8)
+    private static let jsonEscapedTab = Array(#"\t"#.utf8)
+    private static let jsonEscapedNewline = Array(#"\n"#.utf8)
+    private static let jsonEscapedFormFeed = Array(#"\f"#.utf8)
+    private static let jsonEscapedCarriageReturn = Array(#"\r"#.utf8)
+    private static let jsonEscapeHex = Array("0123456789ABCDEF".utf8)
     private static let previewMoreMatchesPrefix = Array(" [... ".utf8)
     private static let previewMoreMatchSuffix = Array(" more match]\n".utf8)
     private static let previewMoreMatchesSuffix = Array(" more matches]\n".utf8)
@@ -6354,12 +6374,12 @@ public enum SwiftDarwinLiteralPreflight {
     ) -> Int? {
         var bytesWritten = 0
         guard writeCountedJSONBytes(
-            Array(#"{"type":"begin","data":{"path":{"text":"#.utf8),
+            jsonBeginRecordPrefix,
             to: &output,
             bytesWritten: &bytesWritten
         ),
               writeJSONEscapedBytes(displayPath, to: &output, bytesWritten: &bytesWritten),
-              writeCountedJSONBytes(Array(#"}}}"#.utf8), to: &output, bytesWritten: &bytesWritten),
+              writeCountedJSONBytes(jsonBeginRecordSuffix, to: &output, bytesWritten: &bytesWritten),
               writeCountedJSONByte(UInt8(ascii: "\n"), to: &output, bytesWritten: &bytesWritten) else {
             return nil
         }
@@ -6378,12 +6398,12 @@ public enum SwiftDarwinLiteralPreflight {
     ) -> Int? {
         var bytesWritten = 0
         guard writeCountedJSONBytes(
-            Array(#"{"type":"match","data":{"path":{"text":"#.utf8),
+            jsonMatchRecordPrefix,
             to: &output,
             bytesWritten: &bytesWritten
         ),
               writeJSONEscapedBytes(displayPath, to: &output, bytesWritten: &bytesWritten),
-              writeCountedJSONBytes(Array(#"},"lines":{"text":"#.utf8), to: &output, bytesWritten: &bytesWritten),
+              writeCountedJSONBytes(jsonMatchLinesPrefix, to: &output, bytesWritten: &bytesWritten),
               writeJSONEscapedBytes(
                 lineBaseAddress,
                 count: lineByteCount,
@@ -6391,14 +6411,14 @@ public enum SwiftDarwinLiteralPreflight {
                 bytesWritten: &bytesWritten
               ),
               writeCountedJSONBytes(
-                Array(#"},"line_number":"#.utf8),
+                jsonMatchLineNumberPrefix,
                 to: &output,
                 bytesWritten: &bytesWritten
               ) else {
             return nil
         }
         if noLineNumber {
-            guard writeCountedJSONBytes(Array("null".utf8), to: &output, bytesWritten: &bytesWritten) else {
+            guard writeCountedJSONBytes(jsonNullBytes, to: &output, bytesWritten: &bytesWritten) else {
                 return nil
             }
         } else {
@@ -6407,13 +6427,13 @@ public enum SwiftDarwinLiteralPreflight {
             }
         }
         guard writeCountedJSONBytes(
-            Array(#","absolute_offset":"#.utf8),
+            jsonMatchAbsoluteOffsetPrefix,
             to: &output,
             bytesWritten: &bytesWritten
         ),
               writeCountedJSONInt(absoluteOffset, to: &output, bytesWritten: &bytesWritten),
               writeCountedJSONBytes(
-                Array(#","submatches":["#.utf8),
+                jsonSubmatchesPrefix,
                 to: &output,
                 bytesWritten: &bytesWritten
               ) else {
@@ -6426,7 +6446,7 @@ public enum SwiftDarwinLiteralPreflight {
                 return nil
             }
             guard writeCountedJSONBytes(
-                Array(#"{"match":{"text":"#.utf8),
+                jsonSubmatchPrefix,
                 to: &output,
                 bytesWritten: &bytesWritten
             ),
@@ -6437,18 +6457,18 @@ public enum SwiftDarwinLiteralPreflight {
                     bytesWritten: &bytesWritten
                   ),
                   writeCountedJSONBytes(
-                    Array(#"},"start":"#.utf8),
+                    jsonSubmatchStartPrefix,
                     to: &output,
                     bytesWritten: &bytesWritten
                   ),
                   writeCountedJSONInt(span.start, to: &output, bytesWritten: &bytesWritten),
-                  writeCountedJSONBytes(Array(#","end":"#.utf8), to: &output, bytesWritten: &bytesWritten),
+                  writeCountedJSONBytes(jsonSubmatchEndPrefix, to: &output, bytesWritten: &bytesWritten),
                   writeCountedJSONInt(span.end, to: &output, bytesWritten: &bytesWritten),
                   writeCountedJSONByte(UInt8(ascii: "}"), to: &output, bytesWritten: &bytesWritten) else {
                 return nil
             }
         }
-        guard writeCountedJSONBytes(Array(#"]}}"#.utf8), to: &output, bytesWritten: &bytesWritten),
+        guard writeCountedJSONBytes(jsonMatchRecordSuffix, to: &output, bytesWritten: &bytesWritten),
               writeCountedJSONByte(UInt8(ascii: "\n"), to: &output, bytesWritten: &bytesWritten) else {
             return nil
         }
@@ -6560,47 +6580,69 @@ public enum SwiftDarwinLiteralPreflight {
         guard writeCountedJSONByte(UInt8(ascii: "\""), to: &output, bytesWritten: &bytesWritten) else {
             return false
         }
-        let hex = Array("0123456789ABCDEF".utf8)
-        for index in 0..<count {
+
+        func writeSafeBytes(from start: Int, to end: Int) -> Bool {
+            guard end > start else {
+                return true
+            }
+            let byteCount = end - start
+            guard output.write(baseAddress.advanced(by: start), count: byteCount) else {
+                return false
+            }
+            bytesWritten += byteCount
+            return true
+        }
+
+        var safeStart = 0
+        var index = 0
+        while index < count {
             let byte = baseAddress[index]
             switch byte {
             case UInt8(ascii: "\""):
-                guard writeCountedJSONBytes(Array(#"\""#.utf8), to: &output, bytesWritten: &bytesWritten) else {
+                guard writeSafeBytes(from: safeStart, to: index),
+                      writeCountedJSONBytes(jsonEscapedQuote, to: &output, bytesWritten: &bytesWritten) else {
                     return false
                 }
             case UInt8(ascii: "\\"):
-                guard writeCountedJSONBytes(Array(#"\\"#.utf8), to: &output, bytesWritten: &bytesWritten) else {
+                guard writeSafeBytes(from: safeStart, to: index),
+                      writeCountedJSONBytes(jsonEscapedBackslash, to: &output, bytesWritten: &bytesWritten) else {
                     return false
                 }
             case UInt8(ascii: "\u{08}"):
-                guard writeCountedJSONBytes(Array(#"\b"#.utf8), to: &output, bytesWritten: &bytesWritten) else {
+                guard writeSafeBytes(from: safeStart, to: index),
+                      writeCountedJSONBytes(jsonEscapedBackspace, to: &output, bytesWritten: &bytesWritten) else {
                     return false
                 }
             case UInt8(ascii: "\t"):
-                guard writeCountedJSONBytes(Array(#"\t"#.utf8), to: &output, bytesWritten: &bytesWritten) else {
+                guard writeSafeBytes(from: safeStart, to: index),
+                      writeCountedJSONBytes(jsonEscapedTab, to: &output, bytesWritten: &bytesWritten) else {
                     return false
                 }
             case UInt8(ascii: "\n"):
-                guard writeCountedJSONBytes(Array(#"\n"#.utf8), to: &output, bytesWritten: &bytesWritten) else {
+                guard writeSafeBytes(from: safeStart, to: index),
+                      writeCountedJSONBytes(jsonEscapedNewline, to: &output, bytesWritten: &bytesWritten) else {
                     return false
                 }
             case UInt8(ascii: "\u{0C}"):
-                guard writeCountedJSONBytes(Array(#"\f"#.utf8), to: &output, bytesWritten: &bytesWritten) else {
+                guard writeSafeBytes(from: safeStart, to: index),
+                      writeCountedJSONBytes(jsonEscapedFormFeed, to: &output, bytesWritten: &bytesWritten) else {
                     return false
                 }
             case UInt8(ascii: "\r"):
-                guard writeCountedJSONBytes(Array(#"\r"#.utf8), to: &output, bytesWritten: &bytesWritten) else {
+                guard writeSafeBytes(from: safeStart, to: index),
+                      writeCountedJSONBytes(jsonEscapedCarriageReturn, to: &output, bytesWritten: &bytesWritten) else {
                     return false
                 }
             case 0x00...0x1F:
-                guard writeCountedJSONBytes(
+                guard writeSafeBytes(from: safeStart, to: index),
+                      writeCountedJSONBytes(
                     [
                         UInt8(ascii: "\\"),
                         UInt8(ascii: "u"),
                         UInt8(ascii: "0"),
                         UInt8(ascii: "0"),
-                        hex[Int(byte >> 4)],
-                        hex[Int(byte & 0x0F)],
+                        jsonEscapeHex[Int(byte >> 4)],
+                        jsonEscapeHex[Int(byte & 0x0F)],
                     ],
                     to: &output,
                     bytesWritten: &bytesWritten
@@ -6608,10 +6650,14 @@ public enum SwiftDarwinLiteralPreflight {
                     return false
                 }
             default:
-                guard writeCountedJSONByte(byte, to: &output, bytesWritten: &bytesWritten) else {
-                    return false
-                }
+                index += 1
+                continue
             }
+            index += 1
+            safeStart = index
+        }
+        guard writeSafeBytes(from: safeStart, to: count) else {
+            return false
         }
         return writeCountedJSONByte(UInt8(ascii: "\""), to: &output, bytesWritten: &bytesWritten)
     }
@@ -6626,8 +6672,29 @@ public enum SwiftDarwinLiteralPreflight {
         to output: inout rgSwiftStdoutBuffer,
         bytesWritten: inout Int
     ) -> Bool {
-        let bytes = Array(String(value).utf8)
-        return writeCountedJSONBytes(bytes, to: &output, bytesWritten: &bytesWritten)
+        guard value >= 0 else {
+            let bytes = Array(String(value).utf8)
+            return writeCountedJSONBytes(bytes, to: &output, bytesWritten: &bytesWritten)
+        }
+        let written = withUnsafeTemporaryAllocation(of: UInt8.self, capacity: 32) { buffer -> Int? in
+            var cursor = buffer.count
+            var number = value
+            repeat {
+                cursor -= 1
+                buffer[cursor] = UInt8(number % 10) + UInt8(ascii: "0")
+                number /= 10
+            } while number > 0
+            let count = buffer.count - cursor
+            guard output.write(buffer.baseAddress!.advanced(by: cursor), count: count) else {
+                return nil
+            }
+            return count
+        }
+        guard let written else {
+            return false
+        }
+        bytesWritten += written
+        return true
     }
 
     private static func writeCountedJSONBytes(
