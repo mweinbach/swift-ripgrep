@@ -15351,17 +15351,24 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
                     }
                 }
                 if activeCandidateCount == 1, let activeCandidate {
-                    return rgSwiftDarwinWriteSingleActiveMultiLiteralLines(
-                        base,
-                        haystackLength: haystackLength,
-                        literal: literals[activeCandidate.literalIndex],
-                        maxCount: maxCount,
-                        lineNumber: lineNumber,
-                        lineNumberFieldSeparator: lineNumberFieldSeparator,
-                        linePrefix: linePrefix,
-                        headingPrefix: headingPrefix,
-                        emitLines: emitLines
-                    )
+                    let latePlainMatch = activeCandidate.start > 2 * 1024 * 1024
+                        && !lineNumber
+                        && linePrefix.isEmpty
+                        && headingPrefix.isEmpty
+                        && !trimLeadingWhitespace
+                    if !latePlainMatch {
+                        return rgSwiftDarwinWriteSingleActiveMultiLiteralLines(
+                            base,
+                            haystackLength: haystackLength,
+                            literal: literals[activeCandidate.literalIndex],
+                            maxCount: maxCount,
+                            lineNumber: lineNumber,
+                            lineNumberFieldSeparator: lineNumberFieldSeparator,
+                            linePrefix: linePrefix,
+                            headingPrefix: headingPrefix,
+                            emitLines: emitLines
+                        )
+                    }
                 }
             }
 
