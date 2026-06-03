@@ -3219,6 +3219,10 @@ struct MiscTests {
         try root.write("needle\nalpha\n", to: "passthru-patterns.txt")
         try root.write("needle needle\nquiet line\n", to: "fixed-patterns.txt")
         try root.write("needlex xneedle needle_ _needle needle\n", to: "word-count.txt")
+        try root.write(
+            Array(repeating: "missingliteral", count: 160).joined(separator: "\n") + "\n",
+            to: "boundary-count.txt"
+        )
         try root.write("éneedle\npre NEEDLE\nNEEDLE\n", to: "unicode-word-ci.txt")
         try root.write("needle needle\nNeedle quiet\n", to: "overlap.txt")
         try root.write("    needle padded\n\tneedle tabbed\nquiet\n    needle later\n", to: "trim.txt")
@@ -7492,6 +7496,17 @@ struct MiscTests {
         ], fixture: {})
         #expect(embeddedWordCountOutput == Data("1\n".utf8))
 
+        let boundedBoundaryRejectedWordCountResult = try runExecutableResult([
+            "-c",
+            "-m1",
+            "-w",
+            "literal",
+            root.path("boundary-count.txt"),
+        ])
+        #expect(boundedBoundaryRejectedWordCountResult.stdout.isEmpty)
+        #expect(boundedBoundaryRejectedWordCountResult.stderr.isEmpty)
+        #expect(boundedBoundaryRejectedWordCountResult.status == 1)
+
         let multiLiteralWordCountOutput = try runExecutableData([
             "-c",
             "-w",
@@ -7517,6 +7532,17 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(multiLiteralWordMaxCountOutput == Data("2\n".utf8))
+
+        let boundedMultiLiteralBoundaryRejectedWordCountResult = try runExecutableResult([
+            "-c",
+            "-m1",
+            "-w",
+            "literal|absent",
+            root.path("boundary-count.txt"),
+        ])
+        #expect(boundedMultiLiteralBoundaryRejectedWordCountResult.stdout.isEmpty)
+        #expect(boundedMultiLiteralBoundaryRejectedWordCountResult.stderr.isEmpty)
+        #expect(boundedMultiLiteralBoundaryRejectedWordCountResult.status == 1)
 
         let caseInsensitiveMultiLiteralWordMaxCountOutput = try runExecutableData([
             "-c",

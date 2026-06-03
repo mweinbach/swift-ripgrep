@@ -11398,7 +11398,7 @@ private func countASCIIWordMatchedLines(
             var searchOffset = 0
             var matchedLineCount = 0
             var rejectedBoundaryCandidates = 0
-            let maxRejectedBoundaryCandidates = 128
+            let maxRejectedBoundaryCandidates = maxCount == nil ? 128 : nil
             while searchOffset < data.count,
                   matchedLineCount < limit {
                 guard let found = rg_memmem_simple(
@@ -11432,10 +11432,15 @@ private func countASCIIWordMatchedLines(
                     searchOffset = base.distance(to: newline.assumingMemoryBound(to: UInt8.self)) + 1
                 } else {
                     rejectedBoundaryCandidates += 1
-                    guard rejectedBoundaryCandidates <= maxRejectedBoundaryCandidates else {
+                    if let maxRejectedBoundaryCandidates,
+                       rejectedBoundaryCandidates > maxRejectedBoundaryCandidates {
                         return nil
                     }
-                    searchOffset = matchStart + 1
+                    searchOffset = rgSwiftNextASCIIWordSearchOffset(
+                        base: base,
+                        dataCount: data.count,
+                        matchEnd: matchEnd
+                    )
                 }
             }
             return matchedLineCount
@@ -11487,7 +11492,7 @@ private func countASCIIWordMatchedLines(
         var searchOffset = 0
         var matchedLineCount = 0
         var rejectedBoundaryCandidates = 0
-        let maxRejectedBoundaryCandidates = 128
+        let maxRejectedBoundaryCandidates = maxCount == nil ? 128 : nil
 
         while searchOffset < data.count,
               matchedLineCount < limit {
@@ -11547,11 +11552,16 @@ private func countASCIIWordMatchedLines(
                         }
 
                         rejectedBoundaryCandidates += 1
-                        guard rejectedBoundaryCandidates <= maxRejectedBoundaryCandidates else {
+                        if let maxRejectedBoundaryCandidates,
+                           rejectedBoundaryCandidates > maxRejectedBoundaryCandidates {
                             needsFallback = true
                             return
                         }
-                        literalSearchOffset = matchStart + 1
+                        literalSearchOffset = rgSwiftNextASCIIWordSearchOffset(
+                            base: base,
+                            dataCount: data.count,
+                            matchEnd: matchEnd
+                        )
                     }
                 }
                 if needsFallback {

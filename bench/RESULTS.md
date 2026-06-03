@@ -309,6 +309,31 @@ Raw hyperfine exports:
 `/tmp/swift-rg-bench/word-boundary-skip-ab-1780475420.json` and
 `/tmp/swift-rg-bench/word-boundary-skip-prefixed-ab-1780475511.json`.
 
+## Retained bounded word-boundary count candidate skipping - 2026-06-03
+
+Bounded Swift Darwin word-regexp count-line output now uses the same rejected
+ASCII word-candidate skip as bounded line output. Single-literal and
+multi-literal count scanners retain the 128 rejected-candidate fallback for
+unbounded counts, but positive max-count searches advance to the end of the
+current ASCII regex word and keep scanning until the requested count limit or
+end of file. A same-session A/B against the saved prepatch binary, with Rust
+included, measured:
+
+| Case | Current Swift | Prepatch Swift | Rust |
+| --- | ---: | ---: | ---: |
+| `-w -c -m 1 literal match-ascii-46m.txt` | 13.28 ms median / 13.30 ms mean | 6.714 s / 6.718 s | 42.26 ms / 42.25 ms |
+| `-w -c --max-count=1 literal match-ascii-46m.txt` | 13.21 ms / 13.21 ms | 6.701 s / 6.725 s | 41.67 ms / 41.71 ms |
+| `-H -w -c -m 1 literal match-ascii-46m.txt` | 13.34 ms / 13.36 ms | 6.662 s / 6.664 s | 42.21 ms / 42.29 ms |
+
+Release stdout, stderr, and status matched the sibling Rust oracle on the dense
+ASCII fixture for bounded word count misses, inline bounded word count misses,
+absent word count misses, count-matches controls, and prefixed bounded word
+count misses. Executable regression coverage now includes repeated
+boundary-rejected single-literal and multi-literal bounded word count rows.
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/word-count-boundary-skip-ab-1780476190.json`.
+
 ## Rejected word/path no-match preflight probes - 2026-06-03
 
 A follow-up probe tried to reuse the no-match byte-count primitives before the
