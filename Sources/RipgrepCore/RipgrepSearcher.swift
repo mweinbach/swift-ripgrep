@@ -8406,6 +8406,39 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: 0, searched: true)
             }
 
+            if firstMatchOnly,
+               case .uppercasePlus = fastPath.run {
+                guard let match = quietUppercaseRunSuffixFirstMatch(
+                    baseAddress: baseAddress,
+                    dataCount: dataCount,
+                    contentStart: contentStart,
+                    suffix: suffix
+                ) else {
+                    return SearchFileResult(
+                        fileURL: fileURL,
+                        matches: [],
+                        bytesSearched: searchableCount,
+                        searched: true
+                    )
+                }
+                return SearchFileResult(
+                    fileURL: fileURL,
+                    matches: [
+                        SearchMatch(
+                            fileURL: fileURL,
+                            lineNumber: 1,
+                            column: nil,
+                            line: "",
+                            absoluteOffset: match.matchStart,
+                            matchCount: 1,
+                            spans: []
+                        ),
+                    ],
+                    bytesSearched: min(searchableCount, match.suffixStart + suffix.count - contentStart),
+                    searched: true
+                )
+            }
+
             let newline = UInt8(ascii: "\n")
             var searchOffset = contentStart
             var lastMatchEnd = contentStart
@@ -11293,6 +11326,38 @@ public struct RipgrepSearcher: @unchecked Sendable {
             return false
         }
         return true
+    }
+
+    private func quietUppercaseRunSuffixFirstMatch(
+        baseAddress: UnsafePointer<UInt8>,
+        dataCount: Int,
+        contentStart: Int,
+        suffix: [UInt8]
+    ) -> (matchStart: Int, suffixStart: Int)? {
+        suffix.withUnsafeBufferPointer { suffixBuffer -> (matchStart: Int, suffixStart: Int)? in
+            guard let suffixBase = suffixBuffer.baseAddress,
+                  suffixBuffer.count > 0 else {
+                return nil
+            }
+            var searchOffset = contentStart
+            while searchOffset + suffixBuffer.count <= dataCount {
+                guard let found = rg_memmem_simple(
+                    baseAddress.advanced(by: searchOffset),
+                    dataCount - searchOffset,
+                    suffixBase,
+                    suffixBuffer.count
+                ) else {
+                    return nil
+                }
+                let suffixStart = baseAddress.distance(to: found)
+                if suffixStart > contentStart,
+                   isASCIIUppercase(baseAddress[suffixStart - 1]) {
+                    return (suffixStart - 1, suffixStart)
+                }
+                searchOffset = suffixStart + 1
+            }
+            return nil
+        }
     }
 
     private func parsePositiveDecimalPrefix(from pattern: inout String) -> Int? {

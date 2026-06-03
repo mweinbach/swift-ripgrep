@@ -8,6 +8,43 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Quiet uppercase-run suffix first match - 2026-06-03
+
+Quiet `[A-Z]+suffix` searches now use a first-match-only scanner after the file
+has already been loaded by the existing raw suffix fast path. The specialized
+branch proves only the uppercase byte immediately before the suffix and returns
+the quiet status result immediately; visible output, stats, exact-count
+patterns such as `[A-Z]{3}suffix`, and other suffix forms stay on the generic
+scanner.
+
+Validation:
+
+- Patched Swift matched Rust status for `[A-Z]+_RESUME`, `[A-Z]{3}_RESUME`,
+  `[A-Z]+_MISSING`, and `[A-Z]+_NEVERMATCHTOKEN` on the Linux benchmark tree.
+- Sorted visible output for those same patterns matched Rust byte-for-byte.
+- `swift build -c release`,
+  `swift test --filter
+  FeatureTests/quietRequiredLiteralRegexRecursiveSearchReturnsOnlyExitStatus`,
+  full `swift test`,
+  `SWIFT_RIPGREP_PARITY=1 swift test --filter
+  ParityHarnessTests/testMatchesRustRipgrepOnSelectedFixtures`,
+  `scripts/check-no-external-deps.sh --skip-build`, and `git diff --check`
+  passed before recording these results.
+
+The retained confirmation used 8 warm-ups and 60 timed runs. The pre-change
+refresh was a same-session 40-run scan before the helper was added; the exact
+and late-missing rows are guard confirmations because exact-count output stays
+on the generic scanner and the late match remains dominated by traversal/order.
+
+| Case | Current Swift | Pre-change / guard | Rust |
+| --- | ---: | ---: | ---: |
+| `-q '[A-Z]+_RESUME' linux` | 11.9 ms mean / 11.2-13.5 ms range | 13.1 ms / 11.2-15.7 ms | 6.8 ms / 5.9-9.1 ms |
+| `-q '[A-Z]{3}_RESUME' linux` | 12.4 ms / 11.5-14.0 ms | generic-path guard | 7.2 ms / 5.7-10.9 ms |
+| `-q '[A-Z]+_MISSING' linux` | 25.0 ms / 24.1-27.2 ms | prior guard 25.8 ms | 17.7 ms / 7.9-85.6 ms |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/quiet-uppercase-run-suffix-specialized-1780454257.json`.
+
 ## Word literal absent proof - 2026-06-03
 
 The simple Darwin literal preflight now skips the heavier regex-literal parser
