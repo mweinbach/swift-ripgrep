@@ -8,6 +8,30 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Retained six-worker Darwin file-list cap - 2026-06-03
+
+The shared Darwin file-list worker cap is back to six workers instead of eight.
+The current source had drifted from the earlier six-worker benchmark note, so
+this checkpoint remeasured the cap against `9d7f1f4` after the recent sorted
+file-list and root-setup work. Output stayed byte-for-byte identical to the
+previous Swift binary for default, hidden, no-vcs, no-ignore, NUL, and debug
+file-listing. Sorted path output also matched Rust for default, hidden, no-vcs,
+and no-ignore file-list controls.
+
+A 40-run A/B followed by a patch-first 60-run confirmation measured:
+
+| Case | Current Swift | Baseline `9d7f1f4` | Rust reference |
+| --- | ---: | ---: | ---: |
+| `--files linux` confirmation | 75.13 ms median / 76.87 ms mean | 77.39 ms / 78.43 ms | 78.17 ms / 87.35 ms from the 40-run pass |
+| `--null --files linux` confirmation | 74.26 ms / 76.40 ms | 77.53 ms / 79.08 ms | not remeasured |
+| `--no-ignore --files linux` guard confirmation | 57.91 ms / 58.74 ms | 63.75 ms / 65.86 ms | not remeasured |
+| `--hidden --files linux` guard confirmation | 76.12 ms / 77.12 ms | 79.88 ms / 80.75 ms | not remeasured |
+| `--no-ignore-vcs --files linux` guard confirmation | 58.91 ms / 59.48 ms | 63.39 ms / 64.30 ms | not remeasured |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/workerlimit6-ab-1780515245.json` and
+`/tmp/swift-rg-bench/workerlimit6-confirm-1780515304.json`.
+
 ## Rejected PathSort bulk byte-key probe - 2026-06-03
 
 Tried building sorted file-list byte keys by bulk-copying the path UTF-8 suffix
