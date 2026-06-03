@@ -5323,6 +5323,54 @@ struct MiscTests {
         #expect(rareAnchorFilesWithoutMatchOutput.stderr.isEmpty)
         #expect(rareAnchorFilesWithoutMatchOutput.status == 0)
 
+        let rareAnchorMultiLiteralQuietNoMatchOutput = try runExecutableResult([
+            "-q",
+            "-e",
+            "ALPHA",
+            "-e",
+            "BRAVO",
+            "-e",
+            "CHARLIE",
+            "-e",
+            "DELTA",
+            root.path("rare-anchor-false-positive.txt"),
+        ])
+        #expect(rareAnchorMultiLiteralQuietNoMatchOutput.stdout.isEmpty)
+        #expect(rareAnchorMultiLiteralQuietNoMatchOutput.stderr.isEmpty)
+        #expect(rareAnchorMultiLiteralQuietNoMatchOutput.status == 1)
+
+        let rareAnchorMultiLiteralFilesWithMatchOutput = try runExecutableResult([
+            "-l",
+            "-e",
+            "ALPHA",
+            "-e",
+            "BRAVO",
+            "-e",
+            "CHARLIE",
+            "-e",
+            "DELTA",
+            root.path("rare-anchor-false-positive.txt"),
+        ])
+        #expect(rareAnchorMultiLiteralFilesWithMatchOutput.stdout.isEmpty)
+        #expect(rareAnchorMultiLiteralFilesWithMatchOutput.stderr.isEmpty)
+        #expect(rareAnchorMultiLiteralFilesWithMatchOutput.status == 1)
+
+        let rareAnchorMultiLiteralFilesWithoutMatchOutput = try runExecutableResult([
+            "--files-without-match",
+            "-e",
+            "ALPHA",
+            "-e",
+            "BRAVO",
+            "-e",
+            "CHARLIE",
+            "-e",
+            "DELTA",
+            root.path("rare-anchor-false-positive.txt"),
+        ])
+        #expect(rareAnchorMultiLiteralFilesWithoutMatchOutput.stdout == Data("\(root.path("rare-anchor-false-positive.txt"))\n".utf8))
+        #expect(rareAnchorMultiLiteralFilesWithoutMatchOutput.stderr.isEmpty)
+        #expect(rareAnchorMultiLiteralFilesWithoutMatchOutput.status == 0)
+
         let allPresentMultiLiteralOutput = try runExecutableData([
             "-e",
             "needle",

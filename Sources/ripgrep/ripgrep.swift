@@ -380,6 +380,126 @@ struct RipgrepCommand {
         }
     }
 
+    #if canImport(Darwin) && !canImport(CRipgrepPlatform)
+    private static func swiftDarwinCommonUppercaseMultiLiteralQuietExitCode(
+        path: String,
+        literals: [[UInt8]]
+    ) -> Int32? {
+        guard swiftDarwinCommonUppercaseMultiLiteralNoMatch(path: path, literals: literals) == true else {
+            return nil
+        }
+        return 1
+    }
+
+    private static func swiftDarwinCommonUppercaseMultiLiteralPathOnlyExitCode(
+        path: String,
+        literals: [[UInt8]],
+        printWhenMatched: Bool,
+        nullTerminated: Bool,
+        crlfTerminated: Bool,
+        outputPath: [UInt8]?
+    ) -> Int32? {
+        guard swiftDarwinCommonUppercaseMultiLiteralNoMatch(path: path, literals: literals) == true else {
+            return nil
+        }
+        guard !printWhenMatched else {
+            return 1
+        }
+        var output = outputPath ?? Array(path.utf8)
+        if nullTerminated {
+            output.append(0)
+        } else if crlfTerminated {
+            output.append(contentsOf: [13, 10])
+        } else {
+            output.append(10)
+        }
+        FileHandle.standardOutput.write(Data(output))
+        return 0
+    }
+
+    private static func swiftDarwinCommonUppercaseMultiLiteralNoMatch(
+        path: String,
+        literals: [[UInt8]]
+    ) -> Bool? {
+        guard let candidateBytes = swiftDarwinCommonUppercaseLiteralBytes(literals) else {
+            return nil
+        }
+
+        let fd = path.withCString { Darwin.open($0, O_RDONLY) }
+        guard fd >= 0 else {
+            return nil
+        }
+        defer {
+            Darwin.close(fd)
+        }
+
+        var fileStat = stat()
+        guard Darwin.fstat(fd, &fileStat) == 0,
+              (fileStat.st_mode & S_IFMT) == S_IFREG,
+              UInt64(fileStat.st_size) <= UInt64(Int.max) else {
+            return nil
+        }
+        guard fileStat.st_size > 0 else {
+            return true
+        }
+
+        let haystackLength = Int(fileStat.st_size)
+        guard haystackLength >= 1024 * 1024,
+              let mapped = Darwin.mmap(nil, haystackLength, PROT_READ, MAP_PRIVATE, fd, 0),
+              mapped != MAP_FAILED else {
+            return nil
+        }
+        defer {
+            Darwin.munmap(mapped, haystackLength)
+        }
+
+        let base = UnsafeRawPointer(mapped).assumingMemoryBound(to: UInt8.self)
+        if memchr(base, 0, min(haystackLength, 64 * 1024)) != nil {
+            return nil
+        }
+
+        let sampleCount = min(haystackLength, 256 * 1024)
+        for candidateByte in candidateBytes {
+            if memchr(base, Int32(candidateByte), sampleCount) == nil {
+                return memchr(base, Int32(candidateByte), haystackLength) == nil ? true : nil
+            }
+        }
+        return nil
+    }
+
+    private static func swiftDarwinCommonUppercaseLiteralBytes(_ literals: [[UInt8]]) -> [UInt8]? {
+        guard (2...8).contains(literals.count),
+              literals.allSatisfy({ !$0.isEmpty && !$0.contains(UInt8(ascii: "\n")) }) else {
+            return nil
+        }
+
+        var commonBytes = [Bool](repeating: false, count: 256)
+        var seenBytes = [Bool](repeating: false, count: 256)
+        for byte in literals[0] {
+            commonBytes[Int(byte)] = true
+        }
+        for literal in literals.dropFirst() {
+            seenBytes = [Bool](repeating: false, count: 256)
+            for byte in literal {
+                seenBytes[Int(byte)] = true
+            }
+            for index in commonBytes.indices where commonBytes[index] && !seenBytes[index] {
+                commonBytes[index] = false
+            }
+        }
+
+        let candidateBytes = commonBytes.indices.compactMap { index -> UInt8? in
+            guard commonBytes[index],
+                  index >= Int(UInt8(ascii: "A")),
+                  index <= Int(UInt8(ascii: "Z")) else {
+                return nil
+            }
+            return UInt8(index)
+        }
+        return candidateBytes.isEmpty ? nil : candidateBytes
+    }
+    #endif
+
     private static func runSwiftDarwinLiteralPreflight(arguments: [String]) -> Int32? {
         let preflightArguments = darwinLiteralPreflightArguments(
             afterStrippingLeadingEngineSelectorFrom: arguments
@@ -5123,6 +5243,12 @@ struct RipgrepCommand {
                 return nil
             }
             if parsedQuiet {
+                if let exitCode = swiftDarwinCommonUppercaseMultiLiteralQuietExitCode(
+                    path: path,
+                    literals: literals
+                ) {
+                    return exitCode
+                }
                 return SwiftDarwinLiteralPreflight.multiLiteralQuietExitCode(
                     path: path,
                     literals: literals
@@ -5139,6 +5265,16 @@ struct RipgrepCommand {
                 )
             }
             if let parsedPathOnlyMode {
+                if let exitCode = swiftDarwinCommonUppercaseMultiLiteralPathOnlyExitCode(
+                    path: path,
+                    literals: literals,
+                    printWhenMatched: parsedPathOnlyMode == .matching,
+                    nullTerminated: parsedNullPathTerminator,
+                    crlfTerminated: parsedCrlf,
+                    outputPath: parsedPathOnlyOutputPath
+                ) {
+                    return exitCode
+                }
                 return SwiftDarwinLiteralPreflight.multiLiteralPathOnlyExitCode(
                     path: path,
                     literals: literals,
@@ -7188,6 +7324,12 @@ struct RipgrepCommand {
         }
 
         if quiet {
+            if let exitCode = swiftDarwinCommonUppercaseMultiLiteralQuietExitCode(
+                path: path,
+                literals: literals
+            ) {
+                return exitCode
+            }
             return SwiftDarwinLiteralPreflight.multiLiteralQuietExitCode(
                 path: path,
                 literals: literals
@@ -7212,6 +7354,16 @@ struct RipgrepCommand {
             let outputPath = path.utf8.allSatisfy { $0 < 0x80 }
                 ? nil
                 : Self.preflightDisplayPathBytes(path, pathSeparator: nil)
+            if let exitCode = swiftDarwinCommonUppercaseMultiLiteralPathOnlyExitCode(
+                path: path,
+                literals: literals,
+                printWhenMatched: printMode == .filesWithMatches,
+                nullTerminated: nullTerminated,
+                crlfTerminated: crlfTerminated,
+                outputPath: outputPath
+            ) {
+                return exitCode
+            }
             return SwiftDarwinLiteralPreflight.multiLiteralPathOnlyExitCode(
                 path: path,
                 literals: literals,
