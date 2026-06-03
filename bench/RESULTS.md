@@ -64,6 +64,15 @@ Rejected follow-up probe:
   82.3 ms versus 83.1 ms, and `--no-ignore-vcs` stayed noise-level positive at
   63.9 ms versus 64.7 ms. The source probe was reverted. Raw export:
   `/tmp/swift-rg-bench/scoped-root-stack-ab-1780529217.json`.
+- Skipping `overridePath` construction in the fast search walker preserved
+  status/stdout/stderr against both Rust and the saved `86e6af2` Swift binary
+  for quiet hit, quiet miss, hidden quiet hit, no-ignore quiet hit, and a normal
+  single-file search output guard. It still regressed the early-hit target:
+  `-q SCHED linux` measured 8.7 ms for the probe versus 8.3 ms baseline and
+  6.2 ms for Rust. The absent-literal miss guard was flat at 1.263 s versus
+  1.265 s baseline. The source probe was reverted. Raw exports:
+  `/tmp/swift-rg-bench/fast-search-empty-override-hit-1780530625.json` and
+  `/tmp/swift-rg-bench/fast-search-empty-override-miss-1780530625.json`.
 
 ## Extended root VCS-context reuse to file-path walks - 2026-06-03
 
