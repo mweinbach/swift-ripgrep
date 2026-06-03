@@ -179,6 +179,33 @@ Raw hyperfine exports:
 and
 `/tmp/swift-rg-bench/simple-common-flags-postsafety-smoke-1780472615.json`.
 
+## Retained simple filename/heading preflight eligibility - 2026-06-03
+
+The simple Swift Darwin executable literal line preflight now keeps explicit
+single-file filename and heading output on the fast path. `-H` /
+`--with-filename` builds the same path line prefix used by the broader parser,
+while `--heading --with-filename` emits the path heading once before matched
+lines. `--no-heading` and `--no-filename` preserve last-flag-wins behavior. A
+same-session A/B against checkpoint `9bf8b7f`, with Rust included, measured:
+
+| Case | Current Swift | Baseline `9bf8b7f` | Rust |
+| --- | ---: | ---: | ---: |
+| `absentliteral match-ascii-46m.txt` guardrail | 11.93 ms median / 11.76 ms mean | 11.98 ms / 11.74 ms | 6.21 ms / 6.19 ms |
+| `-H absentliteral match-ascii-46m.txt` | 7.57 ms / 7.57 ms | 9.43 ms / 9.61 ms | 6.13 ms / 6.13 ms |
+| `--with-filename absentliteral match-ascii-46m.txt` | 7.57 ms / 7.57 ms | 9.44 ms / 9.70 ms | 6.10 ms / 6.10 ms |
+| `--heading --with-filename absentliteral match-ascii-46m.txt` | 7.61 ms / 7.65 ms | 9.46 ms / 9.49 ms | 6.10 ms / 6.13 ms |
+| `-H literal match-ascii-46m.txt` control | 39.27 ms / 39.50 ms | 41.28 ms / 41.50 ms | 55.12 ms / 55.88 ms |
+| `--heading --with-filename literal match-ascii-46m.txt` control | 36.12 ms / 36.33 ms | 37.98 ms / 37.91 ms | 36.29 ms / 36.35 ms |
+| `-H -n literal match-ascii-46m.txt` control | 41.72 ms / 41.83 ms | 43.71 ms / 43.69 ms | 78.84 ms / 78.82 ms |
+
+Output, stderr, and status matched the previous Swift binary and the sibling
+Rust oracle for matched and missing prefixed rows, heading and line-numbered
+heading rows, heading/no-heading override order, filename/no-filename override
+order, and word-boundary prefixed/heading rows.
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/filename-heading-preflight-ab-1780473376.json`.
+
 ## Rejected word/path no-match preflight probes - 2026-06-03
 
 A follow-up probe tried to reuse the no-match byte-count primitives before the

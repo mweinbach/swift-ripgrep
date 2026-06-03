@@ -6422,7 +6422,6 @@ struct RipgrepCommand {
         case "-s",
              "--case-sensitive",
              "--hidden",
-             "--no-heading",
              "--no-ignore",
              "--no-ignore-vcs",
              "--no-messages",
@@ -6495,10 +6494,12 @@ struct RipgrepCommand {
             return nil
         }
         var fixedStrings = false
+        var heading = false
         var lineNumber = false
         var noUnicode = false
         var quiet = false
         var unrestrictedCount = 0
+        var withFilename = false
         var wordRegexp = false
         let pattern = arguments[arguments.count - 2]
         let path = arguments[arguments.count - 1]
@@ -6522,6 +6523,14 @@ struct RipgrepCommand {
                 continue
             }
             switch argument {
+            case "-H", "--with-filename":
+                withFilename = true
+            case "-I", "--no-filename":
+                withFilename = false
+            case "--heading":
+                heading = true
+            case "--no-heading":
+                heading = false
             case "-n", "--line-number":
                 lineNumber = true
             case "-q", "--quiet":
@@ -6567,10 +6576,13 @@ struct RipgrepCommand {
                     literal: literal
                 )
             }
+            let displayPath = withFilename ? Self.preflightDisplayPathBytes(path, pathSeparator: nil) : []
             return SwiftDarwinLiteralPreflight.wordLineExitCode(
                 path: path,
                 literal: literal,
-                lineNumber: lineNumber
+                lineNumber: lineNumber,
+                linePrefix: withFilename && !heading ? displayPath + [UInt8(ascii: ":")] : [],
+                headingPrefix: heading && withFilename ? displayPath + [UInt8(ascii: "\n")] : []
             )
         }
         if quiet {
@@ -6579,11 +6591,14 @@ struct RipgrepCommand {
                 literal: literal
             )
         }
+        let displayPath = withFilename ? Self.preflightDisplayPathBytes(path, pathSeparator: nil) : []
         return SwiftDarwinLiteralPreflight.exitCode(
             path: path,
             literal: literal,
             asciiCaseInsensitive: false,
-            lineNumber: lineNumber
+            lineNumber: lineNumber,
+            linePrefix: withFilename && !heading ? displayPath + [UInt8(ascii: ":")] : [],
+            headingPrefix: heading && withFilename ? displayPath + [UInt8(ascii: "\n")] : []
         )
     }
 
@@ -6623,6 +6638,8 @@ struct RipgrepCommand {
             switch argument {
             case "-c", "--count":
                 count = true
+            case "--no-heading":
+                break
             case "--include-zero":
                 includeZero = true
             case "--no-include-zero":
@@ -6715,6 +6732,8 @@ struct RipgrepCommand {
                 json = true
             case "--no-json":
                 json = false
+            case "--no-heading":
+                break
             case "--stats":
                 stats = true
             case "--no-stats":
@@ -6796,6 +6815,8 @@ struct RipgrepCommand {
                 printWhenMatched = true
             case "--files-without-match":
                 printWhenMatched = false
+            case "--no-heading":
+                break
             case "-0", "--null":
                 nullTerminated = true
             case "--crlf":

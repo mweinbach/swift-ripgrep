@@ -2786,6 +2786,50 @@ struct MiscTests {
             """.utf8
         ))
 
+        let prefixedNumberedOutput = try runExecutableData([
+            "--no-config",
+            "--with-filename",
+            "-n",
+            "literal",
+            root.path("simple.txt"),
+        ], fixture: {})
+        #expect(prefixedNumberedOutput == Data(
+            """
+            \(root.path("simple.txt")):1:literal one
+            \(root.path("simple.txt")):2:literal two
+            \(root.path("simple.txt")):4:literal three
+            \(root.path("simple.txt")):5:literal four
+
+            """.utf8
+        ))
+
+        let headingOutput = try runExecutableData([
+            "--no-config",
+            "--heading",
+            "--with-filename",
+            "literal",
+            root.path("simple.txt"),
+        ], fixture: {})
+        #expect(headingOutput == Data(
+            """
+            \(root.path("simple.txt"))
+            literal one
+            literal two
+            literal three
+            literal four
+
+            """.utf8
+        ))
+
+        let noFilenameOverrideOutput = try runExecutableData([
+            "--no-config",
+            "-H",
+            "--no-filename",
+            "literal",
+            root.path("simple.txt"),
+        ], fixture: {})
+        #expect(noFilenameOverrideOutput == output)
+
         func runExecutableStatusData(_ arguments: [String]) throws -> (stdout: Data, stderr: Data, status: Int32) {
             let executable = ripgrepPackageRootURL().appendingPathComponent(".build/debug/ripgrep")
             let process = Process()
