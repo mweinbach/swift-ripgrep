@@ -11710,14 +11710,66 @@ public struct RipgrepSearcher: @unchecked Sendable {
               !options.passthru,
               options.replacement == nil,
               !fastPath.wordASCII,
-              fastPath.literals.count == 1,
-              let literal = fastPath.literals.first,
-              !literal.isEmpty,
-              !fastPath.caseInsensitiveASCII || literal.allSatisfy({ $0 < 0x80 }),
+              !fastPath.literals.isEmpty,
+              fastPath.literals.allSatisfy({ literal in
+                !literal.isEmpty && (!fastPath.caseInsensitiveASCII || literal.allSatisfy({ $0 < 0x80 }))
+              }),
               pathOnlyOutput || pathStatsOutput || quietOutput || quietStatsOutput || jsonQuietSummaryOutput else {
             return nil
         }
 
+        if fastPath.literals.count > 1 {
+            guard fastPath.caseInsensitiveASCII,
+                  quietOutput else {
+                return nil
+            }
+            var earliestMatchStart = Int.max
+            var earliestMatchEnd = Int.max
+            for literal in fastPath.literals {
+                let foldedLiteral = literal.map(asciiLowercase)
+                var caseInsensitiveShifts = [Int](repeating: foldedLiteral.count, count: 256)
+                if foldedLiteral.count > 1 {
+                    for index in 0..<(foldedLiteral.count - 1) {
+                        caseInsensitiveShifts[Int(foldedLiteral[index])] = foldedLiteral.count - 1 - index
+                    }
+                }
+                let found = foldedLiteral.withUnsafeBufferPointer { needle -> UnsafePointer<UInt8>? in
+                    guard let literalBaseAddress = needle.baseAddress else {
+                        return nil
+                    }
+                    return caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
+                        rg_memcasemem_ascii_prepared(
+                            baseAddress,
+                            data.count,
+                            literalBaseAddress,
+                            foldedLiteral.count,
+                            shifts.baseAddress
+                        )
+                    }
+                }
+                guard let found else {
+                    continue
+                }
+                let matchStart = baseAddress.distance(to: found)
+                if matchStart < earliestMatchStart {
+                    earliestMatchStart = matchStart
+                    earliestMatchEnd = matchStart + foldedLiteral.count
+                }
+            }
+            let hasMatch = earliestMatchStart != Int.max
+            return SearchFileResult(
+                fileURL: fileURL,
+                matches: [],
+                bytesSearched: hasMatch ? earliestMatchEnd : data.count,
+                searched: true,
+                supplementalMatchedLines: hasMatch ? 1 : 0,
+                supplementalMatches: hasMatch ? 1 : 0
+            )
+        }
+
+        guard let literal = fastPath.literals.first else {
+            return nil
+        }
         let literalStorage: [UInt8]
         let caseInsensitiveShifts: [Int]?
         if fastPath.caseInsensitiveASCII {

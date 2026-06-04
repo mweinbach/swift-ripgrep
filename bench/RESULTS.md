@@ -8,6 +8,30 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Quiet case-insensitive multi-literal status helper - 2026-06-04
+
+Quiet recursive ASCII ignore-case multi-literal searches now use a status-only
+raw byte helper inside the per-file Darwin fast path. This keeps `-q` from
+building, sorting, and decoding matching-line output that the caller will throw
+away, while stats, JSON summaries, and path-output modes stay on their existing
+routes.
+
+Status/stdout/stderr matched Rust for the late-hit four-literal alternation and
+a full no-match alternation. The first late-hit file for the representative
+shape matched the first literal (`ERR_SYS`), so literal reordering was not a
+useful follow-up.
+
+Same-session release A/B against detached baseline `93c5c2a`:
+
+| Case | Patched Swift | Baseline `93c5c2a` | Rust reference |
+| --- | ---: | ---: | ---: |
+| `-q -i 'ERR_SYS|PME_TURN_OFF|LINK_REQ_RST|CFG_BME_EVT' linux` | 264.0 ms mean | 277.3 ms | 25.1 ms noisy mean |
+| full no-match guard | 1.075 s | 1.394 s | not remeasured |
+| early-hit PM alternation guard | 6.7 ms | 8.0 ms | not remeasured |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/quiet-casei-alt-status-helper-ab-1780562583.json`.
+
 ## Quiet case-insensitive alternation prefix scout - 2026-06-04
 
 Recursive quiet ASCII ignore-case literal alternations now get a tiny
