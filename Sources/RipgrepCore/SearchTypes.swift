@@ -104,6 +104,7 @@ public struct SearchFileResult: Equatable, Sendable {
     public let searched: Bool
     public let supplementalMatchedLines: Int
     public let supplementalMatches: Int
+    public let totalLineCount: Int?
 
     public init(
         fileURL: URL,
@@ -116,7 +117,8 @@ public struct SearchFileResult: Equatable, Sendable {
         bytesSearched: Int = 0,
         searched: Bool = true,
         supplementalMatchedLines: Int = 0,
-        supplementalMatches: Int = 0
+        supplementalMatches: Int = 0,
+        totalLineCount: Int? = nil
     ) {
         self.fileURL = fileURL
         self.matches = matches
@@ -129,6 +131,7 @@ public struct SearchFileResult: Equatable, Sendable {
         self.searched = searched
         self.supplementalMatchedLines = supplementalMatchedLines
         self.supplementalMatches = supplementalMatches
+        self.totalLineCount = totalLineCount
     }
 
     public var hasMatch: Bool {

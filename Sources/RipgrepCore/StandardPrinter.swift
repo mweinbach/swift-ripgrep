@@ -1058,7 +1058,7 @@ public struct StandardPrinter {
         if options.passthru {
             selectedLineNumbers = result.lines.map(\.lineNumber)
         } else {
-            let lineCount = result.lines.count
+            let lineCount = result.totalLineCount ?? result.lines.count
             guard lineCount > 0 else {
                 return []
             }
@@ -1232,7 +1232,7 @@ public struct StandardPrinter {
     }
 
     private func vimgrepSelectedContextLineNumbers(for result: SearchFileResult) -> [Int] {
-        let lineCount = result.lines.count
+        let lineCount = result.totalLineCount ?? result.lines.count
         let selected = result.matches.reduce(into: Set<Int>()) { lineNumbers, match in
             let matchLineNumbers = multilineLineNumbers(for: match)
             let firstLine = matchLineNumbers.first ?? match.lineNumber

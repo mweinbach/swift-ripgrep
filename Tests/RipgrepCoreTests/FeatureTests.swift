@@ -86,6 +86,19 @@ struct FeatureTests {
         ])
     }
 
+    @Test("ASCII literal after-context near EOF preserves sparse line count")
+    func asciiLiteralAfterContextNearEOFPreservesSparseLineCount() throws {
+        let root = try TemporaryDirectory()
+        try root.write("intro\nNEEDLE\none\ntwo\nthree\nfour", to: "tail.txt")
+
+        #expect(try run(["-n", "-A3", "NEEDLE", root.path("tail.txt")]) == [
+            "2:NEEDLE",
+            "3-one",
+            "4-two",
+            "5-three",
+        ])
+    }
+
     @Test("quiet required-literal regex recursive search returns only exit status")
     func quietRequiredLiteralRegexRecursiveSearchReturnsOnlyExitStatus() throws {
         let root = try TemporaryDirectory()

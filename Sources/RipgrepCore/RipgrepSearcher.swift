@@ -7611,6 +7611,14 @@ public struct RipgrepSearcher: @unchecked Sendable {
         ) {
             return FileSearchOutcome(result: fastResult)
         }
+        if let fastResult = searchRawASCIILiteralContextContents(
+            data,
+            fileURL: fileURL,
+            matcher: matcher,
+            options: options
+        ) {
+            return FileSearchOutcome(result: fastResult)
+        }
         if let fastResult = searchRawLiteralContents(
             data,
             fileURL: fileURL,
@@ -9979,6 +9987,215 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
         return result
         #endif
+    }
+
+    private struct RawContextLine {
+        let lineNumber: Int
+        let start: Int
+        let end: Int
+        let terminator: String
+        let spans: [MatchSpan]
+
+        var isMatch: Bool {
+            !spans.isEmpty
+        }
+    }
+
+    private func searchRawASCIILiteralContextContents(
+        _ data: Data,
+        fileURL: URL,
+        matcher: PatternMatcher,
+        options: RipgrepOptions
+    ) -> SearchFileResult? {
+        guard case .automatic = options.encodingMode,
+              !data.starts(with: [0xEF, 0xBB, 0xBF]),
+              !data.starts(with: [0xFF, 0xFE]),
+              !data.starts(with: [0xFE, 0xFF]),
+              options.printMode == .matchingLines,
+              options.beforeContext > 0 || options.afterContext > 0,
+              !options.json,
+              !options.stats,
+              !options.passthru,
+              !options.invertMatch,
+              !options.onlyMatching,
+              !options.stopOnNonmatch,
+              !options.column,
+              !options.byteOffset,
+              !options.vimgrep,
+              !options.crlf,
+              !options.multiline,
+              !options.nullData,
+              !options.trim,
+              options.maxCount == nil,
+              options.maxColumns == nil,
+              options.replacement == nil,
+              canOmitMatchSpans(options: options),
+              let fastPath = matcher.byteLiteralFastPath(),
+              !fastPath.caseInsensitiveASCII,
+              !fastPath.wordASCII,
+              fastPath.literals.count == 1,
+              let literal = fastPath.literals.first,
+              !literal.isEmpty,
+              !literal.contains(where: isNonASCII) else {
+            return nil
+        }
+
+        if data.isEmpty {
+            return SearchFileResult(
+                fileURL: fileURL,
+                matches: [],
+                bytesSearched: 0,
+                searched: true,
+                totalLineCount: 0
+            )
+        }
+
+        return data.withUnsafeBytes { rawBytes -> SearchFileResult? in
+            let bytes = rawBytes.bindMemory(to: UInt8.self)
+            guard let baseAddress = bytes.baseAddress else {
+                return SearchFileResult(
+                    fileURL: fileURL,
+                    matches: [],
+                    bytesSearched: data.count,
+                    searched: true,
+                    totalLineCount: 0
+                )
+            }
+
+            var selectedLines: [RawContextLine] = []
+            var selectedLineNumbers = Set<Int>()
+            var previousLines: [RawContextLine] = []
+            var matches: [SearchMatch] = []
+            var lineStart = 0
+            var lineNumber = 1
+            var totalLineCount = 0
+            var afterContextRemaining = 0
+            var failedDecode = false
+
+            func selected(_ line: RawContextLine) {
+                guard selectedLineNumbers.insert(line.lineNumber).inserted else {
+                    return
+                }
+                selectedLines.append(line)
+            }
+
+            func decodedLine(start: Int, end: Int) -> String? {
+                String(data: Data(bytes: baseAddress.advanced(by: start), count: end - start), encoding: .utf8)
+            }
+
+            func emitMatch(_ line: RawContextLine, decoded: String) {
+                matches.append(SearchMatch(
+                    fileURL: fileURL,
+                    lineNumber: line.lineNumber,
+                    column: nil,
+                    line: decoded,
+                    lineTerminator: line.terminator,
+                    absoluteOffset: line.start,
+                    matchCount: line.spans.count,
+                    spans: line.spans.map { span in
+                        let textBytes = UnsafeBufferPointer(
+                            start: baseAddress.advanced(by: line.start + span.startByte),
+                            count: span.endByte - span.startByte
+                        )
+                        return MatchSpan(
+                            startColumn: span.startColumn,
+                            endColumn: span.endColumn,
+                            startByte: span.startByte,
+                            endByte: span.endByte,
+                            text: String(decoding: textBytes, as: UTF8.self)
+                        )
+                    }
+                ))
+            }
+
+            func processLine(end lineEnd: Int, terminator: String) {
+                totalLineCount += 1
+                let scan = byteLiteralSpans(
+                    fastPath: fastPath,
+                    bytes: bytes,
+                    lineStart: lineStart,
+                    lineEnd: lineEnd
+                )
+                if scan.needsDecodedFallback {
+                    failedDecode = true
+                    return
+                }
+
+                let rawLine = RawContextLine(
+                    lineNumber: lineNumber,
+                    start: lineStart,
+                    end: lineEnd,
+                    terminator: terminator,
+                    spans: scan.spans
+                )
+
+                if rawLine.isMatch {
+                    for contextLine in previousLines {
+                        selected(contextLine)
+                    }
+                    selected(rawLine)
+                    afterContextRemaining = max(afterContextRemaining, options.afterContext)
+                    guard let decoded = decodedLine(start: rawLine.start, end: rawLine.end) else {
+                        failedDecode = true
+                        return
+                    }
+                    emitMatch(rawLine, decoded: decoded)
+                } else if afterContextRemaining > 0 {
+                    selected(rawLine)
+                    afterContextRemaining -= 1
+                }
+
+                previousLines.append(rawLine)
+                if previousLines.count > options.beforeContext {
+                    previousLines.removeFirst(previousLines.count - options.beforeContext)
+                }
+            }
+
+            var index = 0
+            while index < data.count {
+                if bytes[index] == UInt8(ascii: "\n") {
+                    processLine(end: index, terminator: "\n")
+                    if failedDecode {
+                        return nil
+                    }
+                    index += 1
+                    lineStart = index
+                    lineNumber += 1
+                    continue
+                }
+                index += 1
+            }
+            if lineStart < data.count || data.last != UInt8(ascii: "\n") {
+                processLine(end: data.count, terminator: "")
+            }
+            if failedDecode {
+                return nil
+            }
+
+            var searchLines: [SearchLine] = []
+            searchLines.reserveCapacity(selectedLines.count)
+            for rawLine in selectedLines.sorted(by: { $0.lineNumber < $1.lineNumber }) {
+                guard let line = decodedLine(start: rawLine.start, end: rawLine.end) else {
+                    return nil
+                }
+                searchLines.append(SearchLine(
+                    lineNumber: rawLine.lineNumber,
+                    line: line,
+                    lineTerminator: rawLine.terminator,
+                    absoluteOffset: rawLine.start,
+                    positiveSpans: rawLine.spans
+                ))
+            }
+
+            return SearchFileResult(
+                fileURL: fileURL,
+                matches: matches,
+                lines: searchLines,
+                bytesSearched: data.count,
+                searched: true,
+                totalLineCount: totalLineCount
+            )
+        }
     }
 
     private func searchRawGreekScriptContents(

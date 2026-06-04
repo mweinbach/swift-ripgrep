@@ -8,6 +8,29 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Sparse ASCII literal context scan - 2026-06-04
+
+Plain case-sensitive ASCII literal searches with `-A`, `-B`, or `-C` now use a
+Swift-only raw context scanner when output options are simple enough to avoid
+decoded fallback semantics. The scanner retains only selected before/match/after
+lines, reports the real file line count to the shared context printer, and
+leaves JSON, stats, replacement, vimgrep, offsets, colors, multiline, binary,
+and non-automatic encodings on the existing decoded path.
+
+The accepted patch preserved current Swift output byte-for-byte for
+`-C2 PM_RESUME /tmp/swift-rg-bench/linux` and for focused `-A2`, `-B2`, and
+`-n -C2` variants against detached baseline `c82e935`. Same-session release A/B
+measured the representative context target at 2.746 s for patched Swift versus
+11.175 s for baseline, a 4.07x speedup.
+
+A lower-risk `splitLines` rewrite using direct `String` slices was rejected
+first: it preserved the same `-C2 PM_RESUME` output, but regressed the target
+from 11.114 s baseline to 11.675 s patched.
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/raw-ascii-context-1780570644.json` and
+`/tmp/swift-rg-bench/split-newline-probe-1780570217.json`.
+
 ## Cached ASCII literal fast reject - 2026-06-04
 
 `PatternMatcher` now caches the literal list used by `canFastReject` and uses a
