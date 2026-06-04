@@ -8,6 +8,37 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Deferred word-literal binary proof - 2026-06-04
+
+The Unicode word-literal executable writer now defers its full-file NUL proof
+until after collecting matching line ranges, immediately before any output is
+flushed. Binary fallback behavior is preserved because the function still
+declines before stdout writes if a NUL exists, and no-match binary cases still
+fall back to the generic path. This keeps the implementation Swift-only and
+removes the up-front text proof from the hot `-nw 'Sherlock Holmes'` subtitle
+path.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched baseline `b7f641b` byte-for-byte
+  for `-nw 'Sherlock Holmes'`, split `-n -w`, the explicit ASCII-boundary regex,
+  an ASCII boundary guard fixture, and a NUL-containing binary guard.
+- Current Swift stdout/status matched Rust for the same controls.
+
+A 40-run interleaved A/B measured:
+
+| Case | Current Swift | Baseline `b7f641b` | Rust |
+| --- | ---: | ---: | ---: |
+| `-nw 'Sherlock Holmes' en.sample.txt` | 278.96 ms median / 280.44 ms mean | 304.88 ms / 305.74 ms | 198.65 ms / 199.35 ms |
+| `-n '(?-u:\b)Sherlock Holmes(?-u:\b)' en.sample.txt` guard | 305.97 ms / 307.13 ms | 307.55 ms / 308.09 ms | not remeasured |
+
+Raw artifacts:
+`/tmp/swift-rg-bench/word-nul-defer-parity-1780588141` and
+`/tmp/swift-rg-bench/word-nul-defer-ab-1780588153.json`. A five-run upstream
+harness confirmation measured the Unicode `subtitles_en_literal_word` row at
+276.64 ms and the separate ASCII-boundary label at 308.45 ms:
+`/tmp/swift-rg-bench/word-nul-defer-confirm-1780588250/summary.md`.
+
 ## Rejected word and file-list micro-probes - 2026-06-04
 
 A line-numbered word-literal probe replaced

@@ -15497,10 +15497,6 @@ private func rgSwiftDarwinWriteWordLiteralLineBytes(
         || base[0] == 0xFE && base[1] == 0xFF) {
         return nil
     }
-    if memchr(base, 0, haystackLength) != nil {
-        return nil
-    }
-
     enum WordBoundaryState {
         case bounded
         case notBounded
@@ -15593,6 +15589,13 @@ private func rgSwiftDarwinWriteWordLiteralLineBytes(
         }
         lineNumberAtSearchOffset = newline == nil ? matchedLineNumber : matchedLineNumber + 1
         searchOffset = outputEnd
+    }
+
+    guard !pendingLines.isEmpty else {
+        return memchr(base, 0, haystackLength) == nil ? 0 : nil
+    }
+    guard memchr(base, 0, haystackLength) == nil else {
+        return nil
     }
 
     guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
