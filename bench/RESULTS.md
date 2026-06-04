@@ -8,6 +8,41 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected Darwin file-list traversal probes - 2026-06-04
+
+Two Swift-only probes targeted the remaining `--files` gap on the Linux tree
+sample. Both preserved byte-for-byte output parity against baseline `f045de7`
+for `--files`, `--hidden --files`, `--no-ignore-vcs --files`, `-0 --files`,
+and `--hidden -0 --files`, but both were reverted because they regressed the
+default and hidden median timings.
+
+The first probe raised the shared Darwin file-list worker cap from 6 to 8.
+
+| Case | Probe Swift | Baseline `f045de7` |
+| --- | ---: | ---: |
+| `--files` on Linux tree | 97.10 ms median / 100.89 ms mean | 95.67 ms / 100.59 ms |
+| `--hidden --files` on Linux tree | 99.29 ms / 103.95 ms | 98.16 ms / 102.96 ms |
+| `--no-ignore-vcs --files` on Linux tree | 79.29 ms / 82.65 ms | 78.18 ms / 86.61 ms |
+
+Raw artifacts:
+`/tmp/swift-rg-bench/worker8-parity-1780593033` and
+`/tmp/swift-rg-bench/worker8-ab-1780593042.json`.
+
+The second probe changed the ignore-aware byte-output walker to mutate and
+restore its logical path byte buffer during recursion instead of copying the
+buffer for each child directory. This also preserved output parity, but the
+default and hidden traversal medians moved backward.
+
+| Case | Probe Swift | Baseline `f045de7` |
+| --- | ---: | ---: |
+| `--files` on Linux tree | 96.31 ms median / 99.47 ms mean | 94.12 ms / 99.04 ms |
+| `--hidden --files` on Linux tree | 96.66 ms / 101.74 ms | 94.47 ms / 100.20 ms |
+| `--no-ignore-vcs --files` on Linux tree | 72.53 ms / 77.58 ms | 76.75 ms / 81.46 ms |
+
+Raw artifacts:
+`/tmp/swift-rg-bench/pathbytes-parity-1780593265` and
+`/tmp/swift-rg-bench/pathbytes-ab-1780593275.json`.
+
 ## Deferred word-literal binary proof - 2026-06-04
 
 The Unicode word-literal executable writer now defers its full-file NUL proof
