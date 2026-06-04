@@ -31,6 +31,28 @@ baseline and 210.2 ms Rust.
 Artifacts:
 `/tmp/swift-rg-bench/word-proof-overlap-1780610138`.
 
+## Plain no-mmap literals use full engine fallback - 2026-06-04
+
+Case-sensitive, unnumbered, unprefixed `--no-mmap` literal searches now decline
+the executable literal preflight and fall through to the normal search engine.
+The mapped executable preflight remains available for case-insensitive,
+line-numbered, prefixed, and boundary modes where recent benchmark and parity
+work showed it is still the safer or faster route.
+
+Patched stdout, stderr, and status matched Rust for real subtitle text and for
+270 MiB hit-before-NUL and binary no-match fixtures under plain no-mmap. The
+case-insensitive no-mmap neighbor also matched Rust after the retained route
+was restricted to case-sensitive searches. An 18-run guard measured plain
+`--no-mmap 'Sherlock Holmes'` at 203.2 ms patched versus 210.6 ms baseline and
+167.2 ms Rust. Case-insensitive no-mmap stayed flat at 258.0 ms patched versus
+257.9 ms baseline and 278.9 ms Rust. The line-numbered no-mmap control stayed
+ahead of Rust but measured noisier at 191.5 ms patched versus 184.9 ms
+baseline and 196.6 ms Rust, even though the retained branch does not route
+line-numbered searches.
+
+Artifacts:
+`/tmp/swift-rg-bench/nommap-plain-full-engine-probe-1780610811`.
+
 ## Rejected no-mmap plain streaming route - 2026-06-04
 
 A Swift-only probe routed explicit plain `--no-mmap` literal output directly to

@@ -6568,6 +6568,13 @@ struct RipgrepCommand {
             )
         }
         if noMmap {
+            if !lineNumber,
+               parsedLinePrefix.isEmpty,
+               parsedHeadingPrefix.isEmpty,
+               !asciiCaseInsensitive,
+               !asciiBoundary {
+                return nil
+            }
             // This executable preflight is output-only; prefer the faster mapped
             // Swift scanner when it is available and keep streaming as fallback.
             if let mappedExitCode = SwiftDarwinLiteralPreflight.exitCode(
