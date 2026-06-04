@@ -182,6 +182,19 @@ Retained follow-up:
   Rust. The no-match guard stayed flat at 186.4 ms patched versus 187.3 ms
   baseline. A 5-run upstream harness confirmation measured the
   `subtitles_en_literal` line-numbered row at 292.93 ms.
+- The sparse unbounded case-sensitive multi-literal writer now does the same
+  collect-before-text-proof treatment for line-numbered output only. It records
+  matched line ranges and line numbers first, proves text before any stdout
+  flush, then emits the buffered numbered lines. Patched plain, `-n`, no-match,
+  duplicate-on-one-line, and binary fallback controls matched the current Swift
+  baseline and Rust. A 12-run A/B measured
+  `-n 'Sherlock Holmes|John Watson|Irene Adler|Inspector Lestrade|Professor
+  Moriarty'` at 520.5 ms patched versus 543.8 ms baseline and 311.0 ms for
+  Rust; the plain alternation guard stayed neutral at 463.6 ms patched versus
+  459.9 ms baseline. The no-match line-numbered guard improved slightly at
+  429.8 ms patched versus 446.0 ms baseline. A 5-run upstream harness
+  confirmation measured the `subtitles_en_alternate` line-numbered row at
+  520.47 ms and the unchanged plain row at 464.35 ms.
 
 Rejected same-session probe:
 
@@ -206,6 +219,11 @@ Rejected same-session probe:
   `Int` table also preserved parity, but did not hold a useful win. Plain output
   measured 462.4 ms versus 465.2 ms baseline, while `-n` regressed to 531.8 ms
   versus 527.0 ms baseline. The `Int` table stays.
+- Applying the sparse multi-literal collector to both plain and line-numbered
+  unbounded output preserved parity and improved the line-numbered row
+  modestly, but it regressed plain alternation from 463.8 ms baseline to
+  516.1 ms patched. The retained route is therefore line-numbered only, leaving
+  plain output on the existing dense/anchored writer.
 
 Raw exports and parity artifacts:
 `/tmp/swift-rg-bench/current-subtitles-1780575005/summary.md`,
@@ -225,6 +243,11 @@ Raw exports and parity artifacts:
 `/tmp/swift-rg-bench/collected-line-number-probe/miss-ab-1780579491.json`,
 `/tmp/swift-rg-bench/collected-line-number-probe/parity-final-1780579617`,
 `/tmp/swift-rg-bench/collected-line-number-probe/parity-1780579443`,
+`/tmp/swift-rg-bench/multilit-collect-probe/ab-1780580492.json`,
+`/tmp/swift-rg-bench/multilit-collect-probe/fixed-ab-1780580788.json`,
+`/tmp/swift-rg-bench/multilit-collect-probe/harness-1780580831/summary.md`,
+`/tmp/swift-rg-bench/multilit-collect-probe/miss-ab-1780580848.json`,
+`/tmp/swift-rg-bench/multilit-collect-probe/parity-fixed-1780580788`,
 `/tmp/swift-rg-bench/pair-anchor-probe/ab-1780577742.json`,
 `/tmp/swift-rg-bench/pair-anchor-probe/harness-1780577796/summary.md`,
 `/tmp/swift-rg-bench/pair-anchor-probe/parity-1780577730`,

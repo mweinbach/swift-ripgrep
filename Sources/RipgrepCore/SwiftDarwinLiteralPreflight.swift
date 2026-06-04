@@ -16296,6 +16296,62 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
         return true
     }
 
+    struct PendingMultiLiteralLine {
+        let lineStart: Int
+        let outputEnd: Int
+        let needsFinalNewline: Bool
+        let lineNumber: Int
+    }
+
+    func pendingLine(containing matchStart: Int, currentLineNumber: inout Int, lineCountOffset: inout Int) -> PendingMultiLiteralLine {
+        var lineStart = matchStart
+        while lineStart > 0, base[lineStart - 1] != UInt8(ascii: "\n") {
+            lineStart -= 1
+        }
+        let newline = memchr(
+            base.advanced(by: matchStart),
+            Int32(UInt8(ascii: "\n")),
+            haystackLength - matchStart
+        )
+        let lineEnd = newline.map {
+            base.distance(to: $0.assumingMemoryBound(to: UInt8.self))
+        } ?? haystackLength
+        let outputEnd = newline == nil ? haystackLength : lineEnd + 1
+        currentLineNumber += rg_memcount_byte(
+            base.advanced(by: lineCountOffset),
+            lineStart - lineCountOffset,
+            UInt8(ascii: "\n")
+        )
+        lineCountOffset = lineStart
+        return PendingMultiLiteralLine(
+            lineStart: lineStart,
+            outputEnd: outputEnd,
+            needsFinalNewline: newline == nil,
+            lineNumber: currentLineNumber
+        )
+    }
+
+    func emitPendingLines(_ pendingLines: [PendingMultiLiteralLine]) -> Bool {
+        for line in pendingLines {
+            if lineNumber,
+               !output.writeLineNumberPrefix(
+                line.lineNumber,
+                fieldSeparator: lineNumberFieldSeparator
+               ) {
+                return false
+            }
+            guard output.write(base.advanced(by: line.lineStart), count: line.outputEnd - line.lineStart) else {
+                return false
+            }
+            if line.needsFinalNewline, !output.writeByte(UInt8(ascii: "\n")) {
+                return false
+            }
+        }
+        matchedLineCount = pendingLines.count
+        bytesSearched = pendingLines.last?.outputEnd ?? haystackLength
+        return true
+    }
+
     let prefixLineFirstBytes: [UInt8] = {
         var firstBytes: [UInt8] = []
         firstBytes.reserveCapacity(literals.count)
@@ -16530,6 +16586,65 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
         return sampledLineCount >= 32 && matchedLineCount * 3 >= sampledLineCount * 2
     }
 
+    func collectSparseUnboundedLineMatches() -> [PendingMultiLiteralLine]? {
+        guard emitLines,
+              lineNumber,
+              linePrefix.isEmpty,
+              headingPrefix.isEmpty,
+              !trimLeadingWhitespace,
+              maxCount == Int.max,
+              haystackLength >= 1024 * 1024,
+              !denseLineScanLikely() else {
+            return nil
+        }
+
+        let maxBufferedLines = 16_384
+        let anchoredLiterals = rareAnchoredLiterals()
+        var candidates = if let anchoredLiterals {
+            anchoredLiterals.map { nextAnchoredCandidate($0, from: 0) }
+        } else {
+            literals.indices.map { nextCandidate(literalIndex: $0, from: 0) }
+        }
+        var pendingLines: [PendingMultiLiteralLine] = []
+        pendingLines.reserveCapacity(1024)
+        var pendingCurrentLineNumber = 1
+        var pendingLineCountOffset = 0
+        var pendingBytesSearched = 0
+
+        while let candidateIndex = earliestCandidateIndex(in: candidates) {
+            let matchStart = candidates[candidateIndex].start
+            guard matchStart < haystackLength else {
+                break
+            }
+            guard pendingLines.count < maxBufferedLines else {
+                return nil
+            }
+
+            let pending = pendingLine(
+                containing: matchStart,
+                currentLineNumber: &pendingCurrentLineNumber,
+                lineCountOffset: &pendingLineCountOffset
+            )
+            pendingBytesSearched = pending.outputEnd
+            pendingLines.append(pending)
+            for index in candidates.indices where candidates[index].start < pendingBytesSearched {
+                if let anchoredLiterals {
+                    candidates[index] = nextAnchoredCandidate(
+                        anchoredLiterals[index],
+                        from: pendingBytesSearched
+                    )
+                } else {
+                    candidates[index] = nextCandidate(
+                        literalIndex: candidates[index].literalIndex,
+                        from: pendingBytesSearched
+                    )
+                }
+            }
+        }
+
+        return pendingLines
+    }
+
     func emitDenseLineMatches() -> Bool {
         var lineStart = 0
         while matchedLineCount < maxCount, lineStart < haystackLength {
@@ -16679,99 +16794,118 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
             }
         }
     } else {
-        if memchr(base, 0, haystackLength) != nil {
-            return nil
-        }
-        if let emittedWholeFile = emitWholeFileIfEveryLineStartsWithLiteral() {
-            writeFailed = !emittedWholeFile
-        } else if denseLineScanLikely() {
-            writeFailed = !emitDenseLineMatches()
-        } else if prefixLength >= 4 {
-            var searchOffset = 0
-            while matchedLineCount < maxCount, searchOffset < haystackLength {
-                let foundPointer = literals[0].withUnsafeBufferPointer { literalBuffer in
-                    rg_memmem_simple(
-                        base.advanced(by: searchOffset),
-                        haystackLength - searchOffset,
-                        literalBuffer.baseAddress,
-                        prefixLength
-                    )
+        if let pendingLines = collectSparseUnboundedLineMatches() {
+            guard !pendingLines.isEmpty else {
+                if memchr(base, 0, haystackLength) != nil {
+                    return nil
                 }
-                guard let foundPointer else {
-                    break
+                bytesSearched = haystackLength
+                return rg_darwin_literal_file_result(
+                    status: 0,
+                    matched_line_count: 0,
+                    total_match_count: 0,
+                    bytes_searched: bytesSearched
+                )
+            }
+            guard memchr(base, 0, haystackLength) == nil else {
+                return nil
+            }
+            writeFailed = !emitPendingLines(pendingLines)
+        } else {
+            if memchr(base, 0, haystackLength) != nil {
+                return nil
+            }
+            if let emittedWholeFile = emitWholeFileIfEveryLineStartsWithLiteral() {
+                writeFailed = !emittedWholeFile
+            } else if denseLineScanLikely() {
+                writeFailed = !emitDenseLineMatches()
+            } else if prefixLength >= 4 {
+                var searchOffset = 0
+                while matchedLineCount < maxCount, searchOffset < haystackLength {
+                    let foundPointer = literals[0].withUnsafeBufferPointer { literalBuffer in
+                        rg_memmem_simple(
+                            base.advanced(by: searchOffset),
+                            haystackLength - searchOffset,
+                            literalBuffer.baseAddress,
+                            prefixLength
+                        )
+                    }
+                    guard let foundPointer else {
+                        break
+                    }
+                    let matchStart = base.distance(to: foundPointer)
+                    if literals.contains(where: { literal($0, matchesAt: matchStart) }) {
+                        guard emitLine(containing: matchStart) else {
+                            writeFailed = true
+                            break
+                        }
+                        searchOffset = bytesSearched
+                    } else {
+                        searchOffset = matchStart + 1
+                    }
                 }
-                let matchStart = base.distance(to: foundPointer)
-                if literals.contains(where: { literal($0, matchesAt: matchStart) }) {
+            } else {
+                let anchoredLiterals = rareAnchoredLiterals()
+                var candidates = if let anchoredLiterals {
+                    anchoredLiterals.map { nextAnchoredCandidate($0, from: 0) }
+                } else {
+                    literals.indices.map { nextCandidate(literalIndex: $0, from: 0) }
+                }
+                if !trimLeadingWhitespace {
+                    var activeCandidate: (start: Int, literalIndex: Int)?
+                    var activeCandidateCount = 0
+                    for candidate in candidates where candidate.start < Int.max {
+                        activeCandidate = candidate
+                        activeCandidateCount += 1
+                        if activeCandidateCount > 1 {
+                            break
+                        }
+                    }
+                    if activeCandidateCount == 1, let activeCandidate {
+                        let latePlainMatch = activeCandidate.start > 2 * 1024 * 1024
+                            && !lineNumber
+                            && linePrefix.isEmpty
+                            && headingPrefix.isEmpty
+                            && !trimLeadingWhitespace
+                        if !latePlainMatch {
+                            return rgSwiftDarwinWriteSingleActiveMultiLiteralLines(
+                                base,
+                                haystackLength: haystackLength,
+                                literal: literals[activeCandidate.literalIndex],
+                                maxCount: maxCount,
+                                lineNumber: lineNumber,
+                                lineNumberFieldSeparator: lineNumberFieldSeparator,
+                                linePrefix: linePrefix,
+                                headingPrefix: headingPrefix,
+                                emitLines: emitLines
+                            )
+                        }
+                    }
+                }
+
+                while matchedLineCount < maxCount,
+                      let candidateIndex = earliestCandidateIndex(in: candidates) {
+                    let matchStart = candidates[candidateIndex].start
+                    guard matchStart < haystackLength else {
+                        break
+                    }
+
                     guard emitLine(containing: matchStart) else {
                         writeFailed = true
                         break
                     }
-                    searchOffset = bytesSearched
-                } else {
-                    searchOffset = matchStart + 1
-                }
-            }
-        } else {
-            let anchoredLiterals = rareAnchoredLiterals()
-            var candidates = if let anchoredLiterals {
-                anchoredLiterals.map { nextAnchoredCandidate($0, from: 0) }
-            } else {
-                literals.indices.map { nextCandidate(literalIndex: $0, from: 0) }
-            }
-            if !trimLeadingWhitespace {
-                var activeCandidate: (start: Int, literalIndex: Int)?
-                var activeCandidateCount = 0
-                for candidate in candidates where candidate.start < Int.max {
-                    activeCandidate = candidate
-                    activeCandidateCount += 1
-                    if activeCandidateCount > 1 {
-                        break
-                    }
-                }
-                if activeCandidateCount == 1, let activeCandidate {
-                    let latePlainMatch = activeCandidate.start > 2 * 1024 * 1024
-                        && !lineNumber
-                        && linePrefix.isEmpty
-                        && headingPrefix.isEmpty
-                        && !trimLeadingWhitespace
-                    if !latePlainMatch {
-                        return rgSwiftDarwinWriteSingleActiveMultiLiteralLines(
-                            base,
-                            haystackLength: haystackLength,
-                            literal: literals[activeCandidate.literalIndex],
-                            maxCount: maxCount,
-                            lineNumber: lineNumber,
-                            lineNumberFieldSeparator: lineNumberFieldSeparator,
-                            linePrefix: linePrefix,
-                            headingPrefix: headingPrefix,
-                            emitLines: emitLines
-                        )
-                    }
-                }
-            }
-
-            while matchedLineCount < maxCount,
-                  let candidateIndex = earliestCandidateIndex(in: candidates) {
-                let matchStart = candidates[candidateIndex].start
-                guard matchStart < haystackLength else {
-                    break
-                }
-
-                guard emitLine(containing: matchStart) else {
-                    writeFailed = true
-                    break
-                }
-                for index in candidates.indices where candidates[index].start < bytesSearched {
-                    if let anchoredLiterals {
-                        candidates[index] = nextAnchoredCandidate(
-                            anchoredLiterals[index],
-                            from: bytesSearched
-                        )
-                    } else {
-                        candidates[index] = nextCandidate(
-                            literalIndex: candidates[index].literalIndex,
-                            from: bytesSearched
-                        )
+                    for index in candidates.indices where candidates[index].start < bytesSearched {
+                        if let anchoredLiterals {
+                            candidates[index] = nextAnchoredCandidate(
+                                anchoredLiterals[index],
+                                from: bytesSearched
+                            )
+                        } else {
+                            candidates[index] = nextCandidate(
+                                literalIndex: candidates[index].literalIndex,
+                                from: bytesSearched
+                            )
+                        }
                     }
                 }
             }
