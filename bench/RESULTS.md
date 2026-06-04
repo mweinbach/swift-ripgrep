@@ -8,6 +8,29 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Direct zero-count output for unprefixed LF counts - 2026-06-03
+
+The Darwin Swift preflight count writer now writes the common `0\n` count line
+directly when there is no path/count prefix and no CRLF terminator. Prefixed,
+CRLF, and nonzero counts stay on the existing buffered decimal writer.
+
+Output and status matched Rust for unprefixed include-zero no-match count,
+path-prefixed include-zero no-match count, CRLF include-zero no-match count,
+and a matching include-zero count guard. `swift build -c release` passed before
+benchmarking.
+
+| Case | Patched Swift | Baseline `5e9d27d` | Rust reference |
+| --- | ---: | ---: | ---: |
+| `-c --include-zero absentliteral` | 9.8 ms mean / 9.6 ms median | 10.5 ms / 10.3 ms | 9.6 ms / 9.0 ms from current refresh |
+| no-shell `-c --include-zero absentliteral` | 9.1 ms / 8.9 ms | 9.4 ms / 9.2 ms | not remeasured |
+| `--stats -c --include-zero absentliteral` guard | 13.4 ms / 13.0 ms | 13.5 ms / 13.3 ms | not remeasured |
+| `-H -c --include-zero absentliteral` guard | 13.6 ms / 13.4 ms | 13.4 ms / 12.7 ms | not remeasured |
+| `-c --include-zero literal` guard | 21.8 ms / 21.1 ms | 22.3 ms / 22.0 ms | not remeasured |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/zero-count-direct-ab-1780536871.json` and
+`/tmp/swift-rg-bench/zero-count-direct-noshell-1780536909.json`.
+
 ## Skipped VCS-context probes when VCS ignores are disabled - 2026-06-03
 
 File-path and fast-search walk setup now avoids the root Git/VCS repository

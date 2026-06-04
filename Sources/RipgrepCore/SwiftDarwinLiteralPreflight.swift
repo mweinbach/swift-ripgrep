@@ -151,6 +151,11 @@ public enum SwiftDarwinLiteralPreflight {
         countPrefix: [UInt8] = [],
         crlfTerminated: Bool
     ) -> Bool {
+        if count == 0,
+           countPrefix.isEmpty,
+           !crlfTerminated {
+            return fputs("0\n", Darwin.stdout) >= 0
+        }
         guard var output = rgSwiftStdoutBuffer(capacity: max(64, countPrefix.count + 32)) else {
             return false
         }
