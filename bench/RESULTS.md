@@ -607,6 +607,17 @@ Retained follow-up:
   upstream harness measured the Unicode `subtitles_en_literal_word` row at
   240.08 ms patched versus 183.58 ms Rust, while the ASCII row remained in the
   existing 286.69 ms band.
+- The simple executable literal-line preflight now recognizes ASCII boundary
+  regex literals like `(?-u:\b)Sherlock Holmes(?-u:\b)` before the broader
+  argument parser. The route still uses the existing byte-boundary literal
+  writer, but avoids the heavier full-parser path for this common benchmark
+  shape. Patched output, stderr, and status matched the current Swift baseline
+  and Rust for the real subtitles corpus, plain and line-numbered output,
+  non-ASCII-adjacent ASCII-boundary controls, binary fallback, no-final-newline,
+  no-match, and neighboring plain literal output. A 16-run A/B measured ASCII
+  boundary output at 285.1 ms patched versus 288.8 ms baseline and 178.1 ms
+  Rust, and the focused upstream harness measured the ASCII
+  `subtitles_en_literal_word` row at 284.09 ms.
 
 Rejected same-session probe:
 
@@ -691,6 +702,9 @@ Raw exports and parity artifacts:
 `/tmp/swift-rg-bench/word-anchor-parity-1780600003`,
 `/tmp/swift-rg-bench/word-anchor-ab-1780600018.json`,
 `/tmp/swift-rg-bench/word-anchor-harness-1780600057/summary.md`,
+`/tmp/swift-rg-simple-boundary-preflight-1780601447/parity`,
+`/tmp/swift-rg-simple-boundary-preflight-1780601447/simple-boundary-preflight-ab.json`,
+`/tmp/swift-rg-bench/simple-boundary-preflight-harness-1780601595/summary.md`,
 `/tmp/swift-rg-ascii-boundary-route-1780600592/parity`,
 `/tmp/swift-rg-ascii-boundary-route-1780600592/parity-real-subtitles`,
 `/tmp/swift-rg-ascii-boundary-route-1780600592/ascii-boundary-ab.json`,

@@ -6992,7 +6992,12 @@ struct RipgrepCommand {
               !(noUnicode && wordRegexp) else {
             return nil
         }
-        let literalPattern = simpleSwiftDarwinLiteralPattern(
+        let asciiBoundaryLiteralPattern = (fixedStrings || wordRegexp) ? nil : asciiBoundaryLiteral(
+            pattern,
+            allowPCREQuotedLiterals: allowPCREQuotedLiterals
+        )
+        let asciiBoundary = asciiBoundaryLiteralPattern != nil
+        let literalPattern = asciiBoundaryLiteralPattern ?? simpleSwiftDarwinLiteralPattern(
             pattern,
             fixedStrings: fixedStrings,
             allowPCREQuotedLiterals: allowPCREQuotedLiterals
@@ -7080,6 +7085,7 @@ struct RipgrepCommand {
             )
         }
         if literal.count >= 10,
+           !asciiBoundary,
            let noMatchExitCode = SwiftDarwinLiteralPreflight.rareAnchorLiteralNoMatchExitCode(
             path: path,
             literal: literal
@@ -7087,6 +7093,7 @@ struct RipgrepCommand {
             return noMatchExitCode
         }
         if literal.count >= 10,
+           !asciiBoundary,
            !withFilename,
            !heading,
            fileIsLargeRegularVisibleLineTarget() {
@@ -7097,6 +7104,7 @@ struct RipgrepCommand {
             literal: literal,
             asciiCaseInsensitive: false,
             lineNumber: lineNumber,
+            asciiBoundary: asciiBoundary,
             linePrefix: withFilename && !heading ? displayPath + [UInt8(ascii: ":")] : [],
             headingPrefix: heading && withFilename ? displayPath + [UInt8(ascii: "\n")] : []
         )
