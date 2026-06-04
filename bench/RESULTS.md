@@ -32,6 +32,25 @@ Artifacts:
 `/tmp/swift-rg-bench/ascii-boundary-word-route-1780603420` and
 `/tmp/swift-rg-bench/ascii-boundary-word-route-harness-1780603566/summary.md`.
 
+## Rejected Swift SIMD NUL proof probe - 2026-06-04
+
+A Swift-only probe replaced the large simple-literal writer's two whole-file
+`memchr(..., 0, ...)` text-proof checks with a local `SIMD16<UInt8>` NUL-byte
+scanner. The goal was to narrow the `--no-mmap 'Sherlock Holmes'` gap without
+dropping Rust-compatible binary-file handling. The source probe was reverted
+because it preserved output but made the target path slower.
+
+Parity matched the current Swift baseline and Rust for default, `--no-mmap`,
+and `-a --no-mmap` on fixtures with NUL bytes before and after the matching
+line. The 18-run A/B measured `--no-mmap 'Sherlock Holmes'` at 207.1 ms for the
+probe versus 196.1 ms baseline and 155.0 ms Rust. Nearby controls stayed
+effectively flat: plain literal output measured 170.2 ms probe versus 171.0 ms
+baseline, and line-numbered output measured 234.4 ms probe versus 232.7 ms
+baseline.
+
+Artifacts:
+`/tmp/swift-rg-bench/probe-simd-nul-1780604092`.
+
 ## Rejected adaptive word anchor probe - 2026-06-04
 
 A Swift-only probe changed the sparse Unicode word-literal line writer from the
