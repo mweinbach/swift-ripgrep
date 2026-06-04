@@ -3339,6 +3339,18 @@ Raw hyperfine exports:
 `/tmp/swift-rg-bench/fixed-buffer-policy-1780390262.json`, and
 `/tmp/swift-rg-bench/fixed-buffer-policy-flipped-1780390326.json`.
 
+## Rejected fixed-class empty-file stat probe - 2026-06-04
+
+A Swift-only probe added a stat-before-map guard for ASCII fixed-class no-match
+preflights so empty regular files could return no-match without mapping. It
+preserved status/stdout/stderr for matching-line, count, stats, and nonempty
+miss controls against the saved Swift binary and Rust, and improved the empty
+`vmlinux` rows: plain fixed-class no-match moved from 6.0 ms mean to 5.1 ms,
+and count no-match from 6.2 ms to 5.1 ms. The source probe was reverted because
+the extra metadata open hurt the normal nonempty miss guard, which moved from
+4.8 ms to 6.8 ms in the same 60-run pass. Raw export:
+`/tmp/swift-rg-bench/fixed-empty-stat-probe-1780553202.json`.
+
 ## Rejected fixed-class same-class metadata skip — 2026-06-02
 
 A Swift-only probe stored whether an ASCII fixed-class sequence contained more
