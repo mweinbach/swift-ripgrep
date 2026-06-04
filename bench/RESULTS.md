@@ -170,6 +170,18 @@ Retained follow-up:
   baseline. The unaffected `-n` row measured 320.3 ms patched versus 316.1 ms
   baseline. A 5-run upstream harness confirmation measured `subtitles_en_literal`
   at 250.76 ms, `--no-mmap` at 250.24 ms, and the `-n` row at 314.53 ms.
+- The common unbounded case-sensitive line-numbered literal writer now collects
+  numbered line ranges before proving the haystack is text and emitting. This
+  keeps binary fallback behavior intact because no output is flushed before the
+  text proof, and avoids doing the full-file NUL scan before the match scan.
+  Patched `-n`, no-match, duplicate-on-one-line, and binary fallback controls
+  matched the current Swift baseline and Rust. A 15-run A/B measured
+  `-n 'Sherlock Holmes'` at 298.8 ms patched versus 319.2 ms baseline and
+  202.9 ms for Rust; a final 10-run check after removing an unused buffer
+  allocation measured 298.0 ms patched versus 322.1 ms baseline and 201.3 ms for
+  Rust. The no-match guard stayed flat at 186.4 ms patched versus 187.3 ms
+  baseline. A 5-run upstream harness confirmation measured the
+  `subtitles_en_literal` line-numbered row at 292.93 ms.
 
 Rejected same-session probe:
 
@@ -207,6 +219,12 @@ Raw exports and parity artifacts:
 `/tmp/swift-rg-bench/deferred-text-proof-probe/ab-1780578927.json`,
 `/tmp/swift-rg-bench/deferred-text-proof-probe/harness-1780578975/summary.md`,
 `/tmp/swift-rg-bench/deferred-text-proof-probe/parity-1780578913`,
+`/tmp/swift-rg-bench/collected-line-number-probe/ab-1780579456.json`,
+`/tmp/swift-rg-bench/collected-line-number-probe/final-ab-1780579617.json`,
+`/tmp/swift-rg-bench/collected-line-number-probe/harness-1780579491/summary.md`,
+`/tmp/swift-rg-bench/collected-line-number-probe/miss-ab-1780579491.json`,
+`/tmp/swift-rg-bench/collected-line-number-probe/parity-final-1780579617`,
+`/tmp/swift-rg-bench/collected-line-number-probe/parity-1780579443`,
 `/tmp/swift-rg-bench/pair-anchor-probe/ab-1780577742.json`,
 `/tmp/swift-rg-bench/pair-anchor-probe/harness-1780577796/summary.md`,
 `/tmp/swift-rg-bench/pair-anchor-probe/parity-1780577730`,

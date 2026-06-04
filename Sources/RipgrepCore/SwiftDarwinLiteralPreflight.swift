@@ -13430,8 +13430,16 @@ private func rgSwiftDarwinWriteLiteralBytes(
         firstCaseSensitiveMatch = nil
     }
     let simpleLineOutput = emitLines && !lineNumber && linePrefix.isEmpty && headingPrefix.isEmpty
+    let collectLineNumberedOutput = lineNumber
+        && !asciiCaseInsensitive
+        && !asciiBoundary
+        && emitLines
+        && maxCount == Int.max
+        && linePrefix.isEmpty
+        && headingPrefix.isEmpty
+        && !requireASCIIHaystack
     let output: rgSwiftLazyStdoutBuffer?
-    if emitLines {
+    if emitLines && !collectLineNumberedOutput {
         guard let lazyOutput = rgSwiftLazyStdoutBuffer(
             capacity: 1024 * 1024,
             allocateImmediately: !simpleLineOutput
@@ -13622,6 +13630,118 @@ private func rgSwiftDarwinWriteLiteralBytes(
         return true
     }
 
+    func writeCollectedLineNumberedLiteralLines() -> LiteralLineWriteStats? {
+        struct PendingLine {
+            let number: Int
+            let start: Int
+            let outputEnd: Int
+            let needsFinalNewline: Bool
+        }
+
+        let maxBufferedLines = 16_384
+        var pendingLines: [PendingLine] = []
+        pendingLines.reserveCapacity(1024)
+        var lineNumberAtSearchOffset = 1
+        var collectedSearchOffset = 0
+        var collectedBytesSearched = haystackLength
+
+        while collectedSearchOffset < haystackLength {
+            let result = rg_memmem_count_byte_before(
+                base.advanced(by: collectedSearchOffset),
+                haystackLength - collectedSearchOffset,
+                literalBase,
+                literal.count,
+                UInt8(ascii: "\n")
+            )
+            guard let found = result.match else {
+                break
+            }
+
+            let matchStart = base.distance(to: found)
+            var lineStart = matchStart
+            if result.count == 0 {
+                lineStart = collectedSearchOffset
+            } else {
+                while lineStart > 0, base[lineStart - 1] != UInt8(ascii: "\n") {
+                    lineStart -= 1
+                }
+            }
+            let newline = memchr(found, Int32(UInt8(ascii: "\n")), haystackLength - matchStart)
+            let lineEnd = newline.map {
+                base.distance(to: $0.assumingMemoryBound(to: UInt8.self))
+            } ?? haystackLength
+            let outputEnd = newline == nil ? haystackLength : lineEnd + 1
+            let matchedLineNumber = lineNumberAtSearchOffset + result.count
+
+            guard pendingLines.count < maxBufferedLines else {
+                return nil
+            }
+            pendingLines.append(PendingLine(
+                number: matchedLineNumber,
+                start: lineStart,
+                outputEnd: outputEnd,
+                needsFinalNewline: newline == nil
+            ))
+            collectedBytesSearched = outputEnd
+            lineNumberAtSearchOffset = newline == nil ? matchedLineNumber : matchedLineNumber + 1
+            collectedSearchOffset = outputEnd
+        }
+
+        guard !pendingLines.isEmpty else {
+            return LiteralLineWriteStats(
+                matchedLines: 0,
+                bytesPrinted: 0,
+                bytesSearched: haystackLength
+            )
+        }
+        guard ensureTextHaystack() else {
+            return nil
+        }
+        guard var collectedOutput = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+            return nil
+        }
+        defer {
+            collectedOutput.deallocate()
+        }
+
+        for line in pendingLines {
+            guard collectedOutput.writeLineNumberPrefix(
+                line.number,
+                fieldSeparator: lineNumberFieldSeparator
+            ) else {
+                return nil
+            }
+            guard collectedOutput.write(base.advanced(by: line.start), count: line.outputEnd - line.start) else {
+                return nil
+            }
+            if line.needsFinalNewline,
+               !collectedOutput.writeByte(UInt8(ascii: "\n")) {
+                return nil
+            }
+        }
+
+        guard collectedOutput.flush() else {
+            return nil
+        }
+        return LiteralLineWriteStats(
+            matchedLines: pendingLines.count,
+            bytesPrinted: collectedOutput.statsBytesWritten,
+            bytesSearched: collectedBytesSearched
+        )
+    }
+
+    if collectLineNumberedOutput {
+        return writeCollectedLineNumberedLiteralLines()
+    }
+
+    func shouldDeclineFastPath() -> Bool {
+        writeFailed || declinedFastPath
+    }
+
+    func shouldProvePendingSimpleOutputText() -> Bool {
+        pendingSimpleOutputNeedsTextProof
+    }
+
     if asciiCaseInsensitive {
         foldedLiteral.withUnsafeBufferPointer { foldedNeedle in
             caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
@@ -13692,14 +13812,14 @@ private func rgSwiftDarwinWriteLiteralBytes(
         }
     }
 
-    guard !writeFailed, !declinedFastPath else {
+    guard !shouldDeclineFastPath() else {
         return nil
     }
     if matchedLineCount < maxCount {
         bytesSearched = haystackLength
     }
     if simpleLineOutput {
-        if pendingSimpleOutputNeedsTextProof {
+        if shouldProvePendingSimpleOutputText() {
             guard ensureTextHaystack() else {
                 return nil
             }
