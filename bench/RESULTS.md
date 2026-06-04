@@ -8,6 +8,29 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected single-literal anchor threshold probe - 2026-06-04
+
+A Swift-only probe lowered the single-literal direct writer's rare-anchor
+activation threshold from 256 MiB to 128 MiB. The current 1.5 GiB subtitle
+fixture already exceeded the original threshold, so this mostly checked that a
+lower threshold did not uncover a hidden win in the remaining plain-literal
+subtitle losses. The probe was reverted because it preserved output but did not
+improve the target rows.
+
+Patched stdout, stderr, and status matched Rust for real subtitle text and for
+the large binary fixture under default and explicit no-mmap plain literal
+searches. A rebuilt baseline measured `subtitles_en_literal` at 171.1 ms Swift
+versus 159.0 ms Rust, explicit no-mmap at 196.0 ms Swift versus 159.9 ms Rust,
+and the line-numbered control at 182.6 ms Swift versus 187.6 ms Rust. The
+threshold probe measured 171.4 ms Swift versus 160.0 ms Rust for default,
+195.8 ms Swift versus 155.2 ms Rust for no-mmap, and 181.5 ms Swift versus
+190.1 ms Rust for the line-numbered control.
+
+Artifacts:
+`/tmp/swift-rg-bench/rebuilt-plain-baseline-1780611882`,
+`/tmp/swift-rg-bench/anchor-threshold-parity-1780612071`, and
+`/tmp/swift-rg-bench/anchor-threshold-probe-1780612076`.
+
 ## Word literals overlap binary proof - 2026-06-04
 
 The large word-literal writer now starts its whole-file NUL-byte proof on a
