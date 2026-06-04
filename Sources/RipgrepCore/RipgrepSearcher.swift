@@ -4039,7 +4039,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
                             let anchorBase = literalBaseAddress.advanced(by: bestAnchorOffset)
                             var anchorSearchOffset = bestAnchorOffset
                             var lineNumberCursor = 0
-                            var lastLineStart = -1
                             while anchorSearchOffset <= data.count - 2 {
                                 guard let foundPointer = rg_memmem_simple(
                                     baseAddress.advanced(by: anchorSearchOffset),
@@ -4083,34 +4082,31 @@ public struct RipgrepSearcher: @unchecked Sendable {
                                 } else {
                                     outputEnd = data.count
                                 }
-                                if lineStart != lastLineStart {
-                                    matchedLineCount += 1
-                                    lastLineStart = lineStart
-                                    if canTrackLineNumbersInLiteralScan {
-                                        lineNumberAtSearchOffset += Int(rg_memcount_byte(
-                                            baseAddress.advanced(by: lineNumberCursor),
-                                            lineStart - lineNumberCursor,
-                                            UInt8(ascii: "\n")
-                                        ))
-                                        lineNumberCursor = outputEnd
-                                        writePathPrefixIfNeeded()
-                                        writeDarwinLineNumberPrefix(
-                                            lineNumberAtSearchOffset,
-                                            writeBytes: writeBytes
-                                        )
-                                        lineNumberAtSearchOffset += 1
-                                    } else {
-                                        writeMatchingLinePrefixes(lineStart: lineStart, matchStart: matchStart)
-                                    }
-                                    writeBytes(UnsafeRawBufferPointer(
-                                        start: rawBaseAddress.advanced(by: lineStart),
-                                        count: outputEnd - lineStart
+                                matchedLineCount += 1
+                                if canTrackLineNumbersInLiteralScan {
+                                    lineNumberAtSearchOffset += Int(rg_memcount_byte(
+                                        baseAddress.advanced(by: lineNumberCursor),
+                                        lineStart - lineNumberCursor,
+                                        UInt8(ascii: "\n")
                                     ))
-                                    if newlinePointer == nil {
-                                        var newline = UInt8(ascii: "\n")
-                                        withUnsafeBytes(of: &newline) { buffer in
-                                            writeBytes(buffer)
-                                        }
+                                    lineNumberCursor = outputEnd
+                                    writePathPrefixIfNeeded()
+                                    writeDarwinLineNumberPrefix(
+                                        lineNumberAtSearchOffset,
+                                        writeBytes: writeBytes
+                                    )
+                                    lineNumberAtSearchOffset += 1
+                                } else {
+                                    writeMatchingLinePrefixes(lineStart: lineStart, matchStart: matchStart)
+                                }
+                                writeBytes(UnsafeRawBufferPointer(
+                                    start: rawBaseAddress.advanced(by: lineStart),
+                                    count: outputEnd - lineStart
+                                ))
+                                if newlinePointer == nil {
+                                    var newline = UInt8(ascii: "\n")
+                                    withUnsafeBytes(of: &newline) { buffer in
+                                        writeBytes(buffer)
                                     }
                                 }
                                 bytesSearched = outputEnd

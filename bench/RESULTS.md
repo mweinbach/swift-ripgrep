@@ -8,6 +8,29 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Retained rare-anchor line dedup removal - 2026-06-04
+
+The large single-literal rare-anchor writer no longer checks whether an
+accepted match is on the same line as the previous emitted match. That branch
+already advances the next anchor search to the end of the emitted line plus the
+anchor offset, so the duplicate-line guard was redundant work in the hot
+subtitle literal path.
+
+Patched stdout/stderr/status matched both the current Swift baseline and Rust
+for real subtitle plain, no-mmap, line-numbered, and case-insensitive controls.
+A 25-run same-binary A/B measured plain `Sherlock Holmes` at 169.1 ms median /
+169.6 ms mean for the patch versus 178.0 ms / 178.3 ms for baseline; explicit
+no-mmap at 195.5 ms / 196.5 ms versus 197.1 ms / 197.2 ms; and line-numbered
+output at 186.6 ms / 187.1 ms versus 181.4 ms / 182.0 ms. An order-flipped
+25-run confirmation kept the plain win at 170.4 ms / 170.7 ms patched versus
+181.5 ms / 180.6 ms baseline, while line-numbered output was effectively flat
+at 183.3 ms / 183.6 ms patched versus 182.7 ms / 182.9 ms baseline.
+
+Artifacts:
+`/tmp/swift-rg-bench/rare-anchor-dedup-probe/parity`,
+`/tmp/swift-rg-bench/rare-anchor-dedup-probe/ab.json`, and
+`/tmp/swift-rg-bench/rare-anchor-dedup-probe/ab-flipped.json`.
+
 ## Rejected large literal 1 MiB anchor sample probe - 2026-06-04
 
 A current upstream harness refresh showed the broad Linux search rows are still
