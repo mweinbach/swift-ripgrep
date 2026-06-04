@@ -98,6 +98,28 @@ reverted.
 Artifacts: `/tmp/swift-rg-bench/raw-string-bytes-probe/ab.json` and
 `/tmp/swift-rg-bench/raw-string-bytes-probe/ab-flipped.json`.
 
+## Rejected no-mmap streaming fast-path route - 2026-06-04
+
+A Swift-only probe let explicit `--no-mmap` byte-literal searches use the
+existing line-streaming fast path instead of forcing files under the buffered
+limit into the raw buffered literal scanner. This reused existing Swift
+streaming code rather than adding another scanner.
+
+Patched stdout, stderr, and status matched both the committed Swift binary and
+Rust `rg` for explicit no-mmap subtitle literal output, line-numbered no-mmap,
+word-boundary no-mmap, count output, and a duplicate same-line control. The
+benchmark was mixed. A 24-run A/B measured plain no-mmap at 182.61 ms patched
+versus 183.14 ms baseline, line-numbered no-mmap at 182.14 ms versus 182.87 ms,
+word-boundary no-mmap at 182.70 ms versus 185.10 ms, and count at 211.59 ms
+versus 212.02 ms. The order-flipped confirmation measured plain no-mmap better
+at 190.71 ms patched versus 194.53 ms baseline, but line-numbered no-mmap
+regressed to 179.62 ms patched versus 176.32 ms baseline. Because the route
+changes several no-mmap shapes and did not hold a clean target win, the source
+change was reverted.
+
+Artifacts: `/tmp/swift-rg-bench/nommap-stream-route-probe/ab.json` and
+`/tmp/swift-rg-bench/nommap-stream-route-probe/ab-flipped.json`.
+
 ## Rejected large literal 1 MiB anchor sample probe - 2026-06-04
 
 A current upstream harness refresh showed the broad Linux search rows are still
