@@ -185,6 +185,33 @@ Raw hyperfine exports:
 `/tmp/swift-rg-bench/bounded-concurrent-quiet-casei-ab-1780566105.json` and
 `/tmp/swift-rg-bench/bounded-concurrent-quiet-casei-confirm-1780566175.json`.
 
+## Post-prefix current gap refresh - 2026-06-04
+
+A fresh release matrix after the bounded concurrent quiet prefix kept the
+former late-hit quiet alternation target in the Swift-win band. File listing
+rows were Swift wins or noisy ties, and ordinary Linux literal/miss searches
+remained clear Swift wins against the current Rust reference.
+
+| Case | Swift | Rust |
+| --- | ---: | ---: |
+| `--files linux` | 91.8 ms noisy mean | 103.3 ms noisy mean |
+| `--hidden --files linux` | 94.3 ms | 104.1 ms noisy mean |
+| `PM_RESUME linux` | 1.966 s | 3.301 s |
+| `absentliteral linux` | 1.731 s | 3.247 s |
+| quiet late ignore-case alternation | 21.1 ms | 36.5 ms noisy mean |
+
+Single-file confirmation also ruled out a meaningful source probe. No-shell
+`--count-matches absentliteral` measured 7.3 ms for Swift versus 7.5 ms for
+Rust, while `--stats --files-without-match absentliteral` measured 7.3 ms for
+Swift versus 6.6 ms for Rust. That remaining path/stat gap is below the current
+noise floor and below the threshold for another specialized scanner branch, so
+no source change was retained in this pass.
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/post-f48-broad-refresh-1780566431.json`,
+`/tmp/swift-rg-bench/post-f48-singlefile-scan-1780566558.json`, and
+`/tmp/swift-rg-bench/post-f48-tiny-loss-confirm-1780566572.json`.
+
 ## Quiet case-insensitive alternation prefix scout - 2026-06-04
 
 Recursive quiet ASCII ignore-case literal alternations now get a tiny
