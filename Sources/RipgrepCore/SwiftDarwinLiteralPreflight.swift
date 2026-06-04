@@ -2462,11 +2462,20 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         guard let data = mappedPreflightData(path: path),
-              let matchedLineCount = countASCIIWordMatchedLines(
-                in: data,
-                literal: literal,
-                maxCount: maxCount
-              ) else {
+              !hasBinaryDetectionPrefix(data) else {
+            return nil
+        }
+        if !includeZero,
+           literal.count >= rareAnchorNoMatchShortcutMinimumLiteralLength,
+           !(dataContainsLiteralUsingRareAnchor(data, literal: literal)
+                ?? dataContainsLiteralUsingSIMD(data, literal: literal)) {
+            return 1
+        }
+        guard let matchedLineCount = countASCIIWordMatchedLines(
+            in: data,
+            literal: literal,
+            maxCount: maxCount
+        ) else {
             return nil
         }
 

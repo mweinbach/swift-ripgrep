@@ -34,6 +34,29 @@ Raw hyperfine exports:
 `/tmp/swift-rg-bench/word-contains-rareanchor-noshell-1780538960.json`, and
 `/tmp/swift-rg-bench/word-contains-rareanchor-hitguard-1780538982.json`.
 
+## Raw-absent shortcut for word count misses - 2026-06-03
+
+Single-literal word count output now uses the existing rare-anchor/raw-literal
+absence proof for long literals before entering the word-boundary line counter,
+but only when `--include-zero` is not active. This lets raw-absent word count
+misses return no-match status without the boundary counter while avoiding the
+extra proof pass for short/common matched literals and include-zero output.
+
+Output, stderr, and status matched the saved `c7cf1fa` Swift binary and Rust
+for absent word count, include-zero count, bounded count, CRLF count, short
+matched count, and long matched count guards. `swift build -c release` passed
+before benchmarking.
+
+| Case | Patched Swift | Baseline `c7cf1fa` | Rust reference |
+| --- | ---: | ---: | ---: |
+| no-shell `-w -c absentliteral` | 9.37 ms mean / 9.27 ms median | 10.61 ms / 10.59 ms | current refresh 8.3 ms shell |
+| no-shell `-w -c --include-zero absentliteral` guard | 9.57 ms / 9.33 ms | 9.48 ms / 9.44 ms | not remeasured |
+| no-shell `-w -c literal` short matched guard | 15.46 ms / 15.25 ms | 15.38 ms / 15.20 ms | not remeasured |
+| no-shell `-w -c missingliteral` long matched guard | 21.47 ms / 21.23 ms | 21.48 ms / 21.22 ms | not remeasured |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/word-count-rawabsent-narrow-ab-1780539570.json`.
+
 ## Direct zero-count output for unprefixed LF counts - 2026-06-03
 
 The Darwin Swift preflight count writer now writes the common `0\n` count line
