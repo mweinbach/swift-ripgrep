@@ -1579,6 +1579,20 @@ same-session guard comparisons with 60-80 timed runs.
 Raw hyperfine export:
 `/tmp/swift-rg-bench/suffix-prefix512-ab-1780457067.json`.
 
+Rejected follow-up probe:
+
+- Increasing the quiet ASCII run-suffix output-order prefix from 512 files to
+  1024 and then 768 did not produce a durable recursive-hit win. The 1024 probe
+  regressed `[A-Z]+_RESUME` to 9.9 ms versus 9.3 ms baseline while leaving the
+  missing guard flat at 16.7 ms versus 16.6 ms; it only helped the fixed-count
+  hit under noise at 9.0 ms versus 9.9 ms. The 768 probe flipped the noise:
+  `[A-Z]+_RESUME` measured 8.9 ms versus 10.2 ms baseline, but
+  `[A-Z]{3}_RESUME` regressed to 9.7 ms versus 8.7 ms and the missing guard
+  stayed flat at 16.6 ms versus 16.4 ms. The source probe was reverted to the
+  retained 512-file window. Raw exports:
+  `/tmp/swift-rg-bench/runsuffix-prefix1024-ab-1780542952.json` and
+  `/tmp/swift-rg-bench/runsuffix-prefix768-ab-1780543051.json`.
+
 ## Quiet literal summary-only first match - 2026-06-03
 
 Quiet no-stats/no-json first-match search now returns a summary-only
