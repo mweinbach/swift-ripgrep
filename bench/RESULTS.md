@@ -8,6 +8,27 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected three-byte literal anchor probe - 2026-06-04
+
+A Swift-only probe changed the single-literal direct writer's rare-anchor
+selector from two-byte anchors to three-byte anchors before verifying the full
+literal. The probe was reverted because it preserved output but regressed the
+default plain subtitle row and did not improve explicit no-mmap.
+
+Patched stdout, stderr, and status matched Rust for real subtitle text under
+default, explicit no-mmap, and line-numbered plain literal searches, and for
+the large binary fixture under default and no-mmap. The three-byte probe
+measured `subtitles_en_literal` at 217.5 ms Swift versus 157.1 ms Rust,
+explicit no-mmap at 197.2 ms Swift versus 157.2 ms Rust, and the line-numbered
+control at 183.6 ms Swift versus 190.0 ms Rust. The rebuilt baseline for the
+same family measured default at 171.1 ms Swift, no-mmap at 196.0 ms Swift, and
+line-numbered at 182.6 ms Swift.
+
+Artifacts:
+`/tmp/swift-rg-bench/anchor3-plain-parity-1780612229`,
+`/tmp/swift-rg-bench/anchor3-plain-probe-1780612235`, and
+`/tmp/swift-rg-bench/rebuilt-plain-baseline-1780611882`.
+
 ## Rejected single-literal anchor threshold probe - 2026-06-04
 
 A Swift-only probe lowered the single-literal direct writer's rare-anchor
