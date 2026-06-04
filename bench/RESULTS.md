@@ -32,6 +32,29 @@ Artifacts:
 `/tmp/swift-rg-bench/ascii-boundary-word-route-1780603420` and
 `/tmp/swift-rg-bench/ascii-boundary-word-route-harness-1780603566/summary.md`.
 
+## Rejected text-proof-first no-mmap probe - 2026-06-04
+
+A Swift-only probe moved the large simple-literal writer's whole-file NUL-byte
+text proof before sparse output collection, then reused that proof instead of
+checking for NUL bytes after the sparse scan. The source probe was reverted
+because the corrected version preserved Swift output but made the target
+`--no-mmap` path slower.
+
+Small binary fixtures matched the current Swift baseline and Rust for default,
+`--no-mmap`, and `-a --no-mmap` with NUL bytes before/after the matching line
+and with no match. A large `--no-mmap` binary no-match fixture also matched
+baseline and Rust. A large NUL-after-match fixture matched the Swift baseline
+but not Rust in both baseline and probe, so that existing mismatch was not
+introduced by the probe.
+
+The corrected 18-run A/B measured `--no-mmap 'Sherlock Holmes'` at 203.3 ms
+for the probe versus 189.1 ms baseline and 150.5 ms Rust. Nearby controls were
+flat: plain literal output measured 164.2 ms probe versus 165.8 ms baseline,
+and line-numbered output measured 226.3 ms probe versus 225.7 ms baseline.
+
+Artifacts:
+`/tmp/swift-rg-bench/text-proof-first-corrected-slim-1780604933`.
+
 ## Rejected Swift SIMD NUL proof probe - 2026-06-04
 
 A Swift-only probe replaced the large simple-literal writer's two whole-file
