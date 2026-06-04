@@ -8,6 +8,24 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Cached ASCII literal fast reject - 2026-06-04
+
+`PatternMatcher` now caches the literal list used by `canFastReject` and uses a
+Swift byte scan for case-sensitive ASCII literal prefilters. The target
+recursive context path was spending most sampled worker time rebuilding literal
+arrays and calling `String.range(of:)` on lines that could be rejected before the
+full matcher.
+
+The patch preserved current Swift output byte-for-byte for
+`-C2 PM_RESUME /tmp/swift-rg-bench/linux`, including the current Swift traversal
+order. Same-session release A/B against clean baseline `3a50fdc` measured the
+context target at 11.525 s for patched Swift versus 19.694 s for baseline, with
+Rust at 3.296 s. This keeps the gap open, but removes roughly 42% of the
+previous Swift wall time without C shims.
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/ascii-fast-reject-context-ab-1780569522.json`.
+
 ## Quiet case-insensitive multi-literal status helper - 2026-06-04
 
 Quiet recursive ASCII ignore-case multi-literal searches now use a status-only

@@ -62,6 +62,30 @@ struct FeatureTests {
         #expect(errors.isEmpty)
     }
 
+    @Test("context literal search preserves ASCII and Unicode filtering")
+    func contextLiteralSearchPreservesASCIIAndUnicodeFiltering() throws {
+        let root = try TemporaryDirectory()
+        try root.write("before\nPM_RESUME now\nafter\n", to: "ascii.txt")
+        try root.write("before\ncafé now\nafter\n", to: "unicode.txt")
+        try root.write("before\nCAFE now\nafter\n", to: "uppercase.txt")
+
+        #expect(try run(["--sort=path", "-C1", "PM_RESUME", root.url.path]) == [
+            "\(root.path("ascii.txt"))-before",
+            "\(root.path("ascii.txt")):PM_RESUME now",
+            "\(root.path("ascii.txt"))-after",
+        ])
+        #expect(try run(["--sort=path", "-C1", "fé", root.url.path]) == [
+            "\(root.path("unicode.txt"))-before",
+            "\(root.path("unicode.txt")):café now",
+            "\(root.path("unicode.txt"))-after",
+        ])
+        #expect(try run(["--sort=path", "-i", "-C1", "cafe", root.url.path]) == [
+            "\(root.path("uppercase.txt"))-before",
+            "\(root.path("uppercase.txt")):CAFE now",
+            "\(root.path("uppercase.txt"))-after",
+        ])
+    }
+
     @Test("quiet required-literal regex recursive search returns only exit status")
     func quietRequiredLiteralRegexRecursiveSearchReturnsOnlyExitStatus() throws {
         let root = try TemporaryDirectory()

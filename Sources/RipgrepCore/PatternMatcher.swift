@@ -5,6 +5,8 @@ public struct PatternMatcher {
     private let patternSources: [String]
     private let patterns: [CompiledPattern]
     private let requiredLiteralPrefilters: [String]?
+    private let literalFastRejects: [String]?
+    private let asciiByteLiteralFastRejects: [[UInt8]]?
     private let byteLiteralFastPathCache: ByteLiteralFastPath?
     private let byteRequiredLiteralPrefilterCache: ByteLiteralFastPath?
     private let wordWhitespaceSequenceFastPathCache: WordWhitespaceSequenceFastPath?
@@ -160,6 +162,13 @@ public struct PatternMatcher {
         self.usesByteSemantics = usesByteSemantics
         self.requiredLiteralPrefilters = requiredLiteralPrefilters
         self.patterns = patterns
+        self.literalFastRejects = Self.literalFastRejects(patterns: patterns)
+        self.asciiByteLiteralFastRejects = Self.asciiByteLiteralFastRejects(
+            patterns: patterns,
+            requiredLiteralPrefilters: requiredLiteralPrefilters,
+            options: options,
+            usesByteSemantics: usesByteSemantics
+        )
         self.byteLiteralFastPathCache = Self.makeByteLiteralFastPath(
             patterns: patterns,
             options: options,
@@ -516,19 +525,16 @@ public struct PatternMatcher {
     }
 
     public func canFastReject(_ line: String) -> Bool {
-        let literals = patterns.compactMap { pattern -> String? in
-            guard case .literal(let literal) = pattern, !literal.isEmpty else {
-                return nil
-            }
-            return literal
+        if let asciiByteLiteralFastRejects {
+            return !asciiByteLiteralFastRejects.contains { asciiLiteralContains($0, in: line) }
         }
-        guard literals.count == patterns.count else {
+        guard let literalFastRejects else {
             if let requiredLiteralPrefilters {
                 return !requiredLiteralPrefilters.contains { literalContains($0, in: line) }
             }
             return false
         }
-        return !literals.contains { literalContains($0, in: line) }
+        return !literalFastRejects.contains { literalContains($0, in: line) }
     }
 
     func byteLiteralFastPath() -> ByteLiteralFastPath? {
@@ -665,6 +671,37 @@ public struct PatternMatcher {
             caseInsensitiveASCII: options.effectiveIgnoreCase,
             wordASCII: options.wordRegexp
         )
+    }
+
+    private static func literalFastRejects(patterns: [CompiledPattern]) -> [String]? {
+        let literals = patterns.compactMap { pattern -> String? in
+            guard case .literal(let literal) = pattern, !literal.isEmpty else {
+                return nil
+            }
+            return literal
+        }
+        return literals.count == patterns.count ? literals : nil
+    }
+
+    private static func asciiByteLiteralFastRejects(
+        patterns: [CompiledPattern],
+        requiredLiteralPrefilters: [String]?,
+        options: RipgrepOptions,
+        usesByteSemantics: Bool
+    ) -> [[UInt8]]? {
+        guard !options.effectiveIgnoreCase,
+              !usesByteSemantics else {
+            return nil
+        }
+        if let literals = literalFastRejects(patterns: patterns),
+           literals.allSatisfy({ $0.utf8.allSatisfy(\.isASCII) }) {
+            return literals.map { Array($0.utf8) }
+        }
+        guard let requiredLiteralPrefilters,
+              requiredLiteralPrefilters.allSatisfy({ !$0.isEmpty && $0.utf8.allSatisfy(\.isASCII) }) else {
+            return nil
+        }
+        return requiredLiteralPrefilters.map { Array($0.utf8) }
     }
 
     private static func makeWordWhitespaceSequenceFastPath(
@@ -3667,6 +3704,46 @@ public struct PatternMatcher {
             return line.range(of: literal, options: [.caseInsensitive]) != nil
         }
         return line.range(of: literal) != nil
+    }
+
+    private func asciiLiteralContains(_ literal: [UInt8], in line: String) -> Bool {
+        guard !literal.isEmpty else {
+            return true
+        }
+        return line.utf8.withContiguousStorageIfAvailable { haystack in
+            Self.asciiLiteralContains(literal, in: haystack)
+        } ?? Self.asciiLiteralContains(literal, in: Array(line.utf8)[...])
+    }
+
+    private static func asciiLiteralContains<C: Collection>(
+        _ literal: [UInt8],
+        in haystack: C
+    ) -> Bool where C.Element == UInt8, C.Index == Int {
+        guard literal.count <= haystack.count else {
+            return false
+        }
+        if literal.count == 1 {
+            return haystack.contains(literal[0])
+        }
+        let firstByte = literal[0]
+        let lastSearchIndex = haystack.count - literal.count
+        var index = 0
+        while index <= lastSearchIndex {
+            guard haystack[index] == firstByte else {
+                index += 1
+                continue
+            }
+            var literalIndex = 1
+            while literalIndex < literal.count,
+                  haystack[index + literalIndex] == literal[literalIndex] {
+                literalIndex += 1
+            }
+            if literalIndex == literal.count {
+                return true
+            }
+            index += 1
+        }
+        return false
     }
 
     private func caseInsensitiveLiteralRanges(_ literal: String, in line: String) -> [Range<String.Index>] {
