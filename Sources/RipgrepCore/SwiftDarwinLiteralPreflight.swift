@@ -15692,6 +15692,46 @@ private func rgSwiftDarwinWriteWordLiteralLineBytes(
     var searchOffset = 0
     var lastEmittedLineStart = -1
 
+    func emitBinaryWordMatch(binaryOffset: Int) -> Int? {
+        guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+            return nil
+        }
+        defer {
+            output.deallocate()
+        }
+
+        var emittedLineCount = 0
+        var emittedHeading = false
+        if binaryOffset >= 64 * 1024 {
+            for line in pendingLines where line.outputEnd <= binaryOffset {
+                guard output.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading),
+                      output.writeBytes(linePrefix) else {
+                    return nil
+                }
+                if lineNumber,
+                   !output.writeLineNumberPrefix(line.number, fieldSeparator: lineNumberFieldSeparator) {
+                    return nil
+                }
+                guard output.write(base.advanced(by: line.start), count: line.outputEnd - line.start) else {
+                    return nil
+                }
+                if line.needsFinalNewline,
+                   !output.writeByte(UInt8(ascii: "\n")) {
+                    return nil
+                }
+                emittedLineCount += 1
+            }
+        }
+
+        let binaryMessage = #"binary file matches (found "\0" byte around offset \#(binaryOffset))"#
+        guard output.writeBytes(Array(binaryMessage.utf8)),
+              output.writeByte(UInt8(ascii: "\n")),
+              output.flush() else {
+            return nil
+        }
+        return max(1, emittedLineCount)
+    }
+
     if literal.count >= 4,
        haystackLength >= 256 * 1024 * 1024 {
         let sampleCount = min(haystackLength, 256 * 1024)
@@ -15793,8 +15833,9 @@ private func rgSwiftDarwinWriteWordLiteralLineBytes(
             guard !pendingLines.isEmpty else {
                 return memchr(base, 0, haystackLength) == nil ? 0 : nil
             }
-            guard memchr(base, 0, haystackLength) == nil else {
-                return nil
+            if let binaryPointer = memchr(base, 0, haystackLength) {
+                let binaryOffset = base.distance(to: binaryPointer.assumingMemoryBound(to: UInt8.self))
+                return emitBinaryWordMatch(binaryOffset: binaryOffset)
             }
 
             guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
@@ -15886,8 +15927,9 @@ private func rgSwiftDarwinWriteWordLiteralLineBytes(
     guard !pendingLines.isEmpty else {
         return memchr(base, 0, haystackLength) == nil ? 0 : nil
     }
-    guard memchr(base, 0, haystackLength) == nil else {
-        return nil
+    if let binaryPointer = memchr(base, 0, haystackLength) {
+        let binaryOffset = base.distance(to: binaryPointer.assumingMemoryBound(to: UInt8.self))
+        return emitBinaryWordMatch(binaryOffset: binaryOffset)
     }
 
     guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {

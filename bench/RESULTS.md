@@ -51,6 +51,27 @@ no-match case still exits 1 with no output. An 18-run text-path guard measured
 Artifacts:
 `/tmp/swift-rg-bench/large-binary-direct-message-1780605332`.
 
+## Large no-mmap word binary literal output matches Rust - 2026-06-04
+
+The Unicode word-literal executable preflight now emits Rust-compatible binary
+output directly for explicit `--no-mmap -nw` searches when it has already
+collected matching lines before a later NUL byte. Before this fix, the same
+270 MiB hit-before-NUL fixture fell back to the buffered reader and errored
+with the 256 MiB haystack limit, while Rust printed the numbered matching line
+followed by the binary notice.
+
+Patched stdout, stderr, and status matched Rust for explicit
+`--no-mmap -nw 'Sherlock Holmes'` on both the 270 MiB NUL-after-match fixture
+and the 270 MiB binary no-match fixture. An 18-run text-path guard measured
+Unicode `-nw 'Sherlock Holmes'` at 246.7 ms patched versus 242.3 ms baseline
+and 187.2 ms Rust, while the ASCII boundary regex row measured 243.0 ms patched
+versus 245.7 ms baseline and 182.5 ms Rust. The mixed movement stayed within
+run noise, so this is retained as a parity fix rather than a text-path
+performance win.
+
+Artifacts:
+`/tmp/swift-rg-bench/word-nommap-binary-fix-1780605848`.
+
 ## Rejected text-proof-first no-mmap probe - 2026-06-04
 
 A Swift-only probe moved the large simple-literal writer's whole-file NUL-byte
