@@ -8,6 +8,26 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected count-matches rare-anchor simple preflight - 2026-06-04
+
+A probe routed simple silent `--count-matches absentliteral` through the same
+long-literal rare-anchor no-match proof used by visible literal output before
+falling back to the existing no-match proof. It preserved stdout/status against
+Rust for silent `--count-matches`, silent `-c`, and include-zero
+`--count-matches` no-match rows.
+
+The first same-session A/B against `bfdd018` looked positive for the target:
+silent count-matches absent moved from 8.4 ms mean to 6.9 ms, while matched
+count-matches was unchanged/noise-positive. The order-flipped confirmation
+rejected it: silent count-matches absent measured 8.2 ms for the probe versus
+7.2 ms baseline, and the unchanged plain `-c absentliteral` guard measured
+8.7 ms versus 7.3 ms baseline. Include-zero stayed essentially flat at
+6.7 ms versus 6.6 ms. The source probe was reverted.
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/countmatches-rareanchor-scoped-ab-1780560353.json` and
+`/tmp/swift-rg-bench/countmatches-rareanchor-scoped-confirm-1780560367.json`.
+
 ## Numbered dense multi-literal line scan - 2026-06-04
 
 The existing dense multi-literal line scanner now handles `-n` output when no
