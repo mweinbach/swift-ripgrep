@@ -90,6 +90,16 @@ Rejected follow-up probe:
   both the probe and the clean `ea63f74` baseline, with Rust at 6.0 ms. The
   source probe was reverted. Raw export:
   `/tmp/swift-rg-bench/basename-relative-defer-hit-1780531989.json`.
+- Reusing the basename-only ignore helper in the quiet file-list existence
+  walker preserved status/stdout/stderr against Rust for default, hidden,
+  no-vcs, no-global, explicit-ignore, and missing-root quiet file-listing
+  controls, but did not improve the hot rows. A no-shell 200-run A/B measured
+  default `--quiet --files` at 5.3 ms for the probe versus 4.9 ms baseline,
+  while `--no-ignore-vcs --quiet --files` stayed noise-level slower at 3.4 ms
+  versus 3.3 ms baseline. The source probe was reverted. Raw exports:
+  `/tmp/swift-rg-bench/quiet-files-basename-helper-default-1780533394.json`,
+  `/tmp/swift-rg-bench/quiet-files-basename-helper-hidden-novcs-1780533394.json`,
+  and `/tmp/swift-rg-bench/quiet-files-basename-helper-noshell-1780533402.json`.
 
 ## Extended root VCS-context reuse to file-path walks - 2026-06-03
 
