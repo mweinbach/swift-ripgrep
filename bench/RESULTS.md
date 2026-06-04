@@ -800,6 +800,15 @@ were rejected:
   unacceptable: full no-match quiet rose from 1.446 s to 4.542 s. Adding an
   explicit 32 KiB stat-based size cap kept the hit at 84.5 ms, but still left
   no-match at 4.597 s versus 1.360 s baseline.
+- A narrower selected-literal prefix probe scanned only the shortest
+  case-insensitive literal (`ERR_SYS`) through the same 1,536-file
+  output-order prefix before falling back to the existing parallel search. It
+  preserved the focused quiet alternation and quiet literal tests, but did not
+  move the target hit: cwd-shaped Linux hit measured 270.9 ms median / 283.1 ms
+  mean, while Rust measured 14.5 ms / 18.2 ms. The no-match guard regressed to
+  1.967 s median / 1.997 s mean versus the earlier 1.5 s Swift class, so the
+  source probe was reverted. Raw export:
+  `/tmp/swift-rg-bench/casei-alt-selected-prefix-cwd-probe-1780556570.json`.
 
 The source probes were reverted. A focused regression test remains for the
 quiet ignore-case alternation hit/miss status surface. Raw exports:
