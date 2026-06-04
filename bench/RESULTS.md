@@ -75,6 +75,29 @@ versus 179.91 ms baseline. The source change was reverted.
 Artifacts: `/tmp/swift-rg-bench/raw-rare-anchor-probe/ab.json` and
 `/tmp/swift-rg-bench/raw-rare-anchor-probe/ab-flipped.json`.
 
+## Rejected raw literal String bytes decode probe - 2026-06-04
+
+A Swift-only probe changed the raw buffered single-literal line collector from
+`Data(bytes:)` plus `String(data:encoding:)` to `String(bytes:encoding:)` over
+an unsafe byte buffer for each emitted matching line. The intent was to avoid
+one explicit `Data` allocation per matched line in the explicit `--no-mmap`
+plain literal path while preserving invalid UTF-8 fallback behavior.
+
+Patched stdout, stderr, and status matched both the committed Swift binary and
+Rust `rg` for explicit no-mmap subtitle literal output, default literal output,
+line-numbered no-mmap output, word-boundary no-mmap output, duplicate same-line
+controls, and an invalid-UTF8 no-mmap guard. The benchmark was flat-to-slower:
+a 24-run A/B measured plain no-mmap at 185.25 ms patched versus 185.00 ms
+baseline, default plain at 159.37 ms versus 158.62 ms, line-numbered no-mmap
+at 176.08 ms versus 176.17 ms, and word-boundary no-mmap at 176.91 ms versus
+180.08 ms with high variance. The order-flipped confirmation measured plain
+no-mmap at 187.62 ms patched versus 186.13 ms baseline, and line-numbered
+no-mmap at 176.30 ms patched versus 175.38 ms baseline. The source change was
+reverted.
+
+Artifacts: `/tmp/swift-rg-bench/raw-string-bytes-probe/ab.json` and
+`/tmp/swift-rg-bench/raw-string-bytes-probe/ab-flipped.json`.
+
 ## Rejected large literal 1 MiB anchor sample probe - 2026-06-04
 
 A current upstream harness refresh showed the broad Linux search rows are still
