@@ -8,6 +8,27 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected Darwin file-list worker cap 8 - 2026-06-04
+
+A Swift-only probe raised the ignore-aware Darwin file-list data worker cap
+from 6 to 8 to test whether the current Linux-tree `--files` gap was caused by
+under-parallelizing the top-level directory fan-out. The probe was reverted
+because output parity held but the measured file-list rows regressed.
+
+Sorted Swift output matched Rust for default, hidden, and no-vcs Linux corpus
+file listing. NUL-delimited `-0 --files` output also matched after normalizing
+NUL terminators for comparison, with identical byte and terminator counts. A
+40-run refresh before the probe measured Swift default `--files` at 91.7 ms
+median versus Rust at 80.0 ms, hidden at 94.8 ms versus 80.4 ms, and no-vcs at
+74.6 ms versus 69.6 ms. The 8-worker probe measured Swift default at 105.2 ms,
+hidden at 114.5 ms, and no-vcs at 90.9 ms, so the wider cap is not useful on
+this corpus.
+
+Artifacts:
+`/tmp/swift-rg-bench/current-files-refresh-1780613249.json`,
+`/tmp/swift-rg-bench/files-worker8-parity-1780613404`, and
+`/tmp/swift-rg-bench/files-worker8-probe-1780613420.json`.
+
 ## Rejected large simple first-byte scanner route - 2026-06-04
 
 A Swift-only probe raised the large simple literal writer's rare-anchor branch
