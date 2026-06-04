@@ -251,6 +251,18 @@ struct BinaryTests {
             "cat",
             withoutRoot.url.path,
         ])) == ["text.txt"])
+        #expect(pathBasenames(try run([
+            "--sort=path",
+            "--files-without-match",
+            "absent",
+            withoutRoot.url.path,
+        ])) == ["text.txt"])
+        let explicitBinaryWithoutMatch = try runExecutableData([
+            "--files-without-match",
+            "absent",
+            withoutRoot.path("binary.txt"),
+        ], fixture: {})
+        #expect(explicitBinaryWithoutMatch == Data("\(withoutRoot.path("binary.txt"))\n".utf8))
         var stdinOutput: [String] = []
         var stdinExitCode = RipgrepCLI.run(
             arguments: ["-n", "needle", "-"],

@@ -7340,9 +7340,6 @@ public enum SwiftDarwinLiteralPreflight {
         guard let data = mappedPreflightData(path: path) else {
             return nil
         }
-        guard !hasBinaryDetectionPrefix(data) else {
-            return nil
-        }
         guard !(dataContainsLiteralUsingRareAnchor(data, literal: literal)
                 ?? dataContainsLiteralUsingSIMD(data, literal: literal)) else {
             return nil
@@ -7355,9 +7352,6 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
         guard let data = mappedPreflightData(path: path) else {
-            return nil
-        }
-        guard !hasBinaryDetectionPrefix(data) else {
             return nil
         }
         guard dataContainsLiteralUsingRareAnchor(data, literal: literal) == false else {
