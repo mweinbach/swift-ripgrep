@@ -42,6 +42,66 @@ Raw hyperfine exports:
 three-run sanity check is in
 `/tmp/swift-rg-bench/fast-search-walker-final-1780573818.json`.
 
+## Post-fast-walker Linux refresh and rejected file-list byte probe - 2026-06-04
+
+A fresh release build after the fast Darwin search walker showed Swift ahead of
+Rust on the available Linux search rows. In a five-run focused matrix, Swift
+measured 1.723 s for Unicode no-literal search versus Rust at 3.297 s, 1.570 s
+for the ASCII no-literal variant versus Rust at 3.109 s, 982.3 ms for
+`PM_RESUME` versus Rust at 3.268 s, and 1.216 s for `-C2 PM_RESUME` versus
+Rust at 3.960 s.
+
+The same run measured default `--files` at 88.8 ms for Swift versus 80.8 ms for
+Rust, so the only visible gap shifted back to file listing. A 12-run file-list
+variant matrix showed that gap is narrow and ignore-dependent:
+
+| Case | Swift | Rust |
+| --- | ---: | ---: |
+| `--files linux` | 95.5 ms | 83.7 ms |
+| `--hidden --files linux` | 101.4 ms | 92.0 ms noisy |
+| `--no-ignore --files linux` | 70.0 ms | 86.8 ms noisy |
+| `--no-ignore-vcs --files linux` | 66.8 ms | 73.1 ms |
+
+A broader one-run upstream Linux harness refresh found no remaining Rust search
+win in the available corpus:
+
+| Bench | Rust | Swift | Swift / Rust |
+| --- | ---: | ---: | ---: |
+| `linux_alternates` | 3.343 s | 1.191 s | 0.36x |
+| `linux_alternates_casei` | 3.323 s | 1.918 s | 0.58x |
+| `linux_literal` | 3.143 s | 963.98 ms | 0.31x |
+| `linux_literal` mmap | 3.233 s | 1.184 s | 0.37x |
+| `linux_literal_casei` | 3.058 s | 1.189 s | 0.39x |
+| `linux_literal_casei` mmap | 3.199 s | 1.162 s | 0.36x |
+| `linux_literal_default` | 3.395 s | 960.43 ms | 0.28x |
+| `linux_no_literal` | 3.121 s | 1.652 s | 0.53x |
+| `linux_no_literal` ASCII | 3.236 s | 1.462 s | 0.45x |
+| `linux_re_literal_suffix` | 3.208 s | 1.135 s | 0.35x |
+| `linux_unicode_greek` | 3.073 s | 1.256 s | 0.41x |
+| `linux_unicode_greek_casei` | 2.691 s | 1.198 s | 0.45x |
+| `linux_unicode_word` | 3.185 s | 1.159 s | 0.36x |
+| `linux_unicode_word` ASCII | 3.088 s | 1.154 s | 0.37x |
+| `linux_word` | 2.766 s | 1.112 s | 0.40x |
+
+The subtitles fixtures are still unavailable in this local bench corpus, so the
+large single-file rows remain unrefreshed.
+
+Rejected same-session probe:
+
+- Carrying raw filename bytes in `FastDirectoryChild` and using them to append
+  Darwin file-list output preserved exact `--files`, `--hidden --files`,
+  `--no-ignore --files`, and `--no-ignore-vcs --files` output, but did not hold
+  a speedup. Against detached baseline `58af082`, default `--files` measured
+  81.2 ms for the probe versus 79.4 ms baseline, hidden measured 83.5 ms versus
+  80.6 ms baseline, and no-ignore measured 64.1 ms versus 57.8 ms baseline. The
+  probe was reverted.
+
+Raw hyperfine and harness exports:
+`/tmp/swift-rg-bench/current-post-fastwalker-1780574096.json`,
+`/tmp/swift-rg-bench/current-files-variants-1780574206.json`,
+`/tmp/swift-rg-bench/current-linux-broad-1780574440/summary.md`, and
+`/tmp/swift-rg-bench/namebytes-files-a-1780574276.json`.
+
 ## Current Linux gap refresh and rejected probes - 2026-06-04
 
 After the sparse context work, a current five-run Linux refresh showed the old
