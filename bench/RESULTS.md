@@ -70,6 +70,43 @@ source probe was reverted.
 Raw hyperfine export:
 `/tmp/swift-rg-bench/quiet-casei-smallgroup-ab-1780563960.json`.
 
+## Current gap refresh and rejected hidden worker retune - 2026-06-04
+
+A fresh broad matrix after `614d4eb` showed ordinary Linux search rows are still
+Swift wins, while the live outlier remains quiet ignore-case multi-literal
+late-hit search. Default file listing and no-ignore file listing were Swift wins
+or noisy ties in the same run; hidden file listing was the only file-list row
+that initially looked like a clean gap.
+
+| Case | Swift | Rust |
+| --- | ---: | ---: |
+| `--files linux` | 84.0 ms mean | 105.6 ms noisy mean |
+| `--hidden --files linux` | 94.0 ms | 79.1 ms |
+| `--no-ignore --files linux` | 65.2 ms | 78.3 ms noisy mean |
+| `PM_RESUME linux` | 1.728 s | 3.306 s |
+| no-literal miss on Linux | 1.756 s | 3.228 s |
+| quiet late ignore-case alternation | 267.0 ms | 15.2 ms noisy mean |
+
+Focused no-shell checks ruled out a source change for single-file path-only
+output: `--files-without-match absentliteral` measured 7.6 ms for Swift versus
+7.1 ms for Rust, and `--files-with-matches literal` measured 3.1 ms versus
+2.7 ms. The gap is below the threshold for another parser or containment probe,
+especially because earlier direct path-only variants were rejected.
+
+A hidden file-list worker retune was also rejected without a source edit. An
+initial short run made explicit `-j4`/`-j16` look faster than default hidden
+file listing, but the order-flipped confirmation flattened the result:
+`--hidden --files` measured 79.7 ms, `-j4 --hidden --files` measured 79.4 ms,
+`-j16 --hidden --files` measured 77.8 ms, and Rust measured 79.5 ms, all with
+large overlapping noise. Current Swift and `-j4` hidden output hashes matched;
+sorted Swift and Rust path sets still matched. No source change was retained.
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/current-broad-refresh-1780564249.json`,
+`/tmp/swift-rg-bench/pathonly-noshell-refresh-1780564379.json`,
+`/tmp/swift-rg-bench/current-hidden-worker-refresh-1780564441.json`, and
+`/tmp/swift-rg-bench/hidden-j-confirm-1780564473.json`.
+
 ## Quiet case-insensitive alternation prefix scout - 2026-06-04
 
 Recursive quiet ASCII ignore-case literal alternations now get a tiny
