@@ -8,6 +8,27 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected large simple first-byte scanner route - 2026-06-04
+
+A Swift-only probe raised the large simple literal writer's rare-anchor branch
+threshold from 256 MiB to 2 GiB, forcing the 1.5 GiB subtitle fixture through
+the existing first-byte-plus-NUL fallback scanner. The probe was reverted
+because it preserved output but badly regressed the explicit no-mmap row.
+
+Patched stdout, stderr, and status matched Rust for real subtitle text across
+plain no-mmap, default, line-numbered, and case-insensitive no-mmap controls,
+and for the large binary fixture under default and no-mmap. A five-run
+`subtitles_en_literal` harness measured default at 170.9 ms Swift versus
+161.5 ms Rust, explicit no-mmap at 238.9 ms Swift versus 153.9 ms Rust, and
+the line-numbered control at 182.3 ms Swift versus 186.7 ms Rust. The refreshed
+current-head sweep measured explicit no-mmap at 195.3 ms Swift, so the
+fallback scanner route is not useful for this corpus.
+
+Artifacts:
+`/tmp/swift-rg-bench/large-simple-threshold2g-parity-1780613072`,
+`/tmp/swift-rg-bench/large-simple-threshold2g-probe-1780613080`, and
+`/tmp/swift-rg-bench/current-subtitles-refresh-1780612873`.
+
 ## Rejected buffered no-mmap streaming probe - 2026-06-04
 
 A Swift-only probe added a one-pass buffered streaming writer for the simplest
