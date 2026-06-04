@@ -84,6 +84,12 @@ Rejected follow-up probe:
   probe was reverted. Raw exports:
   `/tmp/swift-rg-bench/quiet-prefix32-hit-ab-1780531205.json` and
   `/tmp/swift-rg-bench/quiet-prefix32-miss-ab-1780531205.json`.
+- Deferring full relative-path construction in the basename-only fast-search
+  ignore branch preserved the quiet `SCHED` output/status against Rust, but did
+  not move the active early-hit target: `-q SCHED linux` measured 8.5 ms for
+  both the probe and the clean `ea63f74` baseline, with Rust at 6.0 ms. The
+  source probe was reverted. Raw export:
+  `/tmp/swift-rg-bench/basename-relative-defer-hit-1780531989.json`.
 
 ## Extended root VCS-context reuse to file-path walks - 2026-06-03
 
