@@ -32,6 +32,25 @@ Same-session release A/B against detached baseline `93c5c2a`:
 Raw hyperfine export:
 `/tmp/swift-rg-bench/quiet-casei-alt-status-helper-ab-1780562583.json`.
 
+## Rejected prepared quiet case-insensitive literal tables - 2026-06-04
+
+A Swift-only probe stored folded ASCII literals and Boyer-Moore-Horspool shift
+tables inside `ByteLiteralFastPath` so quiet ignore-case literal scans would not
+rebuild those small tables for every visited file. It preserved quiet hit and
+miss status/stdout/stderr against Rust, but did not move the remaining late-hit
+alternation target and failed the order-flipped guard pass.
+
+The first A/B against `66e3556` was mixed: the late-hit target stayed flat
+at 271.3 ms versus 270.9 ms baseline, while the miss and early-hit guards
+looked mildly better. The confirmation rejected the probe: full miss measured
+1.107 s for the probe versus 1.092 s baseline, early-hit measured 8.1 ms versus
+6.4 ms baseline, and the late-hit target stayed noise-flat at 274.8 ms versus
+280.5 ms baseline. The source change was reverted.
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/prepared-casei-ab-1780563199.json` and
+`/tmp/swift-rg-bench/prepared-casei-confirm-1780563232.json`.
+
 ## Quiet case-insensitive alternation prefix scout - 2026-06-04
 
 Recursive quiet ASCII ignore-case literal alternations now get a tiny
