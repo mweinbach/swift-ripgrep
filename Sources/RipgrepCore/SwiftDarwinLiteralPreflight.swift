@@ -11950,6 +11950,10 @@ private struct LiteralLineWriteStats {
     let bytesSearched: Int
 }
 
+private final class SwiftDarwinConcurrentTextProof: @unchecked Sendable {
+    var binaryOffset = -1
+}
+
 private struct LiteralMatchedLineAndMatchCounts {
     let matchedLines: Int
     let totalMatches: Int
@@ -13954,6 +13958,27 @@ private func rgSwiftDarwinWriteLiteralBytes(
         var lineNumberAtSearchOffset = 1
         var collectedSearchOffset = 0
         var collectedBytesSearched = haystackLength
+        let concurrentTextProof = !confirmedTextHaystack && haystackLength >= 256 * 1024 * 1024
+        let textProofGroup = concurrentTextProof ? DispatchGroup() : nil
+        let textProofResult = concurrentTextProof ? SwiftDarwinConcurrentTextProof() : nil
+        if let textProofGroup, let textProofResult {
+            let proofBaseAddress = UInt(bitPattern: base)
+            let proofLength = haystackLength
+            textProofGroup.enter()
+            DispatchQueue.global(qos: .userInitiated).async {
+                let proofBase = UnsafeRawPointer(bitPattern: proofBaseAddress)!
+                    .assumingMemoryBound(to: UInt8.self)
+                if let binaryPointer = memchr(proofBase, 0, proofLength) {
+                    textProofResult.binaryOffset = proofBase.distance(
+                        to: binaryPointer.assumingMemoryBound(to: UInt8.self)
+                    )
+                }
+                textProofGroup.leave()
+            }
+        }
+        defer {
+            textProofGroup?.wait()
+        }
 
         func nextCollectedMatch(from offset: Int) -> (match: UnsafePointer<UInt8>?, count: Int) {
             if asciiCaseInsensitive {
@@ -14084,8 +14109,16 @@ private func rgSwiftDarwinWriteLiteralBytes(
             }
         }
         if !confirmedTextHaystack {
-            if let binaryPointer = memchr(base, 0, haystackLength) {
-                let binaryOffset = base.distance(to: binaryPointer.assumingMemoryBound(to: UInt8.self))
+            let binaryOffset: Int
+            if let textProofGroup, let textProofResult {
+                textProofGroup.wait()
+                binaryOffset = textProofResult.binaryOffset
+            } else {
+                binaryOffset = memchr(base, 0, haystackLength).map {
+                    base.distance(to: $0.assumingMemoryBound(to: UInt8.self))
+                } ?? -1
+            }
+            if binaryOffset >= 0 {
                 return emitBinaryLineNumberedLiteralMatch(binaryOffset: binaryOffset)
             }
             confirmedTextHaystack = true

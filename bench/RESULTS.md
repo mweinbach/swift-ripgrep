@@ -118,6 +118,31 @@ Artifacts:
 `/tmp/swift-rg-bench/nommap-numbered-casei-text-parity-1780607348`, and
 `/tmp/swift-rg-bench/nommap-numbered-casei-bench-1780607361`.
 
+## Numbered no-mmap literals overlap text proof - 2026-06-04
+
+The collected line-numbered literal writer now starts its large-haystack NUL
+proof on a background queue while the main thread collects matching line
+ranges. The writer still waits before flushing output, so binary-file handling
+remains Rust-compatible, but explicit `--no-mmap -n` text searches no longer
+pay the proof serially after collection. The overlap is restricted to large
+unproven haystacks; small files and already-proven text paths keep the existing
+serial behavior.
+
+Patched stdout, stderr, and status matched Rust for real subtitle text and for
+270 MiB hit-before-NUL and binary no-match fixtures across unprefixed,
+filename-prefixed, heading, no-filename, and ASCII case-insensitive numbered
+no-mmap modes. An 18-run guard measured `--no-mmap -n 'Sherlock Holmes'` at
+188.4 ms patched versus 295.8 ms baseline and 201.2 ms Rust; the
+filename-prefixed row measured 189.8 ms patched versus 293.4 ms baseline and
+201.7 ms Rust. The case-insensitive row measured 215.5 ms patched versus
+316.6 ms baseline and 316.7 ms Rust, with the filename-prefixed
+case-insensitive row at 215.2 ms patched versus 318.2 ms baseline and
+319.6 ms Rust. The default mmap `-n` guard stayed in-band at 251.4 ms patched
+versus 253.8 ms baseline.
+
+Artifacts:
+`/tmp/swift-rg-bench/nommap-line-proof-overlap-1780608790`.
+
 ## Rejected word-literal anchor probes - 2026-06-04
 
 The current subtitle sweep still shows the largest retained text gap in
