@@ -15979,6 +15979,39 @@ private func rgSwiftDarwinWriteSurroundingWordsBytes(
     return pendingLines.count
 }
 
+private struct SwiftDarwinPreflightMatchedLineBound: Sendable {
+    let start: Int
+    let outputEnd: Int
+    let hasNewline: Bool
+    var firstMatchStart: Int
+}
+
+private final class SwiftDarwinPreflightMatchedLineBoundStore: @unchecked Sendable {
+    private let lock = NSLock()
+    private var chunks: [[SwiftDarwinPreflightMatchedLineBound]]
+
+    init(count: Int) {
+        chunks = Array(repeating: [], count: count)
+    }
+
+    func store(_ bounds: [SwiftDarwinPreflightMatchedLineBound], at index: Int) {
+        lock.lock()
+        chunks[index] = bounds
+        lock.unlock()
+    }
+
+    func collect() -> [SwiftDarwinPreflightMatchedLineBound] {
+        lock.lock()
+        defer { lock.unlock() }
+        var result: [SwiftDarwinPreflightMatchedLineBound] = []
+        result.reserveCapacity(chunks.reduce(0) { $0 + $1.count })
+        for chunk in chunks {
+            result.append(contentsOf: chunk)
+        }
+        return result
+    }
+}
+
 private func rgSwiftDarwinWriteSingleActiveMultiLiteralLines(
     _ base: UnsafePointer<UInt8>,
     haystackLength: Int,
@@ -16586,6 +16619,168 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
         return sampledLineCount >= 32 && matchedLineCount * 3 >= sampledLineCount * 2
     }
 
+    func sortedUniqueLineBounds(
+        _ bounds: [SwiftDarwinPreflightMatchedLineBound]
+    ) -> [SwiftDarwinPreflightMatchedLineBound] {
+        var collectedBounds = bounds
+        collectedBounds.sort {
+            if $0.start != $1.start {
+                return $0.start < $1.start
+            }
+            return $0.firstMatchStart < $1.firstMatchStart
+        }
+
+        var uniqueBounds: [SwiftDarwinPreflightMatchedLineBound] = []
+        uniqueBounds.reserveCapacity(collectedBounds.count)
+        for bound in collectedBounds {
+            if var last = uniqueBounds.last, last.start == bound.start {
+                if bound.firstMatchStart < last.firstMatchStart {
+                    last.firstMatchStart = bound.firstMatchStart
+                    uniqueBounds[uniqueBounds.count - 1] = last
+                }
+            } else {
+                uniqueBounds.append(bound)
+            }
+        }
+        return uniqueBounds
+    }
+
+    func lineAlignedChunkRanges(minimumChunkCount: Int) -> [(start: Int, end: Int)]? {
+        let workerCount = min(max(2, ProcessInfo.processInfo.activeProcessorCount), 16)
+        let targetChunkSize = max(8 * 1024 * 1024, haystackLength / workerCount)
+        var chunkStarts = [0]
+        var targetOffset = targetChunkSize
+        while targetOffset < haystackLength {
+            let newlinePointer = memchr(
+                base.advanced(by: targetOffset),
+                Int32(UInt8(ascii: "\n")),
+                haystackLength - targetOffset
+            )
+            guard let newlinePointer else {
+                break
+            }
+            let chunkStart = base.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self)) + 1
+            guard chunkStart < haystackLength else {
+                break
+            }
+            if chunkStarts.last != chunkStart {
+                chunkStarts.append(chunkStart)
+            }
+            targetOffset = chunkStart + targetChunkSize
+        }
+        guard chunkStarts.count > minimumChunkCount else {
+            return nil
+        }
+
+        return chunkStarts.enumerated().map { index, start in
+            (
+                start: start,
+                end: index + 1 < chunkStarts.count ? chunkStarts[index + 1] : haystackLength
+            )
+        }
+    }
+
+    func collectChunkedParallelUnboundedLineMatches() -> [PendingMultiLiteralLine]? {
+        guard emitLines,
+              linePrefix.isEmpty,
+              headingPrefix.isEmpty,
+              !trimLeadingWhitespace,
+              maxCount == Int.max,
+              haystackLength >= 16 * 1024 * 1024,
+              literals.count >= 3,
+              literals.count <= 8,
+              ProcessInfo.processInfo.activeProcessorCount > 1,
+              let chunkRanges = lineAlignedChunkRanges(minimumChunkCount: literals.count) else {
+            return nil
+        }
+
+        let store = SwiftDarwinPreflightMatchedLineBoundStore(count: chunkRanges.count)
+        let baseAddressValue = UInt(bitPattern: base)
+        let newlineByte = UInt8(ascii: "\n")
+
+        DispatchQueue.concurrentPerform(iterations: chunkRanges.count) { chunkIndex in
+            let range = chunkRanges[chunkIndex]
+            let localBase = UnsafeRawPointer(bitPattern: baseAddressValue)!
+                .assumingMemoryBound(to: UInt8.self)
+            var localBounds: [SwiftDarwinPreflightMatchedLineBound] = []
+
+            for literal in literals where literal.count <= range.end - range.start {
+                literal.withUnsafeBufferPointer { needle in
+                    guard let needleBase = needle.baseAddress else {
+                        return
+                    }
+                    var searchOffset = range.start
+                    while searchOffset < range.end {
+                        let foundPointer = rg_memmem_simple(
+                            localBase.advanced(by: searchOffset),
+                            range.end - searchOffset,
+                            needleBase,
+                            needle.count
+                        )
+                        guard let rawFoundPointer = foundPointer else {
+                            break
+                        }
+
+                        let matchStart = localBase.distance(to: rawFoundPointer)
+                        var lineStart = matchStart
+                        while lineStart > 0, localBase[lineStart - 1] != newlineByte {
+                            lineStart -= 1
+                        }
+
+                        let newlinePointer = memchr(
+                            localBase.advanced(by: matchStart),
+                            Int32(newlineByte),
+                            range.end - matchStart
+                        )
+                        let outputEnd: Int
+                        let hasNewline: Bool
+                        if let newlinePointer {
+                            outputEnd = localBase.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self)) + 1
+                            hasNewline = true
+                        } else {
+                            outputEnd = range.end
+                            hasNewline = false
+                        }
+
+                        localBounds.append(SwiftDarwinPreflightMatchedLineBound(
+                            start: lineStart,
+                            outputEnd: outputEnd,
+                            hasNewline: hasNewline,
+                            firstMatchStart: matchStart
+                        ))
+                        searchOffset = outputEnd
+                    }
+                }
+            }
+            store.store(localBounds, at: chunkIndex)
+        }
+
+        let bounds = sortedUniqueLineBounds(store.collect())
+        guard !bounds.isEmpty else {
+            return []
+        }
+
+        var pendingLines: [PendingMultiLiteralLine] = []
+        pendingLines.reserveCapacity(bounds.count)
+        var pendingCurrentLineNumber = 1
+        var pendingLineCountOffset = 0
+        for bound in bounds {
+            pendingCurrentLineNumber += rg_memcount_byte(
+                base.advanced(by: pendingLineCountOffset),
+                bound.start - pendingLineCountOffset,
+                newlineByte
+            )
+            pendingLineCountOffset = bound.start
+            pendingLines.append(PendingMultiLiteralLine(
+                lineStart: bound.start,
+                outputEnd: bound.outputEnd,
+                needsFinalNewline: !bound.hasNewline,
+                lineNumber: pendingCurrentLineNumber
+            ))
+        }
+        return pendingLines
+    }
+
     func collectSparseUnboundedLineMatches() -> [PendingMultiLiteralLine]? {
         guard emitLines,
               lineNumber,
@@ -16794,7 +16989,24 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
             }
         }
     } else {
-        if let pendingLines = collectSparseUnboundedLineMatches() {
+        if let pendingLines = collectChunkedParallelUnboundedLineMatches() {
+            guard !pendingLines.isEmpty else {
+                if memchr(base, 0, haystackLength) != nil {
+                    return nil
+                }
+                bytesSearched = haystackLength
+                return rg_darwin_literal_file_result(
+                    status: 0,
+                    matched_line_count: 0,
+                    total_match_count: 0,
+                    bytes_searched: bytesSearched
+                )
+            }
+            guard memchr(base, 0, haystackLength) == nil else {
+                return nil
+            }
+            writeFailed = !emitPendingLines(pendingLines)
+        } else if let pendingLines = collectSparseUnboundedLineMatches() {
             guard !pendingLines.isEmpty else {
                 if memchr(base, 0, haystackLength) != nil {
                     return nil

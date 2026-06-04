@@ -210,6 +210,20 @@ Retained follow-up:
   226.80 ms plain and 283.09 ms line-numbered. Explicit `--no-mmap` stays on
   the existing mapped/streaming preflight because the generic no-mmap path hits
   the buffered-size limit on the large subtitles corpus.
+- Large unbounded 3-8 literal executable-preflight line output now splits the
+  mapped file into line-aligned chunks, scans each chunk's literals in
+  parallel, sorts and deduplicates matched line ranges, then emits in file
+  order. This brings the same chunked collector shape used by the regular
+  searcher into the single-file executable preflight while keeping small,
+  bounded, prefixed, headed, and non-line-output forms on existing routes.
+  Patched plain, `-n`, no-match, small-file, and Rust controls matched the
+  current Swift baseline and Rust. An 8-run A/B measured the five-name
+  subtitles alternation at 182.4 ms patched versus 461.3 ms baseline and
+  275.7 ms for Rust; line-numbered output measured 182.1 ms patched versus
+  512.5 ms baseline and 312.0 ms for Rust. The no-match alternation improved
+  to 102.4 ms patched versus 320.0 ms baseline. A 5-run upstream harness
+  confirmation measured `subtitles_en_alternate` at 182.56 ms and the `-n` row
+  at 183.83 ms, faster than Rust at 274.68 ms and 314.07 ms respectively.
 
 Rejected same-session probe:
 
@@ -266,6 +280,9 @@ Raw exports and parity artifacts:
 `/tmp/swift-rg-bench/large-line-route-probe/fixed-ab-1780581634.json`,
 `/tmp/swift-rg-bench/large-line-route-probe/harness-1780581687/summary.md`,
 `/tmp/swift-rg-bench/large-line-route-probe/parity-fixed-1780581634`,
+`/tmp/swift-rg-bench/chunked-preflight-alt-probe/ab2-1780582863.json`,
+`/tmp/swift-rg-bench/chunked-preflight-alt-probe/harness-1780582891/summary.md`,
+`/tmp/swift-rg-bench/chunked-preflight-alt-1780582859`,
 `/tmp/swift-rg-bench/pair-anchor-probe/ab-1780577742.json`,
 `/tmp/swift-rg-bench/pair-anchor-probe/harness-1780577796/summary.md`,
 `/tmp/swift-rg-bench/pair-anchor-probe/parity-1780577730`,
