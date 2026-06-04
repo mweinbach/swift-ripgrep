@@ -980,6 +980,23 @@ struct FeatureTests {
         )
         #expect(filenameZeroExitCode == 1)
         #expect(output == ["\(root.path("none.txt")):0"])
+
+        let rareRoot = try TemporaryDirectory()
+        let rarePrefix = String(repeating: "x", count: 1024 * 1024)
+        try rareRoot.write(
+            "\(rarePrefix)\nrareTOKEN rareTOKEN\nquiet\nrareTOKEN\n",
+            to: "rare-count.txt"
+        )
+        #expect(try run(["-c", "rareTOKEN", rareRoot.path("rare-count.txt")]) == ["2"])
+        #expect(try run(["--count-matches", "rareTOKEN", rareRoot.path("rare-count.txt")]) == ["3"])
+        #expect(try run(["-m1", "--count-matches", "rareTOKEN", rareRoot.path("rare-count.txt")]) == ["2"])
+        #expect(try runAllowingNoMatch(["--count-matches", "missingTOKEN", rareRoot.path("rare-count.txt")]) == [])
+        #expect(runWithExitCode([
+            "--count-matches",
+            "--include-zero",
+            "missingTOKEN",
+            rareRoot.path("rare-count.txt"),
+        ], expectedExitCode: 1) == ["0"])
     }
 
     @Test("omits long matching lines after max columns")

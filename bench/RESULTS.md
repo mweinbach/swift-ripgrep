@@ -1004,6 +1004,25 @@ Rejected follow-up probe:
   did not justify replacing the existing Data-backed counter. The source probe
   was reverted.
 
+## Rare-anchor count-matches no-match shortcut - 2026-06-04
+
+The literal `--count-matches` preflight now uses the existing rare-anchor
+sample heuristic to count long literals when no `--max-count` line bound is
+active. Common-anchor, short-literal, bounded, line-count, and richer output
+cases keep the existing Data-backed counters.
+
+Focused parity now covers rare-anchor matched line counts, total match counts,
+bounded count-matches, no-match count-matches, and include-zero no-match
+count-matches. A same-session A/B against detached baseline `a5d000a` showed
+the retained win is the long no-match count-matches row:
+
+| Case | Current Swift | Baseline `a5d000a` | Rust |
+| --- | ---: | ---: | ---: |
+| `--count-matches absentliteral large.txt` | 8.94 ms median | 10.19 ms | 6.78 ms |
+| sparse `--count-matches absentliteral` | 10.62 ms | 10.45 ms | 6.94 ms |
+| bounded sparse `-m1 --count-matches absentliteral` | 5.48 ms | 5.90 ms | 3.73 ms |
+| dense `--count-matches literal` guard | 13.30 ms | 13.32 ms | 42.89 ms |
+
 ## Retained simple no-match count preflight - 2026-06-03
 
 The simple Darwin executable preflight now has a narrow count-only no-match
