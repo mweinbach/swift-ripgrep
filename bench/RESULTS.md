@@ -8,6 +8,26 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected adaptive word anchor probe - 2026-06-04
+
+A Swift-only probe changed the sparse Unicode word-literal line writer from the
+current rare 2-byte pair anchor to an adaptive 2- through 8-byte sample-selected
+anchor. The target corpus suggested a longer slice would sharply reduce
+candidate verification work (`lm` appears about 204k times in
+`subtitles/en.sample.txt`, while 8-byte slices around `Sherlock Holmes` are near
+833-2,223 occurrences), but the longer `rg_memmem_simple` scan cost outweighed
+the smaller candidate set. The source probe was reverted.
+
+Parity matched the current Swift baseline and Rust for combined and split
+`-n -w 'Sherlock Holmes'`, the explicit ASCII-boundary regex
+`(?-u:\b)Sherlock Holmes(?-u:\b)`, an all-ASCII word guard, and a binary guard.
+Artifacts are under `/tmp/swift-rg-bench/adaptive-word-anchor-1780602917`.
+
+The 16-run A/B measured Unicode subtitle `-nw 'Sherlock Holmes'` at 300.5 ms
+for the probe versus 243.6 ms baseline and 184.9 ms Rust. The explicit
+ASCII-boundary row stayed flat at 287.3 ms probe versus 286.5 ms baseline, so
+the adaptive anchor did not earn its added complexity.
+
 ## Rejected direct mapped contains probe - 2026-06-04
 
 A Swift-only probe replaced the plain literal path-only contains helper's
