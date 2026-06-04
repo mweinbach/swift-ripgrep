@@ -118,6 +118,30 @@ Artifacts:
 `/tmp/swift-rg-bench/nommap-numbered-casei-text-parity-1780607348`, and
 `/tmp/swift-rg-bench/nommap-numbered-casei-bench-1780607361`.
 
+## Rejected word-literal anchor probes - 2026-06-04
+
+The current subtitle sweep still shows the largest retained text gap in
+word-literal line output: `-nw 'Sherlock Holmes'` measured 262.7 ms Swift
+versus 196.1 ms Rust, and the equivalent ASCII-boundary regex measured
+259.8 ms Swift versus 197.3 ms Rust. Three Swift-only probes targeted the
+dedicated large-file word-literal writer and were reverted because they did not
+improve that gap.
+
+Disabling the existing two-byte anchor path preserved output but regressed the
+Unicode and ASCII-boundary word rows to about 286 ms versus the 265 ms
+baseline, so the anchor branch remains worthwhile. Skipping the final binary
+NUL proof measured flat at about 265 ms and was rejected because it would break
+Rust-compatible binary-file handling without improving text throughput. A
+three-byte positive-sample anchor probe also preserved output but stayed flat
+at about 266 ms, so longer anchors need a different shape than simply swapping
+the current two-byte selector.
+
+Artifacts:
+`/tmp/swift-rg-bench/current-head-subtitles-1780607542`,
+`/tmp/swift-rg-bench/word-generic-probe-1780607639`,
+`/tmp/swift-rg-bench/word-binary-proof-ceiling-1780607865`, and
+`/tmp/swift-rg-bench/word-anchor3-probe-1780608098`.
+
 ## Rejected text-proof-first no-mmap probe - 2026-06-04
 
 A Swift-only probe moved the large simple-literal writer's whole-file NUL-byte
