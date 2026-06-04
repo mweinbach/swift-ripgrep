@@ -1592,6 +1592,17 @@ Rejected follow-up probe:
   retained 512-file window. Raw exports:
   `/tmp/swift-rg-bench/runsuffix-prefix1024-ab-1780542952.json` and
   `/tmp/swift-rg-bench/runsuffix-prefix768-ab-1780543051.json`.
+- Routing exact-count run-suffix quiet searches such as `[A-Z]{3}_RESUME`
+  through a direct first-match scanner, instead of the line-aware generic
+  scanner, preserved status and sorted visible output against Rust for
+  `[A-Z]+_RESUME`, `[A-Z]{3}_RESUME`, `[A-Z]+_MISSING`,
+  `[Z]{3}_RESUME`, and `[A-Z]+_NEVERMATCHTOKEN`. The first version slightly
+  helped exact-count hits but regressed the existing plus-run guard; the
+  refined version kept the plus-run branch unchanged but regressed the target
+  row to 9.9 ms versus 9.1 ms baseline. The source probe was reverted. Raw
+  exports: `/tmp/swift-rg-bench/runsuffix-exact-firstmatch-ab-1780543596.json`
+  and
+  `/tmp/swift-rg-bench/runsuffix-exact-firstmatch-refined-ab-1780544003.json`.
 
 ## Quiet literal summary-only first match - 2026-06-03
 
