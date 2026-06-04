@@ -68,6 +68,19 @@ Rejected follow-up probe:
   15.30 ms / 15.10 ms versus 15.22 ms / 14.93 ms baseline. The source probe was
   reverted. Raw export:
   `/tmp/swift-rg-bench/word-includezero-rawabsent-ab-1780540887.json`.
+- Removing the late-plain-match exception from the single-active multi-literal
+  delegation preserved repeated-`-e`, pipe, all-present, no-match, numbered,
+  and binary fallback output/status against the saved `5f21e54` Swift binary
+  and Rust. The target rows were only noise-level positive: repeated `-e
+  literal -e absentliteral` measured 82.6 ms versus 83.0 ms baseline, and the
+  no-match guard measured 79.3 ms versus 80.5 ms baseline. The guard row that
+  had motivated the exception remained slower, with `-e alpha -e theta`
+  measuring 17.7 ms versus 17.1 ms baseline, and a late one-active fixture was
+  neutral at 23.1 ms versus 23.0 ms baseline. The source probe was reverted.
+  Raw exports:
+  `/tmp/swift-rg-bench/late-singleactive-removal-ab-1780541321.json`,
+  `/tmp/swift-rg-bench/late-singleactive-confirm-1780541382.json`, and
+  `/tmp/swift-rg-bench/late-singleactive-latefixture-1780541458.json`.
 
 ## Direct zero-count output for unprefixed LF counts - 2026-06-03
 
