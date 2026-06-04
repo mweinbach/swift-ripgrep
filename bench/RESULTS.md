@@ -8,6 +8,32 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected large literal 1 MiB anchor sample probe - 2026-06-04
+
+A current upstream harness refresh showed the broad Linux search rows are still
+Swift-faster than Rust; the remaining slower rows are the plain English
+subtitle literal shapes. In a two-run filtered sweep, `subtitles_en_literal`
+measured 200.65 ms Swift versus 184.35 ms Rust, and explicit no-mmap measured
+204.97 ms Swift versus 171.52 ms Rust. Alternation, line-numbered literal, and
+no-literal subtitle rows were Swift-faster.
+
+A Swift-only probe raised the large single-literal rare-anchor sampling window
+from 256 KiB to 1 MiB before choosing the two-byte anchor pair. The source
+change was reverted because it preserved output but regressed the target rows.
+Patched stdout/stderr/status matched both the current Swift baseline and Rust
+for real subtitle plain, no-mmap, line-numbered, and case-insensitive controls.
+A 25-run same-binary A/B measured plain `Sherlock Holmes` at 169.6 ms median /
+167.9 ms mean for baseline versus 175.0 ms / 175.7 ms for the probe; explicit
+no-mmap at 197.3 ms / 204.8 ms baseline versus 208.8 ms / 221.8 ms for the
+probe; and line-numbered output at 204.0 ms / 221.2 ms baseline versus
+201.3 ms / 202.5 ms for the probe. Since the live target rows got slower, the
+larger anchor sample is not useful.
+
+Artifacts:
+`/tmp/swift-rg-bench/current-gap-1780614342`,
+`/tmp/swift-rg-bench/anchor-sample-probe/parity`, and
+`/tmp/swift-rg-bench/anchor-sample-probe/ab.json`.
+
 ## Rejected file-list terminator threading probe - 2026-06-04
 
 A Swift-only probe threaded the file-list path terminator byte through the
