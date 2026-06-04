@@ -23,12 +23,18 @@ The accepted patch preserved current Swift output byte-for-byte for
 measured the representative context target at 2.746 s for patched Swift versus
 11.175 s for baseline, a 4.07x speedup.
 
+A follow-on whole-file `Data.range(of:)` miss guard avoids line scanning for
+files that do not contain the literal at all. Same-session release A/B against
+the committed sparse scanner `4681d83` measured 1.921 s for the miss-guard
+patch versus 2.542 s for baseline, another 1.32x speedup on the same target.
+
 A lower-risk `splitLines` rewrite using direct `String` slices was rejected
 first: it preserved the same `-C2 PM_RESUME` output, but regressed the target
 from 11.114 s baseline to 11.675 s patched.
 
 Raw hyperfine exports:
-`/tmp/swift-rg-bench/raw-ascii-context-1780570644.json` and
+`/tmp/swift-rg-bench/raw-ascii-context-1780570644.json`,
+`/tmp/swift-rg-bench/raw-ascii-context-missguard-1780571197.json`, and
 `/tmp/swift-rg-bench/split-newline-probe-1780570217.json`.
 
 ## Cached ASCII literal fast reject - 2026-06-04

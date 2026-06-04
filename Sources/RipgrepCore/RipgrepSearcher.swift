@@ -10050,6 +10050,15 @@ public struct RipgrepSearcher: @unchecked Sendable {
             )
         }
 
+        if data.range(of: Data(literal)) == nil {
+            return SearchFileResult(
+                fileURL: fileURL,
+                matches: [],
+                bytesSearched: data.count,
+                searched: true
+            )
+        }
+
         return data.withUnsafeBytes { rawBytes -> SearchFileResult? in
             let bytes = rawBytes.bindMemory(to: UInt8.self)
             guard let baseAddress = bytes.baseAddress else {

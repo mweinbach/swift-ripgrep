@@ -97,6 +97,7 @@ struct FeatureTests {
             "4-two",
             "5-three",
         ])
+        #expect(runWithExitCode(["-A3", "ABSENT", root.path("tail.txt")], expectedExitCode: 1).isEmpty)
     }
 
     @Test("quiet required-literal regex recursive search returns only exit status")
