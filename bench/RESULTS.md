@@ -8,6 +8,36 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected direct mapped contains probe - 2026-06-04
+
+A Swift-only probe replaced the plain literal path-only contains helper's
+`Data(contentsOf: .mappedIfSafe)` mapping with a direct `open`/`fstat`/`mmap`
+wrapper that preserved the same BOM guards and called the existing
+`rg_memmem_simple` literal finder. A second probe routed plain `-q` status
+through the same first-match helper instead of the line-counting helper. Both
+probes were reverted because the measured wins were inside noise while some
+path-only cases regressed.
+
+Targeted parity matched baseline `9152a34` and Rust for `-q`, `-l`, and
+`--files-without-match` hit/miss controls on the 1.5 GB subtitle sample; the
+quiet probe also matched a NUL-containing binary fixture. Raw parity artifacts:
+`/tmp/swift-rg-bench/contains-direct-parity-1780594637` and
+`/tmp/swift-rg-bench/quiet-direct-parity-1780594875`.
+
+The final 40-run interleaved A/B measured:
+
+| Case | Probe Swift | Baseline `9152a34` | Rust |
+| --- | ---: | ---: | ---: |
+| `-q 'Sherlock Holmes' en.sample.txt` | 28.45 ms median / 28.78 ms mean | 28.89 ms / 28.92 ms | 11.40 ms / 11.42 ms |
+| `-l 'Sherlock Holmes' en.sample.txt` | 28.87 ms / 29.31 ms | 28.47 ms / 28.73 ms | 11.11 ms / 11.25 ms |
+| `-q MissingLiteralNeedle en.sample.txt` | 165.05 ms / 166.35 ms | 165.14 ms / 166.50 ms | not remeasured |
+| `--files-without-match MissingLiteralNeedle en.sample.txt` | 166.00 ms / 168.33 ms | 165.11 ms / 166.83 ms | not remeasured |
+| `--files-without-match 'Sherlock Holmes' en.sample.txt` | 28.68 ms / 28.98 ms | 30.45 ms / 31.00 ms | not remeasured |
+
+Raw benchmark artifacts:
+`/tmp/swift-rg-bench/contains-direct-ab-1780594721.json` and
+`/tmp/swift-rg-bench/quiet-direct-ab-1780594887.json`.
+
 ## Rejected single-literal search-offset line-start probe - 2026-06-04
 
 A Swift-only probe tried to skip the backward newline scan in the regular
