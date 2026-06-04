@@ -741,6 +741,26 @@ Raw hyperfine exports:
 and
 `/tmp/swift-rg-bench/quiet-literal-contains-fastpath-recursive-noshell-1780506465-*.json`.
 
+## Rejected quiet prefix matched-haystack elision - 2026-06-04
+
+The quiet output-order prefix walker appends the matched haystack to its
+`FileWalkResults` even though the quiet first-match caller separately tracks
+the matched result. A Swift-only probe first removed that append for all prefix
+hits, then narrowed it to the quiet byte-literal prefix path so run-suffix kept
+the existing behavior. Both variants preserved focused quiet hit/miss
+stdout/stderr/status parity against Rust.
+
+The all-prefix variant was mixed against clean `cc4a1fe`: `-q SCHED linux`
+moved from 6.95 ms mean / 6.23 ms median to 5.82 ms / 5.73 ms, but
+`[A-Z]+_RESUME` nudged from 9.59 ms / 8.79 ms to 9.76 ms / 9.03 ms and
+`[A-Z]{3}_RESUME` from 8.97 ms / 8.77 ms to 9.70 ms / 8.81 ms. The narrowed
+byte-literal-only rerun still did not hold: `SCHED` regressed to 6.84 ms /
+6.01 ms versus 6.11 ms / 5.73 ms baseline, while `EXPORT_SYMBOL` improved to
+6.03 ms / 5.84 ms from 7.14 ms / 6.41 ms. Run-suffix rows stayed noise-level.
+The source probe was reverted. Raw exports:
+`/tmp/swift-rg-bench/quiet-prefix-noappend-ab-1780547717.json` and
+`/tmp/swift-rg-bench/quiet-prefix-byte-noappend-hit-ab-1780548114.json`.
+
 ## Retained single-file quiet ASCII run-suffix preflight - 2026-06-03
 
 Simple Swift Darwin executable preflight now handles quiet single-file regexes
