@@ -8,6 +8,29 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected file-list terminator threading probe - 2026-06-04
+
+A Swift-only probe threaded the file-list path terminator byte through the
+ignore-aware Darwin data walker instead of recomputing the `--null` versus
+newline choice at each emitted file. The source change preserved output parity
+but was reverted because isolated same-binary A/B checks did not show a stable
+speedup and regressed the hidden file-list row.
+
+Sorted stdout, stderr, and status matched Rust for default, hidden, and no-vcs
+`--files` on the Linux corpus. NUL-delimited `-0 --files` also matched after
+NUL-normalized sorting, with both Rust and Swift producing 5,100,709 output
+bytes and 79,323 NUL terminators. In the final focused 50-run checks, default
+`--files` measured 105.6 ms median / 106.8 ms mean for baseline versus
+102.5 ms / 108.9 ms for the probe; hidden measured 99.5 ms / 101.9 ms baseline
+versus 121.5 ms / 122.7 ms for the probe; and no-vcs measured 91.7 ms /
+100.9 ms baseline versus 99.0 ms / 102.0 ms for the probe. The terminator
+threading change is not useful on this corpus.
+
+Artifacts:
+`/tmp/swift-rg-bench/terminator-probe/parity`,
+`/tmp/swift-rg-bench/terminator-probe/default-hidden-ab.json`, and
+`/tmp/swift-rg-bench/terminator-probe/no-vcs-ab.json`.
+
 ## Rejected Darwin file-list worker cap 8 - 2026-06-04
 
 A Swift-only probe raised the ignore-aware Darwin file-list data worker cap
