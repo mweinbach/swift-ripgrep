@@ -107,6 +107,26 @@ Raw hyperfine exports:
 `/tmp/swift-rg-bench/current-hidden-worker-refresh-1780564441.json`, and
 `/tmp/swift-rg-bench/hidden-j-confirm-1780564473.json`.
 
+## Rejected quiet case-insensitive first-literal return - 2026-06-04
+
+A quiet-only probe stopped scanning the remaining literals in each matched file
+as soon as any ASCII ignore-case literal matched. This is safe for plain
+`-q` status output because stdout/stderr are suppressed and the matched path is
+not reported, but it did not improve the live late-hit alternation row.
+
+Focused status/stdout/stderr checks still matched Rust for the four-literal
+late-hit target, a two-literal full miss, and the early-hit
+`ERR_SYS|PM_RESUME|EXPORT_SYMBOL` guard. The same-session A/B against detached
+baseline `5fd5af7` rejected the source change: the late-hit target measured
+272.4 ms for the probe versus 268.7 ms baseline, the full miss stayed flat at
+1.100 s versus 1.096 s baseline, and the early-hit guard regressed to 9.8 ms
+from 7.8 ms. Literal-distribution checks also showed the full alternation is
+already faster than each single-literal quiet row on this corpus, so returning
+after the first matched literal does not attack the main cost.
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/quiet-casei-firstliteral-ab-1780565035.json`.
+
 ## Quiet case-insensitive alternation prefix scout - 2026-06-04
 
 Recursive quiet ASCII ignore-case literal alternations now get a tiny
