@@ -8,6 +8,58 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Current Linux gap refresh and rejected probes - 2026-06-04
+
+After the sparse context work, a current five-run Linux refresh showed the old
+quiet ignore-case alternation gap is no longer the dominant target. Swift now
+measured 28.8 ms for the quiet four-literal hit versus Rust at 21.1 ms, while
+the full no-match quiet alternation measured 1.160 s for Swift versus 3.236 s
+for Rust. The broader Linux slice measured Swift at 1.780 s for `PM_RESUME`,
+1.868 s for `-C2 PM_RESUME`, and 81.3 ms for `--files`; Rust measured 3.181 s,
+3.208 s, and 74.9 ms respectively.
+
+The upstream harness rows closest to the remaining search gap are now
+`linux_no_literal` and its ASCII `(?-u)` variant. A one-run filtered harness
+pass, with the subtitles fixture unavailable in this local corpus, measured:
+
+| Bench | Rust | Swift | Swift / Rust |
+| --- | ---: | ---: | ---: |
+| `linux_literal_default` | 3.177 s | 1.743 s | 0.55x |
+| `linux_literal_casei` | 3.267 s | 1.786 s | 0.55x |
+| `linux_no_literal` | 2.728 s | 2.318 s | 0.85x |
+| `linux_no_literal` ASCII | 2.919 s | 2.460 s | 0.84x |
+
+Profiling `linux_no_literal` showed the current raw word/whitespace sequence
+fast path is active, with the remaining wall time split between recursive
+haystack collection, mmap/read work, raw byte scanning, and Unicode fallback
+validation for candidate non-ASCII lines.
+
+Rejected same-session probes:
+
+- Raising the shared Darwin file-list worker cap from 6 to 8 preserved exact
+  `--files`, `--hidden --files`, and `--no-ignore --files` output, but improved
+  default/hidden only in a noisy first pass and regressed `--no-ignore --files`;
+  it stayed rejected.
+- Splitting the ignored file-list walker onto an 8-worker cap while leaving the
+  no-ignore walker at 6 also preserved exact output, but order-flipped 12-run
+  checks did not hold a clean default/hidden win, so the single 6-worker cap
+  remains.
+- Raising the word/whitespace regex search worker cap from 8 to 12 preserved
+  Unicode and ASCII no-literal output, but regressed the target from 2.262 s to
+  3.795 s for Unicode and from 2.206 s to 3.722 s for ASCII, mainly through
+  much higher system time.
+- Switching the streaming fast-path gate from a URL stat helper to the
+  metadata-aware haystack helper preserved output for no-literal, literal,
+  context, and quiet alternation guard rows, but measured neutral-to-slower on
+  the no-literal target and stayed rejected.
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/current-gap-refresh-*.json`,
+`/tmp/swift-rg-bench/ignored-worker-split-a-*.json`,
+`/tmp/swift-rg-bench/ignored-worker-split-b-*.json`,
+`/tmp/swift-rg-bench/word-workers12-a-*.json`, and
+`/tmp/swift-rg-bench/metadata-gate-a-*.json`.
+
 ## Sparse ASCII literal context scan - 2026-06-04
 
 Plain case-sensitive ASCII literal searches with `-A`, `-B`, or `-C` now use a
