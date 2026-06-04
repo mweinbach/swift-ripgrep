@@ -134,11 +134,18 @@ Rejected same-session probe:
   It regressed the plain alternation row from 440.9 ms baseline to 560.1 ms
   patched in a 10-run A/B, and the `-n` row stayed effectively worse/noisy at
   651.6 ms baseline versus 658.2 ms patched. The source change was reverted.
+- A follow-up leading-pair anchor probe used each literal's first two bytes as a
+  sparse verifier anchor for plain unnumbered multi-literal output. Patched
+  output matched the current Swift baseline byte-for-byte and sorted output
+  matched Rust, but a 20-run A/B was flat: 439.4 ms patched versus 440.0 ms
+  baseline, with Rust at 257.1 ms. The source change was reverted.
 
 Raw exports and parity artifacts:
 `/tmp/swift-rg-bench/current-subtitles-1780575005/summary.md`,
 `/tmp/swift-rg-bench/suffix-plain-alt-ab-1780575296.json`, and
-`/tmp/swift-rg-bench/suffix-plain-alt-parity-1780575285`.
+`/tmp/swift-rg-bench/suffix-plain-alt-parity-1780575285`,
+`/tmp/swift-rg-bench/leading-pair-alt-ab-1780575870.json`, and
+`/tmp/swift-rg-bench/leading-pair-alt-ab-parity-1780575869`.
 
 ## Current Linux gap refresh and rejected probes - 2026-06-04
 
