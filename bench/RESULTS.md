@@ -120,6 +120,34 @@ Raw artifacts:
 `/tmp/swift-rg-bench/word-widths-baseline-timeout-1780591263.txt`, and
 `/tmp/swift-rg-bench/word-widths-fixed5-guard-ab-1780591676.json`.
 
+## Rejected large literal output routing probes - 2026-06-04
+
+A fresh current hot-sample showed the remaining subtitle literal gap is mostly
+plain and line-numbered literal output: Swift measured 229.91 ms median for
+plain `Sherlock Holmes` vs Rust at 175.64 ms, and 271.10 ms for
+`-n 'Sherlock Holmes'` vs Rust at 203.80 ms. The same sample confirmed the
+neighboring transformed paths are already ahead of Rust: Swift case-insensitive
+line output measured 294.54 ms vs Rust at 326.91 ms, alternation line output
+189.81 ms vs Rust at 320.42 ms, and ASCII no-literal regex 451.37 ms vs Rust
+at 2.396 s.
+
+Two Swift-only literal-output probes were rejected:
+
+- Letting the executable preflight handle large visible single-literal output
+  preserved output parity, but regressed plain subtitles from 223.31 ms median
+  to 250.71 ms and line-numbered subtitles from 262.33 ms to 290.04 ms.
+- Reusing the counted literal scan's `searchOffset` as the line start when
+  `-n` saw zero newlines before a match preserved output parity, but measured
+  as noise: line-numbered subtitles moved from 263.30 ms median to 263.17 ms,
+  while mean time moved slightly backward from 264.61 ms to 265.33 ms.
+
+Raw artifacts:
+`/tmp/swift-rg-bench/current-hot-sample-1780592031.json`,
+`/tmp/swift-rg-bench/large-preflight-parity-1780592173`,
+`/tmp/swift-rg-bench/large-preflight-ab-1780592186.json`,
+`/tmp/swift-rg-bench/literal-linestart-parity-1780592488`, and
+`/tmp/swift-rg-bench/literal-linestart-ab-1780592499.json`.
+
 ## Rejected no-mmap collect-before-flush probe - 2026-06-04
 
 A Swift-only no-mmap probe tried to avoid the streaming literal path's up-front
