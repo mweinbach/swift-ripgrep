@@ -868,6 +868,19 @@ case-insensitive alternation at 0.90x; the rest of the available Linux rows are
 Raw bench output:
 `/tmp/swift-rg-bench/current-wide-refresh-1780466744/summary.md`.
 
+Rejected follow-up probe:
+
+- Raising the transformed multi-literal parallel chunk cap from 16 workers to
+  32 preserved the saved Swift output byte-for-byte for the Linux
+  `-n -i 'ERR_SYS|PME_TURN_OFF|LINK_REQ_RST|CFG_BME_EVT'` alternation row, and
+  sorted output still matched Rust. It was slower than the retained 16-worker
+  cap at 2.601 s versus 2.561 s baseline, while Rust measured 3.190 s. Lowering
+  the cap to 8 workers also preserved Swift output but regressed the same row
+  to 2.847 s versus 2.616 s baseline, with Rust at 3.260 s. The source probe
+  was reverted to the retained 16-worker cap. Raw exports:
+  `/tmp/swift-rg-bench/casei-alt-worker32-ab-1780544612.json` and
+  `/tmp/swift-rg-bench/casei-alt-worker8-ab-1780544751.json`.
+
 ## Retained simple no-match count preflight - 2026-06-03
 
 The simple Darwin executable preflight now has a narrow count-only no-match
