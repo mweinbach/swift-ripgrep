@@ -8,6 +8,43 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected word and file-list micro-probes - 2026-06-04
+
+A line-numbered word-literal probe replaced
+`rg_memmem_count_byte_before` inside
+`rgSwiftDarwinWriteWordLiteralLineBytes` with a separate literal search plus
+newline count between offsets. The probe preserved current Swift output
+byte-for-byte for `-nw Sherlock Holmes`, the explicit ASCII-boundary form
+`-n '(?-u:\b)Sherlock Holmes(?-u:\b)'`, and a boundary guard fixture, but it
+regressed the Unicode word row and did not produce a stable ASCII-boundary win.
+The source change was reverted.
+
+| Case | Probe Swift | Baseline `c3bbd8c` | Rust |
+| --- | ---: | ---: | ---: |
+| `-nw Sherlock Holmes en.sample.txt` | 325.51 ms | 303.43 ms | 203.47 ms |
+| `-n '(?-u:\b)Sherlock Holmes(?-u:\b)' en.sample.txt` | 304.55 ms | 308.63 ms | not remeasured |
+
+Raw artifacts:
+`/tmp/swift-rg-bench/word-separate-count-parity-1780586876` and
+`/tmp/swift-rg-bench/word-separate-count-ab-1780586887.json`.
+
+A file-list byte-writer probe hoisted the newline/NUL path terminator choice
+out of `walkFilePathsInOutputOrderData` recursion. Current Swift output stayed
+byte-for-byte identical to baseline for default, hidden, no-vcs, no-ignore,
+NUL, and debug file-listing, but the measured movement was mixed and the
+default/no-vcs medians regressed. The source change was reverted.
+
+| Case | Probe Swift | Baseline `c3bbd8c` | Rust |
+| --- | ---: | ---: | ---: |
+| `--files linux` | 98.44 ms median / 103.28 ms mean | 96.45 ms / 102.45 ms | 83.58 ms / 95.31 ms |
+| `--hidden --files linux` | 99.08 ms / 103.34 ms | 99.72 ms / 107.37 ms | not remeasured |
+| `--no-ignore-vcs --files linux` | 78.49 ms / 82.47 ms | 77.85 ms / 81.67 ms | not remeasured |
+| `-0 --files linux` | 95.67 ms / 100.65 ms | 96.16 ms / 101.19 ms | not remeasured |
+
+Raw artifacts:
+`/tmp/swift-rg-bench/terminator-hoist-parity-1780587390` and
+`/tmp/swift-rg-bench/terminator-hoist-ab-1780587401.json`.
+
 ## Fast Darwin search walker for default recursive search - 2026-06-04
 
 Default-thread recursive searches now try the existing Darwin fast search-file
