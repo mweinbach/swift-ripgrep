@@ -1503,6 +1503,20 @@ separators, and BOM fallback controls, but the same-session A/B was flat:
 Raw hyperfine export:
 `/tmp/swift-rg-bench/direct-pathonly-ab-1780464478.json`.
 
+Rejected follow-up probe:
+
+- Replacing the common ASCII path-only output writer's small stdout buffer with
+  direct `fwrite(path)` plus a terminator was not stable enough to keep. The
+  broad prototype improved plain `-l literal` once but regressed
+  `--files-without-match absentliteral` and null-terminated path output. A
+  narrower files-with-matches/LF-only version then measured worse than the
+  detached `bda2d5c` baseline in the same session: `-l literal` was 3.566 ms
+  median versus 2.892 ms baseline and 2.679 ms Rust, while files-without-match
+  miss and null path guards were also slower. The source probe was reverted.
+  Raw exports:
+  `/tmp/swift-rg-bench/pathonly-direct-ascii-writer-ab-1780557304.json` and
+  `/tmp/swift-rg-bench/pathonly-direct-ascii-writer-narrow-ab-1780557512.json`.
+
 ## Fixed-class plain max-columns preview route - 2026-06-03
 
 Plain fixed-class `--max-columns-preview` output now has a lean route for the
