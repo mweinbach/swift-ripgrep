@@ -7333,6 +7333,30 @@ public enum SwiftDarwinLiteralPreflight {
         return dataContainsLiteralUsingSIMD(data, literal: literal)
     }
 
+    private static func fileHasNonASCIIPrefix(path: String, limit: Int = 64 * 1024) -> Bool? {
+        let fd = path.withCString { Darwin.open($0, O_RDONLY) }
+        guard fd >= 0 else {
+            return nil
+        }
+        defer {
+            Darwin.close(fd)
+        }
+
+        var buffer = [UInt8](repeating: 0, count: limit)
+        let byteCount = buffer.withUnsafeMutableBytes { rawBuffer in
+            Darwin.read(fd, rawBuffer.baseAddress, limit)
+        }
+        guard byteCount >= 0 else {
+            return nil
+        }
+        return buffer.withUnsafeBufferPointer { bytes in
+            guard let base = bytes.baseAddress else {
+                return false
+            }
+            return rgSwiftContainsNonASCIIByte(base, count: byteCount)
+        }
+    }
+
     private static func literalNoMatchByteCount(path: String, literal: [UInt8]) -> Int? {
         guard !literal.isEmpty else {
             return nil
@@ -9618,7 +9642,9 @@ public enum SwiftDarwinLiteralPreflight {
               rgSwiftIsASCIIRegexWordByte(last) else {
             return nil
         }
-        if let matchedLineCount = literalLineMatchCount(
+        let prefixHasNonASCII = fileHasNonASCIIPrefix(path: path) == true
+        if !prefixHasNonASCII,
+           let matchedLineCount = literalLineMatchCount(
             path: path,
             literal: literal,
             asciiCaseInsensitive: false,

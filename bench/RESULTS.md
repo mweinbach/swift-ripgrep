@@ -235,6 +235,17 @@ Retained follow-up:
   Rust. Sparse `-n 'Sherlock Holmes'` stayed flat at 245.8 ms patched versus
   247.6 ms baseline, and unnumbered dense output stayed flat at 31.5 ms
   patched versus 31.9 ms baseline.
+- Unicode word-literal line output now skips the all-ASCII-haystack prepass
+  when the file's first 64 KiB already proves that fallback will be needed.
+  All-ASCII files keep the existing ASCII-boundary path. Patched output,
+  stderr, and status matched the current Swift baseline and Rust for
+  `-nw 'Sherlock Holmes'`, split `-n -w`, the explicit ASCII boundary regex,
+  an all-ASCII word fixture, and a Unicode-adjacent fallback fixture. A 12-run
+  A/B measured subtitle `-nw 'Sherlock Holmes'` at 288.7 ms median patched
+  versus 300.2 ms baseline and 178.6 ms Rust. The all-ASCII guard stayed in
+  the fast path at 21.1 ms patched versus 24.4 ms baseline and 24.2 ms Rust.
+  A five-run upstream harness measured `subtitles_en_literal_word` at
+  292.10 ms for Unicode and 287.60 ms for the ASCII boundary label.
 
 Rejected same-session probe:
 
@@ -275,6 +286,10 @@ Rejected same-session probe:
   single-literal `-n` branch preserved nearby guards, but did not prove a real
   median win. A 30-run target check measured `-n 'Sherlock Holmes'` at
   245.3 ms patched versus 245.2 ms baseline, so the source probe was reverted.
+- Unconditionally skipping the all-ASCII word prepass preserved and slightly
+  improved Unicode subtitle `-nw 'Sherlock Holmes'`, but it badly regressed an
+  all-ASCII word fixture from 24.6 ms baseline to 316.8 ms patched. The source
+  probe was narrowed to the retained prefix-non-ASCII gate.
 
 Raw exports and parity artifacts:
 `/tmp/swift-rg-bench/current-subtitles-1780575005/summary.md`,
@@ -309,6 +324,10 @@ Raw exports and parity artifacts:
 `/tmp/swift-rg-bench/dense-numbered-collector-parity-1780584162`,
 `/tmp/swift-rg-bench/single-literal-route-probe-1780583583/route-ab.json`,
 `/tmp/swift-rg-bench/single-literal-line-start-long-1780583858/line-start-long.json`,
+`/tmp/swift-rg-bench/word-prefix-nonascii-skip-1780585099/word-prefix-ab.json`,
+`/tmp/swift-rg-bench/word-prefix-nonascii-parity-1780585149`,
+`/tmp/swift-rg-bench/word-prefix-nonascii-harness-1780585184/summary.md`,
+`/tmp/swift-rg-bench/word-skip-ascii-prepass-1780584883/word-ab.json`,
 `/tmp/swift-rg-bench/pair-anchor-probe/ab-1780577742.json`,
 `/tmp/swift-rg-bench/pair-anchor-probe/harness-1780577796/summary.md`,
 `/tmp/swift-rg-bench/pair-anchor-probe/parity-1780577730`,
