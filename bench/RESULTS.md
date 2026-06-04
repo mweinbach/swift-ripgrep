@@ -31,6 +31,26 @@ baseline and 210.2 ms Rust.
 Artifacts:
 `/tmp/swift-rg-bench/word-proof-overlap-1780610138`.
 
+## Rejected no-mmap plain streaming route - 2026-06-04
+
+A Swift-only probe routed explicit plain `--no-mmap` literal output directly to
+the existing streaming executable writer instead of first trying the mapped
+literal preflight. The probe was reverted because it preserved output but made
+the target text path slower and badly regressed the neighboring
+case-insensitive row.
+
+Patched stdout, stderr, and status matched Rust for real subtitle text and for
+270 MiB hit-before-NUL and binary no-match fixtures across plain no-mmap,
+line-numbered no-mmap, and case-insensitive no-mmap controls. The 18-run A/B
+measured plain `--no-mmap 'Sherlock Holmes'` at 215.2 ms for the probe versus
+205.9 ms baseline and 170.7 ms Rust. The case-insensitive neighbor regressed
+to 542.8 ms probe versus 255.4 ms baseline and 281.9 ms Rust. The
+line-numbered no-mmap route stayed in-band at 187.5 ms probe versus 185.6 ms
+baseline and 200.7 ms Rust.
+
+Artifacts:
+`/tmp/swift-rg-bench/nommap-plain-streaming-probe-1780610612`.
+
 ## Default numbered literals use collected preflight - 2026-06-04
 
 Large default mapped literal searches with line numbers now use the collected
