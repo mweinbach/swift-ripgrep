@@ -8,6 +8,32 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Numbered dense multi-literal line scan - 2026-06-04
+
+The existing dense multi-literal line scanner now handles `-n` output when no
+file/heading prefix or whitespace trimming is active. This keeps the dense path
+on the same first-match-per-line search used for plain line output and writes
+the line-number prefix while scanning forward through the mapped file.
+
+Stdout/status matched Rust and the saved `af6bd44` Swift baseline for:
+
+```sh
+rg -n 'Sherlock|Watson|Holmes|Moriarty|Lestrade' \
+  /tmp/swift-rg-bench/multi-literal-synth.txt
+```
+
+Same-session release A/B on the 252 MiB dense synthetic fixture:
+
+| Case | Patched Swift | Baseline `af6bd44` | Rust reference |
+| --- | ---: | ---: | ---: |
+| numbered five-name alternation | 210.2 ms ± 11.7 | 338.1 ms ± 20.3 | 313.7 ms ± 13.5 |
+
+The patched binary was 1.61x faster than the previous Swift path in the direct
+A/B and 1.44x faster than Rust in the same-session reference run. Raw hyperfine
+exports:
+`/tmp/swift-rg-bench/multilit-line-number-before-after-1780559705.json` and
+`/tmp/swift-rg-bench/multilit-line-number-current-1780559580.json`.
+
 ## Retained simple count-matches no-match dispatch - 2026-06-04
 
 The simple Darwin literal count preflight now treats `--count-matches` as

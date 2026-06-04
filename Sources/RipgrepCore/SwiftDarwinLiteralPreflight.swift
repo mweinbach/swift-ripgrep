@@ -16350,7 +16350,6 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
 
     func denseLineScanLikely() -> Bool {
         guard emitLines,
-              !lineNumber,
               linePrefix.isEmpty,
               headingPrefix.isEmpty,
               !trimLeadingWhitespace,
@@ -16407,6 +16406,13 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
                 outputEnd = haystackLength
             }
             if firstLiteralMatch(inLineStart: lineStart, lineEnd: lineEnd) != nil {
+                if lineNumber,
+                   !output.writeLineNumberPrefix(
+                    currentLineNumber,
+                    fieldSeparator: lineNumberFieldSeparator
+                   ) {
+                    return false
+                }
                 guard output.write(base.advanced(by: lineStart), count: outputEnd - lineStart) else {
                     return false
                 }
@@ -16417,6 +16423,7 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
                 bytesSearched = outputEnd
             }
             lineStart = outputEnd
+            currentLineNumber += 1
         }
         return true
     }

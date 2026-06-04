@@ -3399,6 +3399,12 @@ struct MiscTests {
         try root.write("warmup\nnear ALPHA tail\nquiet\n", to: "fixed-bounded.txt")
         let fixedLongLine = String(repeating: "a", count: 5_000) + "ABCDE\n"
         try root.write("short\n" + fixedLongLine, to: "fixed-long-line.txt")
+        let denseNumberedLine = "The game is afoot Sherlock Holmes and Doctor Watson cross London."
+        let denseNumberedLineCount = 20_000
+        try root.write(
+            String(repeating: denseNumberedLine + "\n", count: denseNumberedLineCount),
+            to: "dense-numbered-multi.txt"
+        )
 
         func runExecutableResult(_ arguments: [String]) throws -> (stdout: Data, stderr: Data, status: Int32) {
             let executable = ripgrepPackageRootURL().appendingPathComponent(".build/debug/ripgrep")
@@ -4910,6 +4916,19 @@ struct MiscTests {
             root.path("dense.txt"),
         ], fixture: {})
         #expect(lineBufferedAlternationOutput == output)
+
+        let denseNumberedMultiLiteralOutput = try runExecutableData([
+            "-n",
+            "Sherlock|Watson|Moriarty|Lestrade",
+            root.path("dense-numbered-multi.txt"),
+        ], fixture: {})
+        let denseNumberedMultiLiteralLines = String(
+            decoding: denseNumberedMultiLiteralOutput,
+            as: UTF8.self
+        ).split(separator: "\n")
+        #expect(denseNumberedMultiLiteralLines.count == denseNumberedLineCount)
+        #expect(denseNumberedMultiLiteralLines.first == "1:\(denseNumberedLine)")
+        #expect(denseNumberedMultiLiteralLines.last == "\(denseNumberedLineCount):\(denseNumberedLine)")
 
         let withFilenameOutput = try runExecutableData([
             "--with-filename",
