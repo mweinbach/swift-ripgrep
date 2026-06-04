@@ -8781,7 +8781,8 @@ public enum SwiftDarwinLiteralPreflight {
         guard !hasBinaryDetectionPrefix(data) else {
             return nil
         }
-        guard dataContainsLiteralUsingSIMD(data, literal: literal) else {
+        guard dataContainsLiteralUsingRareAnchor(data, literal: literal)
+                ?? dataContainsLiteralUsingSIMD(data, literal: literal) else {
             return false
         }
 

@@ -8,6 +8,32 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rare-anchor proof for word containment - 2026-06-03
+
+The single-literal word containment helper now reuses the existing rare-anchor
+literal proof before falling back to the direct SIMD literal scan. This keeps
+absent word path-only and quiet checks on the same cheap absent-literal proof
+used by the count/summary paths, while matched literals still fall through to
+the existing word-boundary scanner.
+
+Output, stderr, and status matched the saved `8f67efd` Swift binary and Rust
+for absent word line output, count, quiet, files-without-match, a matched word
+guard, and a Unicode-boundary fallback guard. `swift build -c release` passed
+before benchmarking.
+
+| Case | Patched Swift | Baseline `8f67efd` | Rust reference |
+| --- | ---: | ---: | ---: |
+| no-shell `-w --files-without-match absentliteral` | 9.2 ms mean | 10.6 ms | not remeasured |
+| no-shell `-w absentliteral` | 9.3 ms | 9.5 ms | current refresh 9.2 ms shell |
+| no-shell `-w -c absentliteral` guard | 10.5 ms | 10.5 ms | current refresh 8.9 ms shell |
+| `-w alpha` matched-output guard | 20.3 ms | 20.3 ms | not remeasured |
+| `-q -w alpha` first-match guard | 3.8 ms | 4.2 ms | not remeasured |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/word-contains-rareanchor-ab-1780538939.json`,
+`/tmp/swift-rg-bench/word-contains-rareanchor-noshell-1780538960.json`, and
+`/tmp/swift-rg-bench/word-contains-rareanchor-hitguard-1780538982.json`.
+
 ## Direct zero-count output for unprefixed LF counts - 2026-06-03
 
 The Darwin Swift preflight count writer now writes the common `0\n` count line
