@@ -7106,6 +7106,16 @@ struct RipgrepCommand {
            fileIsLargeRegularVisibleLineTarget() {
             return nil
         }
+        if asciiBoundary,
+           let wordBoundaryExitCode = SwiftDarwinLiteralPreflight.wordLineExitCode(
+            path: path,
+            literal: literal,
+            lineNumber: lineNumber,
+            linePrefix: withFilename && !heading ? displayPath + [UInt8(ascii: ":")] : [],
+            headingPrefix: heading && withFilename ? displayPath + [UInt8(ascii: "\n")] : []
+           ) {
+            return wordBoundaryExitCode
+        }
         return SwiftDarwinLiteralPreflight.exitCode(
             path: path,
             literal: literal,

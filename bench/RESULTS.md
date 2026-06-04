@@ -8,6 +8,30 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## ASCII boundary literals reuse word preflight - 2026-06-04
+
+Explicit ASCII-boundary literal regexes like
+`(?-u:\b)Sherlock Holmes(?-u:\b)` now try the newer executable word-literal
+line preflight before falling back to the existing ASCII-boundary literal
+writer. This keeps non-ASCII-adjacent cases conservative because the word
+preflight declines before writing and the original ASCII-boundary route remains
+available.
+
+Patched stdout, stderr, and status matched the current Swift baseline and Rust
+for the real subtitles corpus in plain and line-numbered ASCII-boundary forms,
+the neighboring Unicode `-nw` form, a non-ASCII-adjacent boundary fixture, an
+ASCII rejected-boundary guard, and a binary guard. The 18-run A/B measured
+line-numbered ASCII-boundary output at 244.1 ms patched versus 288.1 ms
+baseline and 180.8 ms Rust, with plain ASCII-boundary output at 181.8 ms
+patched versus 226.8 ms baseline. The neighboring Unicode `-nw` guard stayed
+in-band at 248.7 ms patched versus 244.5 ms baseline. A five-run upstream
+harness measured `subtitles_en_literal_word` at 243.86 ms for the ASCII label
+and 241.02 ms for the Unicode `-w` label.
+
+Artifacts:
+`/tmp/swift-rg-bench/ascii-boundary-word-route-1780603420` and
+`/tmp/swift-rg-bench/ascii-boundary-word-route-harness-1780603566/summary.md`.
+
 ## Rejected adaptive word anchor probe - 2026-06-04
 
 A Swift-only probe changed the sparse Unicode word-literal line writer from the
