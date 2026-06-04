@@ -697,6 +697,14 @@ Rejected same-session probe:
   baseline to 287.8 ms patched but with a worse mean (290.3 ms vs 290.8 ms), and
   Unicode `-nw` moved backward from 239.5 ms to 241.9 ms. The source probe was
   reverted.
+- Extending the simple executable literal-line preflight's large-literal routing
+  exception from explicit `--no-mmap` to explicit `--mmap` also preserved
+  byte-for-byte parity against current Swift and Rust for real-subtitles
+  `--mmap`, `--mmap -n`, flag-ordering controls, default output, binary
+  fallback, and no-match. The 16-run A/B was a clear regression because
+  explicit `--mmap` should stay on the faster default route: plain `--mmap`
+  moved from 160.0 ms baseline to 191.4 ms patched, and `--mmap -n` moved from
+  224.7 ms to 271.2 ms. The source probe was reverted.
 
 Raw exports and parity artifacts:
 `/tmp/swift-rg-bench/formatted-context-parity-final-1780597504`,
@@ -720,6 +728,8 @@ Raw exports and parity artifacts:
 `/tmp/swift-rg-nommap-simple-route-1780601880/parity`,
 `/tmp/swift-rg-nommap-simple-route-1780601880/nommap-simple-route-ab.json`,
 `/tmp/swift-rg-bench/nommap-simple-route-harness-1780602016/summary.md`,
+`/tmp/swift-rg-explicit-mmap-simple-route-1780602233/parity`,
+`/tmp/swift-rg-explicit-mmap-simple-route-1780602233/explicit-mmap-route-ab.json`,
 `/tmp/swift-rg-ascii-boundary-route-1780600592/parity`,
 `/tmp/swift-rg-ascii-boundary-route-1780600592/parity-real-subtitles`,
 `/tmp/swift-rg-ascii-boundary-route-1780600592/ascii-boundary-ab.json`,
