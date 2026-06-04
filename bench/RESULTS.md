@@ -618,6 +618,18 @@ Retained follow-up:
   boundary output at 285.1 ms patched versus 288.8 ms baseline and 178.1 ms
   Rust, and the focused upstream harness measured the ASCII
   `subtitles_en_literal_word` row at 284.09 ms.
+- The same simple executable literal-line preflight now tracks explicit
+  `--no-mmap`/`--mmap` ordering while parsing common literal output flags, so
+  large `--no-mmap` single-literal output can route directly to the retained
+  mapped output-equivalent writer instead of falling through to the broader
+  parser. Patched output, stderr, and status matched the current Swift baseline
+  and Rust for real-subtitles `--no-mmap`, `--mmap --no-mmap`,
+  `--no-mmap --mmap`, `--no-mmap -n`, neighboring plain output, small
+  no-final-newline controls, binary fallback, and no-match. A 16-run A/B
+  measured `--no-mmap 'Sherlock Holmes'` at 187.3 ms patched versus 196.8 ms
+  baseline and 149.8 ms Rust, while `--no-mmap -n` improved slightly to
+  271.2 ms patched versus 274.3 ms baseline. A five-run upstream harness
+  measured the `subtitles_en_literal` `--no-mmap` row at 186.58 ms.
 
 Rejected same-session probe:
 
@@ -705,6 +717,9 @@ Raw exports and parity artifacts:
 `/tmp/swift-rg-simple-boundary-preflight-1780601447/parity`,
 `/tmp/swift-rg-simple-boundary-preflight-1780601447/simple-boundary-preflight-ab.json`,
 `/tmp/swift-rg-bench/simple-boundary-preflight-harness-1780601595/summary.md`,
+`/tmp/swift-rg-nommap-simple-route-1780601880/parity`,
+`/tmp/swift-rg-nommap-simple-route-1780601880/nommap-simple-route-ab.json`,
+`/tmp/swift-rg-bench/nommap-simple-route-harness-1780602016/summary.md`,
 `/tmp/swift-rg-ascii-boundary-route-1780600592/parity`,
 `/tmp/swift-rg-ascii-boundary-route-1780600592/parity-real-subtitles`,
 `/tmp/swift-rg-ascii-boundary-route-1780600592/ascii-boundary-ab.json`,

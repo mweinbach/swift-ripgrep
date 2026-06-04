@@ -6909,6 +6909,7 @@ struct RipgrepCommand {
         var heading = false
         var lineNumber = false
         var maxCount: Int?
+        var noMmap = false
         var noUnicode = false
         var quiet = false
         var unrestrictedCount = 0
@@ -6941,6 +6942,11 @@ struct RipgrepCommand {
             ) {
                 guard handled else {
                     return nil
+                }
+                if argument == "--no-mmap" {
+                    noMmap = true
+                } else if argument == "--mmap" {
+                    noMmap = false
                 }
                 argumentIndex += 1
                 continue
@@ -7094,6 +7100,7 @@ struct RipgrepCommand {
         }
         if literal.count >= 10,
            !asciiBoundary,
+           !noMmap,
            !withFilename,
            !heading,
            fileIsLargeRegularVisibleLineTarget() {
