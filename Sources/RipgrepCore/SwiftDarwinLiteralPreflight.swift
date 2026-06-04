@@ -13748,8 +13748,6 @@ private func rgSwiftDarwinWriteLiteralBytes(
         && !asciiBoundary
         && emitLines
         && maxCount == Int.max
-        && linePrefix.isEmpty
-        && headingPrefix.isEmpty
         && !requireASCIIHaystack
     let output: rgSwiftLazyStdoutBuffer?
     if emitLines && !collectLineNumberedOutput {
@@ -13958,6 +13956,65 @@ private func rgSwiftDarwinWriteLiteralBytes(
         var collectedSearchOffset = 0
         var collectedBytesSearched = haystackLength
 
+        func emitBinaryLineNumberedLiteralMatch(binaryOffset: Int) -> LiteralLineWriteStats? {
+            guard var collectedOutput = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+                return nil
+            }
+            defer {
+                collectedOutput.deallocate()
+            }
+
+            var emittedLineCount = 0
+            var emittedHeading = false
+            if binaryOffset >= 64 * 1024 {
+                for line in pendingLines where line.outputEnd <= binaryOffset {
+                    guard collectedOutput.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading),
+                          collectedOutput.writeBytes(linePrefix) else {
+                        return nil
+                    }
+                    guard collectedOutput.writeLineNumberPrefix(
+                        line.number,
+                        fieldSeparator: lineNumberFieldSeparator
+                    ) else {
+                        return nil
+                    }
+                    guard collectedOutput.write(base.advanced(by: line.start), count: line.outputEnd - line.start) else {
+                        return nil
+                    }
+                    if line.needsFinalNewline,
+                       !collectedOutput.writeByte(UInt8(ascii: "\n")) {
+                        return nil
+                    }
+                    emittedLineCount += 1
+                }
+            }
+
+            var binaryPrefix: [UInt8] = []
+            if !linePrefix.isEmpty {
+                binaryPrefix = linePrefix
+                binaryPrefix.append(UInt8(ascii: " "))
+            } else if !headingPrefix.isEmpty {
+                binaryPrefix = headingPrefix
+                if binaryPrefix.last == UInt8(ascii: "\n") {
+                    binaryPrefix.removeLast()
+                }
+                binaryPrefix.append(UInt8(ascii: ":"))
+                binaryPrefix.append(UInt8(ascii: " "))
+            }
+            let binaryMessage = #"binary file matches (found "\0" byte around offset \#(binaryOffset))"#
+            guard collectedOutput.writeBytes(binaryPrefix),
+                  collectedOutput.writeBytes(Array(binaryMessage.utf8)),
+                  collectedOutput.writeByte(UInt8(ascii: "\n")),
+                  collectedOutput.flush() else {
+                return nil
+            }
+            return LiteralLineWriteStats(
+                matchedLines: max(1, emittedLineCount),
+                bytesPrinted: collectedOutput.statsBytesWritten,
+                bytesSearched: binaryOffset + 1
+            )
+        }
+
         while collectedSearchOffset < haystackLength {
             let result = rg_memmem_count_byte_before(
                 base.advanced(by: collectedSearchOffset),
@@ -14007,8 +14064,12 @@ private func rgSwiftDarwinWriteLiteralBytes(
                 bytesSearched: haystackLength
             )
         }
-        guard ensureTextHaystack() else {
-            return nil
+        if !confirmedTextHaystack {
+            if let binaryPointer = memchr(base, 0, haystackLength) {
+                let binaryOffset = base.distance(to: binaryPointer.assumingMemoryBound(to: UInt8.self))
+                return emitBinaryLineNumberedLiteralMatch(binaryOffset: binaryOffset)
+            }
+            confirmedTextHaystack = true
         }
         guard var collectedOutput = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
             return nil
@@ -14017,7 +14078,12 @@ private func rgSwiftDarwinWriteLiteralBytes(
             collectedOutput.deallocate()
         }
 
+        var emittedHeading = false
         for line in pendingLines {
+            guard collectedOutput.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading),
+                  collectedOutput.writeBytes(linePrefix) else {
+                return nil
+            }
             guard collectedOutput.writeLineNumberPrefix(
                 line.number,
                 fieldSeparator: lineNumberFieldSeparator

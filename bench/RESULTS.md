@@ -72,6 +72,29 @@ performance win.
 Artifacts:
 `/tmp/swift-rg-bench/word-nommap-binary-fix-1780605848`.
 
+## Large no-mmap numbered binary literal output matches Rust - 2026-06-04
+
+The simple-literal executable preflight now collects line-numbered output for
+case-sensitive `--no-mmap -n` searches even when filename prefixes or heading
+mode are enabled. When a later NUL byte is discovered after collected matching
+lines, the writer emits the same pre-binary matching lines and binary notice as
+Rust instead of falling through to the buffered reader's 256 MiB haystack
+limit.
+
+Patched stdout, stderr, and status matched Rust for a 270 MiB hit-before-NUL
+fixture and a 270 MiB binary no-match fixture across unprefixed `-n`,
+filename-prefixed `-H -n`, `--heading -H -n`, and `--no-filename -n` modes.
+The same modes also matched Rust on the real subtitle text corpus. An 18-run
+text-path guard measured unprefixed `--no-mmap -n 'Sherlock Holmes'` at
+295.5 ms patched versus 297.5 ms baseline and 202.1 ms Rust. The widened
+filename-prefixed collected route improved `--no-mmap -H -n` to 294.4 ms
+patched versus 319.3 ms baseline and 203.3 ms Rust.
+
+Artifacts:
+`/tmp/swift-rg-bench/nommap-numbered-prefix-text-parity-1780606847`,
+`/tmp/swift-rg-bench/nommap-numbered-prefix-binary-final-1780606861`, and
+`/tmp/swift-rg-bench/nommap-numbered-prefix-binary-bench-1780606879`.
+
 ## Rejected text-proof-first no-mmap probe - 2026-06-04
 
 A Swift-only probe moved the large simple-literal writer's whole-file NUL-byte
