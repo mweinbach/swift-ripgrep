@@ -212,6 +212,36 @@ Raw hyperfine exports:
 `/tmp/swift-rg-bench/post-f48-singlefile-scan-1780566558.json`, and
 `/tmp/swift-rg-bench/post-f48-tiny-loss-confirm-1780566572.json`.
 
+## Recursive context gap and rejected output-order probe - 2026-06-04
+
+The curated upstream-style Linux harness after `175457b` showed only Swift wins:
+case-insensitive literal search was 0.56x/0.51x the Rust median, default
+literal search was 0.60x, no-literal regex search was 0.72x, and ASCII
+no-literal regex search was 0.79x. The upstream subtitles fixture was not
+available under the benchsuite dependency name, so the subtitles rows were
+skipped by the harness.
+
+Large local single-file fixtures also stayed in the Swift-win or tie band after
+a no-shell quiet confirmation. The only small apparent loss, quiet single-file
+literal hit, disappeared under no-shell measurement: Swift measured 2.9 ms
+versus Rust at 3.4 ms noisy mean. Quiet miss, files-with-matches hit, and
+files-without-match miss were all ties within noise.
+
+A formatted-output scan found the next real target: recursive context output.
+`-C2 PM_RESUME linux` measured 19.758 s for Swift versus 3.268 s for Rust. A
+Swift-only probe tried to wrap the existing regular-file Darwin context writer
+around the recursive walker. It was rejected because it changed default
+recursive output order: byte-for-byte parity for `-C2 PM_RESUME linux` failed
+against Rust at the first line after the wrapper used file-list order instead
+of Rust's parallel search output order. The source change was reverted.
+
+Raw outputs and exports:
+`/tmp/swift-rg-bench/results-post-175457b-1780566737/summary.md`,
+`/tmp/swift-rg-bench/post-175457b-large-fixture-scan-1780566819.json`,
+`/tmp/swift-rg-bench/post-175457b-quiet-small-confirm-1780566839.json`,
+`/tmp/swift-rg-bench/post-175457b-output-mode-scan-1780566855.json`, and
+`/tmp/swift-rg-bench/context-parity-1780567727`.
+
 ## Quiet case-insensitive alternation prefix scout - 2026-06-04
 
 Recursive quiet ASCII ignore-case literal alternations now get a tiny
