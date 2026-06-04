@@ -195,6 +195,21 @@ Retained follow-up:
   429.8 ms patched versus 446.0 ms baseline. A 5-run upstream harness
   confirmation measured the `subtitles_en_alternate` line-numbered row at
   520.47 ms and the unchanged plain row at 464.35 ms.
+- Large matched single-literal visible output now falls through to the regular
+  Swift searcher after the simple executable preflight fails to prove an
+  absence. The rare-anchor no-match proof still handles large misses in the
+  executable path, but matched large regular files avoid the slower mapped
+  line-output writer. Patched large hit, `-n`, no-match, small-file, and Rust
+  controls matched the current Swift baseline and Rust. A 10-run A/B measured
+  plain `Sherlock Holmes` at 223.0 ms patched versus 275.4 ms baseline and
+  165.8 ms for Rust; line-numbered output measured 264.1 ms patched versus
+  293.7 ms baseline and 197.5 ms for Rust. The large no-match guard stayed flat
+  at 159.3 ms patched versus 158.6 ms baseline. A 5-run upstream harness
+  confirmation measured `subtitles_en_literal` at 224.59 ms and the `-n` row at
+  260.42 ms; neighboring case-insensitive literal rows also improved to
+  226.80 ms plain and 283.09 ms line-numbered. Explicit `--no-mmap` stays on
+  the existing mapped/streaming preflight because the generic no-mmap path hits
+  the buffered-size limit on the large subtitles corpus.
 
 Rejected same-session probe:
 
@@ -248,6 +263,9 @@ Raw exports and parity artifacts:
 `/tmp/swift-rg-bench/multilit-collect-probe/harness-1780580831/summary.md`,
 `/tmp/swift-rg-bench/multilit-collect-probe/miss-ab-1780580848.json`,
 `/tmp/swift-rg-bench/multilit-collect-probe/parity-fixed-1780580788`,
+`/tmp/swift-rg-bench/large-line-route-probe/fixed-ab-1780581634.json`,
+`/tmp/swift-rg-bench/large-line-route-probe/harness-1780581687/summary.md`,
+`/tmp/swift-rg-bench/large-line-route-probe/parity-fixed-1780581634`,
 `/tmp/swift-rg-bench/pair-anchor-probe/ab-1780577742.json`,
 `/tmp/swift-rg-bench/pair-anchor-probe/harness-1780577796/summary.md`,
 `/tmp/swift-rg-bench/pair-anchor-probe/parity-1780577730`,

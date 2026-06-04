@@ -772,6 +772,15 @@ struct RipgrepCommand {
             }
             return FileManager.default.isReadableFile(atPath: path)
         }
+        func regularFileSize(_ path: String) -> Int64? {
+            guard let attributes = try? FileManager.default.attributesOfItem(atPath: path),
+                  let type = attributes[.type] as? FileAttributeType,
+                  type == .typeRegular,
+                  let size = attributes[.size] as? NSNumber else {
+                return nil
+            }
+            return size.int64Value
+        }
         func inlineGlobValue(_ argument: String) -> String? {
             if argument.hasPrefix("--glob=") {
                 return String(argument.dropFirst("--glob=".count))
@@ -6586,6 +6595,14 @@ struct RipgrepCommand {
                 headingPrefix: parsedHeadingPrefix
             )
         }
+        if literal.count >= 10,
+           !asciiBoundary,
+           parsedLinePrefix.isEmpty,
+           parsedHeadingPrefix.isEmpty,
+           let size = regularFileSize(path),
+           size >= 256 * 1024 * 1024 {
+            return nil
+        }
         return SwiftDarwinLiteralPreflight.exitCode(
             path: path,
             literal: literal,
@@ -6900,7 +6917,17 @@ struct RipgrepCommand {
         let pattern = arguments[arguments.count - 2]
         let path = arguments[arguments.count - 1]
         let optionEndIndex = arguments.count - 2
+        let largeVisibleLineFileThreshold: off_t = 256 * 1024 * 1024
         var argumentIndex = 0
+        func fileIsLargeRegularVisibleLineTarget() -> Bool {
+            var fileStat = stat()
+            let status = path.withCString { stat($0, &fileStat) }
+            guard status == 0,
+                  (fileStat.st_mode & S_IFMT) == S_IFREG else {
+                return false
+            }
+            return fileStat.st_size >= largeVisibleLineFileThreshold
+        }
         while argumentIndex < optionEndIndex {
             let argument = arguments[argumentIndex]
             if let handled = applySimpleSwiftDarwinLiteralCommonOption(
@@ -7058,6 +7085,12 @@ struct RipgrepCommand {
             literal: literal
            ) {
             return noMatchExitCode
+        }
+        if literal.count >= 10,
+           !withFilename,
+           !heading,
+           fileIsLargeRegularVisibleLineTarget() {
+            return nil
         }
         return SwiftDarwinLiteralPreflight.exitCode(
             path: path,
