@@ -39,6 +39,31 @@ harness confirmation measured the Unicode `subtitles_en_literal_word` row at
 276.64 ms and the separate ASCII-boundary label at 308.45 ms:
 `/tmp/swift-rg-bench/word-nul-defer-confirm-1780588250/summary.md`.
 
+## Rejected ASCII-boundary line-start shortcut - 2026-06-04
+
+A Swift-only probe in `writeDarwinASCIIBoundaryLiteralLines` reused
+`searchOffset` as the known line start when the line-numbered counted search
+found the next literal before crossing a newline. The idea was to skip the
+backward newline scan in the common explicit ASCII-boundary subtitles row. The
+shortcut preserved output parity, but it did not produce a benchmark win, so
+the source change was reverted.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched baseline `6a299dd` byte-for-byte
+  for `-n '(?-u:\b)Sherlock Holmes(?-u:\b)'`, an ASCII boundary fixture, and
+  the Unicode word guard `-nw 'Sherlock Holmes'`.
+- Current Swift stdout/status matched Rust for the same controls.
+
+| Case | Probe Swift | Baseline `6a299dd` | Rust |
+| --- | ---: | ---: | ---: |
+| `-n '(?-u:\b)Sherlock Holmes(?-u:\b)' en.sample.txt` | 308.31 ms median / 309.64 ms mean | 306.95 ms / 309.30 ms | 199.47 ms / 201.98 ms |
+| `-nw 'Sherlock Holmes' en.sample.txt` guard | 279.88 ms / 282.84 ms | 279.51 ms / 282.04 ms | not remeasured |
+
+Raw artifacts:
+`/tmp/swift-rg-bench/ascii-boundary-linestart-parity-1780589166` and
+`/tmp/swift-rg-bench/ascii-boundary-linestart-ab-1780589178.json`.
+
 ## Rejected no-mmap collect-before-flush probe - 2026-06-04
 
 A Swift-only no-mmap probe tried to avoid the streaming literal path's up-front
