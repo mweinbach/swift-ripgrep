@@ -563,6 +563,16 @@ Retained follow-up:
   baseline, while plain output and line-numbered output stayed within noise.
   A five-run upstream harness measured `subtitles_en_literal` at 206.93 ms,
   `--no-mmap` at 227.31 ms, and the `-n` row at 247.74 ms.
+- The large simple case-sensitive literal collector now switches to a rare
+  adjacent-pair anchor when the first 256 KiB sample proves the pair is sparse.
+  The sparse-anchor route still performs a full NUL proof before writing, so
+  binary fallback stays untouched, and it reuses the same buffered range
+  coalescing as the first-byte collector. Patched output, stderr, and status
+  matched the current Swift baseline and Rust for plain, `--no-mmap`, `-n`,
+  `-m1`, no-final-newline, and binary fallback controls. A 16-run A/B measured
+  plain `Sherlock Holmes` at 208.8 ms patched versus 209.1 ms baseline and
+  151.2 ms Rust, while `--no-mmap` improved to 204.2 ms patched versus
+  230.7 ms baseline and 151.1 ms Rust.
 
 Rejected same-session probe:
 
@@ -617,6 +627,8 @@ Rejected same-session probe:
 Raw exports and parity artifacts:
 `/tmp/swift-rg-bench/formatted-context-parity-final-1780597504`,
 `/tmp/swift-rg-bench/formatted-context-ab-final-1780597523.json`,
+`/tmp/swift-rg-bench/anchor-simple-parity-1780598172`,
+`/tmp/swift-rg-bench/anchor-simple-ab-1780598182.json`,
 `/tmp/swift-rg-bench/context-window-parity-final-1780596088`,
 `/tmp/swift-rg-bench/context-window-ab-1780595658.json`,
 `/tmp/swift-rg-bench/current-subtitles-1780575005/summary.md`,

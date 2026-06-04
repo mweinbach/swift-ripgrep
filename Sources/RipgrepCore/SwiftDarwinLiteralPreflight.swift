@@ -13434,6 +13434,125 @@ private func rgSwiftDarwinWriteLargeSimpleLiteralBytesWithTextProof(
     var pendingRanges: [PendingRange] = []
     pendingRanges.reserveCapacity(1024)
 
+    if literal.count >= 4 {
+        let sampleCount = min(haystackLength, 256 * 1024)
+        var bestAnchorOffset = 0
+        var bestAnchorPairCount = Int.max
+        for anchorOffset in 0..<(literal.count - 1) {
+            var pairCount = 0
+            var sampleOffset = 0
+            while sampleOffset < sampleCount - 1 {
+                if base[sampleOffset] == literalBase[anchorOffset],
+                   base[sampleOffset + 1] == literalBase[anchorOffset + 1] {
+                    pairCount += 1
+                }
+                sampleOffset += 1
+            }
+            if pairCount < bestAnchorPairCount {
+                bestAnchorOffset = anchorOffset
+                bestAnchorPairCount = pairCount
+            }
+        }
+
+        if bestAnchorPairCount > 0,
+           bestAnchorPairCount * 1024 <= sampleCount,
+           memchr(base, 0, haystackLength) == nil {
+            let anchorBase = literalBase.advanced(by: bestAnchorOffset)
+            var anchorSearchOffset = bestAnchorOffset
+            while anchorSearchOffset <= haystackLength - 2 {
+                guard let found = rg_memmem_simple(
+                    base.advanced(by: anchorSearchOffset),
+                    haystackLength - anchorSearchOffset,
+                    anchorBase,
+                    2
+                ) else {
+                    break
+                }
+
+                let anchorStart = base.distance(to: found)
+                let candidateStart = anchorStart - bestAnchorOffset
+                guard candidateStart >= 0,
+                      candidateStart + literal.count <= haystackLength else {
+                    anchorSearchOffset = anchorStart + 1
+                    continue
+                }
+                guard memcmp(base.advanced(by: candidateStart), literalBase, literal.count) == 0 else {
+                    anchorSearchOffset = anchorStart + 1
+                    continue
+                }
+
+                var lineStart = candidateStart
+                while lineStart > 0, base[lineStart - 1] != newline {
+                    lineStart -= 1
+                }
+
+                let newlinePointer = memchr(
+                    base.advanced(by: candidateStart),
+                    Int32(newline),
+                    haystackLength - candidateStart
+                )
+                let outputEnd: Int
+                let needsFinalNewline: Bool
+                if let newlinePointer {
+                    outputEnd = base.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self)) + 1
+                    needsFinalNewline = false
+                } else {
+                    outputEnd = haystackLength
+                    needsFinalNewline = true
+                }
+
+                if let last = pendingRanges.last,
+                   last.outputEnd == lineStart,
+                   !last.needsFinalNewline {
+                    pendingRanges[pendingRanges.count - 1].outputEnd = outputEnd
+                    pendingRanges[pendingRanges.count - 1].needsFinalNewline = needsFinalNewline
+                } else {
+                    pendingRanges.append(PendingRange(
+                        start: lineStart,
+                        outputEnd: outputEnd,
+                        needsFinalNewline: needsFinalNewline
+                    ))
+                }
+                matchedLineCount += 1
+                anchorSearchOffset = outputEnd + bestAnchorOffset
+            }
+
+            guard !pendingRanges.isEmpty else {
+                return LiteralLineWriteStats(
+                    matchedLines: 0,
+                    bytesPrinted: 0,
+                    bytesSearched: haystackLength
+                )
+            }
+
+            guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+                return nil
+            }
+            defer {
+                output.deallocate()
+            }
+
+            for range in pendingRanges {
+                guard output.write(base.advanced(by: range.start), count: range.outputEnd - range.start) else {
+                    return nil
+                }
+                if range.needsFinalNewline,
+                   !output.writeByte(newline) {
+                    return nil
+                }
+            }
+
+            guard output.flush() else {
+                return nil
+            }
+            return LiteralLineWriteStats(
+                matchedLines: matchedLineCount,
+                bytesPrinted: output.statsBytesWritten,
+                bytesSearched: haystackLength
+            )
+        }
+    }
+
     while searchOffset < haystackLength {
         let found = needles.withUnsafeBufferPointer { needleBuffer in
             rg_memchr_any_bytes(
