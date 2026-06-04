@@ -64,6 +64,32 @@ Raw artifacts:
 `/tmp/swift-rg-bench/ascii-boundary-linestart-parity-1780589166` and
 `/tmp/swift-rg-bench/ascii-boundary-linestart-ab-1780589178.json`.
 
+## Rejected simple-literal large-writer threshold - 2026-06-04
+
+A Swift-only probe lowered the simple literal output threshold for
+`rgSwiftDarwinWriteLargeSimpleLiteralBytesWithTextProof` from 256 MiB to
+128 MiB so the restored English subtitles sample could use the fused
+first-byte-or-NUL collector instead of the general lazy writer. The route
+preserved output parity, but the measured target movement was only noise while
+the neighboring line-numbered guard moved slightly backward, so the source
+change was reverted.
+
+Validation:
+
+- Current Swift stdout/stderr/status matched baseline `230f800` byte-for-byte
+  for plain `Sherlock Holmes` on the subtitles corpus, a small-file guard,
+  final-no-newline guard, binary fallback, and `-n 'Sherlock Holmes'`.
+- Current Swift stdout/status matched Rust for the same controls.
+
+| Case | Probe Swift | Baseline `230f800` | Rust |
+| --- | ---: | ---: | ---: |
+| `'Sherlock Holmes' en.sample.txt` | 222.49 ms median / 224.80 ms mean | 223.30 ms / 224.98 ms | 165.30 ms / 167.21 ms |
+| `-n 'Sherlock Holmes' en.sample.txt` guard | 265.05 ms / 267.02 ms | 263.82 ms / 265.85 ms | not remeasured |
+
+Raw artifacts:
+`/tmp/swift-rg-bench/large-threshold-parity-1780590003` and
+`/tmp/swift-rg-bench/large-threshold-ab-1780590013.json`.
+
 ## Rejected no-mmap collect-before-flush probe - 2026-06-04
 
 A Swift-only no-mmap probe tried to avoid the streaming literal path's up-front
