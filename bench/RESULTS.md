@@ -8,6 +8,36 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Quiet case-insensitive alternation prefix scout - 2026-06-04
+
+Recursive quiet ASCII ignore-case literal alternations now get a tiny
+output-order prefix scout before falling back to the existing generic parallel
+search. The scout is limited to the first four searchable files, can only return
+early for a real match, and otherwise returns to the current full-tree path so
+misses and later-hit shapes keep the existing matcher economics.
+
+Status/stdout/stderr matched Rust for an early-hit alternation, the previously
+rejected four-literal shape, a full no-match alternation, and a single-literal
+quiet guard.
+
+Same-session release A/B against detached baseline `54c8227`:
+
+| Case | Patched Swift | Baseline `54c8227` | Rust reference |
+| --- | ---: | ---: | ---: |
+| `-q -i 'ERR_SYS|PM_RESUME|EXPORT_SYMBOL' linux` | 10.2 ms mean | 258.5 ms | current refresh 5-6 ms |
+| original rejected-shape guard | 267.5 ms | 273.4 ms | not remeasured in final prefix-4 pass |
+| full no-match guard | 1.485 s | 1.430 s | not remeasured in final prefix-4 pass |
+
+Prefix tuning rejected a one-file scout because it missed the early target and
+fell back to the baseline 280 ms class. Eight- and sixteen-file scouts both kept
+the hit in the 6-7 ms range, but paid a larger no-match tax in local runs, so the
+retained four-file scout keeps the target win while limiting miss overhead. Raw
+hyperfine exports:
+`/tmp/swift-rg-bench/quiet-casei-alt-prefix4-before-after-1780561894.json`,
+`/tmp/swift-rg-bench/quiet-casei-alt-prefix8-before-after-1780561669.json`,
+`/tmp/swift-rg-bench/quiet-casei-alt-prefix16-before-after-1780561548.json`, and
+`/tmp/swift-rg-bench/quiet-casei-alt-prefix1-before-after-1780561783.json`.
+
 ## Rejected count-matches rare-anchor simple preflight - 2026-06-04
 
 A probe routed simple silent `--count-matches absentliteral` through the same

@@ -391,6 +391,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
         matcher: PatternMatcher
     ) throws -> SearchResults? {
         let quietByteLiteralFastPath = quietByteLiteralFirstMatchFastPath(options: options, matcher: matcher)
+        let quietCaseInsensitiveMultiLiteralPrefixFastPath =
+            quietCaseInsensitiveMultiLiteralFirstMatchFastPath(options: options, matcher: matcher)
         let asciiFixedClassFastPath = matcher.asciiFixedClassSequenceFastPath()
         let quietASCIIFixedClassFastPath = options.quiet && !options.stats
             ? asciiFixedClassFastPath
@@ -414,6 +416,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
               canStopSearchAfterFirstMatch(options: options),
               (hasASCIIFixedClassSequence
                   || quietByteLiteralFastPath != nil
+                  || quietCaseInsensitiveMultiLiteralPrefixFastPath != nil
                   || quietASCIIRunSuffixFastPath != nil
                   || quietGreekScriptFastPath != nil
                   || quietRequiredLiteralProbe) else {
@@ -529,6 +532,53 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
 
         let fileWalker = FileWalker(fileManager: fileManager).withEnvironment(environment)
+        if let quietCaseInsensitiveMultiLiteralPrefixFastPath {
+            let outputOrderPrefixLimit = 4
+            var prefixFilesSearched = 0
+            var prefixSearchMessages: [String] = []
+            var prefixMatchedResult: SearchFileResult?
+            func visitCaseInsensitiveMultiLiteralPrefix(_ haystack: Haystack) -> Bool {
+                let outcome = searchQuietByteLiteralFirstMatch(
+                    haystack,
+                    fastPath: quietCaseInsensitiveMultiLiteralPrefixFastPath,
+                    options: options
+                ).map {
+                    FileSearchOutcome(result: $0)
+                } ?? searchFile(haystack, matcher: matcher, options: options)
+                if outcome.result.searched {
+                    prefixFilesSearched += 1
+                }
+                if let message = outcome.message {
+                    prefixSearchMessages.append(message)
+                }
+                guard outcome.result.hasMatch else {
+                    return false
+                }
+                prefixMatchedResult = outcome.result
+                return true
+            }
+            if let prefixWalkResults = try fileWalker.firstVisitedFastSearchFilePrefixWithMessages(
+                for: options,
+                prefixLimit: outputOrderPrefixLimit,
+                visitHaystack: visitCaseInsensitiveMultiLiteralPrefix
+            ) {
+                let prefixHadVisibleOutput = !prefixWalkResults.results.messages.isEmpty
+                    || !prefixWalkResults.results.warnings.isEmpty
+                    || !prefixWalkResults.results.diagnostics.isEmpty
+                    || !prefixSearchMessages.isEmpty
+                if let prefixMatchedResult, !prefixHadVisibleOutput {
+                    filesSearched += prefixFilesSearched
+                    matchedResult = prefixMatchedResult
+                    return searchResults(walkResults: prefixWalkResults.results)
+                }
+                if !prefixWalkResults.exhausted {
+                    filesSearched += prefixFilesSearched
+                    searchMessages.append(contentsOf: prefixSearchMessages)
+                    return searchResults(walkResults: prefixWalkResults.results)
+                }
+            }
+            return nil
+        }
         if let quietByteLiteralFastPath {
             // Keep this prefix isolated so a miss does not spend the lexical probe budget.
             let outputOrderPrefixLimit = 160
@@ -811,6 +861,44 @@ public struct RipgrepSearcher: @unchecked Sendable {
         #endif
     }
 
+    private func quietCaseInsensitiveMultiLiteralFirstMatchFastPath(
+        options: RipgrepOptions,
+        matcher: PatternMatcher
+    ) -> ByteLiteralFastPath? {
+        #if !canImport(Darwin)
+        return nil
+        #else
+        guard case .automatic = options.encodingMode,
+              options.binaryMode == .automatic,
+              !options.multiline,
+              !options.nullData,
+              !options.invertMatch,
+              !options.stopOnNonmatch,
+              !options.wordRegexp,
+              !options.lineRegexp,
+              !options.onlyMatching,
+              !options.column,
+              !options.byteOffset,
+              !options.vimgrep,
+              !options.crlf,
+              options.beforeContext == 0,
+              options.afterContext == 0,
+              !options.passthru,
+              options.replacement == nil,
+              options.maxColumns == nil,
+              let fastPath = matcher.byteLiteralFastPath(),
+              fastPath.caseInsensitiveASCII,
+              !fastPath.wordASCII,
+              (2...8).contains(fastPath.literals.count),
+              fastPath.literals.allSatisfy({ literal in
+                !literal.isEmpty && literal.allSatisfy { $0 < 0x80 }
+              }) else {
+            return nil
+        }
+        return fastPath
+        #endif
+    }
+
     private func searchQuietByteLiteralFirstMatch(
         _ haystack: Haystack,
         fastPath: ByteLiteralFastPath,
@@ -819,8 +907,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
         #if !canImport(Darwin)
         return nil
         #else
-        guard let literal = fastPath.literals.first,
-              !literal.isEmpty,
+        guard !fastPath.literals.isEmpty,
+              fastPath.literals.allSatisfy({ !$0.isEmpty }),
               !shouldPreprocess(haystack, options: options),
               decompressionCommand(for: haystack.url, options: options) == nil,
               canUseBufferedRawLiteralSearch(haystack, options: options) else {
@@ -848,6 +936,70 @@ public struct RipgrepSearcher: @unchecked Sendable {
         return data.withUnsafeBytes { rawBytes -> SearchFileResult? in
             let bytes = rawBytes.bindMemory(to: UInt8.self)
             guard let baseAddress = bytes.baseAddress else {
+                return SearchFileResult(fileURL: haystack.url, matches: [], bytesSearched: 0, searched: true)
+            }
+            if fastPath.literals.count > 1 {
+                var earliestMatchStart = Int.max
+                var earliestMatchEnd = Int.max
+                for literal in fastPath.literals {
+                    let foundPointer: UnsafePointer<UInt8>?
+                    if fastPath.caseInsensitiveASCII {
+                        let literalStorage = literal.map(asciiLowercase)
+                        var caseInsensitiveShifts = [Int](repeating: literalStorage.count, count: 256)
+                        if literalStorage.count > 1 {
+                            for index in 0..<(literalStorage.count - 1) {
+                                caseInsensitiveShifts[Int(literalStorage[index])] = literalStorage.count - 1 - index
+                            }
+                        }
+                        foundPointer = literalStorage.withUnsafeBufferPointer { needle -> UnsafePointer<UInt8>? in
+                            guard let literalBaseAddress = needle.baseAddress else {
+                                return nil
+                            }
+                            return caseInsensitiveShifts.withUnsafeBufferPointer { shifts in
+                                rg_memcasemem_ascii_prepared(
+                                    baseAddress,
+                                    data.count,
+                                    literalBaseAddress,
+                                    literalStorage.count,
+                                    shifts.baseAddress
+                                )
+                            }
+                        }
+                    } else {
+                        foundPointer = literal.withUnsafeBufferPointer { needle -> UnsafePointer<UInt8>? in
+                            guard let literalBaseAddress = needle.baseAddress else {
+                                return nil
+                            }
+                            return rg_memmem_simple(baseAddress, data.count, literalBaseAddress, literal.count)
+                        }
+                    }
+                    guard let foundPointer else {
+                        continue
+                    }
+                    let matchStart = baseAddress.distance(to: foundPointer)
+                    if matchStart < earliestMatchStart {
+                        earliestMatchStart = matchStart
+                        earliestMatchEnd = matchStart + literal.count
+                    }
+                }
+                guard earliestMatchStart != Int.max else {
+                    return SearchFileResult(
+                        fileURL: haystack.url,
+                        matches: [],
+                        bytesSearched: data.count,
+                        searched: true
+                    )
+                }
+                return SearchFileResult(
+                    fileURL: haystack.url,
+                    matches: [],
+                    bytesSearched: earliestMatchEnd,
+                    searched: true,
+                    supplementalMatchedLines: 1,
+                    supplementalMatches: 1
+                )
+            }
+            guard let literal = fastPath.literals.first else {
                 return SearchFileResult(fileURL: haystack.url, matches: [], bytesSearched: 0, searched: true)
             }
             let foundPointer: UnsafePointer<UInt8>?
