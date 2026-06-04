@@ -242,6 +242,23 @@ Raw outputs and exports:
 `/tmp/swift-rg-bench/post-175457b-output-mode-scan-1780566855.json`, and
 `/tmp/swift-rg-bench/context-parity-1780567727`.
 
+## Rejected sparse context line retention - 2026-06-04
+
+A probe changed the generic non-multiline context search path to retain only
+printable before/match/after context lines for narrow regular context output,
+instead of storing every decoded line for the printer. It preserved current
+Swift output byte-for-byte for `-C2`, `-A2`, `-B2`, line-number context, and
+no-match context on the Linux corpus.
+
+The probe did not improve the live target. Same-session A/B against clean
+baseline `18f286b` measured `-C2 PM_RESUME linux` at 19.599 s for the probe
+versus 19.694 s for baseline, with Rust at 3.196 s. Since the result stayed
+noise-flat while adding sparse-line complexity, the source change was reverted.
+
+Raw outputs and export:
+`/tmp/swift-rg-bench/context-sparse-swift-parity-1780568344` and
+`/tmp/swift-rg-bench/context-sparse-ab-1780568551.json`.
+
 ## Quiet case-insensitive alternation prefix scout - 2026-06-04
 
 Recursive quiet ASCII ignore-case literal alternations now get a tiny
