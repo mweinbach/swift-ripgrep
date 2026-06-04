@@ -995,6 +995,14 @@ Rejected follow-up probe:
   slower in the same pass at 2.605 s versus 2.412 s baseline. The source probe
   was reverted. Raw export:
   `/tmp/swift-rg-bench/casei-alt-count-direct-probe-1780552640.json`.
+- Replacing the Data-backed literal count preflight with a direct
+  `open`/`mmap` mapped-byte counter preserved the focused count parity test,
+  but it regressed the sparse-hit target. On the 46 MiB sparse literal fixture,
+  `--count literal` moved from the current ~10.8 ms scout to 12.1 ms versus
+  Rust at 6.8 ms, while `--count-matches literal` was still slower at 10.5 ms
+  versus Rust at 7.7 ms. Dense count rows stayed ahead of Rust, so the probe
+  did not justify replacing the existing Data-backed counter. The source probe
+  was reverted.
 
 ## Retained simple no-match count preflight - 2026-06-03
 
