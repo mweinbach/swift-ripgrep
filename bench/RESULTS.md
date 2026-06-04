@@ -1616,6 +1616,16 @@ Raw hyperfine export:
 
 Rejected follow-up probe:
 
+- Replacing the `[A-Z]+suffix` first-match dummy `SearchMatch` with
+  summary-only supplemental counts preserved recursive quiet status and sorted
+  `-l` output parity for `[A-Z]+_RESUME` and `[A-Z]{3}_RESUME`, but did not
+  improve the target row. A same-session A/B against clean `69b48df` measured
+  quiet `[A-Z]+_RESUME` at 10.29 ms mean / 9.18 ms median for the probe versus
+  9.47 ms / 9.05 ms baseline and 5.52 ms / 5.42 ms for Rust. Exact-count quiet
+  `[A-Z]{3}_RESUME` was only a small mixed nudge at 9.61 ms / 8.85 ms versus
+  9.84 ms / 9.16 ms baseline and 5.85 ms / 5.64 ms for Rust, so the source
+  probe was reverted. Raw export:
+  `/tmp/swift-rg-bench/runsuffix-summary-only-quiet-ab-1780546686.json`.
 - Increasing the quiet ASCII run-suffix output-order prefix from 512 files to
   1024 and then 768 did not produce a durable recursive-hit win. The 1024 probe
   regressed `[A-Z]+_RESUME` to 9.9 ms versus 9.3 ms baseline while leaving the
