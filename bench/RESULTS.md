@@ -789,12 +789,19 @@ were rejected:
   flat on the target hit at 269.4 ms versus 270.7 ms baseline, made the full
   no-match quiet guard slower at 1.466 s versus 1.375 s, and kept `-l` flat at
   4.261 s versus 4.242 s.
+- Routing quiet multi-literal searches through the first-match walk while
+  keeping the existing `searchFile` matcher preserved hit/miss/single-literal
+  statuses, but gave up the generic parallel search shape. The target hit
+  regressed sharply to 2.295 s mean versus 267.2 ms baseline, so the traversal
+  shortcut was also reverted.
 
 The source probes were reverted. A focused regression test remains for the
 quiet ignore-case alternation hit/miss status surface. Raw exports:
 `/tmp/swift-rg-bench/quiet-casei-alt-multilit-ab-1780549381.json`,
 `/tmp/swift-rg-bench/quiet-casei-alt-perfile-ab-1780549686.json`, and
-`/tmp/swift-rg-bench/casei-alt-perfile-miss-path-ab-1780549719.json`.
+`/tmp/swift-rg-bench/casei-alt-perfile-miss-path-ab-1780549719.json`. The
+traversal probe export is
+`/tmp/swift-rg-bench/quiet-casei-alt-walkstop-ab-1780550498.json`.
 
 ## Retained single-file quiet ASCII run-suffix preflight - 2026-06-03
 
