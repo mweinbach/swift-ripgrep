@@ -53,6 +53,26 @@ line-numbered searches.
 Artifacts:
 `/tmp/swift-rg-bench/nommap-plain-full-engine-probe-1780610811`.
 
+## Rejected default plain preflight route - 2026-06-04
+
+A Swift-only probe removed the large visible-line opt-out for case-sensitive
+default literal output so plain `Sherlock Holmes` searches could use the
+executable literal preflight. The probe was reverted because it improved the
+checked default large-binary behavior but regressed the hot text path.
+
+Patched stdout, stderr, and status matched Rust for real subtitle text and for
+270 MiB hit-before-NUL and binary no-match fixtures across default plain,
+default line-numbered, and filename-prefixed line-numbered modes. The checked
+default hit-before-NUL binary fixture printed Rust's binary notice under the
+probe, but the 18-run text guard measured plain default `Sherlock Holmes` at
+205.4 ms for the probe versus 178.9 ms baseline and 166.0 ms Rust. The
+line-numbered control stayed flat at 187.9 ms probe versus 188.3 ms baseline
+and 195.1 ms Rust, while explicit no-mmap plain measured 207.9 ms probe versus
+206.3 ms baseline and 170.5 ms Rust.
+
+Artifacts:
+`/tmp/swift-rg-bench/default-plain-preflight-probe-1780611547`.
+
 ## Rejected no-mmap plain streaming route - 2026-06-04
 
 A Swift-only probe routed explicit plain `--no-mmap` literal output directly to
