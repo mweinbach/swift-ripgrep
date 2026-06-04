@@ -13416,13 +13416,18 @@ private func rgSwiftDarwinWriteLiteralBytes(
         || base[0] == 0xFE && base[1] == 0xFF) {
         return nil
     }
-    if !asciiCaseInsensitive,
-       rg_memmem_simple(base, haystackLength, literalBase, literal.count) == nil {
-        return LiteralLineWriteStats(
-            matchedLines: 0,
-            bytesPrinted: 0,
-            bytesSearched: haystackLength
-        )
+    let firstCaseSensitiveMatch: UnsafePointer<UInt8>?
+    if !asciiCaseInsensitive, !lineNumber {
+        guard let firstMatch = rg_memmem_simple(base, haystackLength, literalBase, literal.count) else {
+            return LiteralLineWriteStats(
+                matchedLines: 0,
+                bytesPrinted: 0,
+                bytesSearched: haystackLength
+            )
+        }
+        firstCaseSensitiveMatch = firstMatch
+    } else {
+        firstCaseSensitiveMatch = nil
     }
     let simpleLineOutput = emitLines && !lineNumber && linePrefix.isEmpty && headingPrefix.isEmpty
     let output: rgSwiftLazyStdoutBuffer?
@@ -13651,7 +13656,10 @@ private func rgSwiftDarwinWriteLiteralBytes(
         while searchOffset < haystackLength && matchedLineCount < maxCount {
             let found: UnsafePointer<UInt8>?
             let newlinesBeforeMatch: Int
-            if lineNumber {
+            if let firstCaseSensitiveMatch, searchOffset == 0 {
+                found = firstCaseSensitiveMatch
+                newlinesBeforeMatch = 0
+            } else if lineNumber {
                 let result = rg_memmem_count_byte_before(
                     base.advanced(by: searchOffset),
                     haystackLength - searchOffset,

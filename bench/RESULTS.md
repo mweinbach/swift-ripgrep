@@ -139,6 +139,18 @@ Retained follow-up:
   254.4 ms and 285.7 ms respectively. A 5-run upstream harness confirmation
   measured `subtitles_en_alternate` at 432.97 ms and the `-n` row at
   491.66 ms. The neighboring single-literal rows stayed effectively unchanged.
+- The single-literal writer now reuses the already-found first case-sensitive
+  match for unnumbered output and skips that uncounted proof scan for
+  line-numbered output, where the counted scanner can prove the first match and
+  line number in one pass. Patched plain, `--no-mmap`, `-n`, and no-match
+  output/status/stderr matched the current Swift baseline byte-for-byte, and
+  matched Rust output/status. A 20-run A/B measured plain `Sherlock Holmes` at
+  244.1 ms patched versus 249.4 ms baseline, `--no-mmap` at 242.8 ms patched
+  versus 251.5 ms baseline, and `-n` at 288.1 ms patched versus 294.2 ms
+  baseline. The line-numbered miss guard stayed flat at 143.5 ms patched
+  versus 143.6 ms baseline. A 5-run upstream harness confirmation measured
+  `subtitles_en_literal` at 245.32 ms, `--no-mmap` at 245.33 ms, and the `-n`
+  row at 288.37 ms.
 
 Rejected same-session probe:
 
@@ -160,6 +172,10 @@ Raw exports and parity artifacts:
 `/tmp/swift-rg-bench/rare-anchor-line-ab-1780576513/results.json`,
 `/tmp/swift-rg-bench/rare-anchor-line-harness-1780576562/summary.md`,
 `/tmp/swift-rg-bench/rare-anchor-line-parity-1780576501`,
+`/tmp/swift-rg-bench/firstmatch-skip-line-prescan-ab-1780577116/results.json`,
+`/tmp/swift-rg-bench/firstmatch-skip-line-prescan-harness-1780577178/summary.md`,
+`/tmp/swift-rg-bench/firstmatch-skip-line-prescan-parity-1780577042`,
+`/tmp/swift-rg-bench/firstmatch-skip-line-prescan-miss-parity-1780577267`,
 `/tmp/swift-rg-bench/suffix-plain-alt-ab-1780575296.json`, and
 `/tmp/swift-rg-bench/suffix-plain-alt-parity-1780575285`,
 `/tmp/swift-rg-bench/leading-pair-alt-ab-1780575870.json`, and
