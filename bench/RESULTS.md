@@ -125,6 +125,21 @@ are already large Swift wins:
 | `subtitles_en_no_literal` | 2.429 s | 681.05 ms | 0.28x |
 | `subtitles_en_no_literal` ASCII | 2.318 s | 421.43 ms | 0.18x |
 
+Retained follow-up:
+
+- The Swift Darwin multi-literal preflight now allows rare-anchor candidate
+  selection for line-numbered output instead of limiting it to plain
+  unnumbered lines. The actual subtitle alternation literals all had rare
+  sample anchors (`S`, `J`, `A`, `L`, and `P`), so this keeps the sparse
+  verifier plan available for both upstream alternation rows. Patched plain and
+  `-n` output/status/stderr matched the current Swift baseline byte-for-byte,
+  and sorted patched output matched Rust. A 12-run A/B measured plain
+  alternation at 432.7 ms patched versus 554.9 ms baseline, and numbered
+  alternation at 500.9 ms patched versus 649.7 ms baseline, with Rust at
+  254.4 ms and 285.7 ms respectively. A 5-run upstream harness confirmation
+  measured `subtitles_en_alternate` at 432.97 ms and the `-n` row at
+  491.66 ms. The neighboring single-literal rows stayed effectively unchanged.
+
 Rejected same-session probe:
 
 - The multi-literal suffix-plan collector was relaxed to run for plain
@@ -142,6 +157,9 @@ Rejected same-session probe:
 
 Raw exports and parity artifacts:
 `/tmp/swift-rg-bench/current-subtitles-1780575005/summary.md`,
+`/tmp/swift-rg-bench/rare-anchor-line-ab-1780576513/results.json`,
+`/tmp/swift-rg-bench/rare-anchor-line-harness-1780576562/summary.md`,
+`/tmp/swift-rg-bench/rare-anchor-line-parity-1780576501`,
 `/tmp/swift-rg-bench/suffix-plain-alt-ab-1780575296.json`, and
 `/tmp/swift-rg-bench/suffix-plain-alt-parity-1780575285`,
 `/tmp/swift-rg-bench/leading-pair-alt-ab-1780575870.json`, and

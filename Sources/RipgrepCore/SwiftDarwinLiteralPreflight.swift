@@ -16264,7 +16264,6 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
 
     func rareAnchoredLiterals() -> [AnchoredLiteral]? {
         guard haystackLength >= 1024 * 1024,
-              !lineNumber,
               linePrefix.isEmpty,
               headingPrefix.isEmpty,
               !trimLeadingWhitespace,
