@@ -57,6 +57,18 @@ before benchmarking.
 Raw hyperfine export:
 `/tmp/swift-rg-bench/word-count-rawabsent-narrow-ab-1780539570.json`.
 
+Rejected follow-up probe:
+
+- Extending the raw-absent word count shortcut to `--include-zero` preserved
+  status/stdout/stderr against the saved `908093d` Swift binary and Rust for
+  absent, include-zero, CRLF include-zero, prefixed include-zero, short matched,
+  and long matched word count controls. The no-shell confirmation was flat:
+  include-zero measured 9.34 ms mean / 9.23 ms median versus 9.36 ms /
+  9.19 ms baseline, and the short matched guard drifted slightly slower at
+  15.30 ms / 15.10 ms versus 15.22 ms / 14.93 ms baseline. The source probe was
+  reverted. Raw export:
+  `/tmp/swift-rg-bench/word-includezero-rawabsent-ab-1780540887.json`.
+
 ## Direct zero-count output for unprefixed LF counts - 2026-06-03
 
 The Darwin Swift preflight count writer now writes the common `0\n` count line
