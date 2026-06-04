@@ -415,6 +415,18 @@ Retained follow-up:
   3.426 s baseline and 164.7 ms Rust, `-B2` at 259.2 ms patched versus
   3.481 s baseline and 166.6 ms Rust, and `-C2` at 259.3 ms patched versus
   3.494 s baseline and 165.3 ms Rust.
+- Formatted single-literal context output now reuses the same windowed
+  occurrence search for line-numbered, path-prefixed, headed, and custom
+  separator cases. The writer only formats the selected context windows instead
+  of scanning every line in the 1.5 GB file. It still leaves case-insensitive
+  and multi-literal context output on the existing writers. Patched `-n -A2`,
+  `-n -B2`, `-n -C2`, `--with-filename -A2`, `--heading --with-filename -A2`,
+  custom separator, no-context-separator, max-count, and large subtitle controls
+  matched the current Swift baseline and Rust. A 20-run A/B measured
+  `-n -A2 'Sherlock Holmes'` at 326.0 ms patched versus 3.418 s baseline and
+  198.4 ms Rust, `--with-filename -A2` at 257.6 ms patched versus 3.405 s
+  baseline and 166.1 ms Rust, and `-n -C2` at 322.2 ms patched versus 3.554 s
+  baseline and 200.6 ms Rust.
 - The Swift Darwin multi-literal preflight now allows rare-anchor candidate
   selection for line-numbered output instead of limiting it to plain
   unnumbered lines. The actual subtitle alternation literals all had rare
@@ -603,6 +615,8 @@ Rejected same-session probe:
   was reverted and the retained work stayed inside the mapped no-mmap preflight.
 
 Raw exports and parity artifacts:
+`/tmp/swift-rg-bench/formatted-context-parity-final-1780597504`,
+`/tmp/swift-rg-bench/formatted-context-ab-final-1780597523.json`,
 `/tmp/swift-rg-bench/context-window-parity-final-1780596088`,
 `/tmp/swift-rg-bench/context-window-ab-1780595658.json`,
 `/tmp/swift-rg-bench/current-subtitles-1780575005/summary.md`,

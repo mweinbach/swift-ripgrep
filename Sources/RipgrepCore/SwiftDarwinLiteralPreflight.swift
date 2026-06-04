@@ -18151,6 +18151,249 @@ private func rgSwiftDarwinWriteUnprefixedLiteralContextWindows(
     return matchedLineCount
 }
 
+private func rgSwiftDarwinWriteFormattedLiteralContextWindows(
+    _ base: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    literalBase: UnsafePointer<UInt8>,
+    literalCount: Int,
+    firstLiteralMatch: UnsafePointer<UInt8>,
+    beforeContext: Int,
+    afterContext: Int,
+    maxCount: Int,
+    lineNumber: Bool,
+    lineNumberFieldMatchSeparator: [UInt8],
+    lineNumberFieldContextSeparator: [UInt8],
+    lineMatchPrefix: [UInt8],
+    lineContextPrefix: [UInt8],
+    headingPrefix: [UInt8],
+    contextSeparator: [UInt8]?
+) -> Int? {
+    guard literalCount > 0,
+          maxCount > 0,
+          lineNumber || !lineMatchPrefix.isEmpty || !lineContextPrefix.isEmpty || !headingPrefix.isEmpty else {
+        return nil
+    }
+    guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+        return nil
+    }
+    defer {
+        output.deallocate()
+    }
+
+    struct SelectedLine {
+        let start: Int
+        let outputEnd: Int
+        let hasNewline: Bool
+        var containsLiteral: Bool
+    }
+
+    var selectedLines: [SelectedLine] = []
+    selectedLines.reserveCapacity(max(8, beforeContext + afterContext + 1))
+    let firstMatchOffset = base.distance(to: firstLiteralMatch)
+    var searchOffset = firstMatchOffset
+    var previousMatchLineStart = -1
+    var selectedLineCursor = 0
+    var matchedLineCount = 0
+    var lineNumberCursor = 0
+    var currentLineNumber = 1
+    var previousEmittedLineNumber = 0
+    var emittedHeading = false
+
+    func appendWindow(
+        windowStart: Int,
+        windowEnd: Int,
+        matchLineStart: Int
+    ) {
+        var lineStart = windowStart
+        if selectedLines.last?.outputEnd == lineStart {
+            lineStart = selectedLines.last?.outputEnd ?? lineStart
+        }
+        while lineStart < windowEnd {
+            let lineEnd: Int
+            let hasNewline: Bool
+            if let newline = memchr(
+                base.advanced(by: lineStart),
+                Int32(UInt8(ascii: "\n")),
+                windowEnd - lineStart
+            ) {
+                lineEnd = base.distance(to: newline.assumingMemoryBound(to: UInt8.self))
+                hasNewline = true
+            } else {
+                lineEnd = windowEnd
+                hasNewline = false
+            }
+            let outputEnd = hasNewline ? lineEnd + 1 : lineEnd
+            if outputEnd > lineStart {
+                let containsLiteral = rg_memmem_simple(
+                    base.advanced(by: lineStart),
+                    lineEnd - lineStart,
+                    literalBase,
+                    literalCount
+                ) != nil
+                if lineStart == matchLineStart,
+                   let existingIndex = selectedLines.lastIndex(where: { $0.start == lineStart }) {
+                    selectedLines[existingIndex].containsLiteral = true
+                } else {
+                    selectedLines.append(
+                        SelectedLine(
+                            start: lineStart,
+                            outputEnd: outputEnd,
+                            hasNewline: hasNewline,
+                            containsLiteral: containsLiteral
+                        )
+                    )
+                }
+            }
+            lineStart = outputEnd
+        }
+    }
+
+    func emitAvailableLines(through windowEnd: Int, keepAfterLine lineStartToKeep: Int? = nil) -> Bool {
+        while selectedLineCursor < selectedLines.count {
+            let line = selectedLines[selectedLineCursor]
+            if let lineStartToKeep,
+               line.start >= lineStartToKeep {
+                break
+            }
+            guard line.outputEnd <= windowEnd else {
+                break
+            }
+            if lineNumber {
+                currentLineNumber += rg_memcount_byte(
+                    base.advanced(by: lineNumberCursor),
+                    line.start - lineNumberCursor,
+                    UInt8(ascii: "\n")
+                )
+                lineNumberCursor = line.start
+            }
+            if previousEmittedLineNumber > 0,
+               lineNumber,
+               currentLineNumber > previousEmittedLineNumber + 1,
+               let contextSeparator {
+                guard output.writeBytes(contextSeparator),
+                      output.writeByte(UInt8(ascii: "\n")) else {
+                    return false
+                }
+            } else if previousEmittedLineNumber > 0,
+                      !lineNumber,
+                      line.start > (selectedLineCursor > 0 ? selectedLines[selectedLineCursor - 1].outputEnd : 0),
+                      let contextSeparator {
+                guard output.writeBytes(contextSeparator),
+                      output.writeByte(UInt8(ascii: "\n")) else {
+                    return false
+                }
+            }
+            guard output.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading) else {
+                return false
+            }
+            guard output.writeBytes(line.containsLiteral ? lineMatchPrefix : lineContextPrefix) else {
+                return false
+            }
+            if lineNumber {
+                guard output.writeLineNumberPrefix(
+                    currentLineNumber,
+                    fieldSeparator: line.containsLiteral
+                        ? lineNumberFieldMatchSeparator
+                        : lineNumberFieldContextSeparator
+                ) else {
+                    return false
+                }
+            }
+            guard output.write(base.advanced(by: line.start), count: line.outputEnd - line.start) else {
+                return false
+            }
+            if !line.hasNewline,
+               !output.writeByte(UInt8(ascii: "\n")) {
+                return false
+            }
+            previousEmittedLineNumber = lineNumber ? currentLineNumber : previousEmittedLineNumber + 1
+            if lineNumber {
+                currentLineNumber += 1
+                lineNumberCursor = line.outputEnd
+            }
+            selectedLineCursor += 1
+        }
+        return true
+    }
+
+    var previousWindowEnd = 0
+    while searchOffset <= haystackLength - literalCount,
+          matchedLineCount < maxCount {
+        let foundPointer: UnsafePointer<UInt8>?
+        if searchOffset == firstMatchOffset {
+            foundPointer = firstLiteralMatch
+        } else {
+            foundPointer = rg_memmem_simple(
+                base.advanced(by: searchOffset),
+                haystackLength - searchOffset,
+                literalBase,
+                literalCount
+            )
+        }
+        guard let foundPointer else {
+            break
+        }
+
+        let matchStart = base.distance(to: foundPointer)
+        let matchEnd = matchStart + literalCount
+        let matchLineStart = rgSwiftLiteralContextWindowStart(
+            base: base,
+            matchStart: matchStart,
+            beforeContext: 0
+        )
+        if matchLineStart == previousMatchLineStart {
+            searchOffset = max(matchStart + 1, matchEnd)
+            continue
+        }
+
+        let lineEnd: Int
+        if let newline = memchr(
+            base.advanced(by: matchEnd),
+            Int32(UInt8(ascii: "\n")),
+            haystackLength - matchEnd
+        ) {
+            lineEnd = base.distance(to: newline.assumingMemoryBound(to: UInt8.self))
+        } else {
+            lineEnd = haystackLength
+        }
+
+        matchedLineCount += 1
+        previousMatchLineStart = matchLineStart
+        let windowStart = rgSwiftLiteralContextWindowStart(
+            base: base,
+            matchStart: matchLineStart,
+            beforeContext: beforeContext
+        )
+        let windowEnd = rgSwiftLiteralContextWindowEnd(
+            base: base,
+            haystackLength: haystackLength,
+            lineEnd: lineEnd,
+            afterContext: afterContext
+        )
+        if windowStart > previousWindowEnd,
+           !emitAvailableLines(through: previousWindowEnd) {
+            return nil
+        }
+        if matchLineStart < previousWindowEnd,
+           let existingIndex = selectedLines.lastIndex(where: { $0.start == matchLineStart }) {
+            selectedLines[existingIndex].containsLiteral = true
+        }
+        appendWindow(
+            windowStart: max(windowStart, previousWindowEnd),
+            windowEnd: windowEnd,
+            matchLineStart: matchLineStart
+        )
+        previousWindowEnd = max(previousWindowEnd, windowEnd)
+        searchOffset = max(matchStart + 1, matchEnd)
+    }
+
+    guard emitAvailableLines(through: previousWindowEnd),
+          output.flush() else {
+        return nil
+    }
+    return matchedLineCount
+}
+
 private struct RgSwiftMultiLiteralMatchInfo {
     let firstMatch: UnsafePointer<UInt8>?
     let presentLiterals: [[UInt8]]
@@ -18262,6 +18505,26 @@ private func rgSwiftDarwinWriteAfterContextLiteralLines(
             beforeContext: 0,
             afterContext: afterContext,
             maxCount: maxCount,
+            contextSeparator: contextSeparator
+        )
+    }
+    if !asciiCaseInsensitive,
+       let firstLiteralMatch {
+        return rgSwiftDarwinWriteFormattedLiteralContextWindows(
+            base,
+            haystackLength: haystackLength,
+            literalBase: literalBase,
+            literalCount: literal.count,
+            firstLiteralMatch: firstLiteralMatch,
+            beforeContext: 0,
+            afterContext: afterContext,
+            maxCount: maxCount,
+            lineNumber: lineNumber,
+            lineNumberFieldMatchSeparator: lineNumberFieldMatchSeparator,
+            lineNumberFieldContextSeparator: lineNumberFieldContextSeparator,
+            lineMatchPrefix: lineMatchPrefix,
+            lineContextPrefix: lineContextPrefix,
+            headingPrefix: headingPrefix,
             contextSeparator: contextSeparator
         )
     }
@@ -18465,6 +18728,26 @@ private func rgSwiftDarwinWriteBeforeContextLiteralLines(
             beforeContext: beforeContext,
             afterContext: 0,
             maxCount: maxCount,
+            contextSeparator: contextSeparator
+        )
+    }
+    if !asciiCaseInsensitive,
+       let firstLiteralMatch {
+        return rgSwiftDarwinWriteFormattedLiteralContextWindows(
+            base,
+            haystackLength: haystackLength,
+            literalBase: literalBase,
+            literalCount: literal.count,
+            firstLiteralMatch: firstLiteralMatch,
+            beforeContext: beforeContext,
+            afterContext: 0,
+            maxCount: maxCount,
+            lineNumber: lineNumber,
+            lineNumberFieldMatchSeparator: lineNumberFieldMatchSeparator,
+            lineNumberFieldContextSeparator: lineNumberFieldContextSeparator,
+            lineMatchPrefix: lineMatchPrefix,
+            lineContextPrefix: lineContextPrefix,
+            headingPrefix: headingPrefix,
             contextSeparator: contextSeparator
         )
     }
@@ -18713,6 +18996,26 @@ private func rgSwiftDarwinWriteContextLiteralLines(
             beforeContext: beforeContext,
             afterContext: afterContext,
             maxCount: maxCount,
+            contextSeparator: contextSeparator
+        )
+    }
+    if !asciiCaseInsensitive,
+       let firstLiteralMatch {
+        return rgSwiftDarwinWriteFormattedLiteralContextWindows(
+            base,
+            haystackLength: haystackLength,
+            literalBase: literalBase,
+            literalCount: literal.count,
+            firstLiteralMatch: firstLiteralMatch,
+            beforeContext: beforeContext,
+            afterContext: afterContext,
+            maxCount: maxCount,
+            lineNumber: lineNumber,
+            lineNumberFieldMatchSeparator: lineNumberFieldMatchSeparator,
+            lineNumberFieldContextSeparator: lineNumberFieldContextSeparator,
+            lineMatchPrefix: lineMatchPrefix,
+            lineContextPrefix: lineContextPrefix,
+            headingPrefix: headingPrefix,
             contextSeparator: contextSeparator
         )
     }
