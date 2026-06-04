@@ -8,6 +8,17 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected single-literal search-offset line-start probe - 2026-06-04
+
+A Swift-only probe tried to skip the backward newline scan in the regular
+searcher's simple single-literal matching-lines branch by reusing
+`searchOffset` as the current line start after the scan had advanced past an
+emitted line. The source change was reverted before benchmarking because parity
+failed: `searchOffset` can skip over many nonmatching lines before the next
+match, so it is not necessarily the next matched line's start. The failed
+parity artifact is
+`/tmp/swift-rg-bench/searchoffset-linestart-parity-1780594069`.
+
 ## Rejected Darwin file-list traversal probes - 2026-06-04
 
 Two Swift-only probes targeted the remaining `--files` gap on the Linux tree
