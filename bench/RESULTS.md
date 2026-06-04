@@ -73,6 +73,17 @@ Rejected follow-up probe:
   1.265 s baseline. The source probe was reverted. Raw exports:
   `/tmp/swift-rg-bench/fast-search-empty-override-hit-1780530625.json` and
   `/tmp/swift-rg-bench/fast-search-empty-override-miss-1780530625.json`.
+- Lowering the quiet byte-literal output-order prefix from 160 files to 32
+  preserved status/stdout/stderr against Rust and the saved `86e6af2` Swift
+  binary for `SCHED`, `EXPORT_SYMBOL`, `PM_RESUME`, absent-literal, hidden
+  `SCHED`, and no-ignore `SCHED` quiet controls. The narrower window improved
+  `PM_RESUME` to 39.1 ms versus 42.6 ms baseline and left `EXPORT_SYMBOL`
+  flat, but regressed the active early-hit target: `-q SCHED linux` measured
+  8.5 ms versus 8.2 ms baseline and 6.2 ms for Rust. The absent-literal miss
+  guard was only noise-level positive at 1.269 s versus 1.289 s. The source
+  probe was reverted. Raw exports:
+  `/tmp/swift-rg-bench/quiet-prefix32-hit-ab-1780531205.json` and
+  `/tmp/swift-rg-bench/quiet-prefix32-miss-ab-1780531205.json`.
 
 ## Extended root VCS-context reuse to file-path walks - 2026-06-03
 
