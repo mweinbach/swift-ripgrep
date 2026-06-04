@@ -794,6 +794,12 @@ were rejected:
   statuses, but gave up the generic parallel search shape. The target hit
   regressed sharply to 2.295 s mean versus 267.2 ms baseline, so the traversal
   shortcut was also reverted.
+- A deeper output-order prefix of 1,536 files found the first Linux hit and
+  cut the target hit from 286.9 ms to 51.1 ms with the normal matcher, then to
+  41.7 ms with the raw byte-literal reader. The miss economics were
+  unacceptable: full no-match quiet rose from 1.446 s to 4.542 s. Adding an
+  explicit 32 KiB stat-based size cap kept the hit at 84.5 ms, but still left
+  no-match at 4.597 s versus 1.360 s baseline.
 
 The source probes were reverted. A focused regression test remains for the
 quiet ignore-case alternation hit/miss status surface. Raw exports:
@@ -801,7 +807,12 @@ quiet ignore-case alternation hit/miss status surface. Raw exports:
 `/tmp/swift-rg-bench/quiet-casei-alt-perfile-ab-1780549686.json`, and
 `/tmp/swift-rg-bench/casei-alt-perfile-miss-path-ab-1780549719.json`. The
 traversal probe export is
-`/tmp/swift-rg-bench/quiet-casei-alt-walkstop-ab-1780550498.json`.
+`/tmp/swift-rg-bench/quiet-casei-alt-walkstop-ab-1780550498.json`. Deep-prefix
+exports:
+`/tmp/swift-rg-bench/quiet-casei-alt-deep-prefix-ab-1780551253.json`,
+`/tmp/swift-rg-bench/quiet-casei-alt-deep-raw-prefix-ab-1780551543.json`,
+`/tmp/swift-rg-bench/quiet-casei-alt-sizecap-prefix-ab-1780551816.json`, and
+`/tmp/swift-rg-bench/quiet-casei-alt-stat-sizecap-prefix-ab-1780552101.json`.
 
 ## Rejected quiet case-insensitive alternation worker retune - 2026-06-04
 
