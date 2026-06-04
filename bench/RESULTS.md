@@ -51,6 +51,25 @@ Raw hyperfine exports:
 `/tmp/swift-rg-bench/prepared-casei-ab-1780563199.json` and
 `/tmp/swift-rg-bench/prepared-casei-confirm-1780563232.json`.
 
+## Rejected quiet case-insensitive small-group scheduler - 2026-06-04
+
+A probe kept quiet status-only ignore-case multi-literal searches on the
+existing matching code, but reordered the already-collected haystacks by
+top-level group size after the four-file prefix scout missed. Since `-q`
+does not expose the matched path, the intent was to let smaller subtrees find
+any matching file sooner without changing stdout/stderr/status.
+
+Focused quiet hit, miss, early-hit, and single-literal controls all matched
+Rust status/stdout/stderr, but the A/B rejected the scheduler. Against
+`a463e7b`, the late-hit target regressed from 268.9 ms to 454.0 ms, full miss
+regressed from 1.096 s to 1.283 s, and the early-hit guard moved from 8.6 ms to
+10.8 ms. Single-literal quiet was flat/noisy at 8.9 ms versus 9.5 ms baseline,
+but that shape is not enough to justify the multi-literal regressions. The
+source probe was reverted.
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/quiet-casei-smallgroup-ab-1780563960.json`.
+
 ## Quiet case-insensitive alternation prefix scout - 2026-06-04
 
 Recursive quiet ASCII ignore-case literal alternations now get a tiny
