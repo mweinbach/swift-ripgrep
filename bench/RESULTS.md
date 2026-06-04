@@ -8,6 +8,28 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Default numbered literals use collected preflight - 2026-06-04
+
+Large default mapped literal searches with line numbers now use the collected
+Darwin literal writer instead of falling back to the generic searcher solely
+because the file is a large visible-line target. The large-output guard still
+keeps plain unnumbered default literal searches on the old path; the widened
+route is limited to `-n` output, where the collected writer has a proven
+Rust-compatible text/binary path.
+
+Patched stdout, stderr, and status matched Rust for real subtitle text and for
+270 MiB hit-before-NUL and binary no-match fixtures across unprefixed `-n` and
+filename-prefixed `-H -n` modes. Real subtitle text also matched Rust for
+`--heading -H -n` and `--no-filename -n`. An 18-run guard measured default
+`-n 'Sherlock Holmes'` at 177.6 ms patched versus 241.6 ms baseline and
+196.6 ms Rust. The already-collected `-H -n` neighbor stayed in-band at
+184.9 ms patched versus 177.0 ms baseline and 205.0 ms Rust, while plain
+literal output stayed near its previous path at 169.6 ms patched versus
+176.6 ms baseline and 163.8 ms Rust.
+
+Artifacts:
+`/tmp/swift-rg-bench/default-line-darwin-preflight-1780609553`.
+
 ## ASCII boundary literals reuse word preflight - 2026-06-04
 
 Explicit ASCII-boundary literal regexes like

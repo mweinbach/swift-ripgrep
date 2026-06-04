@@ -7101,6 +7101,7 @@ struct RipgrepCommand {
         if literal.count >= 10,
            !asciiBoundary,
            !noMmap,
+           !lineNumber,
            !withFilename,
            !heading,
            fileIsLargeRegularVisibleLineTarget() {
