@@ -246,6 +246,23 @@ Retained follow-up:
   the fast path at 21.1 ms patched versus 24.4 ms baseline and 24.2 ms Rust.
   A five-run upstream harness measured `subtitles_en_literal_word` at
   292.10 ms for Unicode and 287.60 ms for the ASCII boundary label.
+- Large simple case-sensitive literal output in the mapped executable writer
+  now uses a one-pass first-byte-or-NUL collector before flushing buffered
+  line ranges. This keeps binary fallback intact because a NUL found anywhere
+  declines the preflight before stdout is touched, but avoids the separate
+  full-file text proof on clean text haystacks. The retained gate is limited to
+  simple unnumbered output on files at least 256 MiB, so the normal large
+  default row still falls through to the regular Swift searcher and line-number
+  output remains on the existing collected path. Patched output, stderr, and
+  status matched the current Swift baseline for plain, `--no-mmap`, `-n`,
+  no-match `--no-mmap`, and a late-NUL fallback control; the large subtitle
+  plain, `--no-mmap`, `-n`, and no-match rows also matched Rust output/status.
+  A 12-run A/B measured `--no-mmap 'Sherlock Holmes'` at 228.7 ms patched
+  versus 241.3 ms baseline and 151.9 ms Rust. An order-flipped 12-run
+  confirmation measured `--no-mmap` at 228.3 ms patched versus 236.1 ms
+  baseline, while plain output and line-numbered output stayed within noise.
+  A five-run upstream harness measured `subtitles_en_literal` at 206.93 ms,
+  `--no-mmap` at 227.31 ms, and the `-n` row at 247.74 ms.
 
 Rejected same-session probe:
 
@@ -290,6 +307,12 @@ Rejected same-session probe:
   improved Unicode subtitle `-nw 'Sherlock Holmes'`, but it badly regressed an
   all-ASCII word fixture from 24.6 ms baseline to 316.8 ms patched. The source
   probe was narrowed to the retained prefix-non-ASCII gate.
+- Letting large explicit `--no-mmap` literal output fall through to the regular
+  Swift searcher preserved the already-fast plain route, but changed
+  `--no-mmap 'Sherlock Holmes'` on the large subtitles file from successful
+  output to a buffered-limit error:
+  `haystack size 1622661645 exceeds buffered limit 268435456`. The source probe
+  was reverted and the retained work stayed inside the mapped no-mmap preflight.
 
 Raw exports and parity artifacts:
 `/tmp/swift-rg-bench/current-subtitles-1780575005/summary.md`,
@@ -328,6 +351,11 @@ Raw exports and parity artifacts:
 `/tmp/swift-rg-bench/word-prefix-nonascii-parity-1780585149`,
 `/tmp/swift-rg-bench/word-prefix-nonascii-harness-1780585184/summary.md`,
 `/tmp/swift-rg-bench/word-skip-ascii-prepass-1780584883/word-ab.json`,
+`/tmp/swift-rg-bench/large-simple-firstbyte-textproof-ab-1780586021.json`,
+`/tmp/swift-rg-bench/large-simple-firstbyte-textproof-confirm-1780586052.json`,
+`/tmp/swift-rg-bench/large-simple-firstbyte-textproof-parity-1780586010`,
+`/tmp/swift-rg-bench/large-simple-firstbyte-textproof-harness-1780586084/summary.md`,
+`/tmp/swift-rg-bench/large-nommap-fallthrough-parity-1780585776`,
 `/tmp/swift-rg-bench/pair-anchor-probe/ab-1780577742.json`,
 `/tmp/swift-rg-bench/pair-anchor-probe/harness-1780577796/summary.md`,
 `/tmp/swift-rg-bench/pair-anchor-probe/parity-1780577730`,

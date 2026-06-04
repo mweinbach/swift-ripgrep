@@ -13411,6 +13411,127 @@ private final class rgSwiftLazyStdoutBuffer {
     }
 }
 
+private func rgSwiftDarwinWriteLargeSimpleLiteralBytesWithTextProof(
+    _ base: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    literal: UnsafeBufferPointer<UInt8>
+) -> LiteralLineWriteStats? {
+    guard let literalBase = literal.baseAddress,
+          literal.count > 0 else {
+        return nil
+    }
+
+    struct PendingRange {
+        var start: Int
+        var outputEnd: Int
+        var needsFinalNewline: Bool
+    }
+
+    let newline = UInt8(ascii: "\n")
+    let needles = [literalBase[0], UInt8(0)]
+    var searchOffset = 0
+    var matchedLineCount = 0
+    var pendingRanges: [PendingRange] = []
+    pendingRanges.reserveCapacity(1024)
+
+    while searchOffset < haystackLength {
+        let found = needles.withUnsafeBufferPointer { needleBuffer in
+            rg_memchr_any_bytes(
+                base.advanced(by: searchOffset),
+                haystackLength - searchOffset,
+                needleBuffer.baseAddress,
+                needleBuffer.count
+            )
+        }
+        guard let found else {
+            break
+        }
+
+        if found.pointee == 0 {
+            return nil
+        }
+
+        let candidateStart = base.distance(to: found)
+        guard candidateStart + literal.count <= haystackLength else {
+            searchOffset = candidateStart + 1
+            continue
+        }
+        guard memcmp(found, literalBase, literal.count) == 0 else {
+            searchOffset = candidateStart + 1
+            continue
+        }
+
+        var lineStart = candidateStart
+        while lineStart > 0, base[lineStart - 1] != newline {
+            lineStart -= 1
+        }
+
+        let newlinePointer = memchr(
+            found,
+            Int32(newline),
+            haystackLength - candidateStart
+        )
+        let outputEnd: Int
+        let needsFinalNewline: Bool
+        if let newlinePointer {
+            outputEnd = base.distance(to: newlinePointer.assumingMemoryBound(to: UInt8.self)) + 1
+            needsFinalNewline = false
+        } else {
+            outputEnd = haystackLength
+            needsFinalNewline = true
+        }
+
+        if let last = pendingRanges.last,
+           last.outputEnd == lineStart,
+           !last.needsFinalNewline {
+            pendingRanges[pendingRanges.count - 1].outputEnd = outputEnd
+            pendingRanges[pendingRanges.count - 1].needsFinalNewline = needsFinalNewline
+        } else {
+            pendingRanges.append(PendingRange(
+                start: lineStart,
+                outputEnd: outputEnd,
+                needsFinalNewline: needsFinalNewline
+            ))
+        }
+        matchedLineCount += 1
+        searchOffset = outputEnd
+    }
+
+    guard !pendingRanges.isEmpty else {
+        return LiteralLineWriteStats(
+            matchedLines: 0,
+            bytesPrinted: 0,
+            bytesSearched: haystackLength
+        )
+    }
+
+    guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+        return nil
+    }
+    defer {
+        output.deallocate()
+    }
+
+    for range in pendingRanges {
+        guard output.write(base.advanced(by: range.start), count: range.outputEnd - range.start) else {
+            return nil
+        }
+        if range.needsFinalNewline,
+           !output.writeByte(newline) {
+            return nil
+        }
+    }
+
+    guard output.flush() else {
+        return nil
+    }
+    return LiteralLineWriteStats(
+        matchedLines: matchedLineCount,
+        bytesPrinted: output.statsBytesWritten,
+        bytesSearched: haystackLength
+    )
+}
+
 private func rgSwiftDarwinWriteLiteralBytes(
     _ base: UnsafePointer<UInt8>,
     haystackLength: Int,
@@ -13442,6 +13563,21 @@ private func rgSwiftDarwinWriteLiteralBytes(
         || base[0] == 0xFE && base[1] == 0xFF) {
         return nil
     }
+    let simpleLineOutput = emitLines && !lineNumber && linePrefix.isEmpty && headingPrefix.isEmpty
+    if simpleLineOutput,
+       !asciiCaseInsensitive,
+       !asciiBoundary,
+       maxCount == Int.max,
+       !requireASCIIHaystack,
+       !knownTextHaystack,
+       haystackLength >= 256 * 1024 * 1024,
+       let stats = rgSwiftDarwinWriteLargeSimpleLiteralBytesWithTextProof(
+        base,
+        haystackLength: haystackLength,
+        literal: literal
+       ) {
+        return stats
+    }
     let firstCaseSensitiveMatch: UnsafePointer<UInt8>?
     if !asciiCaseInsensitive, !lineNumber {
         guard let firstMatch = rg_memmem_simple(base, haystackLength, literalBase, literal.count) else {
@@ -13455,7 +13591,6 @@ private func rgSwiftDarwinWriteLiteralBytes(
     } else {
         firstCaseSensitiveMatch = nil
     }
-    let simpleLineOutput = emitLines && !lineNumber && linePrefix.isEmpty && headingPrefix.isEmpty
     let collectLineNumberedOutput = lineNumber
         && !asciiCaseInsensitive
         && !asciiBoundary
