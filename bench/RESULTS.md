@@ -120,6 +120,29 @@ change was reverted.
 Artifacts: `/tmp/swift-rg-bench/nommap-stream-route-probe/ab.json` and
 `/tmp/swift-rg-bench/nommap-stream-route-probe/ab-flipped.json`.
 
+## Rejected buffered reader 256 KiB chunk probe - 2026-06-04
+
+A Swift-only probe raised `HaystackReader.bufferedChunkSize` from 64 KiB to
+256 KiB to reduce read-loop overhead for large explicit `--no-mmap` streaming
+searches. This targeted the 1.5 GiB English subtitle fixture without adding any
+new scanner or C shim.
+
+Patched stdout, stderr, and status matched both the committed Swift binary and
+Rust `rg` for explicit no-mmap subtitle literal output, line-numbered no-mmap,
+word-boundary no-mmap, count output, and a small duplicate same-line streaming
+control. The benchmark was mixed. A 24-run A/B measured plain no-mmap at
+183.74 ms patched versus 183.16 ms baseline, line-numbered no-mmap at
+176.86 ms versus 175.84 ms, word-boundary no-mmap at 162.83 ms versus
+163.58 ms with high variance, and count at 201.64 ms versus 201.18 ms. The
+order-flipped confirmation measured plain no-mmap slightly better at 183.08 ms
+patched versus 184.50 ms baseline, while line-numbered no-mmap stayed
+effectively flat at 177.71 ms patched versus 177.96 ms baseline. Since the
+target did not hold a clean win and adjacent no-mmap guards did not improve,
+the source change was reverted.
+
+Artifacts: `/tmp/swift-rg-bench/buffered-chunk-256k-probe/ab.json` and
+`/tmp/swift-rg-bench/buffered-chunk-256k-probe/ab-flipped.json`.
+
 ## Rejected large literal 1 MiB anchor sample probe - 2026-06-04
 
 A current upstream harness refresh showed the broad Linux search rows are still
