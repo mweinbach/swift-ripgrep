@@ -15659,6 +15659,146 @@ private func rgSwiftDarwinWriteWordLiteralLineBytes(
     var searchOffset = 0
     var lastEmittedLineStart = -1
 
+    if literal.count >= 4,
+       haystackLength >= 256 * 1024 * 1024 {
+        let sampleCount = min(haystackLength, 256 * 1024)
+        var bestAnchorOffset = 0
+        var bestAnchorPairCount = Int.max
+        for anchorOffset in 0..<(literal.count - 1) {
+            var pairCount = 0
+            var sampleOffset = 0
+            while sampleOffset < sampleCount - 1 {
+                if base[sampleOffset] == literalBase[anchorOffset],
+                   base[sampleOffset + 1] == literalBase[anchorOffset + 1] {
+                    pairCount += 1
+                }
+                sampleOffset += 1
+            }
+            if pairCount < bestAnchorPairCount {
+                bestAnchorOffset = anchorOffset
+                bestAnchorPairCount = pairCount
+            }
+        }
+        if bestAnchorPairCount > 0,
+           bestAnchorPairCount * 1024 <= sampleCount {
+            let anchorBase = literalBase.advanced(by: bestAnchorOffset)
+            var anchorSearchOffset = bestAnchorOffset
+            var lineNumberCursor = 0
+            var currentLineNumber = 1
+            while anchorSearchOffset <= haystackLength - 2 {
+                guard let found = rg_memmem_simple(
+                    base.advanced(by: anchorSearchOffset),
+                    haystackLength - anchorSearchOffset,
+                    anchorBase,
+                    2
+                ) else {
+                    break
+                }
+
+                let anchorStart = base.distance(to: found)
+                let matchStart = anchorStart - bestAnchorOffset
+                guard matchStart >= 0,
+                      matchStart + literal.count <= haystackLength else {
+                    anchorSearchOffset = anchorStart + 1
+                    continue
+                }
+                guard memcmp(base.advanced(by: matchStart), literalBase, literal.count) == 0 else {
+                    anchorSearchOffset = anchorStart + 1
+                    continue
+                }
+
+                let matchEnd = matchStart + literal.count
+                switch wordBoundaryState(matchStart: matchStart, matchEnd: matchEnd) {
+                case .bounded:
+                    break
+                case .notBounded:
+                    anchorSearchOffset = anchorStart + 1
+                    continue
+                case .needsDecodedFallback:
+                    return nil
+                }
+
+                var lineStart = matchStart
+                while lineStart > 0, base[lineStart - 1] != UInt8(ascii: "\n") {
+                    lineStart -= 1
+                }
+                let newline = memchr(
+                    base.advanced(by: matchStart),
+                    Int32(UInt8(ascii: "\n")),
+                    haystackLength - matchStart
+                )
+                let outputEnd = newline.map {
+                    base.distance(to: $0.assumingMemoryBound(to: UInt8.self)) + 1
+                } ?? haystackLength
+
+                if lineStart != lastEmittedLineStart {
+                    guard pendingLines.count < maxBufferedLines else {
+                        return nil
+                    }
+                    if lineNumber {
+                        currentLineNumber += Int(rg_memcount_byte(
+                            base.advanced(by: lineNumberCursor),
+                            lineStart - lineNumberCursor,
+                            UInt8(ascii: "\n")
+                        ))
+                    }
+                    pendingLines.append(PendingLine(
+                        number: currentLineNumber,
+                        start: lineStart,
+                        outputEnd: outputEnd,
+                        needsFinalNewline: newline == nil
+                    ))
+                    lastEmittedLineStart = lineStart
+                    if lineNumber {
+                        currentLineNumber += 1
+                        lineNumberCursor = outputEnd
+                    }
+                }
+                anchorSearchOffset = outputEnd + bestAnchorOffset
+            }
+
+            guard !pendingLines.isEmpty else {
+                return memchr(base, 0, haystackLength) == nil ? 0 : nil
+            }
+            guard memchr(base, 0, haystackLength) == nil else {
+                return nil
+            }
+
+            guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+                return nil
+            }
+            defer {
+                output.deallocate()
+            }
+
+            var emittedHeading = false
+            for line in pendingLines {
+                guard output.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading) else {
+                    return nil
+                }
+                guard output.writeBytes(linePrefix) else {
+                    return nil
+                }
+                if lineNumber,
+                   !output.writeLineNumberPrefix(line.number, fieldSeparator: lineNumberFieldSeparator) {
+                    return nil
+                }
+                guard output.write(base.advanced(by: line.start), count: line.outputEnd - line.start) else {
+                    return nil
+                }
+                if line.needsFinalNewline,
+                   !output.writeByte(UInt8(ascii: "\n")) {
+                    return nil
+                }
+            }
+
+            guard output.flush() else {
+                return nil
+            }
+            return pendingLines.count
+        }
+    }
+
     while searchOffset < haystackLength {
         let result = rg_memmem_count_byte_before(
             base.advanced(by: searchOffset),

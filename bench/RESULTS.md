@@ -584,6 +584,18 @@ Retained follow-up:
   149.7 ms Rust. The `-n` row improved to 224.9 ms patched versus 245.3 ms
   baseline and 178.8 ms Rust; `--no-mmap` stayed flat because it remains on the
   mapped preflight path.
+- Line-numbered Unicode word literals now use a sparse adjacent-pair anchor in
+  the executable word-literal preflight. The route still buffers matching lines
+  before stdout and falls back before writing if a candidate boundary needs
+  Unicode decoding. Patched output, stderr, and status matched the current
+  Swift baseline and Rust for the explicit ASCII boundary regex, `-nw`, split
+  `-n -w`, a small Unicode-adjacent fallback fixture, binary fallback, and a
+  no-match control. A 16-run A/B measured `-nw 'Sherlock Holmes'` at 240.9 ms
+  patched versus 261.9 ms baseline and 177.8 ms Rust. The ASCII boundary regex
+  stayed flat at 286.8 ms patched versus 287.8 ms baseline. A five-run focused
+  upstream harness measured the Unicode `subtitles_en_literal_word` row at
+  240.08 ms patched versus 183.58 ms Rust, while the ASCII row remained in the
+  existing 286.69 ms band.
 
 Rejected same-session probe:
 
@@ -653,6 +665,9 @@ Raw exports and parity artifacts:
 `/tmp/swift-rg-bench/direct-anchor-parity-1780599335`,
 `/tmp/swift-rg-bench/direct-anchor-parity-extra-1780599400`,
 `/tmp/swift-rg-bench/direct-anchor-ab-1780599347.json`,
+`/tmp/swift-rg-bench/word-anchor-parity-1780600003`,
+`/tmp/swift-rg-bench/word-anchor-ab-1780600018.json`,
+`/tmp/swift-rg-bench/word-anchor-harness-1780600057/summary.md`,
 `/tmp/swift-rg-bench/context-window-parity-final-1780596088`,
 `/tmp/swift-rg-bench/context-window-ab-1780595658.json`,
 `/tmp/swift-rg-bench/current-subtitles-1780575005/summary.md`,
