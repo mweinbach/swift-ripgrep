@@ -803,6 +803,19 @@ quiet ignore-case alternation hit/miss status surface. Raw exports:
 traversal probe export is
 `/tmp/swift-rg-bench/quiet-casei-alt-walkstop-ab-1780550498.json`.
 
+## Rejected quiet case-insensitive alternation worker retune - 2026-06-04
+
+A direct `-j` scan for the same quiet ignore-case alternation showed the
+generic parallel shape is already near its best small-worker point. `-j8`
+improved the target hit only slightly at 265.9 ms mean versus 273.4 ms for
+`-j4`, while `-j16` fell back to 299.7 ms with much higher system time. The
+guardrail pass rejected raising the default cap for this shape: no-match quiet
+regressed from 1.504 s at `-j4` to 1.771 s at `-j8`. Path-only output improved
+from 4.456 s to 3.269 s, but that does not justify making quiet misses worse.
+No source change was made. Raw exports:
+`/tmp/swift-rg-bench/quiet-casei-alt-thread-scan-1780550719.json` and
+`/tmp/swift-rg-bench/quiet-casei-alt-thread-miss-1780550767.json`.
+
 ## Retained single-file quiet ASCII run-suffix preflight - 2026-06-03
 
 Simple Swift Darwin executable preflight now handles quiet single-file regexes
