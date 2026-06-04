@@ -8,6 +8,29 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Retained simple count-matches no-match dispatch - 2026-06-04
+
+The simple Darwin literal count preflight now treats `--count-matches` as
+count-style output for the no-match proof. For absent single literals this lets
+the executable return the same empty output/status path as `-c` without falling
+through to the full count-matches scanner. Matched count-matches rows still fall
+through to the existing counter when the no-match proof cannot prove absence.
+
+Status/stdout/stderr matched Rust for absent count-matches, include-zero absent
+count-matches, and a matched count-matches guard. The focused dense literal
+preflight regression test passed with added absent count-matches coverage.
+
+Same-session no-shell A/B against checkpoint `2263c3e`, with Rust included:
+
+| Case | Current Swift | Baseline `2263c3e` | Rust |
+|---|---:|---:|---:|
+| `--count-matches absentliteral` | 6.94 ms median / 7.20 ms mean | 9.85 ms / 10.13 ms | 7.15 ms / 7.23 ms |
+| `--include-zero --count-matches absentliteral` | 6.52 ms / 6.54 ms | 8.42 ms / 8.51 ms | not in this A/B |
+| `--count-matches literal` guard | 13.07 ms / 13.12 ms | 13.56 ms / 14.16 ms | not in this A/B |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/countmatches-simple-dispatch-ab-1780558082.json`.
+
 ## Rare-anchor proof for word containment - 2026-06-03
 
 The single-literal word containment helper now reuses the existing rare-anchor

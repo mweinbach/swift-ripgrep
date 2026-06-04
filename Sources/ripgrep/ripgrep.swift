@@ -7076,7 +7076,7 @@ struct RipgrepCommand {
         guard arguments.count >= 3 else {
             return nil
         }
-        var count = false
+        var countStyleOutput = false
         var fixedStrings = false
         var includeZero = false
         var noUnicode = false
@@ -7103,8 +7103,8 @@ struct RipgrepCommand {
                 continue
             }
             switch argument {
-            case "-c", "--count":
-                count = true
+            case "-c", "--count", "--count-matches":
+                countStyleOutput = true
             case "--no-heading":
                 break
             case "--include-zero":
@@ -7124,7 +7124,7 @@ struct RipgrepCommand {
             }
             argumentIndex += 1
         }
-        guard count,
+        guard countStyleOutput,
               !pattern.hasPrefix("-"),
               path != "-" else {
             return nil

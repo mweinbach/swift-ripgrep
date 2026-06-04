@@ -5379,6 +5379,25 @@ struct MiscTests {
         #expect(rareAnchorSingleLiteralCountOutput.stderr.isEmpty)
         #expect(rareAnchorSingleLiteralCountOutput.status == 1)
 
+        let rareAnchorSingleLiteralCountMatchesNoMatchOutput = try runExecutableResult([
+            "--count-matches",
+            "absentliteral",
+            root.path("rare-anchor-false-positive.txt"),
+        ])
+        #expect(rareAnchorSingleLiteralCountMatchesNoMatchOutput.stdout.isEmpty)
+        #expect(rareAnchorSingleLiteralCountMatchesNoMatchOutput.stderr.isEmpty)
+        #expect(rareAnchorSingleLiteralCountMatchesNoMatchOutput.status == 1)
+
+        let rareAnchorSingleLiteralCountMatchesIncludeZeroOutput = try runExecutableResult([
+            "--count-matches",
+            "--include-zero",
+            "absentliteral",
+            root.path("rare-anchor-false-positive.txt"),
+        ])
+        #expect(rareAnchorSingleLiteralCountMatchesIncludeZeroOutput.stdout == Data("0\n".utf8))
+        #expect(rareAnchorSingleLiteralCountMatchesIncludeZeroOutput.stderr.isEmpty)
+        #expect(rareAnchorSingleLiteralCountMatchesIncludeZeroOutput.status == 1)
+
         let rareAnchorPlainNoMatchOutput = try runExecutableResult([
             "absentliteral",
             root.path("rare-anchor-false-positive.txt"),
