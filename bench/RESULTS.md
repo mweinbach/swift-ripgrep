@@ -402,6 +402,19 @@ are already large Swift wins:
 
 Retained follow-up:
 
+- Unprefixed single-literal context output now searches full-file literal
+  occurrences directly, expands each matched line to its requested
+  before/after context window, merges overlapping windows, and writes
+  contiguous byte ranges with group separators. This avoids the old
+  line-by-line context scan on sparse large files while leaving line-numbered,
+  prefixed, headed, case-insensitive, and multi-literal context output on the
+  existing formatted writers. Patched `-A2`, `-B2`, `-C2`, max-count, and
+  no-context-separator fixtures matched the current Swift baseline and Rust;
+  large subtitle `-A2`, `-B2`, and `-C2` output/status/stderr also matched.
+  A 20-run A/B measured `-A2 'Sherlock Holmes'` at 257.4 ms patched versus
+  3.426 s baseline and 164.7 ms Rust, `-B2` at 259.2 ms patched versus
+  3.481 s baseline and 166.6 ms Rust, and `-C2` at 259.3 ms patched versus
+  3.494 s baseline and 165.3 ms Rust.
 - The Swift Darwin multi-literal preflight now allows rare-anchor candidate
   selection for line-numbered output instead of limiting it to plain
   unnumbered lines. The actual subtitle alternation literals all had rare
@@ -590,6 +603,8 @@ Rejected same-session probe:
   was reverted and the retained work stayed inside the mapped no-mmap preflight.
 
 Raw exports and parity artifacts:
+`/tmp/swift-rg-bench/context-window-parity-final-1780596088`,
+`/tmp/swift-rg-bench/context-window-ab-1780595658.json`,
 `/tmp/swift-rg-bench/current-subtitles-1780575005/summary.md`,
 `/tmp/swift-rg-bench/rare-anchor-line-ab-1780576513/results.json`,
 `/tmp/swift-rg-bench/rare-anchor-line-harness-1780576562/summary.md`,

@@ -18010,6 +18010,147 @@ private func rgSwiftLiteralContextWindowStart(
     return lineStart
 }
 
+private func rgSwiftLiteralContextWindowEnd(
+    base: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    lineEnd: Int,
+    afterContext: Int
+) -> Int {
+    var outputEnd = lineEnd < haystackLength ? lineEnd + 1 : haystackLength
+    var remaining = afterContext
+    while remaining > 0, outputEnd < haystackLength {
+        if let newline = memchr(
+            base.advanced(by: outputEnd),
+            Int32(UInt8(ascii: "\n")),
+            haystackLength - outputEnd
+        ) {
+            let nextLineEnd = base.distance(to: newline.assumingMemoryBound(to: UInt8.self))
+            outputEnd = nextLineEnd + 1
+        } else {
+            outputEnd = haystackLength
+        }
+        remaining -= 1
+    }
+    return outputEnd
+}
+
+private func rgSwiftDarwinWriteUnprefixedLiteralContextWindows(
+    _ base: UnsafePointer<UInt8>,
+    haystackLength: Int,
+    literalBase: UnsafePointer<UInt8>,
+    literalCount: Int,
+    firstLiteralMatch: UnsafePointer<UInt8>,
+    beforeContext: Int,
+    afterContext: Int,
+    maxCount: Int,
+    contextSeparator: [UInt8]?
+) -> Int? {
+    guard literalCount > 0,
+          maxCount > 0 else {
+        return nil
+    }
+    guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+        return nil
+    }
+    defer {
+        output.deallocate()
+    }
+
+    var matchedLineCount = 0
+    let firstMatchOffset = base.distance(to: firstLiteralMatch)
+    var searchOffset = firstMatchOffset
+    var previousMatchLineStart = -1
+    var previousWindowEnd = 0
+
+    while searchOffset <= haystackLength - literalCount,
+          matchedLineCount < maxCount {
+        let foundPointer: UnsafePointer<UInt8>?
+        if searchOffset == firstMatchOffset {
+            foundPointer = firstLiteralMatch
+        } else {
+            foundPointer = rg_memmem_simple(
+                base.advanced(by: searchOffset),
+                haystackLength - searchOffset,
+                literalBase,
+                literalCount
+            )
+        }
+        guard let foundPointer else {
+            break
+        }
+
+        let matchStart = base.distance(to: foundPointer)
+        let matchEnd = matchStart + literalCount
+        let matchLineStart = rgSwiftLiteralContextWindowStart(
+            base: base,
+            matchStart: matchStart,
+            beforeContext: 0
+        )
+        if matchLineStart == previousMatchLineStart {
+            searchOffset = max(matchStart + 1, matchEnd)
+            continue
+        }
+
+        let lineEnd: Int
+        if let newline = memchr(
+            base.advanced(by: matchEnd),
+            Int32(UInt8(ascii: "\n")),
+            haystackLength - matchEnd
+        ) {
+            lineEnd = base.distance(to: newline.assumingMemoryBound(to: UInt8.self))
+        } else {
+            lineEnd = haystackLength
+        }
+
+        matchedLineCount += 1
+        previousMatchLineStart = matchLineStart
+        let windowStart = rgSwiftLiteralContextWindowStart(
+            base: base,
+            matchStart: matchLineStart,
+            beforeContext: beforeContext
+        )
+        let windowEnd = rgSwiftLiteralContextWindowEnd(
+            base: base,
+            haystackLength: haystackLength,
+            lineEnd: lineEnd,
+            afterContext: afterContext
+        )
+
+        let writeStart: Int
+        if windowStart > previousWindowEnd {
+            if previousWindowEnd > 0,
+               let contextSeparator {
+                guard output.writeBytes(contextSeparator),
+                      output.writeByte(UInt8(ascii: "\n")) else {
+                    return nil
+                }
+            }
+            writeStart = windowStart
+        } else {
+            writeStart = previousWindowEnd
+        }
+        if windowEnd > writeStart {
+            guard output.write(base.advanced(by: writeStart), count: windowEnd - writeStart) else {
+                return nil
+            }
+            if windowEnd == haystackLength,
+               haystackLength > 0,
+               base[haystackLength - 1] != UInt8(ascii: "\n"),
+               !output.writeByte(UInt8(ascii: "\n")) {
+                return nil
+            }
+            previousWindowEnd = windowEnd
+        }
+
+        searchOffset = max(matchStart + 1, matchEnd)
+    }
+
+    guard output.flush() else {
+        return nil
+    }
+    return matchedLineCount
+}
+
 private struct RgSwiftMultiLiteralMatchInfo {
     let firstMatch: UnsafePointer<UInt8>?
     let presentLiterals: [[UInt8]]
@@ -18105,6 +18246,24 @@ private func rgSwiftDarwinWriteAfterContextLiteralLines(
         if rgSwiftContainsNonASCIIByte(base, count: haystackLength) {
             return nil
         }
+    }
+    if !asciiCaseInsensitive,
+       !lineNumber,
+       lineMatchPrefix.isEmpty,
+       lineContextPrefix.isEmpty,
+       headingPrefix.isEmpty,
+       let firstLiteralMatch {
+        return rgSwiftDarwinWriteUnprefixedLiteralContextWindows(
+            base,
+            haystackLength: haystackLength,
+            literalBase: literalBase,
+            literalCount: literal.count,
+            firstLiteralMatch: firstLiteralMatch,
+            beforeContext: 0,
+            afterContext: afterContext,
+            maxCount: maxCount,
+            contextSeparator: contextSeparator
+        )
     }
 
     guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
@@ -18290,6 +18449,24 @@ private func rgSwiftDarwinWriteBeforeContextLiteralLines(
         if rgSwiftContainsNonASCIIByte(base, count: haystackLength) {
             return nil
         }
+    }
+    if !asciiCaseInsensitive,
+       !lineNumber,
+       lineMatchPrefix.isEmpty,
+       lineContextPrefix.isEmpty,
+       headingPrefix.isEmpty,
+       let firstLiteralMatch {
+        return rgSwiftDarwinWriteUnprefixedLiteralContextWindows(
+            base,
+            haystackLength: haystackLength,
+            literalBase: literalBase,
+            literalCount: literal.count,
+            firstLiteralMatch: firstLiteralMatch,
+            beforeContext: beforeContext,
+            afterContext: 0,
+            maxCount: maxCount,
+            contextSeparator: contextSeparator
+        )
     }
 
     guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
@@ -18520,6 +18697,24 @@ private func rgSwiftDarwinWriteContextLiteralLines(
         if rgSwiftContainsNonASCIIByte(base, count: haystackLength) {
             return nil
         }
+    }
+    if !asciiCaseInsensitive,
+       !lineNumber,
+       lineMatchPrefix.isEmpty,
+       lineContextPrefix.isEmpty,
+       headingPrefix.isEmpty,
+       let firstLiteralMatch {
+        return rgSwiftDarwinWriteUnprefixedLiteralContextWindows(
+            base,
+            haystackLength: haystackLength,
+            literalBase: literalBase,
+            literalCount: literal.count,
+            firstLiteralMatch: firstLiteralMatch,
+            beforeContext: beforeContext,
+            afterContext: afterContext,
+            maxCount: maxCount,
+            contextSeparator: contextSeparator
+        )
     }
 
     guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
