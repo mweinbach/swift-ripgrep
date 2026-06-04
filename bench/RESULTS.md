@@ -1804,6 +1804,14 @@ Raw hyperfine export:
 
 Rejected follow-up probe:
 
+- Extending the `[A-Z]+suffix` lexical fallback shape to short exact uppercase
+  runs like `[A-Z]{3}_RESUME` preserved the focused run-suffix quiet test, but
+  did not improve the target hit. A same-session no-shell A/B against clean
+  `21f548b` measured exact-run hit at 11.29 ms median for the probe versus
+  11.11 ms baseline and 6.62 ms Rust. The no-match exact-run guard nudged down
+  from 1.196 s to 1.165 s, but plus-run hit and the plain `SCHED` quiet guard
+  were slower/noisier, so the source probe was reverted. Raw export:
+  `/tmp/swift-rg-bench/runsuffix-exact-lexical-ab-1780558824.json`.
 - Replacing the `[A-Z]+suffix` first-match dummy `SearchMatch` with
   summary-only supplemental counts preserved recursive quiet status and sorted
   `-l` output parity for `[A-Z]+_RESUME` and `[A-Z]{3}_RESUME`, but did not
