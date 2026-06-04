@@ -30,6 +30,26 @@ literal output stayed near its previous path at 169.6 ms patched versus
 Artifacts:
 `/tmp/swift-rg-bench/default-line-darwin-preflight-1780609553`.
 
+## Rejected large simple text-proof overlap - 2026-06-04
+
+A Swift-only probe overlapped the large simple literal writer's final whole-file
+NUL-byte proof with its rare-pair anchor search, mirroring the retained
+line-numbered no-mmap overlap shape. The probe was reverted because it
+preserved targeted output but did not improve the remaining plain
+`--no-mmap 'Sherlock Holmes'` gap.
+
+Patched stdout, stderr, and status matched Rust for real subtitle text and for
+270 MiB hit-before-NUL and binary no-match fixtures under explicit
+`--no-mmap`. The 18-run A/B measured plain `--no-mmap 'Sherlock Holmes'` at
+202.8 ms for the probe versus 199.4 ms baseline and 158.5 ms Rust, with higher
+system time and variance. Nearby controls stayed in-band: plain default output
+measured 165.0 ms probe versus 168.9 ms baseline and 161.4 ms Rust, while
+line-numbered no-mmap measured 174.9 ms probe versus 187.3 ms baseline and
+191.5 ms Rust.
+
+Artifacts:
+`/tmp/swift-rg-bench/large-simple-proof-overlap-1780609909`.
+
 ## ASCII boundary literals reuse word preflight - 2026-06-04
 
 Explicit ASCII-boundary literal regexes like
