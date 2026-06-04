@@ -954,6 +954,27 @@ case-insensitive alternation at 0.90x; the rest of the available Linux rows are
 Raw bench output:
 `/tmp/swift-rg-bench/current-wide-refresh-1780466744/summary.md`.
 
+## Current upstream Linux refresh - 2026-06-04
+
+A fresh two-run upstream `ripgrep/benchsuite` Linux subset refresh kept all 15
+available Linux line-output rows ahead of Rust. Subtitle corpora were still
+unavailable. The closest rows are now no-literal and case-insensitive
+alternation, both still faster than Rust:
+
+| Benchmark | Label | Rust rg | Swift rg | Swift/Rust |
+| --- | --- | ---: | ---: | ---: |
+| `linux_alternates_casei` | rg | 3.240 s | 2.566 s | 0.79x |
+| `linux_no_literal` | rg | 2.964 s | 2.298 s | 0.78x |
+| `linux_no_literal` | rg (ASCII) | 3.183 s | 2.163 s | 0.68x |
+| `linux_alternates` | rg | 3.232 s | 1.928 s | 0.60x |
+| `linux_unicode_greek` | rg | 3.237 s | 1.852 s | 0.57x |
+| `linux_word` | rg | 3.261 s | 1.742 s | 0.53x |
+
+This shifts the remaining optimization target away from broad Linux
+matching-line parity and toward specialized output modes such as quiet, count,
+path-only, and tiny process-level preflights. Raw bench output:
+`/tmp/swift-rg-bench/linux-refresh-1780553501/summary.md`.
+
 Rejected follow-up probe:
 
 - Raising the transformed multi-literal parallel chunk cap from 16 workers to
