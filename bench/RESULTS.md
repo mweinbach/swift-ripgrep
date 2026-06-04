@@ -127,6 +127,33 @@ after the first matched literal does not attack the main cost.
 Raw hyperfine export:
 `/tmp/swift-rg-bench/quiet-casei-firstliteral-ab-1780565035.json`.
 
+## Current target refresh and rejected traversal-order probe - 2026-06-04
+
+A fresh compact matrix after `1abec65` kept the quiet ignore-case late-hit
+alternation as the only large current gap. Dense numbered literal output is now
+a Swift win on the large ASCII fixture, and the word/path absent rows are
+noise-level ties in no-shell measurements.
+
+| Case | Swift | Rust |
+| --- | ---: | ---: |
+| `-n literal match-ascii-46m.txt` | 46.6 ms | 74.4 ms |
+| no-shell `-w absentliteral match-ascii-46m.txt` | 7.6 ms | 7.8 ms |
+| no-shell `-q -w absentliteral match-ascii-46m.txt` | 7.3 ms | 7.4 ms |
+| no-shell `--files-without-match absentliteral match-ascii-46m.txt` | 6.8 ms | 6.6 ms |
+| quiet late ignore-case alternation | 278.7 ms | 15.7 ms |
+
+The quiet alternation worker scan again showed the default small-worker shape is
+already near the best Swift point: `-j1` measured 358.9 ms, `-j2` 290.1 ms,
+`-j4` 250.4 ms, `-j8` 258.6 ms, and `-j32` 289.9 ms with much higher system
+time. A sorted traversal/order probe was also rejected: Swift
+`--sort path -q -i ...` measured 1.286 s versus 263.8 ms unsorted, while Rust
+also lost its fast quiet behavior when sorted (248.2 ms sorted versus 15.1 ms
+unsorted). No source change was retained.
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/current-next-target-refresh-1780565228.json` and
+`/tmp/swift-rg-bench/current-word-noshell-refresh-1780565310.json`.
+
 ## Quiet case-insensitive alternation prefix scout - 2026-06-04
 
 Recursive quiet ASCII ignore-case literal alternations now get a tiny
