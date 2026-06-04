@@ -39,6 +39,28 @@ harness confirmation measured the Unicode `subtitles_en_literal_word` row at
 276.64 ms and the separate ASCII-boundary label at 308.45 ms:
 `/tmp/swift-rg-bench/word-nul-defer-confirm-1780588250/summary.md`.
 
+## Rejected no-mmap collect-before-flush probe - 2026-06-04
+
+A Swift-only no-mmap probe tried to avoid the streaming literal path's up-front
+full-file NUL proof by collecting matching complete lines while reading chunks,
+then flushing after EOF. It was limited to plain case-sensitive literal output,
+so line-numbered and case-insensitive no-mmap output stayed on existing routes.
+The probe preserved current Swift stdout/stderr/status byte-for-byte for plain
+`--no-mmap 'Sherlock Holmes'`, no-match, final-no-newline, binary fallback, and
+line-numbered guard cases, and current Swift stdout/status matched Rust for the
+same controls. It was reverted because the extra matched-line `Data` copies
+outweighed the saved text-proof pass.
+
+| Case | Probe Swift | Baseline `782d9ae` | Rust |
+| --- | ---: | ---: | ---: |
+| `--no-mmap 'Sherlock Holmes' en.sample.txt` | 258.08 ms median / 259.52 ms mean | 255.71 ms / 257.51 ms | 166.14 ms / 168.17 ms |
+| `--no-mmap -n 'Sherlock Holmes' en.sample.txt` guard | 296.23 ms / 298.59 ms | 295.74 ms / 296.56 ms | not remeasured |
+| default mmap plain guard | 224.30 ms / 225.24 ms | 223.81 ms / 225.71 ms | not remeasured |
+
+Raw artifacts:
+`/tmp/swift-rg-bench/no-mmap-collect-parity-1780588585` and
+`/tmp/swift-rg-bench/no-mmap-collect-ab-1780588596.json`.
+
 ## Rejected word and file-list micro-probes - 2026-06-04
 
 A line-numbered word-literal probe replaced
