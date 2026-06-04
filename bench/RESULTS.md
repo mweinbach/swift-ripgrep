@@ -224,6 +224,17 @@ Retained follow-up:
   to 102.4 ms patched versus 320.0 ms baseline. A 5-run upstream harness
   confirmation measured `subtitles_en_alternate` at 182.56 ms and the `-n` row
   at 183.83 ms, faster than Rust at 274.68 ms and 314.07 ms respectively.
+- Dense single-literal line-numbered output can now finish the executable
+  preflight's collect-before-text-proof path instead of falling through after
+  16,384 buffered lines. The retained cap is still bounded at one million
+  pending lines, but it covers the 46 MiB dense ASCII fixture with 876,990
+  matching lines. Patched dense `-n literal` output/status/stderr matched the
+  current Swift baseline and Rust, along with no-match, sparse subtitle,
+  small-file, and binary fallback controls. A 20-run A/B measured dense
+  `-n literal` at 44.4 ms median patched versus 92.0 ms baseline and 73.1 ms
+  Rust. Sparse `-n 'Sherlock Holmes'` stayed flat at 245.8 ms patched versus
+  247.6 ms baseline, and unnumbered dense output stayed flat at 31.5 ms
+  patched versus 31.9 ms baseline.
 
 Rejected same-session probe:
 
@@ -253,6 +264,17 @@ Rejected same-session probe:
   modestly, but it regressed plain alternation from 463.8 ms baseline to
   516.1 ms patched. The retained route is therefore line-numbered only, leaving
   plain output on the existing dense/anchored writer.
+- Removing the large single-literal fallthrough guard sent plain and numbered
+  `Sherlock Holmes` subtitles output back through the mapped executable
+  preflight. It preserved route viability but regressed the target rows in a
+  10-run A/B: plain output measured 244.2 ms patched versus 212.3 ms baseline,
+  line-numbered output measured 283.7 ms patched versus 252.1 ms baseline, and
+  `--no-mmap` stayed worse/noisy at 244.2 ms patched versus 239.6 ms baseline.
+  The source probe was reverted.
+- Reusing the counted-search line-start shortcut in the regular searcher's
+  single-literal `-n` branch preserved nearby guards, but did not prove a real
+  median win. A 30-run target check measured `-n 'Sherlock Holmes'` at
+  245.3 ms patched versus 245.2 ms baseline, so the source probe was reverted.
 
 Raw exports and parity artifacts:
 `/tmp/swift-rg-bench/current-subtitles-1780575005/summary.md`,
@@ -283,6 +305,10 @@ Raw exports and parity artifacts:
 `/tmp/swift-rg-bench/chunked-preflight-alt-probe/ab2-1780582863.json`,
 `/tmp/swift-rg-bench/chunked-preflight-alt-probe/harness-1780582891/summary.md`,
 `/tmp/swift-rg-bench/chunked-preflight-alt-1780582859`,
+`/tmp/swift-rg-bench/dense-numbered-collector-limit-1780584087/collector-limit.json`,
+`/tmp/swift-rg-bench/dense-numbered-collector-parity-1780584162`,
+`/tmp/swift-rg-bench/single-literal-route-probe-1780583583/route-ab.json`,
+`/tmp/swift-rg-bench/single-literal-line-start-long-1780583858/line-start-long.json`,
 `/tmp/swift-rg-bench/pair-anchor-probe/ab-1780577742.json`,
 `/tmp/swift-rg-bench/pair-anchor-probe/harness-1780577796/summary.md`,
 `/tmp/swift-rg-bench/pair-anchor-probe/parity-1780577730`,

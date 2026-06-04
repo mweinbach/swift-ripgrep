@@ -13638,7 +13638,7 @@ private func rgSwiftDarwinWriteLiteralBytes(
             let needsFinalNewline: Bool
         }
 
-        let maxBufferedLines = 16_384
+        let maxBufferedLines = 1_000_000
         var pendingLines: [PendingLine] = []
         pendingLines.reserveCapacity(1024)
         var lineNumberAtSearchOffset = 1
