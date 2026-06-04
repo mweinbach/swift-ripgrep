@@ -160,6 +160,16 @@ Retained follow-up:
   versus 143.6 ms baseline. A 5-run upstream harness confirmation measured
   `subtitles_en_literal` at 245.32 ms, `--no-mmap` at 245.33 ms, and the `-n`
   row at 288.37 ms.
+- Simple unnumbered literal output now defers the full-file text/NUL proof until
+  just before flushing its pending output buffer. This preserves binary fallback
+  behavior because no bytes have been written yet, while letting the match scan
+  run before the text proof. Patched plain, `--no-mmap`, `-n`, no-match, and
+  binary fallback output/status/stderr matched the current Swift baseline and
+  Rust. A 15-run A/B measured plain `Sherlock Holmes` at 252.9 ms patched versus
+  270.5 ms baseline, and `--no-mmap` at 253.4 ms patched versus 271.3 ms
+  baseline. The unaffected `-n` row measured 320.3 ms patched versus 316.1 ms
+  baseline. A 5-run upstream harness confirmation measured `subtitles_en_literal`
+  at 250.76 ms, `--no-mmap` at 250.24 ms, and the `-n` row at 314.53 ms.
 
 Rejected same-session probe:
 
@@ -194,6 +204,9 @@ Raw exports and parity artifacts:
 `/tmp/swift-rg-bench/firstmatch-skip-line-prescan-harness-1780577178/summary.md`,
 `/tmp/swift-rg-bench/firstmatch-skip-line-prescan-parity-1780577042`,
 `/tmp/swift-rg-bench/firstmatch-skip-line-prescan-miss-parity-1780577267`,
+`/tmp/swift-rg-bench/deferred-text-proof-probe/ab-1780578927.json`,
+`/tmp/swift-rg-bench/deferred-text-proof-probe/harness-1780578975/summary.md`,
+`/tmp/swift-rg-bench/deferred-text-proof-probe/parity-1780578913`,
 `/tmp/swift-rg-bench/pair-anchor-probe/ab-1780577742.json`,
 `/tmp/swift-rg-bench/pair-anchor-probe/harness-1780577796/summary.md`,
 `/tmp/swift-rg-bench/pair-anchor-probe/parity-1780577730`,

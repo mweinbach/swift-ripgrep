@@ -13470,6 +13470,7 @@ private func rgSwiftDarwinWriteLiteralBytes(
     var pendingSimpleOutputStart: Int?
     var pendingSimpleOutputEnd = 0
     var pendingSimpleOutputNeedsFinalNewline = false
+    var pendingSimpleOutputNeedsTextProof = false
 
     func ensureTextHaystack() -> Bool {
         if confirmedTextHaystack {
@@ -13553,9 +13554,13 @@ private func rgSwiftDarwinWriteLiteralBytes(
             declinedFastPath = true
             return false
         }
-        guard ensureTextHaystack() else {
-            declinedFastPath = true
-            return false
+        if simpleLineOutput {
+            pendingSimpleOutputNeedsTextProof = !confirmedTextHaystack
+        } else {
+            guard ensureTextHaystack() else {
+                declinedFastPath = true
+                return false
+            }
         }
 
         if lineStart != lastEmittedLineStart {
@@ -13694,6 +13699,11 @@ private func rgSwiftDarwinWriteLiteralBytes(
         bytesSearched = haystackLength
     }
     if simpleLineOutput {
+        if pendingSimpleOutputNeedsTextProof {
+            guard ensureTextHaystack() else {
+                return nil
+            }
+        }
         guard flushPendingSimpleOutput() else {
             return nil
         }
