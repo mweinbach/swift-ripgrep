@@ -13523,8 +13523,39 @@ private func rgSwiftDarwinWriteLargeSimpleLiteralBytesWithTextProof(
                     bytesSearched: haystackLength
                 ) : nil
             }
-            guard memchr(base, 0, haystackLength) == nil else {
-                return nil
+            if let binaryPointer = memchr(base, 0, haystackLength) {
+                let binaryOffset = base.distance(to: binaryPointer.assumingMemoryBound(to: UInt8.self))
+                guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
+                    return nil
+                }
+                defer {
+                    output.deallocate()
+                }
+
+                var emittedLineCount = 0
+                if binaryOffset >= 64 * 1024 {
+                    for range in pendingRanges where range.outputEnd <= binaryOffset {
+                        guard output.write(base.advanced(by: range.start), count: range.outputEnd - range.start) else {
+                            return nil
+                        }
+                        if range.needsFinalNewline,
+                           !output.writeByte(newline) {
+                            return nil
+                        }
+                        emittedLineCount += 1
+                    }
+                }
+                let binaryMessage = #"binary file matches (found "\0" byte around offset \#(binaryOffset))"#
+                guard output.writeBytes(Array(binaryMessage.utf8)),
+                      output.writeByte(newline),
+                      output.flush() else {
+                    return nil
+                }
+                return LiteralLineWriteStats(
+                    matchedLines: max(1, emittedLineCount),
+                    bytesPrinted: output.statsBytesWritten,
+                    bytesSearched: binaryOffset + 1
+                )
             }
 
             guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {

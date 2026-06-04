@@ -32,6 +32,25 @@ Artifacts:
 `/tmp/swift-rg-bench/ascii-boundary-word-route-1780603420` and
 `/tmp/swift-rg-bench/ascii-boundary-word-route-harness-1780603566/summary.md`.
 
+## Large no-mmap binary literal output matches Rust - 2026-06-04
+
+The large simple-literal executable preflight now emits Rust-compatible binary
+output directly when it has collected matching text lines before discovering a
+NUL byte. Before this fix, a large explicit `--no-mmap 'Sherlock Holmes'` file
+with a match before a later NUL fell through to the buffered reader and errored
+with the 256 MiB haystack limit, while Rust printed the matching line followed
+by `binary file matches`.
+
+Patched stdout, stderr, and status matched Rust for a 270 MiB NUL-after-match
+fixture and a 270 MiB binary no-match fixture. The fixed NUL-after-match case
+now exits 0 and prints the pre-binary match line plus the binary notice; the
+no-match case still exits 1 with no output. An 18-run text-path guard measured
+`--no-mmap 'Sherlock Holmes'` at 190.4 ms patched versus 191.3 ms baseline and
+153.1 ms Rust, so the normal text workload stayed flat.
+
+Artifacts:
+`/tmp/swift-rg-bench/large-binary-direct-message-1780605332`.
+
 ## Rejected text-proof-first no-mmap probe - 2026-06-04
 
 A Swift-only probe moved the large simple-literal writer's whole-file NUL-byte
