@@ -770,6 +770,32 @@ median to 6.55 ms / 6.32 ms, `EXPORT_SYMBOL` from 5.88 ms / 5.66 ms to
 9.18 ms. The source probe was reverted. Raw export:
 `/tmp/swift-rg-bench/quiet-prefix-bytecount-hit-ab-1780548722.json`.
 
+## Rejected quiet case-insensitive alternation probes - 2026-06-04
+
+A compact cross-section found the remaining recursive quiet gap was concentrated
+in ASCII ignore-case literal alternations: `-q -i
+'ERR_SYS|PME_TURN_OFF|LINK_REQ_RST|CFG_BME_EVT' .` measured 272.97 ms mean /
+259.95 ms median for Swift versus 19.89 ms / 15.07 ms for Rust, while nearby
+quiet literals and file-listing rows were close or faster. Two Swift-only probes
+were rejected:
+
+- Allowing the quiet byte-literal first-match prefix path to scan multiple
+  literals preserved stdout/stderr/status for hit, miss, and single-literal
+  controls, but serialized too much duplicated prefix work. Against clean
+  `a84ffe0`, the target hit regressed from 267.7 ms mean to 310.7 ms, and the
+  single-literal `-q SCHED .` guard regressed from 5.7 ms to 7.6 ms.
+- A narrower per-file Darwin byte scanner for quiet/path-only ignore-case
+  alternations also preserved large-fixture status and output sizes, but stayed
+  flat on the target hit at 269.4 ms versus 270.7 ms baseline, made the full
+  no-match quiet guard slower at 1.466 s versus 1.375 s, and kept `-l` flat at
+  4.261 s versus 4.242 s.
+
+The source probes were reverted. A focused regression test remains for the
+quiet ignore-case alternation hit/miss status surface. Raw exports:
+`/tmp/swift-rg-bench/quiet-casei-alt-multilit-ab-1780549381.json`,
+`/tmp/swift-rg-bench/quiet-casei-alt-perfile-ab-1780549686.json`, and
+`/tmp/swift-rg-bench/casei-alt-perfile-miss-path-ab-1780549719.json`.
+
 ## Retained single-file quiet ASCII run-suffix preflight - 2026-06-03
 
 Simple Swift Darwin executable preflight now handles quiet single-file regexes

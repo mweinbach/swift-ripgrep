@@ -33,6 +33,35 @@ struct FeatureTests {
         #expect(errors.isEmpty)
     }
 
+    @Test("quiet ignore-case literal alternation recursive search returns only exit status")
+    func quietIgnoreCaseLiteralAlternationRecursiveSearchReturnsOnlyExitStatus() throws {
+        let root = try TemporaryDirectory()
+        try root.write("plain\n", to: "a.txt")
+        try root.write("link_req_rst happened\n", to: "nested/b.txt")
+
+        var output: [String] = []
+        var errors: [String] = []
+        var exitCode = RipgrepCLI.run(
+            arguments: ["-q", "-i", "ERR_SYS|PME_TURN_OFF|LINK_REQ_RST|CFG_BME_EVT", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 0)
+        #expect(output.isEmpty)
+        #expect(errors.isEmpty)
+
+        output = []
+        errors = []
+        exitCode = RipgrepCLI.run(
+            arguments: ["-q", "-i", "NO_SUCH_TOKEN_A|NO_SUCH_TOKEN_B", root.url.path],
+            stdout: { output.append($0) },
+            stderr: { errors.append($0) }
+        )
+        #expect(exitCode == 1)
+        #expect(output.isEmpty)
+        #expect(errors.isEmpty)
+    }
+
     @Test("quiet required-literal regex recursive search returns only exit status")
     func quietRequiredLiteralRegexRecursiveSearchReturnsOnlyExitStatus() throws {
         let root = try TemporaryDirectory()
