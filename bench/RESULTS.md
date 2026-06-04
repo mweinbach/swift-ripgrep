@@ -966,6 +966,14 @@ Rejected follow-up probe:
   was reverted to the retained 16-worker cap. Raw exports:
   `/tmp/swift-rg-bench/casei-alt-worker32-ab-1780544612.json` and
   `/tmp/swift-rg-bench/casei-alt-worker8-ab-1780544751.json`.
+- Admitting `-c -i 'ERR_SYS|PME_TURN_OFF|LINK_REQ_RST|CFG_BME_EVT'` to the
+  transformed multi-literal line scanner preserved recursive count output
+  byte-for-byte against the saved Swift binary, but it did not improve the
+  slower count row. Against clean `a84ffe0`, count regressed from 4.280 s mean
+  to 4.397 s, while Rust measured 3.243 s. The line-output guard also drifted
+  slower in the same pass at 2.605 s versus 2.412 s baseline. The source probe
+  was reverted. Raw export:
+  `/tmp/swift-rg-bench/casei-alt-count-direct-probe-1780552640.json`.
 
 ## Retained simple no-match count preflight - 2026-06-03
 
