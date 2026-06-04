@@ -13455,8 +13455,7 @@ private func rgSwiftDarwinWriteLargeSimpleLiteralBytesWithTextProof(
         }
 
         if bestAnchorPairCount > 0,
-           bestAnchorPairCount * 1024 <= sampleCount,
-           memchr(base, 0, haystackLength) == nil {
+           bestAnchorPairCount * 1024 <= sampleCount {
             let anchorBase = literalBase.advanced(by: bestAnchorOffset)
             var anchorSearchOffset = bestAnchorOffset
             while anchorSearchOffset <= haystackLength - 2 {
@@ -13518,11 +13517,14 @@ private func rgSwiftDarwinWriteLargeSimpleLiteralBytesWithTextProof(
             }
 
             guard !pendingRanges.isEmpty else {
-                return LiteralLineWriteStats(
+                return memchr(base, 0, haystackLength) == nil ? LiteralLineWriteStats(
                     matchedLines: 0,
                     bytesPrinted: 0,
                     bytesSearched: haystackLength
-                )
+                ) : nil
+            }
+            guard memchr(base, 0, haystackLength) == nil else {
+                return nil
             }
 
             guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {

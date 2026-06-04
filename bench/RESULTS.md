@@ -573,6 +573,17 @@ Retained follow-up:
   plain `Sherlock Holmes` at 208.8 ms patched versus 209.1 ms baseline and
   151.2 ms Rust, while `--no-mmap` improved to 204.2 ms patched versus
   230.7 ms baseline and 151.1 ms Rust.
+- The sparse large simple literal collector now defers its full-file NUL proof
+  until after it collects matching output ranges, while still buffering all
+  stdout until text safety is proven. This removes one early full-file pass from
+  explicit `--no-mmap` plain literal output without changing binary fallback.
+  Patched output, stderr, and status matched the current Swift baseline and Rust
+  for real-subtitles `--no-mmap`, plain output, small no-final-newline controls,
+  binary fallback, and no-match controls. A 16-run A/B measured `--no-mmap
+  'Sherlock Holmes'` at 192.1 ms patched versus 207.6 ms baseline and 149.8 ms
+  Rust; plain output measured 161.3 ms patched versus 164.9 ms baseline. A
+  five-run upstream harness measured `subtitles_en_literal` `--no-mmap` at
+  191.24 ms patched versus 147.92 ms Rust.
 - The direct stdout single-literal branch now uses the same sampled sparse
   adjacent-pair anchor for large case-sensitive matching-line output. This
   targets the default mmap-backed subtitles row that does not use the mapped
@@ -654,6 +665,15 @@ Rejected same-session probe:
   (250.8 ms vs 250.1 ms), while Rust measured 185.2 ms. Plain output was also
   flat/noisy at 206.5 ms baseline versus 207.0 ms patched. The source probe
   was reverted.
+- Routing ASCII boundary literals like `(?-u:\b)Sherlock Holmes(?-u:\b)` through
+  the buffered sparse word-literal writer preserved byte-for-byte parity against
+  current Swift and Rust for the real subtitles corpus, plain and line-numbered
+  output, non-ASCII-adjacent ASCII-boundary controls, binary fallback, no-final
+  newline, no-match, and the neighboring Unicode `-nw` guard. The 16-run A/B was
+  not strong enough to retain: ASCII boundary output moved from 290.4 ms
+  baseline to 287.8 ms patched but with a worse mean (290.3 ms vs 290.8 ms), and
+  Unicode `-nw` moved backward from 239.5 ms to 241.9 ms. The source probe was
+  reverted.
 
 Raw exports and parity artifacts:
 `/tmp/swift-rg-bench/formatted-context-parity-final-1780597504`,
@@ -665,9 +685,15 @@ Raw exports and parity artifacts:
 `/tmp/swift-rg-bench/direct-anchor-parity-1780599335`,
 `/tmp/swift-rg-bench/direct-anchor-parity-extra-1780599400`,
 `/tmp/swift-rg-bench/direct-anchor-ab-1780599347.json`,
+`/tmp/swift-rg-nommap-defer-proof-1780601059/parity`,
+`/tmp/swift-rg-nommap-defer-proof-1780601059/nommap-defer-ab.json`,
+`/tmp/swift-rg-bench/nommap-defer-harness-1780601099/summary.md`,
 `/tmp/swift-rg-bench/word-anchor-parity-1780600003`,
 `/tmp/swift-rg-bench/word-anchor-ab-1780600018.json`,
 `/tmp/swift-rg-bench/word-anchor-harness-1780600057/summary.md`,
+`/tmp/swift-rg-ascii-boundary-route-1780600592/parity`,
+`/tmp/swift-rg-ascii-boundary-route-1780600592/parity-real-subtitles`,
+`/tmp/swift-rg-ascii-boundary-route-1780600592/ascii-boundary-ab.json`,
 `/tmp/swift-rg-bench/context-window-parity-final-1780596088`,
 `/tmp/swift-rg-bench/context-window-ab-1780595658.json`,
 `/tmp/swift-rg-bench/current-subtitles-1780575005/summary.md`,
