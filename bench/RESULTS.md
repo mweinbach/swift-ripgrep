@@ -110,6 +110,21 @@ Rejected follow-up probe:
   source probe was reverted. Raw exports:
   `/tmp/swift-rg-bench/quiet-status-only-hit-noshell-1780533357.json` and
   `/tmp/swift-rg-bench/quiet-status-only-miss-1780533357.json`.
+- A broader Linux benchsuite scout found no lagging full-tree search row to
+  target: literal, mmap literal, default literal, no-literal, ASCII no-literal,
+  word, Unicode word, alternates, case-insensitive alternates, literal casei,
+  regex literal suffix, and Greek/Greek-casei searches all remained Swift wins
+  versus Rust, with ratios from 0.53x to 0.80x. Raw summaries:
+  `/tmp/swift-rg-bench/linux-scout-1780534897/summary.md` and
+  `/tmp/swift-rg-bench/linux-alternates-scout-1780535030/summary.md`.
+- Replacing the quiet byte-literal fast path's small `Data.starts(with:)` BOM
+  arrays with a direct byte-inspection helper preserved targeted quiet hit,
+  miss, hidden, UTF-8 BOM, and UTF-16LE BOM parity against Rust, but regressed
+  the hot rows. A no-shell 200-run A/B measured `-q SCHED linux` at 6.4 ms for
+  the probe versus 5.8 ms baseline, and a 12-run absent-literal guard measured
+  1.058 s versus 1.029 s baseline. The source probe was reverted. Raw exports:
+  `/tmp/swift-rg-bench/quiet-bom-helper-hit-1780535474.json` and
+  `/tmp/swift-rg-bench/quiet-bom-helper-miss-1780535474.json`.
 
 ## Extended root VCS-context reuse to file-path walks - 2026-06-03
 
