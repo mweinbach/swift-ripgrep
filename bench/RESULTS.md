@@ -142,6 +142,23 @@ Artifacts:
 `/tmp/swift-rg-bench/word-binary-proof-ceiling-1780607865`, and
 `/tmp/swift-rg-bench/word-anchor3-probe-1780608098`.
 
+## Rejected no-mmap numbered text-proof shortcut - 2026-06-04
+
+A Swift-only probe skipped the collected line-numbered literal writer's final
+NUL-byte proof to measure the ceiling for explicit
+`--no-mmap -n 'Sherlock Holmes'`. The probe was reverted because it would
+mis-handle binary files with a match before a later NUL byte; the no-mmap
+caller has not independently proven that the mapped haystack is text.
+
+The 12-run A/B showed why this is still a useful lead: default mmap `-n`
+stayed flat at 248.8 ms probe versus 247.7 ms baseline, but explicit
+`--no-mmap -n` improved to 261.3 ms probe versus 295.3 ms baseline and
+204.6 ms Rust. A retained version needs a real text-proof source or an
+integrated binary scan rather than a caller-level `knownTextHaystack` shortcut.
+
+Artifacts:
+`/tmp/swift-rg-bench/literal-lines-proof-ceiling-1780608326`.
+
 ## Rejected text-proof-first no-mmap probe - 2026-06-04
 
 A Swift-only probe moved the large simple-literal writer's whole-file NUL-byte
