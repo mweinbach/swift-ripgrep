@@ -4003,6 +4003,123 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     && !countOnly
                     && !onlyMatching
                 var lineNumberAtSearchOffset = 1
+                if allowDirectStdout,
+                   !fastPath.caseInsensitiveASCII,
+                   !fastPath.wordASCII,
+                   !countOnly,
+                   !countMatchesOnly,
+                   !onlyMatching,
+                   maxCount == Int.max,
+                   literal.count >= 4,
+                   data.count >= 256 * 1024 * 1024 {
+                    let sampleCount = min(data.count, 256 * 1024)
+                    var bestAnchorOffset = 0
+                    var bestAnchorPairCount = Int.max
+                    for anchorOffset in 0..<(literal.count - 1) {
+                        var pairCount = 0
+                        var sampleOffset = 0
+                        while sampleOffset < sampleCount - 1 {
+                            if baseAddress[sampleOffset] == literal[anchorOffset],
+                               baseAddress[sampleOffset + 1] == literal[anchorOffset + 1] {
+                                pairCount += 1
+                            }
+                            sampleOffset += 1
+                        }
+                        if pairCount < bestAnchorPairCount {
+                            bestAnchorOffset = anchorOffset
+                            bestAnchorPairCount = pairCount
+                        }
+                    }
+                    if bestAnchorPairCount > 0,
+                       bestAnchorPairCount * 1024 <= sampleCount {
+                        literal.withUnsafeBufferPointer { needle in
+                            guard let literalBaseAddress = needle.baseAddress else {
+                                return
+                            }
+                            let anchorBase = literalBaseAddress.advanced(by: bestAnchorOffset)
+                            var anchorSearchOffset = bestAnchorOffset
+                            var lineNumberCursor = 0
+                            var lastLineStart = -1
+                            while anchorSearchOffset <= data.count - 2 {
+                                guard let foundPointer = rg_memmem_simple(
+                                    baseAddress.advanced(by: anchorSearchOffset),
+                                    data.count - anchorSearchOffset,
+                                    anchorBase,
+                                    2
+                                ) else {
+                                    break
+                                }
+                                let anchorStart = baseAddress.distance(to: foundPointer)
+                                let matchStart = anchorStart - bestAnchorOffset
+                                guard matchStart >= 0,
+                                      matchStart + literal.count <= data.count else {
+                                    anchorSearchOffset = anchorStart + 1
+                                    continue
+                                }
+                                guard memcmp(
+                                    baseAddress.advanced(by: matchStart),
+                                    literalBaseAddress,
+                                    literal.count
+                                ) == 0 else {
+                                    anchorSearchOffset = anchorStart + 1
+                                    continue
+                                }
+
+                                var lineStart = matchStart
+                                while lineStart > 0, baseAddress[lineStart - 1] != UInt8(ascii: "\n") {
+                                    lineStart -= 1
+                                }
+                                let remaining = data.count - matchStart
+                                let newlinePointer = memchr(
+                                    baseAddress.advanced(by: matchStart),
+                                    Int32(UInt8(ascii: "\n")),
+                                    remaining
+                                )
+                                let outputEnd: Int
+                                if let newlinePointer {
+                                    outputEnd = baseAddress.distance(
+                                        to: newlinePointer.assumingMemoryBound(to: UInt8.self)
+                                    ) + 1
+                                } else {
+                                    outputEnd = data.count
+                                }
+                                if lineStart != lastLineStart {
+                                    matchedLineCount += 1
+                                    lastLineStart = lineStart
+                                    if canTrackLineNumbersInLiteralScan {
+                                        lineNumberAtSearchOffset += Int(rg_memcount_byte(
+                                            baseAddress.advanced(by: lineNumberCursor),
+                                            lineStart - lineNumberCursor,
+                                            UInt8(ascii: "\n")
+                                        ))
+                                        lineNumberCursor = outputEnd
+                                        writePathPrefixIfNeeded()
+                                        writeDarwinLineNumberPrefix(
+                                            lineNumberAtSearchOffset,
+                                            writeBytes: writeBytes
+                                        )
+                                        lineNumberAtSearchOffset += 1
+                                    } else {
+                                        writeMatchingLinePrefixes(lineStart: lineStart, matchStart: matchStart)
+                                    }
+                                    writeBytes(UnsafeRawBufferPointer(
+                                        start: rawBaseAddress.advanced(by: lineStart),
+                                        count: outputEnd - lineStart
+                                    ))
+                                    if newlinePointer == nil {
+                                        var newline = UInt8(ascii: "\n")
+                                        withUnsafeBytes(of: &newline) { buffer in
+                                            writeBytes(buffer)
+                                        }
+                                    }
+                                }
+                                bytesSearched = outputEnd
+                                anchorSearchOffset = outputEnd + bestAnchorOffset
+                            }
+                        }
+                        return
+                    }
+                }
                 if countMatchesOnly && allowDirectStdout && !fastPath.wordASCII {
                     // Direct stdout count-matches cannot print stats/JSON, so only the total is observable here.
                     if literal.count == 1 {

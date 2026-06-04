@@ -573,6 +573,17 @@ Retained follow-up:
   plain `Sherlock Holmes` at 208.8 ms patched versus 209.1 ms baseline and
   151.2 ms Rust, while `--no-mmap` improved to 204.2 ms patched versus
   230.7 ms baseline and 151.1 ms Rust.
+- The direct stdout single-literal branch now uses the same sampled sparse
+  adjacent-pair anchor for large case-sensitive matching-line output. This
+  targets the default mmap-backed subtitles row that does not use the mapped
+  no-mmap preflight. Patched output, stderr, and status matched the current
+  Swift baseline and Rust for plain, `-n`, `--no-mmap`, `-m1`,
+  no-final-newline, binary fallback, `--with-filename`, `--with-filename -n`,
+  `--no-filename -n`, and a custom field separator. A 16-run A/B measured
+  plain `Sherlock Holmes` at 161.6 ms patched versus 208.5 ms baseline and
+  149.7 ms Rust. The `-n` row improved to 224.9 ms patched versus 245.3 ms
+  baseline and 178.8 ms Rust; `--no-mmap` stayed flat because it remains on the
+  mapped preflight path.
 
 Rejected same-session probe:
 
@@ -623,12 +634,25 @@ Rejected same-session probe:
   output to a buffered-limit error:
   `haystack size 1622661645 exceeds buffered limit 268435456`. The source probe
   was reverted and the retained work stayed inside the mapped no-mmap preflight.
+- A line-numbered sparse adjacent-pair anchor route for large simple literal
+  output preserved byte-for-byte parity against current Swift and Rust for
+  `-n`, plain, `--no-mmap`, `-n -m1`, no-final-newline, and binary fallback
+  controls, but the 16-run A/B was too small to keep: `-n 'Sherlock Holmes'`
+  moved from 250.4 ms baseline to 248.7 ms patched with nearly flat means
+  (250.8 ms vs 250.1 ms), while Rust measured 185.2 ms. Plain output was also
+  flat/noisy at 206.5 ms baseline versus 207.0 ms patched. The source probe
+  was reverted.
 
 Raw exports and parity artifacts:
 `/tmp/swift-rg-bench/formatted-context-parity-final-1780597504`,
 `/tmp/swift-rg-bench/formatted-context-ab-final-1780597523.json`,
 `/tmp/swift-rg-bench/anchor-simple-parity-1780598172`,
 `/tmp/swift-rg-bench/anchor-simple-ab-1780598182.json`,
+`/tmp/swift-rg-bench/line-anchor-parity-1780598807`,
+`/tmp/swift-rg-bench/line-anchor-ab-1780598817.json`,
+`/tmp/swift-rg-bench/direct-anchor-parity-1780599335`,
+`/tmp/swift-rg-bench/direct-anchor-parity-extra-1780599400`,
+`/tmp/swift-rg-bench/direct-anchor-ab-1780599347.json`,
 `/tmp/swift-rg-bench/context-window-parity-final-1780596088`,
 `/tmp/swift-rg-bench/context-window-ab-1780595658.json`,
 `/tmp/swift-rg-bench/current-subtitles-1780575005/summary.md`,
