@@ -15872,6 +15872,25 @@ private func rgSwiftDarwinWriteWordLiteralLineBytes(
         }
         if bestAnchorPairCount > 0,
            bestAnchorPairCount * 1024 <= sampleCount {
+            let textProofGroup = DispatchGroup()
+            let textProofResult = SwiftDarwinConcurrentTextProof()
+            let proofBaseAddress = UInt(bitPattern: base)
+            let proofLength = haystackLength
+            textProofGroup.enter()
+            DispatchQueue.global(qos: .userInitiated).async {
+                let proofBase = UnsafeRawPointer(bitPattern: proofBaseAddress)!
+                    .assumingMemoryBound(to: UInt8.self)
+                if let binaryPointer = memchr(proofBase, 0, proofLength) {
+                    textProofResult.binaryOffset = proofBase.distance(
+                        to: binaryPointer.assumingMemoryBound(to: UInt8.self)
+                    )
+                }
+                textProofGroup.leave()
+            }
+            defer {
+                textProofGroup.wait()
+            }
+
             let anchorBase = literalBase.advanced(by: bestAnchorOffset)
             var anchorSearchOffset = bestAnchorOffset
             var lineNumberCursor = 0
@@ -15948,11 +15967,12 @@ private func rgSwiftDarwinWriteWordLiteralLineBytes(
                 anchorSearchOffset = outputEnd + bestAnchorOffset
             }
 
+            textProofGroup.wait()
+            let binaryOffset = textProofResult.binaryOffset
             guard !pendingLines.isEmpty else {
-                return memchr(base, 0, haystackLength) == nil ? 0 : nil
+                return binaryOffset < 0 ? 0 : nil
             }
-            if let binaryPointer = memchr(base, 0, haystackLength) {
-                let binaryOffset = base.distance(to: binaryPointer.assumingMemoryBound(to: UInt8.self))
+            if binaryOffset >= 0 {
                 return emitBinaryWordMatch(binaryOffset: binaryOffset)
             }
 

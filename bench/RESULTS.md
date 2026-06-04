@@ -8,6 +8,29 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Word literals overlap binary proof - 2026-06-04
+
+The large word-literal writer now starts its whole-file NUL-byte proof on a
+background queue while the main thread collects rare-pair anchored matching
+lines. Output still waits for the proof before flushing, and every early exit
+from the branch joins the proof before the mmap can be released, preserving the
+existing Rust-compatible binary-file behavior.
+
+Patched stdout, stderr, and status matched Rust for real subtitle text and for
+270 MiB hit-before-NUL and binary no-match fixtures across Unicode `-nw`,
+ASCII-boundary `-n '(?-u:\b)...(?-u:\b)'`, and explicit no-mmap word modes. An
+18-run guard measured Unicode `-nw 'Sherlock Holmes'` at 157.3 ms patched
+versus 259.1 ms baseline and 211.3 ms Rust. The ASCII-boundary row measured
+152.3 ms patched versus 257.1 ms baseline and 200.0 ms Rust, and explicit
+`--no-mmap -nw` measured 157.6 ms patched versus 260.2 ms baseline and
+197.7 ms Rust. After adding the proof-lifetime `defer`, a 10-run confirmation
+measured Unicode `-nw` at 154.4 ms patched versus 256.4 ms baseline and
+209.0 ms Rust, with ASCII-boundary at 156.9 ms patched versus 258.3 ms
+baseline and 210.2 ms Rust.
+
+Artifacts:
+`/tmp/swift-rg-bench/word-proof-overlap-1780610138`.
+
 ## Default numbered literals use collected preflight - 2026-06-04
 
 Large default mapped literal searches with line numbers now use the collected
