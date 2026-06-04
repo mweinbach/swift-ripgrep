@@ -761,6 +761,15 @@ The source probe was reverted. Raw exports:
 `/tmp/swift-rg-bench/quiet-prefix-noappend-ab-1780547717.json` and
 `/tmp/swift-rg-bench/quiet-prefix-byte-noappend-hit-ab-1780548114.json`.
 
+A smaller follow-up skipped `prefixProbeBytes` accounting only for the matching
+prefix haystack while preserving miss accounting for fallback budgets. It
+preserved focused quiet hit and full-miss parity, but regressed every measured
+hit row against clean `4684515`: `SCHED` moved from 6.18 ms mean / 5.68 ms
+median to 6.55 ms / 6.32 ms, `EXPORT_SYMBOL` from 5.88 ms / 5.66 ms to
+6.11 ms / 5.78 ms, and `[A-Z]+_RESUME` from 9.59 ms / 8.86 ms to 9.89 ms /
+9.18 ms. The source probe was reverted. Raw export:
+`/tmp/swift-rg-bench/quiet-prefix-bytecount-hit-ab-1780548722.json`.
+
 ## Retained single-file quiet ASCII run-suffix preflight - 2026-06-03
 
 Simple Swift Darwin executable preflight now handles quiet single-file regexes
