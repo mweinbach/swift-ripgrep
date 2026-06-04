@@ -16280,9 +16280,13 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
         }
 
         let sampleCount = min(haystackLength, 256 * 1024)
-        var byteCounts = [Int](repeating: 0, count: 256)
-        for offset in 0..<sampleCount {
-            byteCounts[Int(base[offset])] += 1
+        let pairSampleCount = max(sampleCount - 1, 0)
+        var pairCounts = [Int](repeating: 0, count: 1 << 16)
+        if pairSampleCount > 0 {
+            for offset in 0..<pairSampleCount {
+                let pair = Int(base[offset]) << 8 | Int(base[offset + 1])
+                pairCounts[pair] += 1
+            }
         }
 
         var anchored: [AnchoredLiteral] = []
@@ -16292,13 +16296,14 @@ private func rgSwiftDarwinWriteMultiLiteralLines(
             var bestOffset = 0
             var bestCount = Int.max
             for offset in 0..<(literal.count - 1) {
-                let count = byteCounts[Int(literal[offset])]
+                let pair = Int(literal[offset]) << 8 | Int(literal[offset + 1])
+                let count = pairCounts[pair]
                 if count < bestCount {
                     bestOffset = offset
                     bestCount = count
                 }
             }
-            guard bestCount * 64 <= sampleCount else {
+            guard bestCount * 64 <= pairSampleCount else {
                 return nil
             }
             anchored.append(AnchoredLiteral(

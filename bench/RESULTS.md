@@ -139,6 +139,15 @@ Retained follow-up:
   254.4 ms and 285.7 ms respectively. A 5-run upstream harness confirmation
   measured `subtitles_en_alternate` at 432.97 ms and the `-n` row at
   491.66 ms. The neighboring single-literal rows stayed effectively unchanged.
+- The rare-anchor picker now samples adjacent byte-pair frequency instead of
+  single-byte frequency, then still verifies the full literal before emitting.
+  Patched plain, `-n`, and no-match alternation output/status/stderr matched the
+  current Swift baseline byte-for-byte, and patched output/status matched Rust.
+  A 12-run A/B measured plain alternation at 413.3 ms patched versus 433.6 ms
+  baseline, and numbered alternation at 484.7 ms patched versus 496.5 ms
+  baseline, with Rust at 253.8 ms and 288.3 ms respectively. A 5-run upstream
+  harness confirmation measured `subtitles_en_alternate` at 409.94 ms and the
+  `-n` row at 468.37 ms.
 - The single-literal writer now reuses the already-found first case-sensitive
   match for unnumbered output and skips that uncounted proof scan for
   line-numbered output, where the counted scanner can prove the first match and
@@ -176,6 +185,9 @@ Raw exports and parity artifacts:
 `/tmp/swift-rg-bench/firstmatch-skip-line-prescan-harness-1780577178/summary.md`,
 `/tmp/swift-rg-bench/firstmatch-skip-line-prescan-parity-1780577042`,
 `/tmp/swift-rg-bench/firstmatch-skip-line-prescan-miss-parity-1780577267`,
+`/tmp/swift-rg-bench/pair-anchor-probe/ab-1780577742.json`,
+`/tmp/swift-rg-bench/pair-anchor-probe/harness-1780577796/summary.md`,
+`/tmp/swift-rg-bench/pair-anchor-probe/parity-1780577730`,
 `/tmp/swift-rg-bench/suffix-plain-alt-ab-1780575296.json`, and
 `/tmp/swift-rg-bench/suffix-plain-alt-parity-1780575285`,
 `/tmp/swift-rg-bench/leading-pair-alt-ab-1780575870.json`, and
