@@ -66,6 +66,23 @@ private struct DirectoryVisit {
     let physicalPath: String
 }
 
+private final class ConcurrentFastSearchState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var foundMatch = false
+
+    func shouldStop() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return foundMatch
+    }
+
+    func markMatch() {
+        lock.lock()
+        foundMatch = true
+        lock.unlock()
+    }
+}
+
 private struct DirectoryChild {
     let url: URL
     let name: String
@@ -742,6 +759,53 @@ public struct FileWalker: @unchecked Sendable {
             }
             return false
         }
+    }
+
+    func firstConcurrentVisitedFastSearchFilePrefixWithMessages(
+        for options: RipgrepOptions,
+        prefixLimit: Int,
+        workerCount: Int,
+        visitHaystack: @Sendable @escaping (Haystack) -> Bool
+    ) throws -> (results: FileWalkResults, exhausted: Bool)? {
+        let workerCount = max(1, workerCount)
+        let prefixLimit = max(0, prefixLimit)
+        let queue = DispatchQueue.global(qos: .userInitiated)
+        let group = DispatchGroup()
+        let pending = DispatchSemaphore(value: workerCount * 2)
+        let state = ConcurrentFastSearchState()
+        var visited = 0
+        var exhausted = false
+
+        let results = try fastSearchFileWalkResults(for: options) { haystack, _ in
+            guard !state.shouldStop() else {
+                return true
+            }
+            guard visited < prefixLimit else {
+                exhausted = true
+                return true
+            }
+            visited += 1
+            pending.wait()
+            guard !state.shouldStop() else {
+                pending.signal()
+                return true
+            }
+            group.enter()
+            queue.async {
+                if visitHaystack(haystack) {
+                    state.markMatch()
+                }
+                pending.signal()
+                group.leave()
+            }
+            return state.shouldStop()
+        }
+
+        group.wait()
+        guard let results else {
+            return nil
+        }
+        return (results, exhausted)
     }
 
     func firstVisitedFastSearchFilePrefixWithMessages(

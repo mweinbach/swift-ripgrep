@@ -154,6 +154,37 @@ Raw hyperfine exports:
 `/tmp/swift-rg-bench/current-next-target-refresh-1780565228.json` and
 `/tmp/swift-rg-bench/current-word-noshell-refresh-1780565310.json`.
 
+## Bounded concurrent quiet ignore-case alternation prefix - 2026-06-04
+
+Quiet recursive ASCII ignore-case multi-literal searches now get a bounded
+concurrent fast-search prefix after the four-file output-order scout misses.
+The probe searches up to 1,536 fast-walked haystacks with the existing raw
+byte status scanner while the fast walker is still producing files. It is
+limited to plain quiet status output: if the raw byte scanner cannot handle a
+haystack, or if the bounded prefix misses, the search falls back to the existing
+full-tree path so no-match economics stay in the old band.
+
+Status/stdout/stderr matched Rust for the late-hit four-literal alternation, a
+full no-match alternation, and the early-hit `ERR_SYS|PM_RESUME|EXPORT_SYMBOL`
+guard.
+
+Same-session release A/B against detached baseline `584426f`:
+
+| Case | Patched Swift | Baseline `584426f` |
+| --- | ---: | ---: |
+| late-hit quiet ignore-case alternation | 25.5 ms mean | 268.6 ms |
+| full no-match quiet alternation | 1.134 s | 1.131 s |
+| early-hit quiet alternation guard | 9.7 ms noisy mean | 8.0 ms |
+
+The order-flipped confirmation kept the target win and flattened the early-hit
+guard: baseline early-hit measured 8.2 ms versus patched 7.8 ms, baseline
+late-hit measured 268.9 ms versus patched 26.7 ms, and the full miss measured
+1.096 s baseline versus 1.118 s patched.
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/bounded-concurrent-quiet-casei-ab-1780566105.json` and
+`/tmp/swift-rg-bench/bounded-concurrent-quiet-casei-confirm-1780566175.json`.
+
 ## Quiet case-insensitive alternation prefix scout - 2026-06-04
 
 Recursive quiet ASCII ignore-case literal alternations now get a tiny

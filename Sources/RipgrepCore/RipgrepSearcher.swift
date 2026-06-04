@@ -127,6 +127,44 @@ private final class ParallelSearchCompletion: @unchecked Sendable {
     }
 }
 
+private final class QuietConcurrentSearchState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var filesSearched = 0
+    private var matchedResult: SearchFileResult?
+    private var abandoned = false
+
+    func shouldAbandon() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return abandoned
+    }
+
+    func abandon() {
+        lock.lock()
+        abandoned = true
+        lock.unlock()
+    }
+
+    func store(_ result: SearchFileResult) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if result.searched {
+            filesSearched += 1
+        }
+        let hasMatch = result.hasMatch
+        if hasMatch, matchedResult == nil {
+            matchedResult = result
+        }
+        return hasMatch
+    }
+
+    func snapshot() -> (filesSearched: Int, matchedResult: SearchFileResult?, abandoned: Bool) {
+        lock.lock()
+        defer { lock.unlock() }
+        return (filesSearched, matchedResult, abandoned)
+    }
+}
+
 private struct MultilineSpanCandidate {
     let span: MatchSpan
     let startLineIndex: Int
@@ -575,6 +613,39 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     filesSearched += prefixFilesSearched
                     searchMessages.append(contentsOf: prefixSearchMessages)
                     return searchResults(walkResults: prefixWalkResults.results)
+                }
+            }
+            let concurrentState = QuietConcurrentSearchState()
+
+            @Sendable func visitCaseInsensitiveMultiLiteralConcurrent(_ haystack: Haystack) -> Bool {
+                guard !concurrentState.shouldAbandon(),
+                      let fastResult = searchQuietByteLiteralFirstMatch(
+                        haystack,
+                        fastPath: quietCaseInsensitiveMultiLiteralPrefixFastPath,
+                        options: options
+                      ) else {
+                    concurrentState.abandon()
+                    return true
+                }
+
+                return concurrentState.store(fastResult)
+            }
+
+            let concurrentPrefixLimit = 1_536
+            if let concurrentWalkResults = try fileWalker.firstConcurrentVisitedFastSearchFilePrefixWithMessages(
+                for: options,
+                prefixLimit: concurrentPrefixLimit,
+                workerCount: effectiveWorkerCount(matcher: matcher, options: options),
+                visitHaystack: visitCaseInsensitiveMultiLiteralConcurrent
+            ) {
+                let snapshot = concurrentState.snapshot()
+                let didAbandon = snapshot.abandoned
+                if !didAbandon {
+                    filesSearched += snapshot.filesSearched
+                    matchedResult = snapshot.matchedResult
+                }
+                if !didAbandon, snapshot.matchedResult != nil || !concurrentWalkResults.exhausted {
+                    return searchResults(walkResults: concurrentWalkResults.results)
                 }
             }
             return nil
