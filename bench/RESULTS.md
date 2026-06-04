@@ -1636,6 +1636,14 @@ Rejected follow-up probe:
   `[A-Z]{3}_RESUME` was neutral under noise at 9.24 ms / 8.88 ms versus
   9.52 ms / 8.83 ms baseline, so the source probe was reverted. Raw export:
   `/tmp/swift-rg-bench/runsuffix-direct-lexical-ab-1780546895.json`.
+- Returning summary-only `SearchResults` from the quiet required-literal prefix
+  result path preserved quiet hit/miss status and empty stdout/stderr parity,
+  but did not improve the run-suffix target. A same-session A/B against clean
+  `14e8369` measured quiet `[A-Z]+_RESUME` at 9.98 ms mean / 9.36 ms median
+  for the probe versus 9.67 ms / 8.81 ms baseline and 5.91 ms / 5.68 ms for
+  Rust. Exact-count quiet `[A-Z]{3}_RESUME` was also slower at 10.16 ms /
+  9.60 ms versus 10.11 ms / 9.38 ms baseline. The source probe was reverted.
+  Raw export: `/tmp/swift-rg-bench/quiet-summary-result-ab-1780547439.json`.
 - Increasing the quiet ASCII run-suffix output-order prefix from 512 files to
   1024 and then 768 did not produce a durable recursive-hit win. The 1024 probe
   regressed `[A-Z]+_RESUME` to 9.9 ms versus 9.3 ms baseline while leaving the
