@@ -100,6 +100,16 @@ Rejected follow-up probe:
   `/tmp/swift-rg-bench/quiet-files-basename-helper-default-1780533394.json`,
   `/tmp/swift-rg-bench/quiet-files-basename-helper-hidden-novcs-1780533394.json`,
   and `/tmp/swift-rg-bench/quiet-files-basename-helper-noshell-1780533402.json`.
+- Replacing quiet byte-literal `SearchFileResult` construction with a
+  status-only scanner preserved output-suppressed quiet behavior against Rust
+  for `SCHED`, absent-literal, hidden, and no-ignore controls, and preserved
+  stats/binary fallback behavior against the exact `e92f11a` Swift baseline.
+  It still regressed both hot rows: a no-shell 200-run A/B measured
+  `-q SCHED linux` at 6.4 ms for the probe versus 5.9 ms baseline, and a
+  12-run absent-literal guard measured 1.071 s versus 1.028 s baseline. The
+  source probe was reverted. Raw exports:
+  `/tmp/swift-rg-bench/quiet-status-only-hit-noshell-1780533357.json` and
+  `/tmp/swift-rg-bench/quiet-status-only-miss-1780533357.json`.
 
 ## Extended root VCS-context reuse to file-path walks - 2026-06-03
 
