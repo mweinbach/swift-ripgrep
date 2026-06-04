@@ -12014,6 +12014,26 @@ struct MiscTests {
         #expect(exactByteMiss.exitCode == 1)
         #expect(exactByteMiss.output.isEmpty)
         #expect(exactByteMiss.error.isEmpty)
+
+        let exactUppercaseFilesWithMatches = try runExecutableResult([
+            "--no-config",
+            "-l",
+            "[A-Z]{3}_RESUME",
+            root.path("run-suffix-hit.txt"),
+        ]) {}
+        #expect(exactUppercaseFilesWithMatches.exitCode == 0)
+        #expect(exactUppercaseFilesWithMatches.output == Data("\(root.path("run-suffix-hit.txt"))\n".utf8))
+        #expect(exactUppercaseFilesWithMatches.error.isEmpty)
+
+        let exactUppercaseFilesWithoutMatch = try runExecutableResult([
+            "--no-config",
+            "--files-without-match",
+            "[A-Z]{3}_RESUME",
+            root.path("run-suffix-miss.txt"),
+        ]) {}
+        #expect(exactUppercaseFilesWithoutMatch.exitCode == 0)
+        #expect(exactUppercaseFilesWithoutMatch.output == Data("\(root.path("run-suffix-miss.txt"))\n".utf8))
+        #expect(exactUppercaseFilesWithoutMatch.error.isEmpty)
         #endif
     }
 

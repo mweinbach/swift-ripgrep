@@ -8348,14 +8348,16 @@ public struct RipgrepSearcher: @unchecked Sendable {
         fileURL: URL,
         options: RipgrepOptions
     ) -> SearchFileResult? {
-        let firstMatchOnly = options.quiet && !options.stats
+        let filesWithMatchesMode = options.printMode == .filesWithMatches
+        let filesWithoutMatchMode = options.printMode == .filesWithoutMatch
+        let pathOnlyOutput = !options.json && !options.stats && (filesWithMatchesMode || filesWithoutMatchMode)
+        let firstMatchOnly = (options.quiet && !options.stats) || pathOnlyOutput
         let statsOnly = options.quiet && options.stats
         let lineOutput = !options.quiet
             && !options.json
             && !options.stats
             && options.printMode == .matchingLines
         guard firstMatchOnly || statsOnly || lineOutput,
-              options.printMode == .matchingLines,
               case .automatic = options.encodingMode,
               !options.json,
               !options.fixedStrings,
@@ -8539,19 +8541,11 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     if firstMatchOnly {
                         return SearchFileResult(
                             fileURL: fileURL,
-                            matches: [
-                                SearchMatch(
-                                    fileURL: fileURL,
-                                    lineNumber: 1,
-                                    column: nil,
-                                    line: "",
-                                    absoluteOffset: matchStart,
-                                    matchCount: 1,
-                                    spans: []
-                                ),
-                            ],
+                            matches: [],
                             bytesSearched: min(searchableCount, suffixStart + suffix.count - contentStart),
-                            searched: true
+                            searched: true,
+                            supplementalMatchedLines: 1,
+                            supplementalMatches: 1
                         )
                     }
                     if lineOutput {

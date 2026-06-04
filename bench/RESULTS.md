@@ -1592,6 +1592,28 @@ same-session guard comparisons with 60-80 timed runs.
 Raw hyperfine export:
 `/tmp/swift-rg-bench/suffix-prefix512-ab-1780457067.json`.
 
+Retained path-only fix:
+
+- Plain `-l` / `--files-with-matches` and `--files-without-match` ASCII
+  run-suffix searches now use the same raw content scanner as quiet first-match
+  output when JSON and stats are disabled. This fixes exact-count path-only
+  parity for cases like `-l '[A-Z]{3}_RESUME'`: before the fix, Swift missed
+  the single-file and recursive Linux hits that Rust reported.
+- Patched Swift matched Rust status and stdout for single-file
+  `-l '[A-Z]{3}_RESUME'`, `--files-without-match '[A-Z]{3}_RESUME'`,
+  `-l '[A-Z]+_RESUME'`, and `--files-without-match '[Z]{3}_RESUME'` controls.
+  Recursive Linux sorted output also matched Rust for `-l '[A-Z]{3}_RESUME'`
+  with 840 paths and `--files-without-match '[Z]{3}_RESUME'` with 79,320
+  paths.
+
+| Path-only run-suffix case | Swift | Rust |
+| --- | ---: | ---: |
+| `-l '[A-Z]{3}_RESUME' linux` | 7.0 ms mean | 7.7 ms |
+| `-l '[A-Z]+_RESUME' linux` | 7.1 ms | 7.1 ms |
+
+Raw hyperfine export:
+`/tmp/swift-rg-bench/runsuffix-pathonly-fix-1780545517.json`.
+
 Rejected follow-up probe:
 
 - Increasing the quiet ASCII run-suffix output-order prefix from 512 files to
