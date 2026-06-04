@@ -8,6 +8,31 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected buffered no-mmap streaming probe - 2026-06-04
+
+A Swift-only probe added a one-pass buffered streaming writer for the simplest
+plain `--no-mmap` literal output. The writer collected matching-line output
+until the haystack had been checked for BOM/NUL bytes, then flushed only after
+the file was proven safe; binary or oversized-output cases could still return
+nil without leaking partial stdout. The probe was reverted because it preserved
+output but did not materially improve the no-mmap subtitle row or the measured
+memory footprint.
+
+Patched stdout, stderr, and status matched Rust for real subtitle text across
+plain no-mmap, default, line-numbered, and case-insensitive no-mmap controls,
+and for the large binary fixture under default and no-mmap. A five-run
+`subtitles_en_literal` harness measured default at 168.3 ms Swift versus
+159.5 ms Rust, explicit no-mmap at 195.3 ms Swift versus 157.8 ms Rust, and
+the line-numbered control at 180.8 ms Swift versus 187.6 ms Rust. The rebuilt
+baseline for the same family measured no-mmap at 196.0 ms Swift, so the
+runtime delta was too small for the added path. A `/usr/bin/time -l` sanity
+check on the patched no-mmap command still reported roughly 1.6 GB maximum RSS.
+
+Artifacts:
+`/tmp/swift-rg-bench/nommap-buffered-stream-parity-1780612623`,
+`/tmp/swift-rg-bench/nommap-buffered-stream-probe-1780612631`, and
+`/tmp/swift-rg-bench/route-sanity-nommap-patched.err`.
+
 ## Rejected three-byte literal anchor probe - 2026-06-04
 
 A Swift-only probe changed the single-literal direct writer's rare-anchor
