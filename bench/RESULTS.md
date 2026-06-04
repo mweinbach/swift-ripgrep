@@ -34,6 +34,31 @@ Raw hyperfine exports:
 `/tmp/swift-rg-bench/word-contains-rareanchor-noshell-1780538960.json`, and
 `/tmp/swift-rg-bench/word-contains-rareanchor-hitguard-1780538982.json`.
 
+## Dominant literals for matching-line output - 2026-06-03
+
+Matching-line multi-literal output now drops redundant superstring literals
+after proving the mapped file is text. For line output, a shorter literal
+dominates any longer literal that contains it because both produce the same
+matched-line set; count-matches, only-matching, replacement, vimgrep, and
+binary fallback semantics stay on their existing routes.
+
+Output, stderr, and status matched the saved `d609d8c` Swift binary and Rust
+for repeated `-e literal -e absentliteral`, pipe alternation, all-present,
+no-match, numbered output, only-matching superstring output, and binary fallback
+controls. A focused executable regression covers numbered matching-line output
+and the only-matching superstring guard.
+
+| Case | Patched Swift | Baseline `d609d8c` | Rust reference |
+| --- | ---: | ---: | ---: |
+| `-e literal -e absentliteral` | 31.9 ms mean / 29.8-49.4 ms range | 76.0 ms / 72.1-95.8 ms | 45.9 ms / 43.6-57.3 ms |
+| `literal\|absentliteral` | 33.5 ms / 31.8-53.6 ms | 79.3 ms / 74.9-99.7 ms | not remeasured |
+| all-present guard `-e alpha -e theta` | 14.1 ms / 12.8-30.9 ms | 13.6 ms / 12.5-27.0 ms | not remeasured |
+| no-match guard `-e absentliteral -e otherabsent` | 12.8 ms / 11.5-27.1 ms | 12.4 ms / 11.4-29.3 ms | not remeasured |
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/dominant-line-literals-ab-1780542380.json` and
+`/tmp/swift-rg-bench/dominant-line-literals-guards-1780542429.json`.
+
 ## Raw-absent shortcut for word count misses - 2026-06-03
 
 Single-literal word count output now uses the existing rare-anchor/raw-literal

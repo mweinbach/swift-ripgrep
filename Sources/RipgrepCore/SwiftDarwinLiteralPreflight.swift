@@ -10841,6 +10841,38 @@ public enum SwiftDarwinLiteralPreflight {
         let base = UnsafeRawPointer(mapped).assumingMemoryBound(to: UInt8.self)
         let plainLineOutput = emitLines && maxCount == nil
         let countLineOutput = !emitLines
+        let reducedLineOutputLiterals = emitLines ? dominantLineOutputLiterals(literals) : literals
+        let lineOutputTextProven: Bool
+        let outputLiterals: [[UInt8]]
+        if emitLines, reducedLineOutputLiterals != literals {
+            if memchr(base, 0, haystackLength) == nil {
+                lineOutputTextProven = true
+                outputLiterals = reducedLineOutputLiterals
+            } else {
+                lineOutputTextProven = false
+                outputLiterals = literals
+            }
+        } else {
+            lineOutputTextProven = false
+            outputLiterals = reducedLineOutputLiterals
+        }
+        let resultMaxCount = maxCount ?? Int.max
+        if emitLines,
+           lineOutputTextProven,
+           !trimLeadingWhitespace,
+           outputLiterals.count == 1 {
+            return rgSwiftDarwinWriteSingleActiveMultiLiteralLines(
+                base,
+                haystackLength: haystackLength,
+                literal: outputLiterals[0],
+                maxCount: resultMaxCount,
+                lineNumber: lineNumber,
+                lineNumberFieldSeparator: lineNumberFieldSeparator,
+                linePrefix: linePrefix,
+                headingPrefix: headingPrefix,
+                emitLines: emitLines
+            )
+        }
         if countLineOutput,
            !lineNumber,
            linePrefix.isEmpty,
@@ -10866,9 +10898,8 @@ public enum SwiftDarwinLiteralPreflight {
            let prunedLiterals = rgSwiftDarwinPruneMultiLiteralsWithAbsentBytes(
             base,
             haystackLength: haystackLength,
-            literals: literals
+            literals: outputLiterals
            ) {
-            let resultMaxCount = maxCount ?? Int.max
             if prunedLiterals.isEmpty {
                 return rg_darwin_literal_file_result(
                     status: 0,
@@ -10906,8 +10937,8 @@ public enum SwiftDarwinLiteralPreflight {
         return rgSwiftDarwinWriteMultiLiteralLines(
             base,
             haystackLength: haystackLength,
-            literals: literals,
-            maxCount: maxCount ?? Int.max,
+            literals: outputLiterals,
+            maxCount: resultMaxCount,
             lineNumber: lineNumber,
             lineNumberFieldSeparator: lineNumberFieldSeparator,
             linePrefix: linePrefix,
@@ -11983,6 +12014,30 @@ private func distinctExactLineLiterals(_ literals: [[UInt8]]) -> [[UInt8]]? {
         }
     }
     return distinct
+}
+
+private func dominantLineOutputLiterals(_ literals: [[UInt8]]) -> [[UInt8]] {
+    guard literals.allSatisfy({ !$0.contains(UInt8(ascii: "\n")) }) else {
+        return literals
+    }
+
+    var distinct: [[UInt8]] = []
+    distinct.reserveCapacity(literals.count)
+    for literal in literals where !distinct.contains(literal) {
+        distinct.append(literal)
+    }
+
+    guard distinct.count > 1 else {
+        return distinct
+    }
+
+    return distinct.enumerated().compactMap { candidateIndex, candidate in
+        for (otherIndex, other) in distinct.enumerated()
+            where otherIndex != candidateIndex && containsLiteral(other, in: candidate) {
+            return nil
+        }
+        return candidate
+    }
 }
 
 private func distinctASCIICaseInsensitiveExactLineLiterals(_ literals: [[UInt8]]) -> [[UInt8]]? {
@@ -15690,7 +15745,8 @@ private func rgSwiftDarwinWriteSingleActiveMultiLiteralLines(
     lineNumberFieldSeparator: [UInt8],
     linePrefix: [UInt8],
     headingPrefix: [UInt8],
-    emitLines: Bool
+    emitLines: Bool,
+    knownTextHaystack: Bool = true
 ) -> rg_darwin_literal_file_result? {
     literal.withUnsafeBufferPointer { literalBuffer in
         guard let stats = rgSwiftDarwinWriteLiteralBytes(
@@ -15705,7 +15761,7 @@ private func rgSwiftDarwinWriteSingleActiveMultiLiteralLines(
             headingPrefix: headingPrefix,
             emitLines: emitLines,
             maxCount: maxCount,
-            knownTextHaystack: true
+            knownTextHaystack: knownTextHaystack
         ) else {
             return nil
         }

@@ -2329,6 +2329,34 @@ struct MiscTests {
 
         #expect(String(decoding: multiByteOutput, as: UTF8.self) == "2:bravo\n4:delta\n")
 
+        try root.write("literal\nabsentliteral\nother\n", to: "contained-literals.txt")
+        let containedLiteralLineOutput = try runExecutableData([
+            "-n",
+            "-e",
+            "literal",
+            "-e",
+            "absentliteral",
+            root.path("contained-literals.txt"),
+        ], fixture: {})
+        #expect(String(decoding: containedLiteralLineOutput, as: UTF8.self) == """
+        1:literal
+        2:absentliteral
+
+        """)
+        let containedLiteralOnlyMatchingOutput = try runExecutableData([
+            "-o",
+            "-e",
+            "absentliteral",
+            "-e",
+            "literal",
+            root.path("contained-literals.txt"),
+        ], fixture: {})
+        #expect(String(decoding: containedLiteralOnlyMatchingOutput, as: UTF8.self) == """
+        literal
+        absentliteral
+
+        """)
+
         let ignoreCaseMultiByteOutput = try runExecutableData([
             "-i",
             "BRAVO|DELTA",
