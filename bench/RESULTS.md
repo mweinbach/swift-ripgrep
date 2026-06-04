@@ -31,6 +31,27 @@ Raw hyperfine exports:
 `/tmp/swift-rg-bench/zero-count-direct-ab-1780536871.json` and
 `/tmp/swift-rg-bench/zero-count-direct-noshell-1780536909.json`.
 
+Rejected follow-up probes:
+
+- Extending the direct count writer to all unprefixed LF single-digit counts
+  preserved output/status for one-count, nine-count, two-digit fallback,
+  prefixed, CRLF, and zero-count guards, but did not move the target. A
+  51 MiB one-match count stayed flat at 14.3 ms mean, while a nine-match count
+  regressed to 14.9 ms versus 13.5 ms baseline under noise. The source probe
+  was reverted. Partial raw export:
+  `/tmp/swift-rg-bench/single-digit-count-ab-1780537282.json`.
+- Writing prefixed LF zero counts directly with `fwrite(prefix)` plus
+  `fputs("0\n")` preserved focused prefixed/CRLF output and status against the
+  saved `9df75e4` Swift baseline and Rust; sorted recursive include-zero output
+  also matched Rust byte-for-byte. The focused shell A/B looked positive at
+  12.7 ms versus 14.1 ms for a 51 MiB one-file prefixed zero count, but the
+  no-shell confirmation was only noise-level positive at 13.2 ms versus
+  13.4 ms, and recursive include-zero was neutral to slightly slower at
+  2.915 s versus 2.893 s baseline. The source probe was reverted. Raw exports:
+  `/tmp/swift-rg-bench/prefixed-zero-direct-ab-1780537449.json`,
+  `/tmp/swift-rg-bench/prefixed-zero-recursive-ab-1780537449.json`, and
+  `/tmp/swift-rg-bench/prefixed-zero-noshell-ab-1780537534.json`.
+
 ## Skipped VCS-context probes when VCS ignores are disabled - 2026-06-03
 
 File-path and fast-search walk setup now avoids the root Git/VCS repository
