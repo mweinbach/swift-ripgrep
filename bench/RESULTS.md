@@ -175,6 +175,15 @@ Rejected same-session probe:
   output matched the current Swift baseline byte-for-byte and sorted output
   matched Rust, but a 20-run A/B was flat: 439.4 ms patched versus 440.0 ms
   baseline, with Rust at 257.1 ms. The source change was reverted.
+- Replacing the leading 256 KiB adjacent-pair sample with four 64 KiB windows
+  spread across the file preserved plain, `-n`, and no-match parity against the
+  current Swift baseline and Rust, but lost both measured alternation rows:
+  plain measured 464.3 ms versus 461.4 ms baseline, and `-n` measured 534.7 ms
+  versus 528.6 ms baseline.
+- Saturating the adjacent-pair sample counts into a `UInt16` table instead of an
+  `Int` table also preserved parity, but did not hold a useful win. Plain output
+  measured 462.4 ms versus 465.2 ms baseline, while `-n` regressed to 531.8 ms
+  versus 527.0 ms baseline. The `Int` table stays.
 
 Raw exports and parity artifacts:
 `/tmp/swift-rg-bench/current-subtitles-1780575005/summary.md`,
@@ -188,6 +197,10 @@ Raw exports and parity artifacts:
 `/tmp/swift-rg-bench/pair-anchor-probe/ab-1780577742.json`,
 `/tmp/swift-rg-bench/pair-anchor-probe/harness-1780577796/summary.md`,
 `/tmp/swift-rg-bench/pair-anchor-probe/parity-1780577730`,
+`/tmp/swift-rg-bench/multiwindow-anchor-probe/ab-1780578434.json`,
+`/tmp/swift-rg-bench/multiwindow-anchor-probe/parity-1780578422`,
+`/tmp/swift-rg-bench/u16-pair-anchor-probe/ab-1780578605.json`,
+`/tmp/swift-rg-bench/u16-pair-anchor-probe/parity-1780578592`,
 `/tmp/swift-rg-bench/suffix-plain-alt-ab-1780575296.json`, and
 `/tmp/swift-rg-bench/suffix-plain-alt-parity-1780575285`,
 `/tmp/swift-rg-bench/leading-pair-alt-ab-1780575870.json`, and
