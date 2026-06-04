@@ -52,6 +52,29 @@ versus 181.30 ms baseline. The source change was reverted.
 Artifacts: `/tmp/swift-rg-bench/pair-count-probe/ab.json` and
 `/tmp/swift-rg-bench/pair-count-probe/ab-flipped.json`.
 
+## Rejected raw no-mmap rare-anchor literal probe - 2026-06-04
+
+A Swift-only probe added a large-file rare two-byte anchor branch to the raw
+buffered single-literal line collector used by explicit `--no-mmap` searches.
+The branch reused the mapped writer's sparse candidate idea, but still returned
+normal `SearchMatch` values so output went through the existing printer and
+binary/read behavior stayed on the no-mmap path.
+
+Patched stdout, stderr, and status matched both the committed Swift binary and
+Rust `rg` for explicit no-mmap subtitle literal output, default literal output,
+line-numbered no-mmap output, word-boundary no-mmap output, and duplicate
+same-line controls. The benchmark did not justify the added branch. A 20-run
+A/B measured plain no-mmap at 190.71 ms patched versus 191.98 ms baseline,
+default plain at 166.72 ms versus 165.89 ms, line-numbered no-mmap at
+180.30 ms versus 182.19 ms, and word-boundary no-mmap at 193.69 ms versus
+198.95 ms with high variance. An order-flipped confirmation kept plain no-mmap
+only slightly better at 192.33 ms patched versus 193.84 ms baseline, while
+line-numbered no-mmap was effectively flat/slightly worse at 180.39 ms patched
+versus 179.91 ms baseline. The source change was reverted.
+
+Artifacts: `/tmp/swift-rg-bench/raw-rare-anchor-probe/ab.json` and
+`/tmp/swift-rg-bench/raw-rare-anchor-probe/ab-flipped.json`.
+
 ## Rejected large literal 1 MiB anchor sample probe - 2026-06-04
 
 A current upstream harness refresh showed the broad Linux search rows are still
