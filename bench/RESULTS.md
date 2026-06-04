@@ -31,6 +31,27 @@ Artifacts:
 `/tmp/swift-rg-bench/rare-anchor-dedup-probe/ab.json`, and
 `/tmp/swift-rg-bench/rare-anchor-dedup-probe/ab-flipped.json`.
 
+## Rejected single-literal pair histogram probe - 2026-06-04
+
+A Swift-only probe replaced the large single-literal rare-anchor setup's
+per-literal-pair sample scans with one 65,536-entry pair-frequency histogram of
+the same 256 KiB sample. The idea was to avoid rescanning the sample once per
+candidate anchor pair while preserving the existing sparse-anchor verifier and
+writer.
+
+The probe preserved stdout, stderr, and status byte-for-byte against both the
+committed Swift binary and Rust `rg` for plain `Sherlock Holmes`, explicit
+`--no-mmap`, `-n`, and `-i` subtitle controls, but the benchmark shape was not a
+durable win. In a 16-run A/B, plain output was effectively flat at 166.24 ms
+patched versus 166.47 ms baseline, no-mmap was flat at 193.71 ms versus
+194.35 ms, and line-numbered output regressed to 183.99 ms versus 179.48 ms. An
+order-flipped confirmation showed plain at 164.91 ms patched versus 171.30 ms
+baseline, but line-numbered still stayed slower/noisy at 184.45 ms patched
+versus 181.30 ms baseline. The source change was reverted.
+
+Artifacts: `/tmp/swift-rg-bench/pair-count-probe/ab.json` and
+`/tmp/swift-rg-bench/pair-count-probe/ab-flipped.json`.
+
 ## Rejected large literal 1 MiB anchor sample probe - 2026-06-04
 
 A current upstream harness refresh showed the broad Linux search rows are still
