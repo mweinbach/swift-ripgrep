@@ -90,6 +90,36 @@ Raw artifacts:
 `/tmp/swift-rg-bench/large-threshold-parity-1780590003` and
 `/tmp/swift-rg-bench/large-threshold-ab-1780590013.json`.
 
+## Rejected variable-width word/whitespace sequence probe - 2026-06-04
+
+A Swift-only probe generalized the no-literal word/whitespace fast path from
+repeated `\w{5}` groups to per-group widths such as
+`(?-u)\w{5}\s+\w{6}\s+\w{7}`. The corrected version used a sliding window of
+word-run lengths so overlapping candidates like `troops really retreat` were
+not missed. It preserved output parity for the variable-width subtitles row,
+small Unicode/ASCII guard fixtures, and the existing repeated-five fast path,
+but it was reverted because the sliding-window state regressed the established
+repeated-five subtitles guard too much.
+
+Validation:
+
+- Probe Swift stdout/status matched Rust for
+  `-n '(?-u)\w{5}\s+\w{6}\s+\w{7}'` on the subtitles corpus and for Unicode
+  and ASCII fixture guards.
+- Probe repeated-five ASCII output matched baseline `c171e67` and Rust
+  byte-for-byte.
+
+| Case | Probe Swift | Baseline `c171e67` | Rust |
+| --- | ---: | ---: | ---: |
+| `-n '(?-u)\w{5}\s+\w{6}\s+\w{7}' en.sample.txt` | 1.259 s median / 1.265 s mean | timed out after 90.26 s | 2.457 s / 2.457 s |
+| repeated-five ASCII guard | 823.63 ms / 822.68 ms | 531.58 ms / 532.70 ms | not in guard A/B |
+
+Raw artifacts:
+`/tmp/swift-rg-bench/word-widths-parity-1780591660`,
+`/tmp/swift-rg-bench/word-widths-current-rust-1780591225.json`,
+`/tmp/swift-rg-bench/word-widths-baseline-timeout-1780591263.txt`, and
+`/tmp/swift-rg-bench/word-widths-fixed5-guard-ab-1780591676.json`.
+
 ## Rejected no-mmap collect-before-flush probe - 2026-06-04
 
 A Swift-only no-mmap probe tried to avoid the streaming literal path's up-front
