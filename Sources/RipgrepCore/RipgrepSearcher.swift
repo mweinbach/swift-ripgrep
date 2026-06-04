@@ -320,6 +320,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let walkResults = options.useStdin && options.roots.isEmpty
             ? FileWalkResults(haystacks: [], messages: [], warnings: explicitIgnoreFileLoadWarnings(options: options))
             : try fastQuietFallbackHaystacks(options: options, fileWalker: fileWalker)
+                ?? fastSearchFallbackHaystacks(options: options, fileWalker: fileWalker)
                 ?? fileWalker.haystacksWithMessages(for: options)
         var messages = walkResults.messages
         let warnings = walkResults.warnings
@@ -419,6 +420,16 @@ public struct RipgrepSearcher: @unchecked Sendable {
         guard canStopSearchAfterFirstMatch(options: options),
               !options.useStdin,
               !options.patternFileStdin else {
+            return nil
+        }
+        return try fileWalker.fastSearchHaystacksWithMessages(for: options)
+    }
+
+    private func fastSearchFallbackHaystacks(
+        options: RipgrepOptions,
+        fileWalker: FileWalker
+    ) throws -> FileWalkResults? {
+        guard options.threadCount == nil else {
             return nil
         }
         return try fileWalker.fastSearchHaystacksWithMessages(for: options)

@@ -8,6 +8,40 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Fast Darwin search walker for default recursive search - 2026-06-04
+
+Default-thread recursive searches now try the existing Darwin fast search-file
+walker before falling back to the generic Foundation-heavy haystack collector.
+The fast walker is already restricted to simple search options with default
+path rendering, no custom globs/types, no explicit sort mode, no symlink/one
+file-system traversal, and no logging. Explicit `--threads` runs stay on the
+generic walker so single-thread traversal order remains byte-identical.
+
+The accepted one-line routing change preserved current Swift output
+byte-for-byte for `linux_no_literal`, `linux_no_literal` ASCII, `PM_RESUME`, and
+`-C2 PM_RESUME` against detached baseline `9b91604`. Sorted output for the
+Unicode and ASCII no-literal rows also matched Rust `rg`.
+
+Same-session seven-run A/B:
+
+| Case | Patched Swift | Baseline `9b91604` | Speedup |
+| --- | ---: | ---: | ---: |
+| `-n '\w{5}\s+...' linux` | 1.580 s | 2.265 s | 1.43x |
+| `-n '(?-u)\w{5}\s+...' linux` | 1.533 s | 2.235 s | 1.46x |
+| `PM_RESUME linux` | 982.9 ms | 1.756 s | 1.79x |
+| `-C2 PM_RESUME linux` | 1.181 s | 1.898 s | 1.61x |
+
+An order-flipped confirmation held the same shape: Unicode no-literal at
+1.582 s versus 2.277 s, ASCII no-literal at 1.519 s versus 2.244 s,
+`PM_RESUME` at 1.032 s versus 1.733 s, and `-C2 PM_RESUME` at 1.169 s versus
+1.946 s.
+
+Raw hyperfine exports:
+`/tmp/swift-rg-bench/fast-search-walker-a-1780573129.json` and
+`/tmp/swift-rg-bench/fast-search-walker-b-1780573249.json`. A final rebuilt
+three-run sanity check is in
+`/tmp/swift-rg-bench/fast-search-walker-final-1780573818.json`.
+
 ## Current Linux gap refresh and rejected probes - 2026-06-04
 
 After the sparse context work, a current five-run Linux refresh showed the old
