@@ -95,6 +95,29 @@ Artifacts:
 `/tmp/swift-rg-bench/nommap-numbered-prefix-binary-final-1780606861`, and
 `/tmp/swift-rg-bench/nommap-numbered-prefix-binary-bench-1780606879`.
 
+## Case-insensitive numbered no-mmap literals use collected output - 2026-06-04
+
+The same collected line-numbered literal writer now handles ASCII
+case-insensitive `--no-mmap -n -i` searches by using the existing folded
+candidate finder and keeping the established ASCII-haystack proof before any
+output is flushed. This closes the neighboring large-binary mismatch where a
+case-insensitive hit before a later NUL byte fell through to the buffered
+reader's 256 MiB haystack limit.
+
+Patched stdout, stderr, and status matched Rust for a 270 MiB hit-before-NUL
+fixture and a 270 MiB binary no-match fixture across unprefixed `-n -i`,
+filename-prefixed `-H -n -i`, `--heading -H -n -i`, and
+`--no-filename -n -i` modes. The same modes also matched Rust on the real
+subtitle text corpus. An 18-run text-path guard measured unprefixed
+`--no-mmap -n -i 'sherlock holmes'` at 316.0 ms patched versus 340.6 ms
+baseline and 313.2 ms Rust. The filename-prefixed row improved to 321.8 ms
+patched versus 344.5 ms baseline and 318.2 ms Rust.
+
+Artifacts:
+`/tmp/swift-rg-bench/nommap-numbered-casei-binary-fix-1780607338`,
+`/tmp/swift-rg-bench/nommap-numbered-casei-text-parity-1780607348`, and
+`/tmp/swift-rg-bench/nommap-numbered-casei-bench-1780607361`.
+
 ## Rejected text-proof-first no-mmap probe - 2026-06-04
 
 A Swift-only probe moved the large simple-literal writer's whole-file NUL-byte

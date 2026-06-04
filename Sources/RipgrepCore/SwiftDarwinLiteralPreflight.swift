@@ -13744,7 +13744,6 @@ private func rgSwiftDarwinWriteLiteralBytes(
         firstCaseSensitiveMatch = nil
     }
     let collectLineNumberedOutput = lineNumber
-        && !asciiCaseInsensitive
         && !asciiBoundary
         && emitLines
         && maxCount == Int.max
@@ -13956,6 +13955,27 @@ private func rgSwiftDarwinWriteLiteralBytes(
         var collectedSearchOffset = 0
         var collectedBytesSearched = haystackLength
 
+        func nextCollectedMatch(from offset: Int) -> (match: UnsafePointer<UInt8>?, count: Int) {
+            if asciiCaseInsensitive {
+                return foldedLiteral.withUnsafeBufferPointer { foldedNeedle in
+                    rg_memcasemem_ascii_count_byte_before(
+                        base.advanced(by: offset),
+                        haystackLength - offset,
+                        foldedNeedle.baseAddress,
+                        foldedNeedle.count,
+                        UInt8(ascii: "\n")
+                    )
+                }
+            }
+            return rg_memmem_count_byte_before(
+                base.advanced(by: offset),
+                haystackLength - offset,
+                literalBase,
+                literal.count,
+                UInt8(ascii: "\n")
+            )
+        }
+
         func emitBinaryLineNumberedLiteralMatch(binaryOffset: Int) -> LiteralLineWriteStats? {
             guard var collectedOutput = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
                 return nil
@@ -14016,13 +14036,7 @@ private func rgSwiftDarwinWriteLiteralBytes(
         }
 
         while collectedSearchOffset < haystackLength {
-            let result = rg_memmem_count_byte_before(
-                base.advanced(by: collectedSearchOffset),
-                haystackLength - collectedSearchOffset,
-                literalBase,
-                literal.count,
-                UInt8(ascii: "\n")
-            )
+            let result = nextCollectedMatch(from: collectedSearchOffset)
             guard let found = result.match else {
                 break
             }
@@ -14063,6 +14077,11 @@ private func rgSwiftDarwinWriteLiteralBytes(
                 bytesPrinted: 0,
                 bytesSearched: haystackLength
             )
+        }
+        if asciiCaseInsensitive {
+            guard ensureASCIIHaystack() else {
+                return nil
+            }
         }
         if !confirmedTextHaystack {
             if let binaryPointer = memchr(base, 0, haystackLength) {
