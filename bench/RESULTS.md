@@ -31,6 +31,15 @@ Raw hyperfine export:
 
 Rejected follow-up probe:
 
+- Combining the single-active multi-literal absent-byte proof with the mapped
+  text/NUL proof used one Swift SIMD `memchr-any` pass for `[candidate, NUL]`
+  before delegating `literal|absent` to the single-literal writer. It preserved
+  pipe, repeated-`-e`, all-present, no-match, and binary-NUL parity, but
+  regressed the target rows: repeated `-e literal -e absent` measured
+  77.8 ms versus 76.6 ms baseline, pipe `literal|absent` measured 81.4 ms
+  versus 79.5 ms baseline, and the no-match guard measured 78.0 ms versus
+  77.0 ms baseline. The separate `memchr` plus text proof stays. Raw export:
+  `/tmp/swift-rg-bench/prune-combined-proof-ab-1780536318.json`.
 - A quiet file-listing existence probe checked allowed files in each directory
   before recursing into allowed child directories, since `--quiet --files`
   prints no paths. It preserved status/stdout/stderr against the saved
