@@ -1626,6 +1626,16 @@ Rejected follow-up probe:
   9.84 ms / 9.16 ms baseline and 5.85 ms / 5.64 ms for Rust, so the source
   probe was reverted. Raw export:
   `/tmp/swift-rg-bench/runsuffix-summary-only-quiet-ab-1780546686.json`.
+- Skipping the output-order prefix entirely for short `[A-Z]+suffix` quiet
+  searches and going straight to the lexical first-match walk preserved quiet
+  hit/miss status parity and sorted `-l '[A-Z]+_RESUME'` output, but regressed
+  the main row. A same-session A/B against clean `69b48df` measured quiet
+  `[A-Z]+_RESUME` at 22.46 ms mean / 21.21 ms median for the probe versus
+  9.94 ms / 9.13 ms baseline and 6.58 ms / 5.65 ms for Rust. The missing guard
+  also moved from 16.55 ms / 15.46 ms to 17.27 ms / 16.48 ms. Exact-count
+  `[A-Z]{3}_RESUME` was neutral under noise at 9.24 ms / 8.88 ms versus
+  9.52 ms / 8.83 ms baseline, so the source probe was reverted. Raw export:
+  `/tmp/swift-rg-bench/runsuffix-direct-lexical-ab-1780546895.json`.
 - Increasing the quiet ASCII run-suffix output-order prefix from 512 files to
   1024 and then 768 did not produce a durable recursive-hit win. The 1024 probe
   regressed `[A-Z]+_RESUME` to 9.9 ms versus 9.3 ms baseline while leaving the
