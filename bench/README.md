@@ -57,6 +57,13 @@ gunzip "$SUITE_DIR/subtitles/en.txt.gz"
 head -n 55000000 "$SUITE_DIR/subtitles/en.txt" > "$SUITE_DIR/subtitles/en.sample.txt"
 rm "$SUITE_DIR/subtitles/en.txt"   # only en.sample.txt is used after this
 
+# If disk pressure matters, stream directly to the sample instead of keeping
+# the full decompressed file:
+curl -L https://object.pouta.csc.fi/OPUS-OpenSubtitles/v2016/mono/en.txt.gz \
+    | gunzip -c \
+    | head -n 55000000 \
+    > "$SUITE_DIR/subtitles/en.sample.txt"
+
 # Copy the upstream benchsuite script next to ours.
 cp ~/upstream-ripgrep/benchsuite/benchsuite "$SUITE_DIR/benchsuite.py"
 ```

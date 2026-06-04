@@ -102,6 +102,44 @@ Raw hyperfine and harness exports:
 `/tmp/swift-rg-bench/current-linux-broad-1780574440/summary.md`, and
 `/tmp/swift-rg-bench/namebytes-files-a-1780574276.json`.
 
+## Restored English subtitles corpus and rejected suffix alternation probe - 2026-06-04
+
+The upstream English subtitles sample is now available locally at
+`/tmp/swift-rg-bench/subtitles/en.sample.txt` using the documented 55M-line
+slice. This fills the large single-file bench gap that previous Linux-only
+refreshes could not cover.
+
+A one-run upstream subtitles refresh found the current strongest search gaps in
+simple literal and literal-alternation line output, while no-literal subtitles
+are already large Swift wins:
+
+| Benchmark | Rust | Swift | Swift / Rust |
+| --- | ---: | ---: | ---: |
+| `subtitles_en_alternate` | 257.92 ms | 607.59 ms | 2.36x |
+| `subtitles_en_alternate` lines | 297.95 ms | 678.11 ms | 2.28x |
+| `subtitles_en_literal` | 157.55 ms | 263.39 ms | 1.67x |
+| `subtitles_en_literal` no-mmap | 156.52 ms | 264.27 ms | 1.69x |
+| `subtitles_en_literal` lines | 186.84 ms | 311.27 ms | 1.67x |
+| `subtitles_en_literal_casei` | 270.25 ms | 268.75 ms | 0.99x |
+| `subtitles_en_literal_casei` lines | 292.10 ms | 332.29 ms | 1.14x |
+| `subtitles_en_no_literal` | 2.429 s | 681.05 ms | 0.28x |
+| `subtitles_en_no_literal` ASCII | 2.318 s | 421.43 ms | 0.18x |
+
+Rejected same-session probe:
+
+- The multi-literal suffix-plan collector was relaxed to run for plain
+  unnumbered matching-line output, not only line-numbered output. The probe
+  preserved current Swift output byte-for-byte for the plain and `-n`
+  subtitles alternation rows, and sorted patched output matched Rust for both.
+  It regressed the plain alternation row from 440.9 ms baseline to 560.1 ms
+  patched in a 10-run A/B, and the `-n` row stayed effectively worse/noisy at
+  651.6 ms baseline versus 658.2 ms patched. The source change was reverted.
+
+Raw exports and parity artifacts:
+`/tmp/swift-rg-bench/current-subtitles-1780575005/summary.md`,
+`/tmp/swift-rg-bench/suffix-plain-alt-ab-1780575296.json`, and
+`/tmp/swift-rg-bench/suffix-plain-alt-parity-1780575285`.
+
 ## Current Linux gap refresh and rejected probes - 2026-06-04
 
 After the sparse context work, a current five-run Linux refresh showed the old
