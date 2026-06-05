@@ -8,6 +8,36 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected chunk literal streaming search probe - 2026-06-04
+
+A Swift-only probe added a narrow large-file streaming route for plain,
+case-sensitive, non-word, no-line-number `--no-mmap` literal output. Instead
+of splitting every streamed line and scanning each line, the route searched the
+buffered carry data for the literal first, decoded only matching lines, and
+declined back to the existing streaming path for BOM, binary NUL, UTF-8
+fallback trouble, and adjacent formatted modes. The intent was to make the
+remaining English subtitle no-mmap literal row algorithmically closer to the
+mapped literal writer without loading the whole file or adding any C shim.
+
+Patched stdout, stderr, and status matched both the committed Swift binary and
+Rust `rg` for explicit no-mmap subtitle literal output, line-numbered no-mmap,
+word-boundary no-mmap, count output, a small duplicate same-line control, a BOM
+guard, a binary NUL guard, and a final-no-newline guard. Focused
+`StreamingHaystackTests` and `MiscTests` also passed.
+
+The benchmark did not produce a durable win. A 24-run A/B measured plain
+no-mmap at 182.06 ms patched versus 182.25 ms baseline, line-numbered no-mmap
+at 178.76 ms versus 179.74 ms, word-boundary no-mmap at 164.00 ms versus
+159.68 ms, and count at 196.63 ms versus 200.34 ms. The order-flipped
+confirmation reversed the target row to 182.55 ms patched versus 181.84 ms
+baseline, kept word-boundary slower at 163.63 ms versus 161.02 ms, and
+reversed count to 201.12 ms versus 198.16 ms. Since the target was flat to
+slower and adjacent guards regressed, the source change was reverted.
+
+Artifacts: `/tmp/swift-rg-bench/chunk-literal-stream-probe/parity`,
+`/tmp/swift-rg-bench/chunk-literal-stream-probe/ab.json`, and
+`/tmp/swift-rg-bench/chunk-literal-stream-probe/ab-flipped.json`.
+
 ## Rejected chunk-level streaming carry compaction probe - 2026-06-04
 
 A Swift-only probe changed `HaystackReader.streamLines` to track the consumed
