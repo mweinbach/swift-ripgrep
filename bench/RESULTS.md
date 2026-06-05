@@ -8,6 +8,42 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected mapped plain literal post-emit line skip - 2026-06-04
+
+A broader current-head refresh confirmed most benchmark rows are Swift wins:
+Linux literal/no-literal rows ran at 0.35x-0.55x Rust time, subtitle alternates
+at 0.50x-0.68x, subtitle case-insensitive literal rows at 0.81x-0.88x, and
+subtitle no-literal rows at 0.19x-0.29x. The remaining slower rows were
+case-sensitive subtitle literals: default literal at 158.25 ms Swift versus
+146.56 ms Rust, explicit no-mmap at 185.25 ms versus 145.69 ms, and
+line-numbered default at 179.71 ms versus 174.29 ms.
+
+A Swift-only probe changed the mapped plain literal line writer to skip to the
+end of the emitted line after accepting a match, instead of continuing the next
+literal search one byte after the match. Line output emits each matching line
+once, so the goal was to avoid duplicate same-line literal searches while
+preserving rejected word-boundary candidates and max-count byte accounting.
+
+Patched stdout, stderr, and status matched both the committed Swift binary and
+Rust `rg` for default subtitle literal output, line-numbered output, explicit
+no-mmap controls, word-boundary output, duplicate same-line controls, and a
+final-no-newline guard. `MiscTests` also passed.
+
+The benchmark did not justify keeping the skip. A 24-run A/B measured default
+literal at 157.22 ms patched versus 156.38 ms baseline, line-numbered default
+at 177.06 ms versus 176.06 ms, explicit no-mmap at 181.32 ms versus
+181.95 ms, and word-boundary at 159.53 ms versus 161.03 ms. The order-flipped
+confirmation kept default slower at 156.71 ms patched versus 156.02 ms
+baseline, reversed no-mmap to 182.47 ms patched versus 181.71 ms baseline, and
+regressed word-boundary to 165.26 ms versus 160.45 ms. Since the default
+target row slowed in both passes and neighbors were mixed, the source change
+was reverted.
+
+Artifacts: `/tmp/swift-rg-bench/current-broad-refresh-1780620664/summary.md`,
+`/tmp/swift-rg-bench/plain-line-skip-probe/parity`,
+`/tmp/swift-rg-bench/plain-line-skip-probe/ab.json`, and
+`/tmp/swift-rg-bench/plain-line-skip-probe/ab-flipped.json`.
+
 ## Rejected chunk literal streaming search probe - 2026-06-04
 
 A Swift-only probe added a narrow large-file streaming route for plain,
