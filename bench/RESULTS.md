@@ -143,6 +143,29 @@ the source change was reverted.
 Artifacts: `/tmp/swift-rg-bench/buffered-chunk-256k-probe/ab.json` and
 `/tmp/swift-rg-bench/buffered-chunk-256k-probe/ab-flipped.json`.
 
+## Rejected lazy streaming line-data probe - 2026-06-04
+
+A Swift-only probe made the streaming search closure build `line + terminator`
+`Data` lazily instead of copying and appending the terminator for every streamed
+line up front. The byte-literal fast path can check BOM and NUL bytes on the
+line body directly, so the probe targeted per-line copy overhead in large
+explicit `--no-mmap` searches.
+
+Patched stdout, stderr, and status matched both the committed Swift binary and
+Rust `rg` for explicit no-mmap subtitle literal output, line-numbered no-mmap,
+word-boundary no-mmap, count output, a small duplicate same-line control, a BOM
+guard, and a binary NUL guard. The benchmark was not a target win. A 24-run A/B
+measured plain no-mmap at 181.71 ms patched versus 181.70 ms baseline,
+line-numbered no-mmap at 181.77 ms versus 176.60 ms, word-boundary no-mmap at
+162.01 ms versus 163.10 ms with variance, and count at 198.42 ms versus
+201.09 ms. The order-flipped confirmation measured plain no-mmap slower at
+184.13 ms patched versus 182.04 ms baseline, and line-numbered no-mmap slower
+at 180.21 ms patched versus 176.31 ms baseline. Since the target was flat to
+slower and the line-numbered guard regressed, the source change was reverted.
+
+Artifacts: `/tmp/swift-rg-bench/lazy-stream-line-data-probe/ab.json` and
+`/tmp/swift-rg-bench/lazy-stream-line-data-probe/ab-flipped.json`.
+
 ## Rejected large literal 1 MiB anchor sample probe - 2026-06-04
 
 A current upstream harness refresh showed the broad Linux search rows are still
