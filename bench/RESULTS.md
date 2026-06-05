@@ -8,6 +8,36 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected mapped plain literal ASCII line decode probe - 2026-06-04
+
+A Swift-only probe changed the mapped plain literal line writer to decode
+emitted lines through the existing ASCII-aware `utf8LineString` helper instead
+of always constructing `Data` and then `String(data:encoding:)`. The intent was
+to reduce allocation overhead on ASCII subtitle output while preserving the
+same UTF-8 fallback behavior for non-ASCII matching lines.
+
+Patched stdout, stderr, and status matched both the committed Swift binary and
+Rust `rg` for default subtitle literal output, line-numbered output, explicit
+no-mmap controls, word-boundary output, duplicate same-line controls, a
+final-no-newline guard, and a non-ASCII matching-line guard. `MiscTests` also
+passed.
+
+The benchmark did not justify keeping the decode change. A 24-run A/B measured
+default literal at 158.89 ms patched versus 158.51 ms baseline, line-numbered
+default at 175.82 ms versus 176.19 ms, explicit no-mmap at 181.07 ms versus
+182.08 ms, and word-boundary at 166.08 ms versus 167.11 ms. The order-flipped
+confirmation measured default at 156.40 ms patched versus 157.90 ms baseline,
+line-numbered default at 176.41 ms versus 176.40 ms, explicit no-mmap at
+183.37 ms versus 187.43 ms, and word-boundary at 180.21 ms versus 181.56 ms.
+A tighter 40-run target-only rerun reversed the target rows: default literal
+slowed to 162.55 ms patched versus 161.32 ms baseline, and line-numbered
+default slowed to 179.33 ms versus 178.76 ms. Since the mapped target rows did
+not retain a durable win, the source change was reverted.
+
+Artifacts: `/tmp/swift-rg-bench/utf8-line-decode-probe/ab.json`,
+`/tmp/swift-rg-bench/utf8-line-decode-probe/ab-flipped.json`, and
+`/tmp/swift-rg-bench/utf8-line-decode-probe/ab-target-40.json`.
+
 ## Rejected mapped plain literal post-emit line skip - 2026-06-04
 
 A broader current-head refresh confirmed most benchmark rows are Swift wins:
