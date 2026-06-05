@@ -8,6 +8,41 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected zero-sample rare-pair anchor probe - 2026-06-04
+
+A Swift-only probe let the large simple literal writer use its rare-pair anchor
+path when the best sampled two-byte literal pair appeared zero times in the
+first 256 KiB. The intent was to help absent literal searches such as
+`PM_RESUME` by scanning for a rare/absent pair instead of falling back to the
+first-byte-or-NUL collector. The existing branch's full-file NUL proof stayed in
+place before returning a no-match result.
+
+Patched stdout, stderr, and status matched the committed Swift binary and Rust
+for real subtitle no-match, default literal output, explicit no-mmap literal
+output, explicit no-mmap no-match, final-no-newline output, and a large binary
+no-match guard. `MiscTests` also passed. A large hit-before-NUL fixture matched
+the committed Swift binary but not Rust; that is an existing current-Swift
+binary-output gap, not a regression from this probe.
+
+The benchmark did not prove a durable target win. A 24-run A/B measured
+subtitle no-match at 177.80 ms patched versus 177.25 ms baseline, default
+literal at 164.53 ms versus 165.34 ms, explicit no-mmap at 190.94 ms versus
+191.94 ms, and explicit no-mmap no-match at 176.95 ms versus 179.39 ms. The
+order-flipped confirmation kept default slightly faster at 164.02 ms versus
+165.41 ms, but no-mmap regressed to 191.57 ms versus 190.24 ms and no-mmap
+no-match regressed to 179.14 ms versus 176.15 ms. A 40-run target pass measured
+default at 164.49 ms patched versus 168.62 ms baseline, no-match effectively
+flat at 177.62 ms versus 177.47 ms, and no-mmap at 189.78 ms versus 191.73 ms.
+The 40-run flipped target pass then flattened default to 164.87 ms patched
+versus 164.78 ms baseline and no-mmap to 192.82 ms versus 193.05 ms. Since the
+intended absent-literal target stayed neutral and neighboring rows were mixed,
+the source change was reverted.
+
+Artifacts: `/tmp/swift-rg-bench/zero-anchor-probe/ab.json`,
+`/tmp/swift-rg-bench/zero-anchor-probe/ab-flipped.json`,
+`/tmp/swift-rg-bench/zero-anchor-probe/ab-target-40.json`, and
+`/tmp/swift-rg-bench/zero-anchor-probe/ab-target-40-flipped.json`.
+
 ## Rejected mapped plain literal ASCII line decode probe - 2026-06-04
 
 A Swift-only probe changed the mapped plain literal line writer to decode
