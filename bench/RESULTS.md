@@ -8,6 +8,38 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected streaming newline terminator allocation probe - 2026-06-04
+
+A current-head harness refresh isolated the remaining English subtitle gap to
+the explicit no-mmap literal row: `subtitles_en_literal` measured 156.54 ms
+Swift versus 146.49 ms Rust, explicit no-mmap measured 181.28 ms Swift versus
+147.34 ms Rust, and line-numbered literal output was effectively tied at
+175.52 ms Swift versus 176.12 ms Rust. Case-insensitive, word-boundary, and
+no-literal subtitle rows remained Swift-faster.
+
+A Swift-only probe then gave `HaystackReader.streamLines` a shared newline
+terminator `Data` value and reserved the carry buffer to the reader chunk size.
+The idea was to reduce tiny per-line allocations in large explicit `--no-mmap`
+streaming searches without changing scanner or printer behavior. Patched
+stdout, stderr, and status matched both the committed Swift binary and Rust
+`rg` for explicit no-mmap subtitle literal output, line-numbered no-mmap,
+word-boundary no-mmap, count output, a small duplicate same-line control, a BOM
+guard, and a binary NUL guard.
+
+The benchmark did not justify keeping the allocation tweak. A 24-run A/B
+measured plain no-mmap at 187.03 ms patched versus 183.31 ms baseline,
+line-numbered no-mmap at 175.42 ms versus 175.85 ms, word-boundary no-mmap at
+158.56 ms versus 158.55 ms, and count at 195.68 ms versus 196.10 ms. The
+order-flipped confirmation made the target row effectively flat at 183.01 ms
+patched versus 183.67 ms baseline, but word-boundary regressed to 164.26 ms
+versus 160.84 ms. Since the target win did not hold and an adjacent guard
+regressed, the source change was reverted.
+
+Artifacts: `/tmp/swift-rg-bench/current-refresh-1780618786/summary.md`,
+`/tmp/swift-rg-bench/stream-newline-terminator-probe/parity`,
+`/tmp/swift-rg-bench/stream-newline-terminator-probe/ab.json`, and
+`/tmp/swift-rg-bench/stream-newline-terminator-probe/ab-flipped.json`.
+
 ## Rejected unsafe streaming byte-buffer probe - 2026-06-04
 
 A Swift-only probe changed the streaming byte-literal branch to scan
