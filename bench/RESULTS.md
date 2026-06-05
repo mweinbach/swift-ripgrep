@@ -8,6 +8,28 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected direct literal late-binary defer probe - 2026-06-04
+
+A Swift-only probe made the direct stdout literal writer decline large
+matching-line output when the first binary-detection block had no newline, and
+then broadened that gate to large files whose first bytes matched the literal.
+The intent was to route the remaining default large hit-before-NUL mismatch
+through the existing binary-aware result path without re-enabling the slower
+default plain preflight for normal line-oriented subtitle text.
+
+The first gate was too narrow: the failing fixture has a short first line
+(`Sherlock Holmes\n`), a long ASCII tail, and a late NUL at offset 283115536,
+so Swift still printed only `Sherlock Holmes` while Rust printed the matching
+line plus `binary file matches`. The prefix-literal gate did reach the generic
+binary-aware path, but the exact 270 MiB fixture was still running after more
+than two minutes and had to be stopped. That route is therefore a poor tradeoff
+for a direct-writer edge case unless the binary notice can be emitted inside
+the direct writer without forcing full decoded fallback. The source and
+regression-test probe were reverted.
+
+Artifacts: `/tmp/swift-rg-bench/late-binary-probe-1780623708`,
+`/tmp/swift-rg-bench/late-binary-probe-1780623864`.
+
 ## Rejected large simple first-byte binary helper probe - 2026-06-04
 
 A Swift-only probe tried to make the large simple literal writer's
