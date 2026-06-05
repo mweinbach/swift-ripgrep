@@ -8,6 +8,31 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected unsafe streaming byte-buffer probe - 2026-06-04
+
+A Swift-only probe changed the streaming byte-literal branch to scan
+`streamedLine.data` through its unsafe byte buffer instead of first copying
+each streamed line into `[UInt8]`. The intent was to reduce per-line allocation
+work in large explicit `--no-mmap` subtitle searches while preserving the
+existing Swift streaming route and all printer behavior.
+
+Patched stdout, stderr, and status matched both the committed Swift binary and
+Rust `rg` for explicit no-mmap subtitle literal output, line-numbered no-mmap,
+word-boundary no-mmap, count output, a small duplicate same-line control, a BOM
+guard, and a binary NUL guard. The benchmark signal was not durable enough to
+keep. A 24-run A/B measured plain no-mmap at 181.42 ms patched versus
+183.26 ms baseline, line-numbered no-mmap at 176.43 ms versus 175.93 ms,
+word-boundary no-mmap at 166.38 ms versus 163.87 ms with high variance, and
+count at 197.61 ms versus 200.45 ms. The order-flipped confirmation reversed
+the target plain row to 190.08 ms patched versus 188.49 ms baseline, kept
+word-boundary effectively flat/slower at 181.72 ms versus 181.43 ms, and left
+count neutral at 205.04 ms versus 205.28 ms. Since the target win did not hold
+and an adjacent guard regressed, the source change was reverted.
+
+Artifacts: `/tmp/swift-rg-bench/unsafe-stream-bytes-probe/parity`,
+`/tmp/swift-rg-bench/unsafe-stream-bytes-probe/ab.json`, and
+`/tmp/swift-rg-bench/unsafe-stream-bytes-probe/ab-flipped.json`.
+
 ## Retained rare-anchor line dedup removal - 2026-06-04
 
 The large single-literal rare-anchor writer no longer checks whether an
