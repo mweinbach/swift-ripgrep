@@ -8,6 +8,35 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected chunk-level streaming carry compaction probe - 2026-06-04
+
+A Swift-only probe changed `HaystackReader.streamLines` to track the consumed
+start offset within the carry buffer and remove the consumed prefix once before
+the next chunk read, instead of calling `Data.removeSubrange` after every
+emitted line. The intent was to reduce hot-loop `Data` mutation overhead in
+large explicit `--no-mmap` streaming searches without changing line data,
+offsets, binary detection, or printer behavior.
+
+Patched stdout, stderr, and status matched both the committed Swift binary and
+Rust `rg` for explicit no-mmap subtitle literal output, line-numbered no-mmap,
+word-boundary no-mmap, count output, a small duplicate same-line control, a BOM
+guard, a binary NUL guard, and a final-no-newline guard. Focused
+`StreamingHaystackTests` and `HaystackReaderTests` also passed.
+
+The benchmark signal was mixed rather than a durable target win. A 24-run A/B
+measured plain no-mmap at 182.91 ms patched versus 182.87 ms baseline,
+line-numbered no-mmap at 176.09 ms versus 176.10 ms, word-boundary no-mmap at
+160.79 ms versus 160.20 ms, and count at 196.74 ms versus 198.18 ms. The
+order-flipped confirmation measured plain no-mmap better at 183.21 ms patched
+versus 185.61 ms baseline and line-numbered better at 175.78 ms versus
+177.54 ms, but count regressed to 198.70 ms patched versus 196.84 ms baseline.
+Because the target was flat in one pass and a neighboring count guard reversed
+in the other, the source change was reverted.
+
+Artifacts: `/tmp/swift-rg-bench/carry-compaction-probe/parity`,
+`/tmp/swift-rg-bench/carry-compaction-probe/ab.json`, and
+`/tmp/swift-rg-bench/carry-compaction-probe/ab-flipped.json`.
+
 ## Rejected streaming newline terminator allocation probe - 2026-06-04
 
 A current-head harness refresh isolated the remaining English subtitle gap to
