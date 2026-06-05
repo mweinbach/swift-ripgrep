@@ -8,6 +8,26 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected large simple first-byte binary helper probe - 2026-06-04
+
+A Swift-only probe tried to make the large simple literal writer's
+first-byte-or-NUL collector emit already-buffered matching lines plus Rust's
+binary notice when it encountered a later NUL byte. The intent was to close the
+remaining default large hit-before-NUL mismatch without reopening the slower
+default plain preflight route that previously regressed clean subtitle text.
+
+The probe was reverted because it did not affect the mismatching default route.
+That default case still avoids the executable preflight via the large
+visible-line opt-out and continued to print only `Sherlock Holmes`, while Rust
+prints the matching line followed by `binary file matches`. Explicit
+`--no-mmap` already matched Rust before the probe. A synthetic 270 MiB
+`PM_RESUME` fixture designed to hit the first-byte collector also already
+matched Rust before the probe in both default and explicit no-mmap modes, so
+the helper refactor did not close a real current gap. `MiscTests` passed before
+the source was restored.
+
+Artifacts: `/tmp/swift-rg-bench/binary-message-fix`.
+
 ## Rejected zero-sample rare-pair anchor probe - 2026-06-04
 
 A Swift-only probe let the large simple literal writer use its rare-pair anchor
