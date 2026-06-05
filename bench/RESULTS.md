@@ -8,6 +8,26 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected large simple range coalescing removal - 2026-06-05
+
+A Swift-only probe removed the adjacent-range coalescing branch from the large
+simple literal collector. The branch runs for each accepted line in the sparse
+subtitle literal path, and writing adjacent matching lines separately is
+byte-identical to writing one coalesced range, so the intent was to trim hot
+per-match bookkeeping without changing text proof or binary fallback behavior.
+
+Patched stdout/stderr matched the committed Swift baseline and Rust for real
+subtitle plain, explicit `--no-mmap`, line-numbered, `-m1`, final-no-newline,
+and adjacent-line controls. The benchmark did not justify keeping the change:
+a 20-run A/B measured plain `Sherlock Holmes` at 187.3 ms patched versus
+185.0 ms baseline and 176.4 ms Rust. Explicit `--no-mmap` was only noise-level
+better at 218.1 ms versus 219.1 ms, and `-n` was similarly tiny at 188.9 ms
+versus 189.6 ms. Since the main plain row regressed and neighboring wins were
+not durable, the source change was reverted.
+
+Artifacts: `/tmp/swift-rg-bench/range-coalesce-probe-1780624678/parity` and
+`/tmp/swift-rg-bench/range-coalesce-probe-1780624678/ab.json`.
+
 ## Rejected direct literal late-binary defer probe - 2026-06-04
 
 A Swift-only probe made the direct stdout literal writer decline large
