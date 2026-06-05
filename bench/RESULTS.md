@@ -8,6 +8,31 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected large simple stdout buffer capacity probes - 2026-06-05
+
+Swift-only probes reduced the large simple literal collector's stdout buffer
+from 1 MiB to 64 KiB and then to 256 KiB. The target branch buffers sparse
+subtitle literal output before the text/NUL proof, so the intent was to reduce
+allocation and cache footprint for common small-output searches without
+changing scanners, text proof, binary fallback, or emitted bytes.
+
+Both capacities preserved focused stdout/stderr parity against the committed
+Swift baseline and Rust for real subtitle plain, explicit `--no-mmap`,
+line-numbered, `-m1`, final-no-newline, and dense adjacent-line controls. The
+benchmark did not prove a durable win. The 64 KiB variant measured plain
+`Sherlock Holmes` at 192.7 ms patched versus 194.8 ms baseline in the first
+20-run A/B, but the order-flipped 30-run pass was only 195.3 ms versus
+196.4 ms and reversed `--no-mmap` to 223.7 ms patched versus 222.9 ms
+baseline. The 256 KiB variant likewise stayed mixed: plain was 190.1 ms versus
+192.3 ms baseline, `-n` was 188.3 ms versus 189.8 ms, but `--no-mmap` was
+slightly worse at 219.3 ms versus 218.7 ms. Since the signal was noisy and an
+affected neighbor regressed, the source change was reverted.
+
+Artifacts: `/tmp/swift-rg-bench/large-simple-buffer-probe-1780625163/parity`,
+`/tmp/swift-rg-bench/large-simple-buffer-probe-1780625163/ab.json`,
+`/tmp/swift-rg-bench/large-simple-buffer-probe-1780625163/ab-flipped.json`, and
+`/tmp/swift-rg-bench/large-simple-buffer-probe-1780625163/ab-256.json`.
+
 ## Rejected large simple range coalescing removal - 2026-06-05
 
 A Swift-only probe removed the adjacent-range coalescing branch from the large
