@@ -8,6 +8,52 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Rejected file-list and plain literal micro-probes - 2026-06-06
+
+Three small Swift-only probes targeted the current live gaps where Swift was
+still slower than the Rust oracle on this machine: default/hidden Linux
+`--files` and plain case-sensitive `Sherlock Holmes` subtitle output. All
+preserved byte-for-byte output against the saved Swift baseline and Rust controls
+where applicable, but none held a clean target win.
+
+- A CLI-only non-exact file-list count shortcut changed direct Darwin `--files`
+  exit-status accounting to record only whether any file was emitted. Exact
+  output still matched, but the 20-run A/B was mixed: default listing was flat
+  at 97.08 ms patched versus 96.62 ms baseline, hidden improved to 100.17 ms
+  versus 103.41 ms, and `--no-ignore --files` regressed hard to 89.09 ms versus
+  73.45 ms.
+- Reusing an already-computed `isDirectory` boolean in one ignore-aware walker
+  branch preserved output and helped `--no-ignore --files` to 71.71 ms versus
+  74.87 ms, but the primary default row regressed to 95.01 ms versus 92.45 ms.
+- Moving the large simple literal writer's fallback-only `needles` array below
+  the rare-anchor branch preserved plain, `--no-mmap`, `-n`, and `-m1` subtitle
+  output against Rust. The target stayed flat/slightly slower: plain output was
+  177.08 ms patched versus 177.04 ms baseline, `--no-mmap` was 202.75 ms versus
+  202.04 ms, and `-n` was 183.91 ms versus 183.72 ms.
+
+Artifacts: `/tmp/swift-rg-count-probe-files.json`,
+`/tmp/swift-rg-kind-probe-files.json`, and
+`/tmp/swift-rg-literal-needles.json`.
+
+## Rejected plain literal prefix guard probe - 2026-06-06
+
+A Swift-only probe hoisted the direct single-literal writer's line-prefix
+eligibility check out of the large rare-anchor output loop, so plain
+unprefixed subtitle literal output could skip the `writeMatchingLinePrefixes`
+helper call entirely. The intent was to trim redundant per-match work on the
+remaining case-sensitive default `Sherlock Holmes` row without changing the
+scanner, line range calculation, binary behavior, or emitted bytes.
+
+Patched stdout, stderr, and status matched both the committed Swift baseline
+and Rust for default subtitle literal output, explicit `--no-mmap`, and
+line-numbered output. The benchmark did not show a retained win: a 30-run A/B
+measured default plain output at 178 ms patched versus 177 ms baseline, while
+the line-numbered guard was flat at 182 ms for both binaries. Since the target
+row was flat/slightly slower, the source change was reverted.
+
+Artifacts: `/tmp/swift-rg-bench/prefix-skip-probe-1780749500/parity` and
+`/tmp/swift-rg-bench/prefix-skip-probe-1780749500/ab.json`.
+
 ## Rejected large simple stdout buffer capacity probes - 2026-06-05
 
 Swift-only probes reduced the large simple literal collector's stdout buffer
