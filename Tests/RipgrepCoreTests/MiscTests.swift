@@ -7319,7 +7319,7 @@ struct MiscTests {
             #expect(quietResult.status == expectedStatus)
         }
 
-        for (pathOnlyArguments, expectedOutput, expectedStatus) in [
+        let pathOnlyCases: [([String], Data, Int32)] = [
             (["-l", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
             (["--no-config", "-l", "needle", root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
             (["-l", "needle", root.path("quiet-no-match.txt"), root.path("dense.txt")], Data("\(root.path("dense.txt"))\n".utf8), Int32(0)),
@@ -7411,7 +7411,8 @@ struct MiscTests {
             (["--files-without-match", "-x", "needle|last", root.path("exact.txt")], Data(), Int32(1)),
             (["--files-without-match", "-i", "-x", "NEEDLE|LAST", root.path("exact.txt")], Data(), Int32(1)),
             (["--crlf", "-l", "-i", "-x", "NEEDLE|QUIET", root.path("crlf.txt")], Data("\(root.path("crlf.txt"))\r\n".utf8), Int32(0)),
-        ] {
+        ]
+        for (pathOnlyArguments, expectedOutput, expectedStatus) in pathOnlyCases {
             let pathOnlyResult = try runExecutableResult(pathOnlyArguments)
             #expect(pathOnlyResult.stdout == expectedOutput)
             #expect(pathOnlyResult.stderr.isEmpty)
@@ -7751,7 +7752,7 @@ struct MiscTests {
         ], fixture: {})
         #expect(caseInsensitiveExactLineCrlfCountOutput == Data("1\r\n".utf8))
 
-        for (countArguments, expectedOutput, expectedStatus) in [
+        let countCases: [([String], Data, Int32)] = [
             (["-c", "needle", root.path("dense.txt")], Data("3\n".utf8), Int32(0)),
             (["-c", "needle", root.path("quiet-no-match.txt"), root.path("dense.txt")], Data("\(root.path("dense.txt")):3\n".utf8), Int32(0)),
             (["--heading", "-c", "needle", root.path("quiet-no-match.txt"), root.path("dense.txt")], Data("\(root.path("dense.txt")):3\n".utf8), Int32(0)),
@@ -7807,7 +7808,8 @@ struct MiscTests {
             (["-c", "-x", "needle|last", root.path("exact.txt")], Data("3\n".utf8), Int32(0)),
             (["-c", "-m2", "-x", "needle|last", root.path("exact.txt")], Data("2\n".utf8), Int32(0)),
             (["-c", "-x", "-e", "needle", "-e", "last", root.path("exact.txt")], Data("3\n".utf8), Int32(0)),
-        ] {
+        ]
+        for (countArguments, expectedOutput, expectedStatus) in countCases {
             let countResult = try runExecutableResult(countArguments)
             #expect(countResult.stdout == expectedOutput)
             #expect(countResult.stderr.isEmpty)
@@ -9171,7 +9173,7 @@ struct MiscTests {
         #expect(quietCountMatchesResult.stdout.isEmpty)
         #expect(quietCountMatchesResult.stderr.isEmpty)
 
-        for (exactLineArguments, expectedOutput) in [
+        let exactLineCases: [([String], Data)] = [
             (["-x", "needle", root.path("exact.txt")], Data("needle\nneedle\n".utf8)),
             (["--with-filename", "-x", "needle", root.path("exact.txt")], Data("\(root.path("exact.txt")):needle\n\(root.path("exact.txt")):needle\n".utf8)),
             (["-n", "-x", "needle", root.path("exact.txt")], Data("1:needle\n3:needle\n".utf8)),
@@ -9219,7 +9221,8 @@ struct MiscTests {
             (["--vimgrep", "-x", "-e", "needle", "-e", "last", root.path("exact.txt")], Data("\(root.path("exact.txt")):1:1:needle\n\(root.path("exact.txt")):3:1:needle\n\(root.path("exact.txt")):5:1:last\n".utf8)),
             (["--vimgrep", "-i", "-x", "-e", "NEEDLE", "-e", "LAST", root.path("exact.txt")], Data("\(root.path("exact.txt")):1:1:needle\n\(root.path("exact.txt")):3:1:needle\n\(root.path("exact.txt")):5:1:last\n".utf8)),
             (["--crlf", "-x", "needle", root.path("crlf.txt")], Data("needle\r\n".utf8)),
-        ] {
+        ]
+        for (exactLineArguments, expectedOutput) in exactLineCases {
             let exactLineOutput = try runExecutableData(exactLineArguments, fixture: {})
             #expect(exactLineOutput == expectedOutput)
         }
