@@ -13538,7 +13538,8 @@ private func rgSwiftDarwinWriteLargeSimpleLiteralBytesWithTextProof(
 
                 var emittedLineCount = 0
                 if binaryOffset >= 64 * 1024 {
-                    for range in pendingRanges where range.outputEnd <= binaryOffset {
+                    let binaryBlockStart = binaryOffset - binaryOffset % (64 * 1024)
+                    for range in pendingRanges where range.outputEnd <= binaryBlockStart {
                         guard output.write(base.advanced(by: range.start), count: range.outputEnd - range.start) else {
                             return nil
                         }
@@ -14012,7 +14013,8 @@ private func rgSwiftDarwinWriteLiteralBytes(
             var emittedLineCount = 0
             var emittedHeading = false
             if binaryOffset >= 64 * 1024 {
-                for line in pendingLines where line.outputEnd <= binaryOffset {
+                let binaryBlockStart = binaryOffset - binaryOffset % (64 * 1024)
+                for line in pendingLines where line.outputEnd <= binaryBlockStart {
                     guard collectedOutput.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading),
                           collectedOutput.writeBytes(linePrefix) else {
                         return nil
@@ -15821,7 +15823,8 @@ private func rgSwiftDarwinWriteWordLiteralLineBytes(
         var emittedLineCount = 0
         var emittedHeading = false
         if binaryOffset >= 64 * 1024 {
-            for line in pendingLines where line.outputEnd <= binaryOffset {
+            let binaryBlockStart = binaryOffset - binaryOffset % (64 * 1024)
+            for line in pendingLines where line.outputEnd <= binaryBlockStart {
                 guard output.writeHeadingPrefix(headingPrefix, emittedHeading: &emittedHeading),
                       output.writeBytes(linePrefix) else {
                     return nil

@@ -2,8 +2,8 @@ import Darwin
 import Foundation
 
 public enum RipgrepCLI {
-    public static let version = "15.1.0"
-    public static let revision = "4519153e5e"
+    public static let version = "15.2.0"
+    public static let revision = "e89fff89ac"
 
     public struct OutputOptions: Equatable {
         public let showFilename: Bool

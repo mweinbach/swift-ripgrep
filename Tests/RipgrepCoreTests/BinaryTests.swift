@@ -101,6 +101,37 @@ struct BinaryTests {
         ])
         #expect(try runAllowingNoMatch(["--passthru", "tail", root.path("late-nul.dat")]) == [])
 
+        var lateBlockBinary = Data("medical student before\n".utf8)
+        lateBlockBinary.append(
+            Data(repeating: UInt8(ascii: "x"), count: 70_000 - lateBlockBinary.count)
+        )
+        lateBlockBinary.append(0)
+        lateBlockBinary.append(contentsOf: Data("medical student after\n".utf8))
+        try root.write(lateBlockBinary, to: "late-block-nul.dat")
+        let lateBlockOutput = try runExecutableData([
+            "--mmap",
+            "-n",
+            "medical student",
+            root.path("late-block-nul.dat"),
+        ], fixture: {})
+        #expect(lateBlockOutput == Data((
+            "1:medical student before\n" +
+            #"binary file matches (found "\0" byte around offset 70000)"# + "\n"
+        ).utf8))
+
+        try root.write(
+            Data("Project Gutenberg EBook first\n\0binary tail\n".utf8),
+            to: "explicit-text.dat"
+        )
+        let explicitTextOutput = try runExecutableData([
+            "--no-mmap",
+            "-n",
+            "--text",
+            "Project Gutenberg EBook",
+            root.path("explicit-text.dat"),
+        ], fixture: {})
+        #expect(explicitTextOutput == Data("1:Project Gutenberg EBook first\n".utf8))
+
         let multilineBinaryReplacementStats = try run([
             "--stats",
             "-U",

@@ -25,13 +25,15 @@ final class ParityHarnessTests: XCTestCase {
                 executable: swiftRipgrep,
                 arguments: arguments,
                 currentDirectory: tempdir.url,
-                stdin: parityCase.stdin
+                stdin: parityCase.stdin,
+                environmentOverrides: parityCase.environment
             )
             let rustResult = try runProcess(
                 executable: rustRipgrep,
                 arguments: arguments,
                 currentDirectory: tempdir.url,
-                stdin: parityCase.stdin
+                stdin: parityCase.stdin,
+                environmentOverrides: parityCase.environment
             )
 
             XCTAssertEqual(
@@ -60,6 +62,7 @@ private struct ParityCase {
     var fixture: (URL) throws -> Void
     var arguments: [String]
     var stdin: Data?
+    var environment: [String: String]
     var intentionallySkippedBecause: String?
 
     init(
@@ -67,12 +70,14 @@ private struct ParityCase {
         fixture: @escaping (URL) throws -> Void,
         arguments: [String],
         stdin: Data? = nil,
+        environment: [String: String] = [:],
         intentionallySkippedBecause: String? = nil
     ) {
         self.name = name
         self.fixture = fixture
         self.arguments = arguments
         self.stdin = stdin
+        self.environment = environment
         self.intentionallySkippedBecause = intentionallySkippedBecause
     }
 }
@@ -311,6 +316,30 @@ private func regressionParityCases() -> [ParityCase] {
 #include ("widgets/mobile/foo-bar-resetpw.vm")
 """
     return [
+        ParityCase(
+            name: "regression::r3275_git_global_config_env",
+            fixture: { dir in
+                try createDirectory(".git", in: dir)
+                try write("needle\n", to: "foo/foo1", in: dir)
+                try write("needle\n", to: "foo/foo2", in: dir)
+                try write("foo2\n", to: "global-excludes-nonstandard", in: dir)
+                try write("[core]\nexcludesFile = global-excludes-nonstandard\n", to: "global-config-nonstandard", in: dir)
+            },
+            arguments: ["--files", "foo"],
+            environment: ["GIT_CONFIG_GLOBAL": "global-config-nonstandard", "HOME": "."]
+        ),
+        ParityCase(
+            name: "regression::git_system_config_env",
+            fixture: { dir in
+                try createDirectory(".git", in: dir)
+                try write("needle\n", to: "foo/foo1", in: dir)
+                try write("needle\n", to: "foo/foo2", in: dir)
+                try write("foo2\n", to: "system-excludes-nonstandard", in: dir)
+                try write("[core]\nexcludesFile = system-excludes-nonstandard\n", to: "system-config-nonstandard", in: dir)
+            },
+            arguments: ["--files", "foo"],
+            environment: ["GIT_CONFIG_SYSTEM": "system-config-nonstandard", "HOME": "."]
+        ),
         ParityCase(name: "regression::r16", fixture: { dir in try createDirectory(".git", in: dir); try write("ghi/", to: ".gitignore", in: dir); try write("xyz", to: "ghi/toplevel.txt", in: dir); try write("xyz", to: "def/ghi/subdir.txt", in: dir) }, arguments: ["xyz"]),
         ParityCase(name: "regression::r25", fixture: { dir in try createDirectory(".git", in: dir); try write("/llvm/", to: ".gitignore", in: dir); try write("test", to: "src/llvm/foo", in: dir) }, arguments: ["test"]),
         ParityCase(name: "regression::r30", fixture: { dir in try write("vendor/**\n!vendor/manifest", to: ".gitignore", in: dir); try write("test", to: "vendor/manifest", in: dir) }, arguments: ["test"]),
@@ -526,7 +555,22 @@ private func miscParityCases() -> [ParityCase] {
     let wordUnicodeBoundaryFallbackFixture: (URL) throws -> Void = { dir in
         try write("émissingliteral\nmissingliteralé\nplain\n", to: "unicode-word", in: dir)
     }
+    let gitMultiRootFixture: (URL) throws -> Void = { dir in
+        try createDirectory(".git", in: dir)
+        try write("src/invalid\n", to: ".gitignore", in: dir)
+        try write("this\n", to: "src/invalid", in: dir)
+        try write("this\n", to: "src/valid", in: dir)
+        try write("this\n", to: "tests/valid", in: dir)
+    }
+    let rgignoreMultiRootFixture: (URL) throws -> Void = { dir in
+        try write("beta/**/*.svg\n", to: ".rgignore", in: dir)
+        try write("AWS\n", to: "alpha/a.txt", in: dir)
+        try write("AWS\n", to: "beta/x.svg", in: dir)
+    }
     return [
+        ParityCase(name: "misc::type_list_15_2", fixture: { _ in }, arguments: ["--type-list"]),
+        ParityCase(name: "misc::ignore_git_multi_root_order", fixture: gitMultiRootFixture, arguments: ["--sort", "path", "--files-with-matches", "this", "src", "tests"]),
+        ParityCase(name: "misc::ignore_rgignore_multi_root_order", fixture: rgignoreMultiRootFixture, arguments: ["--sort", "path", "--files-with-matches", "AWS", "alpha", "beta"]),
         ParityCase(name: "misc::single_file", fixture: sherlockFixture, arguments: ["Sherlock", "sherlock"]),
         ParityCase(name: "misc::dir", fixture: sherlockFixture, arguments: ["Sherlock"]),
         ParityCase(name: "misc::line_numbers", fixture: sherlockFixture, arguments: ["-n", "Sherlock", "sherlock"]),
@@ -951,7 +995,8 @@ private func runProcess(
     executable: URL,
     arguments: [String],
     currentDirectory: URL,
-    stdin: Data? = nil
+    stdin: Data? = nil,
+    environmentOverrides: [String: String] = [:]
 ) throws -> ProcessResult {
     let process = Process()
     process.executableURL = executable
@@ -959,6 +1004,7 @@ private func runProcess(
     process.currentDirectoryURL = currentDirectory
     var environment = ProcessInfo.processInfo.environment
     environment.removeValue(forKey: "RIPGREP_CONFIG_PATH")
+    environment.merge(environmentOverrides) { _, override in override }
     process.environment = environment
 
     let input = Pipe()

@@ -4711,12 +4711,20 @@ public struct FileWalker: @unchecked Sendable {
     }
 
     private func globalGitIgnoreFile() -> URL? {
+        if let globalConfig = readGitConfig(gitConfigGlobalURL()),
+           let excludesFile = parseExcludesFile(from: globalConfig) {
+            return excludesFile
+        }
         if let homeConfig = readGitConfig(homeGitConfigURL()),
            let excludesFile = parseExcludesFile(from: homeConfig) {
             return excludesFile
         }
         if let xdgConfig = readGitConfig(xdgGitConfigURL()),
            let excludesFile = parseExcludesFile(from: xdgConfig) {
+            return excludesFile
+        }
+        if let systemConfig = readGitConfig(gitConfigSystemURL()),
+           let excludesFile = parseExcludesFile(from: systemConfig) {
             return excludesFile
         }
         return defaultGlobalGitIgnoreURL()
@@ -4731,6 +4739,18 @@ public struct FileWalker: @unchecked Sendable {
 
     private func homeGitConfigURL() -> URL? {
         homeURL()?.appendingPathComponent(".gitconfig")
+    }
+
+    private func gitConfigGlobalURL() -> URL? {
+        guard let raw = environment["GIT_CONFIG_GLOBAL"], !raw.isEmpty else {
+            return nil
+        }
+        return URL(fileURLWithPath: raw, isDirectory: false)
+    }
+
+    private func gitConfigSystemURL() -> URL {
+        let raw = environment["GIT_CONFIG_SYSTEM"].flatMap { $0.isEmpty ? nil : $0 } ?? "/etc/gitconfig"
+        return URL(fileURLWithPath: raw, isDirectory: false)
     }
 
     private func xdgGitConfigURL() -> URL? {

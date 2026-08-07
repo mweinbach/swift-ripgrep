@@ -508,6 +508,32 @@ struct RipgrepCommand {
         guard getenv("RIPGREP_CONFIG_PATH") == nil || leadingArgumentsDisableConfigForPreflight(arguments) else {
             return nil
         }
+        var treatsBinaryDataAsText = false
+        var parsesOptions = true
+        for argument in arguments {
+            if argument == "--" {
+                parsesOptions = false
+                continue
+            }
+            guard parsesOptions else {
+                continue
+            }
+            switch argument {
+            case "-a", "--text":
+                treatsBinaryDataAsText = true
+            case "--no-text", "--binary", "--no-binary":
+                treatsBinaryDataAsText = false
+            default:
+                if argument.first == "-",
+                   !argument.hasPrefix("--"),
+                   argument.dropFirst().contains("a") {
+                    treatsBinaryDataAsText = true
+                }
+            }
+        }
+        guard !treatsBinaryDataAsText else {
+            return nil
+        }
         if let exitCode = runSimpleSwiftDarwinASCIIRunSuffixQuietPreflight(
             arguments: arguments,
             allowPCREQuotedLiterals: preflightArguments.allowPCREQuotedLiterals

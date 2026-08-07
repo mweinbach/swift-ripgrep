@@ -5188,6 +5188,42 @@ struct FeatureTests {
         ]))
     }
 
+    @Test("honors Git config environment overrides for global ignores")
+    func honorsGitConfigEnvironmentOverridesForGlobalIgnores() throws {
+        let root = try TemporaryDirectory()
+        let config = try TemporaryDirectory()
+        try root.createDirectory(".git")
+        try root.write("needle\n", to: "keep.txt")
+        try root.write("needle\n", to: "global.txt")
+        try root.write("needle\n", to: "system.txt")
+        try config.write("global.txt\n", to: "global-ignore")
+        try config.write(
+            "[core]\nexcludesFile = \(config.path("global-ignore"))\n",
+            to: "global-config"
+        )
+
+        #expect(Set(pathBasenames(try run(
+            ["needle", root.url.path],
+            environment: [
+                "GIT_CONFIG_GLOBAL": config.path("global-config"),
+                "HOME": config.url.path,
+            ]
+        ))) == Set(["keep.txt", "system.txt"]))
+
+        try config.write("system.txt\n", to: "system-ignore")
+        try config.write(
+            "[core]\nexcludesFile = \(config.path("system-ignore"))\n",
+            to: "system-config"
+        )
+        #expect(Set(pathBasenames(try run(
+            ["needle", root.url.path],
+            environment: [
+                "GIT_CONFIG_SYSTEM": config.path("system-config"),
+                "HOME": config.url.path,
+            ]
+        ))) == Set(["global.txt", "keep.txt"]))
+    }
+
     @Test("honors rgignore and ignore family switches")
     func honorsRgignoreAndIgnoreFamilySwitches() throws {
         let root = try TemporaryDirectory()
@@ -5234,6 +5270,40 @@ struct FeatureTests {
         try outsideGit.write("skip-vcs.txt\n", to: ".gitignore")
         #expect(Set(pathBasenames(try run(["needle", outsideGit.url.path]))) == Set(["keep.txt", "skip-vcs.txt"]))
         #expect(pathBasenames(try run(["--no-require-git", "needle", outsideGit.url.path])) == ["keep.txt"])
+    }
+
+    @Test("parent ignore rules remain independent across multiple roots")
+    func parentIgnoreRulesRemainIndependentAcrossMultipleRoots() throws {
+        let root = try TemporaryDirectory()
+        try root.createDirectory(".git")
+        try root.write("src/invalid\n", to: ".gitignore")
+        try root.write("this\n", to: "src/invalid")
+        try root.write("this\n", to: "src/valid")
+        try root.write("this\n", to: "tests/valid")
+
+        let originalDirectory = FileManager.default.currentDirectoryPath
+        defer { FileManager.default.changeCurrentDirectoryPath(originalDirectory) }
+        #expect(FileManager.default.changeCurrentDirectoryPath(root.url.path))
+        #expect(Set(try run(["--sort", "path", "--files-with-matches", "this", "src", "tests"])) == Set([
+            "src/valid",
+            "tests/valid",
+        ]))
+        #expect(Set(try run(["--sort", "path", "--files-with-matches", "this", "tests", "src"])) == Set([
+            "src/valid",
+            "tests/valid",
+        ]))
+
+        let customRoot = try TemporaryDirectory()
+        try customRoot.write("beta/**/*.svg\n", to: ".rgignore")
+        try customRoot.write("AWS\n", to: "alpha/a.txt")
+        try customRoot.write("AWS\n", to: "beta/x.svg")
+        #expect(FileManager.default.changeCurrentDirectoryPath(customRoot.url.path))
+        #expect(try run(["--sort", "path", "--files-with-matches", "AWS", "alpha", "beta"]) == [
+            "alpha/a.txt",
+        ])
+        #expect(try run(["--sort", "path", "--files-with-matches", "AWS", "beta", "alpha"]) == [
+            "alpha/a.txt",
+        ])
     }
 
     @Test("treats ignore unclosed character classes as literal")
@@ -5814,6 +5884,23 @@ struct FeatureTests {
         #expect(errors.isEmpty)
     }
 
+    @Test("filters by file types added in ripgrep 15.2")
+    func filtersByFileTypesAddedInRipgrep152() throws {
+        let root = try TemporaryDirectory()
+        try root.write("needle\n", to: "request.hurl")
+        try root.write("needle\n", to: "module.mojo")
+        try root.write("needle\n", to: "PKGBUILD")
+        try root.write("needle\n", to: "schema.proto")
+        try root.write("needle\n", to: "proof.v")
+
+        #expect(pathBasenames(try run(["-thurl", "needle", root.url.path])) == ["request.hurl"])
+        #expect(pathBasenames(try run(["-tmojo", "needle", root.url.path])) == ["module.mojo"])
+        #expect(pathBasenames(try run(["-tpkgbuild", "needle", root.url.path])) == ["PKGBUILD"])
+        #expect(pathBasenames(try run(["-tproto", "needle", root.url.path])) == ["schema.proto"])
+        #expect(pathBasenames(try run(["-tprotobuf", "needle", root.url.path])) == ["schema.proto"])
+        #expect(pathBasenames(try run(["-trocq", "needle", root.url.path])) == ["proof.v"])
+    }
+
     @Test("supports type add clear include and list")
     func supportsTypeAddClearIncludeAndList() throws {
         let root = try TemporaryDirectory()
@@ -6218,7 +6305,7 @@ struct FeatureTests {
 
         #expect(exitCode == 0)
         #expect(output.count == 1)
-        #expect(output[0].contains("ripgrep 15.1.0 (rev 4519153e5e)"))
+        #expect(output[0].contains("ripgrep 15.2.0 (rev e89fff89ac)"))
         #expect(output[0].contains("Use -h for short descriptions and --help for more details."))
         #expect(output[0].contains("-i, --ignore-case"))
         #expect(!output[0].contains("This flag searches case insensitively."))
@@ -6240,7 +6327,7 @@ struct FeatureTests {
 
         #expect(exitCode == 0)
         #expect(output.count == 1)
-        #expect(output[0].contains("ripgrep 15.1.0 (rev 4519153e5e)"))
+        #expect(output[0].contains("ripgrep 15.2.0 (rev e89fff89ac)"))
         #expect(output[0].contains("--files"))
         #expect(output[0].contains("--maxdepth"))
         #expect(output[0].contains("--no-json"))
@@ -6261,7 +6348,7 @@ struct FeatureTests {
         )
         #expect(exitCode == 0)
         #expect(errors.isEmpty)
-        #expect(output == ["ripgrep 15.1.0 (rev 4519153e5e)"])
+        #expect(output == ["ripgrep 15.2.0 (rev e89fff89ac)"])
 
         output = []
         errors = []
@@ -6272,7 +6359,7 @@ struct FeatureTests {
         )
         #expect(exitCode == 0)
         #expect(errors.isEmpty)
-        #expect(output == ["ripgrep 15.1.0 (rev 4519153e5e)"])
+        #expect(output == ["ripgrep 15.2.0 (rev e89fff89ac)"])
 
         output = []
         errors = []
@@ -6285,7 +6372,7 @@ struct FeatureTests {
         #expect(errors.isEmpty)
         #expect(output.count == 1)
         let versionDetails = output.joined(separator: "\n")
-        #expect(versionDetails.contains("ripgrep 15.1.0 (rev 4519153e5e)"))
+        #expect(versionDetails.contains("ripgrep 15.2.0 (rev e89fff89ac)"))
         #expect(versionDetails.contains("simd(compile):+NEON"))
         #expect(versionDetails.contains("simd(runtime):+NEON"))
         #expect(

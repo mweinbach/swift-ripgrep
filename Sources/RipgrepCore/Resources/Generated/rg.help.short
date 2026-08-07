@@ -1,4 +1,4 @@
-ripgrep 15.1.0 (rev 4519153e5e)
+ripgrep 15.2.0 (rev e89fff89ac)
 Andrew Gallant <jamslam@gmail.com>
 
 ripgrep (rg) recursively searches the current directory for lines matching

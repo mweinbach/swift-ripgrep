@@ -1,23 +1,23 @@
 # swift-ripgrep porting notes
 
 Baseline checked: `/Users/mweinbach/Projects/swift-harness/ripgrep` at
-`4519153e5e` (`ripgrep 15.1.0`). The Swift binary reports the same upstream
+`e89fff89ac` (`ripgrep 15.2.0`). The Swift binary reports the same upstream
 revision and keeps the `-P`/`--engine=pcre2` surface available through the
 in-tree Swift compatibility engine; it does not link libpcre2.
 
-## Status — 2026-05-26
+## Status — 2026-08-07
 
-**Functional 1:1 with Rust ripgrep 15.1.0 across the covered harness,
+**Functional 1:1 with Rust ripgrep 15.2.0 across the covered harness,
 including the streaming I/O architecture.** Verified via:
 
-- **163 Swift Testing cases** across 12 suites covering search, output formats,
+- **220 Swift Testing cases** across 12 suites covering search, output formats,
   ignore rules, file types, stdin, encodings, binary handling, parser
   diagnostics, mmap/worker pool, PCRE2, streaming haystack reads, and
   generated-asset drift.
-- **193 parity-harness cases** drawn from Rust's own `tests/binary.rs`,
+- **368 parity-harness cases** drawn from Rust's own `tests/binary.rs`,
   `tests/multiline.rs`, `tests/json.rs`, `tests/misc.rs`, `tests/feature.rs`
   and `tests/regression.rs`, plus compressed-input probes for `.gz` /
-  `.bz2` / `.xz` / `.lzma` / `.br` / `.zst` / `.lz4`. **192 pass
+  `.bz2` / `.xz` / `.lzma` / `.br` / `.zst` / `.lz4`. **367 pass
   byte-for-byte** (including JSON
   output after stripping `elapsed`/`elapsed_total` timing values, which are
   inherently non-deterministic in Rust). The remaining 1 is skipped because

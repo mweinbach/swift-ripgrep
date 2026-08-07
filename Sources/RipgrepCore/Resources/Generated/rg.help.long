@@ -1,4 +1,4 @@
-ripgrep 15.1.0 (rev 4519153e5e)
+ripgrep 15.2.0 (rev e89fff89ac)
 Andrew Gallant <jamslam@gmail.com>
 
 ripgrep (rg) recursively searches the current directory for lines matching
@@ -310,7 +310,7 @@ SEARCH OPTIONS:
         This flag can be disabled with --no-mmap.
 
     -U, --multiline
-        This flag enable searching across multiple lines.
+        This flag enables searching across multiple lines.
 
         When multiline mode is enabled, ripgrep will lift the restriction that
         a match cannot include a line terminator. For example, when multiline
