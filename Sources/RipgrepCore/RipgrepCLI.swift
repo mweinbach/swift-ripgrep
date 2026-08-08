@@ -538,9 +538,6 @@ public enum RipgrepCLI {
     }
 
     private static func shouldPrintNothingSearchedWarning(results: SearchResults, options: RipgrepOptions) -> Bool {
-        if hasExplicitIgnoreFileLoadError(options: options) {
-            return true
-        }
         guard results.summary.filesSearched == 0,
               options.maxFileSize == nil,
               options.typeChanges.isEmpty else {
@@ -552,20 +549,8 @@ public enum RipgrepCLI {
     }
 
     private static func shouldExitForImplicitNothingSearched(results: SearchResults, options: RipgrepOptions) -> Bool {
-        hasExplicitIgnoreFileLoadError(options: options)
-            || (options.rootPathArguments.isEmpty
-                && shouldPrintNothingSearchedWarning(results: results, options: options))
-    }
-
-    private static func hasExplicitIgnoreFileLoadError(options: RipgrepOptions) -> Bool {
-        guard !options.noIgnoreFiles else {
-            return false
-        }
-        return options.ignoreFiles.contains { fileURL in
-            var isDirectory = ObjCBool(false)
-            return !FileManager.default.fileExists(atPath: fileURL.path, isDirectory: &isDirectory)
-                || isDirectory.boolValue
-        }
+        options.rootPathArguments.isEmpty
+            && shouldPrintNothingSearchedWarning(results: results, options: options)
     }
 
     private static func filesModePathsWithStdin(_ files: [URL], options: RipgrepOptions) -> [URL] {
