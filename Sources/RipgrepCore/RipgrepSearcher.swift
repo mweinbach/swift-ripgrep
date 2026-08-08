@@ -9780,9 +9780,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
         matcher: PatternMatcher,
         options: RipgrepOptions
     ) -> SearchFileResult? {
-        #if !canImport(Darwin) && !os(Windows)
-        return nil
-        #else
         guard case .automatic = options.encodingMode,
               !data.starts(with: [0xEF, 0xBB, 0xBF]),
               !data.starts(with: [0xFF, 0xFE]),
@@ -10136,7 +10133,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
             )
         }
         return result
-        #endif
     }
 
     private struct RawContextLine {
@@ -10896,9 +10892,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
         matcher: PatternMatcher,
         options: RipgrepOptions
     ) -> SearchFileResult? {
-        #if !canImport(Darwin) && !os(Windows)
-        return nil
-        #else
         guard case .automatic = options.encodingMode,
               !data.starts(with: [0xEF, 0xBB, 0xBF]),
               !data.starts(with: [0xFF, 0xFE]),
@@ -11065,7 +11058,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
             )
         }
         return result
-        #endif
     }
 
     private func searchDarwinSurroundingWordsContents(
