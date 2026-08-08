@@ -10938,7 +10938,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         guard let prefilter = matcher.byteRequiredLiteralPrefilter() else {
             return nil
         }
-        if let fastResult = searchDarwinRegexRequiredLiteralContents(
+        if let fastResult = searchRegexRequiredLiteralContents(
             data,
             fileURL: fileURL,
             matcher: matcher,
@@ -11531,18 +11531,19 @@ public struct RipgrepSearcher: @unchecked Sendable {
         #endif
     }
 
-    private func searchDarwinRegexRequiredLiteralContents(
+    private func searchRegexRequiredLiteralContents(
         _ data: Data,
         fileURL: URL,
         matcher: PatternMatcher,
         options: RipgrepOptions,
         prefilter: ByteLiteralFastPath
     ) -> SearchFileResult? {
-        #if !canImport(Darwin)
-        return nil
-        #else
-        guard options.printMode == .matchingLines,
-              options.heading != true,
+        let countOutput = options.printMode == .count
+        let lineOutput = options.printMode == .matchingLines
+        guard countOutput || lineOutput,
+              !options.invertMatch,
+              !lineOutput || options.heading != true,
+              options.effectivePatterns.count == 1,
               !prefilter.caseInsensitiveASCII,
               !prefilter.wordASCII,
               prefilter.literals.count == 1,
@@ -11552,6 +11553,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
 
         var matches: [SearchMatch] = []
+        var supplementalMatchedLines = 0
         let dataCount = data.count
         var failedDecode = false
 
@@ -11625,31 +11627,35 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 }
                 let spans = decodedLiteralFallbackSpans(matcher: matcher, options: options, line: line)
                 if !spans.isEmpty {
-                    advanceLineNumber(to: lineStart)
-                    matches.append(SearchMatch(
-                        fileURL: fileURL,
-                        lineNumber: lineNumber,
-                        column: nil,
-                        line: line,
-                        lineTerminator: terminator,
-                        absoluteOffset: lineStart,
-                        matchCount: spans.count,
-                        spans: spans.map { span in
-                            let start = lineStart + span.startByte
-                            let count = span.endByte - span.startByte
-                            let textBytes = UnsafeBufferPointer(
-                                start: baseAddress.advanced(by: start),
-                                count: count
-                            )
-                            return MatchSpan(
-                                startColumn: span.startColumn,
-                                endColumn: span.endColumn,
-                                startByte: span.startByte,
-                                endByte: span.endByte,
-                                text: String(decoding: textBytes, as: UTF8.self)
-                            )
-                        }
-                    ))
+                    if countOutput {
+                        supplementalMatchedLines += 1
+                    } else {
+                        advanceLineNumber(to: lineStart)
+                        matches.append(SearchMatch(
+                            fileURL: fileURL,
+                            lineNumber: lineNumber,
+                            column: nil,
+                            line: line,
+                            lineTerminator: terminator,
+                            absoluteOffset: lineStart,
+                            matchCount: spans.count,
+                            spans: spans.map { span in
+                                let start = lineStart + span.startByte
+                                let count = span.endByte - span.startByte
+                                let textBytes = UnsafeBufferPointer(
+                                    start: baseAddress.advanced(by: start),
+                                    count: count
+                                )
+                                return MatchSpan(
+                                    startColumn: span.startColumn,
+                                    endColumn: span.endColumn,
+                                    startByte: span.startByte,
+                                    endByte: span.endByte,
+                                    text: String(decoding: textBytes, as: UTF8.self)
+                                )
+                            }
+                        ))
+                    }
                 }
                 searchOffset = newlinePointer == nil ? dataCount : lineEnd + 1
             }
@@ -11661,11 +11667,11 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 fileURL: fileURL,
                 matches: matches,
                 bytesSearched: data.count,
-                searched: true
+                searched: true,
+                supplementalMatchedLines: supplementalMatchedLines
             )
         }
         return result
-        #endif
     }
 
     private func wordPrefixLiteralPattern(options: RipgrepOptions) -> (literal: [UInt8], asciiOnly: Bool)? {

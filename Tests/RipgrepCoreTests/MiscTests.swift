@@ -1720,6 +1720,27 @@ struct MiscTests {
         """)
     }
 
+    @Test("required literal regex count counts matching lines once")
+    func requiredLiteralRegexCountCountsMatchingLinesOnce() throws {
+        let root = try TemporaryDirectory()
+        try root.write("""
+        Alpha Holmes
+        A Holmes
+        alpha Holmes
+        Zebra\tHolmes
+        Éclair Holmes
+        Holmes
+        Beta Holmes Beta Holmes
+        """, to: "required-literal-count.txt")
+
+        let output = try run([
+            "-c",
+            #"[A-Z][a-z]+\s+Holmes"#,
+            root.path("required-literal-count.txt"),
+        ])
+        #expect(output == ["3"])
+    }
+
     @Test("word regexp line numbers survive rejected same-line candidate")
     func wordRegexpLineNumbersSurviveRejectedSameLineCandidate() throws {
         let root = try TemporaryDirectory()
