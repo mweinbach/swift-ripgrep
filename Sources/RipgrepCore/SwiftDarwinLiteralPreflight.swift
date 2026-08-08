@@ -9187,6 +9187,15 @@ public enum SwiftDarwinLiteralPreflight {
             Darwin.munmap(mapped, haystackLength)
         }
 
+        if haystackLength >= 256 * 1024 * 1024,
+           !asciiCaseInsensitive,
+           !lineNumber,
+           !asciiBoundary,
+           linePrefix.isEmpty,
+           headingPrefix.isEmpty {
+            _ = Darwin.madvise(mapped, haystackLength, MADV_WILLNEED)
+        }
+
         return literal.withUnsafeBufferPointer { literalBuffer in
             rgSwiftDarwinWriteLiteralBytes(
                 UnsafeRawPointer(mapped).assumingMemoryBound(to: UInt8.self),

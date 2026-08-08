@@ -8,6 +8,38 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Large literal mappings request read-ahead - 2026-08-08
+
+The two remaining slower-than-Rust subtitle rows were dominated by first-touch
+VM faults while sequentially scanning the 1.6 GB mapped corpus. The retained
+Darwin-only change calls `madvise(..., MADV_WILLNEED)` immediately before the
+two exact large, plain-literal scan shapes: the regular searcher's direct
+rare-anchor output route and the mapped preflight used by explicit
+`--no-mmap`. The advice is best-effort and does not alter matching, output, or
+binary-detection semantics.
+
+An isolated scanner probe measured the first pass at roughly 149-158 ms with
+no advice versus 113-115 ms with `MADV_WILLNEED` in order-flipped runs. The
+complete executable then held the win in both 12-run orderings:
+
+| Case | Advised Swift | Baseline `b77a95d` | Rust 15.2.0 |
+| --- | ---: | ---: | ---: |
+| Plain `Sherlock Holmes` | 113.41 / 113.93 ms | 158.33 / 157.97 ms | 157.41 / 152.58 ms |
+| `--no-mmap 'Sherlock Holmes'` | 121.15 / 121.58 ms | 167.27 / 167.46 ms | 160.87 / 157.60 ms |
+
+The final upstream-derived 14-row matrix used one warm-up and three timed runs
+per contestant. Swift won all 14 rows with a 0.5730 Swift/Rust geometric-mean
+runtime ratio. Plain literal output measured 114.93 ms Swift versus 153.60 ms
+Rust (0.7482x), explicit no-mmap measured 124.01 ms versus 153.36 ms (0.8086x),
+and the closest row was line-numbered literal output at 0.9478x Rust runtime.
+
+Stdout matched Rust for plain, no-mmap, and line-numbered searches of the real
+subtitle corpus. Early, late, and leading-NUL 270 MiB fixtures matched the saved
+Swift baseline. Raw artifacts:
+`/tmp/swift-rg-bench/results-20260808-willneed-final`,
+`/tmp/swift-rg-bench/willneed-both-base-first.json`, and
+`/tmp/swift-rg-bench/willneed-both-patched-first.json`.
+
 ## Large literal scan fuses matching with binary proof - 2026-08-08
 
 The Darwin large simple-literal writer now searches for its sampled rare

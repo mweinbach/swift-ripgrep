@@ -4023,6 +4023,11 @@ public struct RipgrepSearcher: @unchecked Sendable {
                    maxCount == Int.max,
                    literal.count >= 4,
                    data.count >= 256 * 1024 * 1024 {
+                    _ = Darwin.madvise(
+                        UnsafeMutableRawPointer(mutating: rawBaseAddress),
+                        data.count,
+                        MADV_WILLNEED
+                    )
                     let sampleCount = min(data.count, 256 * 1024)
                     var bestAnchorOffset = 0
                     var bestAnchorPairCount = Int.max
