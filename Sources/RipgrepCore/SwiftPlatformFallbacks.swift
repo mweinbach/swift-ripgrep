@@ -5,14 +5,20 @@ import Foundation
 import Darwin
 #elseif canImport(Glibc)
 import Glibc
+#elseif canImport(Musl)
+import Musl
+#elseif canImport(CRT)
+import CRT
 #endif
 
+#if os(macOS)
 struct rg_darwin_literal_file_result {
     var status: Int32
     var matched_line_count: Int
     var total_match_count: Int
     var bytes_searched: Int
 }
+#endif
 
 @inline(__always)
 private func rgASCIILower(_ byte: UInt8) -> UInt8 {
@@ -2796,6 +2802,7 @@ func rg_memcount_byte(
     return count
 }
 
+#if os(macOS)
 @inline(__always)
 private func unavailableDarwinFastPath() -> rg_darwin_literal_file_result {
     rg_darwin_literal_file_result(
@@ -2913,4 +2920,5 @@ func rg_darwin_write_byte_unit_pcre_o(
 ) -> rg_darwin_literal_file_result {
     unavailableDarwinFastPath()
 }
+#endif
 #endif

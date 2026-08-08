@@ -105,7 +105,7 @@ private func packageRootURL() -> URL {
 }
 
 private func ensureBuiltBinary(packageRoot: URL) throws -> URL {
-    let binary = packageRoot.appendingPathComponent(".build/debug/ripgrep")
+    let binary = ripgrepExecutableURL()
     if FileManager.default.isExecutableFile(atPath: binary.path) {
         return binary
     }

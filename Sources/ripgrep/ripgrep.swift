@@ -13,10 +13,18 @@ import Musl
 #elseif canImport(CRT)
 import CRT
 #endif
+#if os(Windows)
+import WinSDK
+#endif
 
 @main
 struct RipgrepCommand {
     static func main() {
+        #if os(Windows)
+        _setmode(_fileno(stdin), _O_BINARY)
+        _setmode(_fileno(stdout), _O_BINARY)
+        _setmode(_fileno(stderr), _O_BINARY)
+        #endif
         let arguments = Array(CommandLine.arguments.dropFirst())
         if arguments.first.map(mayUseUtilityFastPath) == true,
            let exitCode = RipgrepCLI.runUtilityFastPath(arguments: arguments) {
@@ -53,7 +61,16 @@ struct RipgrepCommand {
     }
 
     private static func standardInputIsReadable() -> Bool {
-        #if canImport(Darwin) || canImport(Glibc) || canImport(Musl)
+        #if os(Windows)
+        if _isatty(_fileno(stdin)) == 0 {
+            return true
+        }
+        guard let handle = GetStdHandle(STD_INPUT_HANDLE), handle != INVALID_HANDLE_VALUE else {
+            return false
+        }
+        var consoleMode: DWORD = 0
+        return !GetConsoleMode(handle, &consoleMode)
+        #elseif canImport(Darwin) || canImport(Glibc) || canImport(Musl)
         var statBuffer = stat()
         guard fstat(STDIN_FILENO, &statBuffer) == 0 else {
             return false

@@ -1,5 +1,13 @@
-import Darwin
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#elseif canImport(Musl)
+import Musl
+#elseif canImport(CRT)
+import CRT
+#endif
 
 struct HaystackReader {
     enum ReadPath: Equatable {
@@ -72,9 +80,10 @@ struct HaystackReader {
     }
 
     static func selectedPath(forFileAt fileURL: URL, options: RipgrepOptions) throws -> ReadPath {
+        #if canImport(Darwin) || canImport(Glibc) || canImport(Musl)
         var fileStat = stat()
         let statResult = fileURL.path.withCString { path in
-            Darwin.fstatat(AT_FDCWD, path, &fileStat, 0)
+            fstatat(AT_FDCWD, path, &fileStat, 0)
         }
         guard statResult == 0 else {
             throw ReaderError.posix(path: fileURL.path, operation: "stat", code: errno)
@@ -84,10 +93,21 @@ struct HaystackReader {
             isRegularFile: isRegular(fileStat.st_mode),
             options: options
         )
+        #else
+        do {
+            let values = try fileURL.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
+            return selectedPath(
+                fileSize: UInt64(max(0, values.fileSize ?? 0)),
+                isRegularFile: values.isRegularFile == true,
+                options: options
+            )
+        } catch {
+            throw ReaderError.fileSystem(path: fileURL.path, operation: "stat", message: error.localizedDescription)
+        }
+        #endif
     }
 
     static func selectedPath(for haystack: Haystack, options: RipgrepOptions) throws -> ReadPath {
-        #if canImport(Darwin)
         if let fileSize = haystack.fileSize,
            let isRegularFile = haystack.isRegularFile {
             return selectedPath(
@@ -96,7 +116,6 @@ struct HaystackReader {
                 options: options
             )
         }
-        #endif
         return try selectedPath(forFileAt: haystack.url, options: options)
     }
 
@@ -245,16 +264,17 @@ struct HaystackReader {
     }
 
     private static func readMmap(fileURL: URL) throws -> Data {
+        #if canImport(Darwin) || canImport(Glibc) || canImport(Musl)
         let fd = fileURL.path.withCString { path in
-            Darwin.open(path, O_RDONLY)
+            open(path, O_RDONLY)
         }
         guard fd >= 0 else {
             throw ReaderError.posix(path: fileURL.path, operation: "open", code: errno)
         }
-        defer { Darwin.close(fd) }
+        defer { close(fd) }
 
         var fileStat = stat()
-        guard Darwin.fstat(fd, &fileStat) == 0 else {
+        guard fstat(fd, &fileStat) == 0 else {
             throw ReaderError.posix(path: fileURL.path, operation: "fstat", code: errno)
         }
         guard isRegular(fileStat.st_mode) else {
@@ -268,24 +288,34 @@ struct HaystackReader {
         }
 
         let length = Int(fileStat.st_size)
-        let mapped = Darwin.mmap(nil, length, PROT_READ, MAP_PRIVATE, fd, 0)
+        let mapped = mmap(nil, length, PROT_READ, MAP_PRIVATE, fd, 0)
         guard mapped != MAP_FAILED, let mapped else {
             throw ReaderError.posix(path: fileURL.path, operation: "mmap", code: errno)
         }
 
         return Data(bytesNoCopy: mapped, count: length, deallocator: .custom { pointer, count in
-            Darwin.munmap(pointer, count)
+            munmap(pointer, count)
         })
+        #else
+        do {
+            return try Data(contentsOf: fileURL, options: .alwaysMapped)
+        } catch {
+            throw ReaderError.fileSystem(path: fileURL.path, operation: "mmap", message: error.localizedDescription)
+        }
+        #endif
     }
 
+    #if canImport(Darwin) || canImport(Glibc) || canImport(Musl)
     private static func isRegular(_ mode: mode_t) -> Bool {
         (mode & S_IFMT) == S_IFREG
     }
+    #endif
 }
 
 extension HaystackReader {
     enum ReaderError: Error, CustomStringConvertible, Equatable {
         case posix(path: String, operation: String, code: Int32)
+        case fileSystem(path: String, operation: String, message: String)
         case notRegular(path: String)
         case tooLarge(path: String, size: UInt64)
         case bufferLimitExceeded(size: Int, limit: Int)
@@ -294,7 +324,13 @@ extension HaystackReader {
         var description: String {
             switch self {
             case .posix(let path, let operation, let code):
+                #if canImport(Darwin) || canImport(Glibc) || canImport(Musl) || canImport(CRT)
                 return "\(path): failed to \(operation): \(String(cString: strerror(code))) (os error \(code))"
+                #else
+                return "\(path): failed to \(operation) (os error \(code))"
+                #endif
+            case .fileSystem(let path, let operation, let message):
+                return "\(path): failed to \(operation): \(message)"
             case .notRegular(let path):
                 return "\(path): failed to mmap: not a regular file"
             case .tooLarge(let path, let size):

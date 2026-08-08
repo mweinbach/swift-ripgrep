@@ -4,6 +4,8 @@ import CRipgrepPlatform
 #endif
 #if canImport(Darwin)
 import Darwin
+#elseif canImport(CRT)
+import CRT
 #endif
 
 private struct FileSearchOutcome: Sendable {
@@ -1410,8 +1412,13 @@ public struct RipgrepSearcher: @unchecked Sendable {
         guard case .automatic = options.encodingMode else {
             return false
         }
+        #if os(Windows)
+        let stdoutIsTerminal = _isatty(_fileno(stdout)) != 0
+        #else
+        let stdoutIsTerminal = isatty(STDOUT_FILENO) != 0
+        #endif
         guard options.colorMode == .never
-                || (options.colorMode == .automatic && isatty(STDOUT_FILENO) == 0) else {
+                || (options.colorMode == .automatic && !stdoutIsTerminal) else {
             return false
         }
         return !options.effectivePatterns.contains { pattern in
@@ -1467,7 +1474,11 @@ public struct RipgrepSearcher: @unchecked Sendable {
     private func explicitIgnoreFileLoadWarning(fileURL: URL, displayPath: String) -> String? {
         var isDirectory: ObjCBool = false
         if fileManager.fileExists(atPath: fileURL.path, isDirectory: &isDirectory), isDirectory.boolValue {
+            #if os(Windows)
+            return "\(displayPath): Access is denied. (os error 5)"
+            #else
             return "\(displayPath): line 1: Is a directory (os error 21)"
+            #endif
         }
         if !fileManager.fileExists(atPath: fileURL.path) {
             return "\(displayPath): No such file or directory (os error 2)"
@@ -6807,6 +6818,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         #endif
     }
 
+    #if os(macOS)
     private func searchResults(
         fileURL: URL,
         directResult result: rg_darwin_literal_file_result
@@ -6831,6 +6843,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             )
         )
     }
+    #endif
 
     private func searchDarwinPlainLiteralNoMatch(
         _ data: Data,
@@ -7744,6 +7757,14 @@ public struct RipgrepSearcher: @unchecked Sendable {
             return FileSearchOutcome(result: fastResult)
         }
         if let fastResult = searchRawLiteralContents(
+            data,
+            fileURL: fileURL,
+            matcher: matcher,
+            options: options
+        ) {
+            return FileSearchOutcome(result: fastResult)
+        }
+        if let fastResult = searchRawASCIIAlternationZeroOrMoreSuffixContents(
             data,
             fileURL: fileURL,
             matcher: matcher,
@@ -9754,7 +9775,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         matcher: PatternMatcher,
         options: RipgrepOptions
     ) -> SearchFileResult? {
-        #if !canImport(Darwin)
+        #if !canImport(Darwin) && !os(Windows)
         return nil
         #else
         guard case .automatic = options.encodingMode,
@@ -9786,7 +9807,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             guard let baseAddress = bytes.baseAddress else {
                 return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: data.count)
             }
-            if let literalResult = searchDarwinPlainLiteralSuppressedOutput(
+            if let literalResult = searchPlainLiteralSuppressedOutputSIMD(
                 data: data,
                 fileURL: fileURL,
                 baseAddress: baseAddress,
@@ -9813,7 +9834,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                let literal = fastPath.literals.first,
                !literal.isEmpty,
                !literal.contains(where: isNonASCII) {
-                if let literalResult = searchDarwinCaseInsensitiveLiteralLines(
+                if let literalResult = searchCaseInsensitiveLiteralLinesSIMD(
                     data: data,
                     fileURL: fileURL,
                     bytes: bytes,
@@ -9830,7 +9851,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                fastPath.caseInsensitiveASCII,
                !fastPath.wordASCII,
                fastPath.literals.count > 1 {
-                if let literalResult = searchDarwinCaseInsensitiveMultiLiteralLines(
+                if let literalResult = searchCaseInsensitiveMultiLiteralLinesSIMD(
                     data: data,
                     fileURL: fileURL,
                     bytes: bytes,
@@ -9847,7 +9868,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                fastPath.literals.count == 1,
                let literal = fastPath.literals.first,
                !literal.isEmpty {
-                if let literalResult = searchDarwinPlainLiteralLines(
+                if let literalResult = searchPlainLiteralLinesSIMD(
                     data: data,
                     fileURL: fileURL,
                     bytes: bytes,
@@ -10758,13 +10779,119 @@ public struct RipgrepSearcher: @unchecked Sendable {
         #endif
     }
 
+    private func searchRawASCIIAlternationZeroOrMoreSuffixContents(
+        _ data: Data,
+        fileURL: URL,
+        matcher: PatternMatcher,
+        options: RipgrepOptions
+    ) -> SearchFileResult? {
+        #if !canImport(Darwin) && !os(Windows)
+        return nil
+        #else
+        guard case .automatic = options.encodingMode,
+              !data.starts(with: [0xEF, 0xBB, 0xBF]),
+              !data.starts(with: [0xFF, 0xFE]),
+              !data.starts(with: [0xFE, 0xFF]),
+              !options.json,
+              !options.stats,
+              options.beforeContext == 0,
+              options.afterContext == 0,
+              !options.passthru,
+              options.replacement == nil,
+              !options.stopOnNonmatch,
+              options.maxCount == nil,
+              !options.onlyMatching,
+              !options.column,
+              !options.byteOffset,
+              !options.vimgrep,
+              !options.crlf,
+              options.maxColumns == nil,
+              options.printMode == .count
+                || options.printMode == .filesWithMatches
+                || options.printMode == .filesWithoutMatch,
+              let fastPath = matcher.asciiAlternationZeroOrMoreSuffixFastPath() else {
+            return nil
+        }
+
+        var matches: [SearchMatch] = []
+        var matchedLines = 0
+        var lineStart = 0
+        var lineNumber = 1
+        let dataCount = data.count
+
+        return data.withUnsafeBytes { rawBytes -> SearchFileResult in
+            let bytes = rawBytes.bindMemory(to: UInt8.self)
+            guard bytes.baseAddress != nil else {
+                return SearchFileResult(fileURL: fileURL, matches: [], bytesSearched: dataCount)
+            }
+
+            func scanLine(end lineEnd: Int) -> Bool {
+                let scan = byteLiteralLineMatch(
+                    fastPath: fastPath,
+                    bytes: bytes,
+                    lineStart: lineStart,
+                    lineEnd: lineEnd
+                )
+                guard scan.hasMatch else {
+                    return false
+                }
+                switch options.printMode {
+                case .count:
+                    matchedLines += 1
+                    return false
+                case .filesWithMatches, .filesWithoutMatch:
+                    matches.append(SearchMatch(
+                        fileURL: fileURL,
+                        lineNumber: lineNumber,
+                        column: nil,
+                        line: "",
+                        lineTerminator: "",
+                        absoluteOffset: lineStart,
+                        matchCount: 1,
+                        spans: []
+                    ))
+                    return true
+                case .matchingLines, .countMatches:
+                    return false
+                }
+            }
+
+            var index = 0
+            while index < dataCount {
+                if bytes[index] == UInt8(ascii: "\n") {
+                    if scanLine(end: index) {
+                        break
+                    }
+                    index += 1
+                    lineStart = index
+                    lineNumber += 1
+                } else {
+                    index += 1
+                }
+            }
+            if matches.isEmpty,
+               (lineStart < dataCount || data.last != UInt8(ascii: "\n")) {
+                _ = scanLine(end: dataCount)
+            }
+
+            return SearchFileResult(
+                fileURL: fileURL,
+                matches: matches,
+                bytesSearched: dataCount,
+                searched: true,
+                supplementalMatchedLines: matchedLines
+            )
+        }
+        #endif
+    }
+
     private func searchRawRegexPrefilterContents(
         _ data: Data,
         fileURL: URL,
         matcher: PatternMatcher,
         options: RipgrepOptions
     ) -> SearchFileResult? {
-        #if !canImport(Darwin)
+        #if !canImport(Darwin) && !os(Windows)
         return nil
         #else
         guard case .automatic = options.encodingMode,
@@ -12100,14 +12227,14 @@ public struct RipgrepSearcher: @unchecked Sendable {
         return byteLiteralLineMatch(fastPath: fastPath, bytes: bytes, lineStart: 0, lineEnd: lineEnd)
     }
 
-    private func searchDarwinPlainLiteralSuppressedOutput(
+    private func searchPlainLiteralSuppressedOutputSIMD(
         data: Data,
         fileURL: URL,
         baseAddress: UnsafePointer<UInt8>,
         fastPath: ByteLiteralFastPath,
         options: RipgrepOptions
     ) -> SearchFileResult? {
-        #if !canImport(Darwin)
+        #if !canImport(Darwin) && !os(Windows)
         return nil
         #else
         let filesWithMatchesMode = options.printMode == .filesWithMatches
@@ -12115,6 +12242,13 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let pathMode = filesWithMatchesMode || filesWithoutMatchMode
         let pathOnlyOutput = !options.json && !options.stats && pathMode
         let pathStatsOutput = !options.json && options.stats && pathMode
+        #if os(Windows)
+        let countOutput = !options.json
+            && !options.stats
+            && (options.printMode == .count || options.printMode == .countMatches)
+        #else
+        let countOutput = false
+        #endif
         let quietOutput = !options.json
             && !options.stats
             && options.quiet
@@ -12135,7 +12269,12 @@ public struct RipgrepSearcher: @unchecked Sendable {
               fastPath.literals.allSatisfy({ literal in
                 !literal.isEmpty && (!fastPath.caseInsensitiveASCII || literal.allSatisfy({ $0 < 0x80 }))
               }),
-              pathOnlyOutput || pathStatsOutput || quietOutput || quietStatsOutput || jsonQuietSummaryOutput else {
+              countOutput
+                || pathOnlyOutput
+                || pathStatsOutput
+                || quietOutput
+                || quietStatsOutput
+                || jsonQuietSummaryOutput else {
             return nil
         }
 
@@ -12291,7 +12430,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         #endif
     }
 
-    private func searchDarwinPlainLiteralLines(
+    private func searchPlainLiteralLinesSIMD(
         data: Data,
         fileURL: URL,
         bytes: UnsafeBufferPointer<UInt8>,
@@ -12300,7 +12439,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         maxCount: Int,
         requiresWordBoundary: Bool
     ) -> SearchFileResult? {
-        #if canImport(Darwin)
+        #if canImport(Darwin) || os(Windows)
         let dataCount = data.count
         var matches: [SearchMatch] = []
         var searchOffset = 0
@@ -12405,7 +12544,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         #endif
     }
 
-    private func searchDarwinCaseInsensitiveLiteralLines(
+    private func searchCaseInsensitiveLiteralLinesSIMD(
         data: Data,
         fileURL: URL,
         bytes: UnsafeBufferPointer<UInt8>,
@@ -12413,7 +12552,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         literal: [UInt8],
         maxCount: Int
     ) -> SearchFileResult? {
-        #if canImport(Darwin)
+        #if canImport(Darwin) || os(Windows)
         let dataCount = data.count
         var lineStarts = Set<Int>()
         var matchStarts: [Int] = []
@@ -12514,14 +12653,14 @@ public struct RipgrepSearcher: @unchecked Sendable {
         #endif
     }
 
-    private func searchDarwinCaseInsensitiveMultiLiteralLines(
+    private func searchCaseInsensitiveMultiLiteralLinesSIMD(
         data: Data,
         fileURL: URL,
         bytes: UnsafeBufferPointer<UInt8>,
         baseAddress: UnsafePointer<UInt8>,
         fastPath: ByteLiteralFastPath
     ) -> SearchFileResult? {
-        #if canImport(Darwin)
+        #if canImport(Darwin) || os(Windows)
         guard fastPath.caseInsensitiveASCII,
               !fastPath.wordASCII,
               fastPath.literals.count > 1,
@@ -13263,7 +13402,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
             result.matches,
             binaryByteOffset: binaryByteOffset,
             options: options,
-            isExplicit: true
+            isExplicit: true,
+            usesBufferCutoff: false
         )
         let emittedMatches = shouldEmitSuppressedBinaryMatches(options, isExplicit: true)
             ? result.matches
@@ -13290,6 +13430,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             lines: displayLines,
             binaryByteOffset: binaryByteOffset,
             hasBinaryMatch: hasBinaryMatch,
+            shouldPrintMatchesBeforeBinary: !displayMatches.isEmpty,
             bytesSearched: suppressedBinaryBytesSearched(
                 dataCount: data.count,
                 binaryByteOffset: binaryByteOffset,
@@ -13875,18 +14016,45 @@ public struct RipgrepSearcher: @unchecked Sendable {
     }
 
     private func resolveExecutable(_ program: String) -> URL? {
-        if program.contains("/") {
+        if program.contains("/") || program.contains("\\") {
             let url = URL(fileURLWithPath: program)
+            #if os(Windows)
+            return FileManager.default.fileExists(atPath: url.path) ? url : nil
+            #else
             return FileManager.default.isExecutableFile(atPath: url.path) ? url : nil
+            #endif
         }
-        let paths = (environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin")
-            .split(separator: ":")
+        #if os(Windows)
+        let path = environment.first { $0.key.caseInsensitiveCompare("PATH") == .orderedSame }?.value ?? ""
+        let pathSeparator: Character = ";"
+        let pathExtensions = (environment.first { $0.key.caseInsensitiveCompare("PATHEXT") == .orderedSame }?.value
+            ?? ".COM;.EXE;.BAT;.CMD")
+            .split(separator: ";")
+            .map(String.init)
+        let names = URL(fileURLWithPath: program).pathExtension.isEmpty
+            ? [program] + pathExtensions.map { program + $0.lowercased() }
+            : [program]
+        #else
+        let path = environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin"
+        let pathSeparator: Character = ":"
+        let names = [program]
+        #endif
+        let paths = path
+            .split(separator: pathSeparator)
             .map(String.init)
         for path in paths {
-            let candidate = URL(fileURLWithPath: path, isDirectory: true)
-                .appendingPathComponent(program)
-            if FileManager.default.isExecutableFile(atPath: candidate.path) {
-                return candidate
+            for name in names {
+                let candidate = URL(fileURLWithPath: path, isDirectory: true)
+                    .appendingPathComponent(name)
+                #if os(Windows)
+                if FileManager.default.fileExists(atPath: candidate.path) {
+                    return candidate
+                }
+                #else
+                if FileManager.default.isExecutableFile(atPath: candidate.path) {
+                    return candidate
+                }
+                #endif
             }
         }
         return nil

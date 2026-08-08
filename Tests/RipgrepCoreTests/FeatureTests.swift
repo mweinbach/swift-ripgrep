@@ -227,6 +227,33 @@ struct FeatureTests {
         #expect(fixedClassStats.contains("91 bytes searched"))
     }
 
+    @Test("ASCII literal alternation with optional class suffix counts recursively")
+    func asciiLiteralAlternationWithOptionalClassSuffixCountsRecursively() throws {
+        let root = try TemporaryDirectory()
+        try root.write("Darwin\nWindowsAPI\nprefix DarwinSDK suffix\nplain\n", to: "a.txt")
+        try root.write("Windows123\nplain\n", to: "nested/b.txt")
+        try root.write("nothing here\n", to: "nested/miss.txt")
+
+        #expect(countBasenames(try run([
+            "--sort", "path", "-c", "(Darwin|Windows)[A-Za-z]*", root.url.path,
+        ])) == [
+            "a.txt:3",
+            "b.txt:1",
+        ])
+        #expect(pathBasenames(try run([
+            "--sort", "path", "-l", "(?:Darwin|Windows)[A-Za-z]*", root.url.path,
+        ])) == [
+            "a.txt",
+            "b.txt",
+        ])
+        #expect(pathBasenames(try run([
+            "--sort", "path", "--files-without-match", "(Darwin|Windows)[A-Za-z]*", root.url.path,
+        ])) == ["miss.txt"])
+
+        try root.write("foo.bar9\nbaz123\nnone\n", to: "escaped.txt")
+        #expect(try run(["-c", #"(foo\.bar|baz)[0-9]*"#, root.path("escaped.txt")]) == ["2"])
+    }
+
     @Test("quiet literal recursive summaries count exact matches")
     func quietLiteralRecursiveSummariesCountExactMatches() throws {
         let root = try TemporaryDirectory()
@@ -6373,8 +6400,17 @@ struct FeatureTests {
         #expect(output.count == 1)
         let versionDetails = output.joined(separator: "\n")
         #expect(versionDetails.contains("ripgrep 15.2.0 (rev e89fff89ac)"))
+        #if arch(arm64)
         #expect(versionDetails.contains("simd(compile):+NEON"))
         #expect(versionDetails.contains("simd(runtime):+NEON"))
+        #elseif arch(x86_64)
+        #expect(versionDetails.contains("simd(compile):+SSE2,-SSSE3,-AVX2"))
+        #expect(versionDetails.contains("simd(runtime):+SSE2"))
+        #expect(!versionDetails.contains("NEON"))
+        #else
+        #expect(versionDetails.contains("simd(compile):-SIMD"))
+        #expect(versionDetails.contains("simd(runtime):-SIMD"))
+        #endif
         #expect(
             versionDetails.contains("features:-pcre2") ||
                 versionDetails.contains("features:+pcre2")

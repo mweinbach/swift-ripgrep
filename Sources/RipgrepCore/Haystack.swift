@@ -2,6 +2,9 @@ import Foundation
 #if canImport(Darwin)
 import Darwin
 #endif
+#if os(Windows)
+import WinSDK
+#endif
 
 public struct Haystack: Equatable, Sendable {
     public let url: URL
@@ -314,6 +317,39 @@ private final class DarwinFilePathDataChunkStore: @unchecked Sendable {
 }
 #endif
 
+#if os(Windows)
+private struct WindowsFastSearchRootPlan {
+    let rootURL: URL
+    let rootBase: URL
+    let rootArgumentIsAbsolute: Bool
+    let logicalPath: String
+    let logicalPathIsASCII: Bool
+}
+
+private struct WindowsFastDirectoryChild {
+    enum Kind: Equatable {
+        case directory
+        case file
+        case symbolicLink
+        case other
+    }
+
+    let name: String
+    let isASCII: Bool
+    let isHidden: Bool
+    let kind: Kind
+    let fileSize: UInt64?
+}
+
+private struct WindowsFastDirectoryContents {
+    let children: [WindowsFastDirectoryChild]
+    let hasGitMarker: Bool
+    let hasGitignore: Bool
+    let hasIgnore: Bool
+    let hasRgignore: Bool
+}
+#endif
+
 public struct FileWalker: @unchecked Sendable {
     private let fileManager: FileManager
     private let environment: [String: String]
@@ -519,6 +555,35 @@ public struct FileWalker: @unchecked Sendable {
             warnings: warnings,
             diagnostics: diagnostics,
             filtered: filtered
+        )
+        #elseif os(Windows)
+        guard options.mode == .files,
+              !options.useStdin,
+              !options.nullPathTerminator,
+              options.effectiveRoots.count == 1 else {
+            return nil
+        }
+        guard let results = try windowsFastSearchFileWalkResults(
+            for: options,
+            lexicalOrder: false,
+            visitHaystack: { haystack, haystacks in
+                haystacks.append(haystack)
+                return stopAfterFirst
+            }
+        ) else {
+            return nil
+        }
+        if !stopAfterFirst {
+            for haystack in results.haystacks {
+                emit(windowsFastDisplayPath(haystack.overridePath, options: options))
+            }
+        }
+        return FilePathStreamResults(
+            count: results.haystacks.count,
+            messages: results.messages,
+            warnings: results.warnings,
+            diagnostics: results.diagnostics,
+            filtered: results.filtered
         )
         #else
         return nil
@@ -729,7 +794,20 @@ public struct FileWalker: @unchecked Sendable {
     #endif
 
     public func haystacksWithMessages(for options: RipgrepOptions) throws -> FileWalkResults {
-        try haystacksWithMessages(for: options, visitHaystack: nil)
+        #if os(Windows)
+        if options.mode == .files,
+           let fastResults = try windowsFastSearchFileWalkResults(
+            for: options,
+            lexicalOrder: false,
+            visitHaystack: { haystack, haystacks in
+                haystacks.append(haystack)
+                return false
+            }
+           ) {
+            return fastResults
+        }
+        #endif
+        return try haystacksWithMessages(for: options, visitHaystack: nil)
     }
 
     func firstVisitedHaystackWithMessages(
@@ -943,6 +1021,12 @@ public struct FileWalker: @unchecked Sendable {
             warnings: warnings,
             diagnostics: diagnostics,
             filtered: filtered
+        )
+        #elseif os(Windows)
+        return try windowsFastSearchFileWalkResults(
+            for: options,
+            lexicalOrder: lexicalOrder,
+            visitHaystack: visitHaystack
         )
         #else
         return nil
@@ -3268,6 +3352,440 @@ public struct FileWalker: @unchecked Sendable {
     }
     #endif
 
+    #if os(Windows)
+    private func windowsFastSearchFileWalkResults(
+        for options: RipgrepOptions,
+        lexicalOrder: Bool,
+        visitHaystack: (Haystack, inout [Haystack]) -> Bool
+    ) throws -> FileWalkResults? {
+        guard windowsCanFastVisitSearchFiles(options: options),
+              options.effectiveRoots.count == 1 else {
+            return nil
+        }
+
+        var messages: [String] = []
+        var warnings: [String] = []
+        var diagnostics: [String] = []
+        var filtered = false
+        let root = options.effectiveRoots[0]
+        guard fileManager.fileExists(atPath: root.path) else {
+            let displayPath = rootDisplayPath(at: 0, root: root, options: options)
+            messages.append(missingRootMessage(displayPath, options: options, hasExistingRoot: false))
+            return FileWalkResults(
+                haystacks: [],
+                messages: messages,
+                warnings: warnings,
+                diagnostics: diagnostics,
+                filtered: false
+            )
+        }
+        guard let rootPlan = windowsFastSearchRootPlan(root: root, options: options) else {
+            return nil
+        }
+
+        let rootVCSContext = rootVCSContextForIgnoreLoading(rootBase: rootPlan.rootBase, options: options)
+        var rootIgnoreStack = IgnoreStack()
+        appendExplicitIgnoreFiles(
+            to: &rootIgnoreStack,
+            rootBase: rootPlan.rootBase,
+            rootVCSContext: rootVCSContext,
+            warnings: &warnings,
+            diagnostics: &diagnostics,
+            options: options
+        )
+        appendGlobalIgnoreFile(
+            to: &rootIgnoreStack,
+            rootBase: rootPlan.rootBase,
+            rootVCSContext: rootVCSContext,
+            warnings: &warnings,
+            diagnostics: &diagnostics,
+            options: options
+        )
+        appendParentIgnoreFiles(
+            to: &rootIgnoreStack,
+            rootBase: rootPlan.rootBase,
+            rootVCSContext: rootVCSContext,
+            warnings: &warnings,
+            diagnostics: &diagnostics,
+            options: options
+        )
+
+        var didStop = false
+        var haystacks: [Haystack] = []
+        haystacks.reserveCapacity(256)
+        try walkWindowsFastSearchFiles(
+            directoryPath: rootPlan.rootURL.path,
+            logicalDirectoryPath: rootPlan.logicalPath,
+            logicalDirectoryPathIsASCII: rootPlan.logicalPathIsASCII,
+            relativePath: "",
+            rootBase: rootPlan.rootBase,
+            rootDebugDisplayPath: rootDisplayPath(at: 0, root: root, options: options),
+            rootArgumentIsAbsolute: rootPlan.rootArgumentIsAbsolute,
+            vcsContext: rootVCSContext,
+            messages: &messages,
+            warnings: &warnings,
+            diagnostics: &diagnostics,
+            filtered: &filtered,
+            ignoreStack: rootIgnoreStack,
+            options: options,
+            lexicalOrder: lexicalOrder,
+            didStop: &didStop
+        ) { haystack in
+            visitHaystack(haystack, &haystacks)
+        }
+
+        if options.sortMode?.kind == .path {
+            haystacks = sorted(haystacks, options: options)
+        }
+        return FileWalkResults(
+            haystacks: haystacks,
+            messages: messages,
+            warnings: warnings,
+            diagnostics: diagnostics,
+            filtered: filtered
+        )
+    }
+
+    private func windowsCanFastVisitSearchFiles(options: RipgrepOptions) -> Bool {
+        let canSort = options.sortMode == nil || options.sortMode?.kind == .path
+        return (options.mode == .search || options.mode == .files)
+            && !options.useStdin
+            && !options.nullPathTerminator
+            && canSort
+            && options.loggingMode == nil
+            && (options.pathSeparator == nil || options.pathSeparator == "/")
+            && options.colorMode != .always
+            && options.colorMode != .ansi
+            && options.colorChanges.isEmpty
+            && !options.hyperlinkFormat.isEnabled
+            && options.globPatterns.isEmpty
+            && options.caseInsensitiveGlobPatterns.isEmpty
+            && options.typeChanges.isEmpty
+            && options.maxFileSize == nil
+            && options.maxDepth == nil
+            && !options.followSymlinks
+            && !options.oneFileSystem
+    }
+
+    private func windowsFastSearchRootPlan(
+        root: URL,
+        options: RipgrepOptions
+    ) -> WindowsFastSearchRootPlan? {
+        let rootURL = root.standardizedFileURL
+        let attributes = rootURL.path.withCString(encodedAs: UTF16.self) { path in
+            GetFileAttributesW(path)
+        }
+        guard attributes != DWORD.max,
+              attributes & DWORD(FILE_ATTRIBUTE_DIRECTORY) != 0,
+              attributes & DWORD(FILE_ATTRIBUTE_REPARSE_POINT) == 0 else {
+            return nil
+        }
+
+        let rootArgument = options.rootPathArguments.first ?? ""
+        let rootArgumentIsAbsolute = (rootArgument as NSString).isAbsolutePath
+        let logicalPath: String
+        if rootArgument.isEmpty {
+            logicalPath = ""
+        } else if rootArgumentIsAbsolute {
+            logicalPath = windowsTrimTrailingSeparators(normalizedTraversalPath(rootURL.path))
+        } else {
+            let currentDirectory = URL(
+                fileURLWithPath: fileManager.currentDirectoryPath,
+                isDirectory: true
+            ).standardizedFileURL
+            logicalPath = relativePathIfContained(rootURL, in: currentDirectory)
+                .map(windowsTrimTrailingSeparators)
+                ?? windowsTrimTrailingSeparators(normalizedTraversalPath(rootURL.path))
+        }
+        return WindowsFastSearchRootPlan(
+            rootURL: rootURL,
+            rootBase: rootURL,
+            rootArgumentIsAbsolute: rootArgumentIsAbsolute,
+            logicalPath: logicalPath,
+            logicalPathIsASCII: logicalPath.utf8.allSatisfy { $0 < 0x80 }
+        )
+    }
+
+    private func windowsTrimTrailingSeparators(_ path: String) -> String {
+        var result = path
+        while result.count > 1,
+              result.hasSuffix("/") || result.hasSuffix("\\") {
+            if result.count == 3,
+               result.utf8.dropFirst().first == UInt8(ascii: ":") {
+                break
+            }
+            result.removeLast()
+        }
+        return result
+    }
+
+    private func windowsFastDisplayPath(_ path: String, options: RipgrepOptions) -> String {
+        let normalized = path.utf8.allSatisfy { $0 < 0x80 }
+            ? path
+            : path.precomposedStringWithCanonicalMapping
+        let separator = options.pathSeparator ?? "\\"
+        return String(normalized.map { character in
+            character == "/" || character == "\\" ? separator : character
+        })
+    }
+
+    private func walkWindowsFastSearchFiles(
+        directoryPath: String,
+        logicalDirectoryPath: String,
+        logicalDirectoryPathIsASCII: Bool,
+        relativePath: String,
+        rootBase: URL,
+        rootDebugDisplayPath: String,
+        rootArgumentIsAbsolute: Bool,
+        vcsContext: Bool,
+        messages: inout [String],
+        warnings: inout [String],
+        diagnostics: inout [String],
+        filtered: inout Bool,
+        ignoreStack: IgnoreStack,
+        options: RipgrepOptions,
+        lexicalOrder: Bool,
+        didStop: inout Bool,
+        visit: (Haystack) -> Bool
+    ) throws {
+        guard !didStop else {
+            return
+        }
+        let contents = try windowsFastDirectoryContents(
+            atPath: directoryPath,
+            collectIgnoreMarkers: !(options.noIgnore && options.hidden)
+        )
+        let directoryVCSContext = vcsContext || (!options.noIgnoreVCS && contents.hasGitMarker)
+        var directoryIgnoreStack = ignoreStack
+        if !options.noIgnore && hasLoadableIgnoreFiles(
+            hasGitMarker: contents.hasGitMarker,
+            hasGitignore: contents.hasGitignore,
+            hasIgnore: contents.hasIgnore,
+            hasRgignore: contents.hasRgignore,
+            vcsContext: directoryVCSContext,
+            options: options
+        ) {
+            appendIgnoreFiles(
+                in: URL(fileURLWithPath: directoryPath, isDirectory: true),
+                to: &directoryIgnoreStack,
+                warnings: &warnings,
+                diagnostics: &diagnostics,
+                rootBase: rootBase,
+                rootDebugDisplayPath: rootDebugDisplayPath,
+                rootArgumentIsAbsolute: rootArgumentIsAbsolute,
+                vcsContext: directoryVCSContext,
+                scope: directoryIgnoreScope(relativePath: relativePath),
+                directoryContents: DirectoryContents(
+                    children: [],
+                    hasGitMarker: contents.hasGitMarker,
+                    hasGitignore: contents.hasGitignore,
+                    hasIgnore: contents.hasIgnore,
+                    hasRgignore: contents.hasRgignore
+                ),
+                options: options
+            )
+        }
+
+        let directoryPathPrefix = directoryPath.hasSuffix("\\") || directoryPath.hasSuffix("/")
+            ? directoryPath
+            : directoryPath + "\\"
+        let logicalDirectoryPathPrefix = logicalDirectoryPath.isEmpty
+            ? ""
+            : logicalDirectoryPath + "/"
+        let relativePathPrefix = relativePath.isEmpty ? "" : relativePath + "/"
+        let ignoreStackIsEmpty = directoryIgnoreStack.isEmpty
+
+        func visitChild(_ child: WindowsFastDirectoryChild) throws {
+            guard child.kind != .symbolicLink && child.kind != .other else {
+                return
+            }
+            let isDirectory = child.kind == .directory
+            let childRelativePath = relativePathPrefix + child.name
+            if !options.hidden, child.isHidden {
+                if ignoreStackIsEmpty || !isIncludedByIgnore(
+                    relativePath: childRelativePath,
+                    basename: child.name,
+                    isDirectory: isDirectory,
+                    ignoreStack: directoryIgnoreStack
+                ) {
+                    return
+                }
+            }
+            if !ignoreStackIsEmpty,
+               !directoryIgnoreStack.allows(
+                relativePath: childRelativePath,
+                basename: child.name,
+                isDirectory: isDirectory
+               ) {
+                filtered = true
+                return
+            }
+
+            let physicalPath = directoryPathPrefix + child.name
+            if isDirectory {
+                try walkWindowsFastSearchFiles(
+                    directoryPath: physicalPath,
+                    logicalDirectoryPath: logicalDirectoryPathPrefix + child.name,
+                    logicalDirectoryPathIsASCII: logicalDirectoryPathIsASCII && child.isASCII,
+                    relativePath: childRelativePath,
+                    rootBase: rootBase,
+                    rootDebugDisplayPath: rootDebugDisplayPath,
+                    rootArgumentIsAbsolute: rootArgumentIsAbsolute,
+                    vcsContext: directoryVCSContext,
+                    messages: &messages,
+                    warnings: &warnings,
+                    diagnostics: &diagnostics,
+                    filtered: &filtered,
+                    ignoreStack: directoryIgnoreStack,
+                    options: options,
+                    lexicalOrder: lexicalOrder,
+                    didStop: &didStop,
+                    visit: visit
+                )
+            } else {
+                let outputPath = logicalDirectoryPathPrefix + child.name
+                let haystack = Haystack(
+                    url: URL(fileURLWithPath: physicalPath, isDirectory: false),
+                    isExplicit: false,
+                    overridePath: outputPath,
+                    fileSize: child.fileSize,
+                    isRegularFile: true
+                )
+                if visit(haystack) {
+                    didStop = true
+                }
+            }
+        }
+
+        if lexicalOrder {
+            for child in contents.children.sorted(by: { $0.name < $1.name }) {
+                try visitChild(child)
+                if didStop { return }
+            }
+        } else {
+            for child in contents.children.reversed() {
+                try visitChild(child)
+                if didStop { return }
+            }
+        }
+    }
+
+    private func windowsFastDirectoryContents(
+        atPath directoryPath: String,
+        collectIgnoreMarkers: Bool
+    ) throws -> WindowsFastDirectoryContents {
+        var searchPath = directoryPath
+        if !searchPath.hasSuffix("\\") && !searchPath.hasSuffix("/") {
+            searchPath.append("\\")
+        }
+        searchPath.append("*")
+
+        var findData = WIN32_FIND_DATAW()
+        let findHandle = searchPath.withCString(encodedAs: UTF16.self) { path in
+            FindFirstFileW(path, &findData)
+        }
+        guard findHandle != INVALID_HANDLE_VALUE else {
+            let error = GetLastError()
+            if error == DWORD(ERROR_FILE_NOT_FOUND) {
+                return WindowsFastDirectoryContents(
+                    children: [],
+                    hasGitMarker: false,
+                    hasGitignore: false,
+                    hasIgnore: false,
+                    hasRgignore: false
+                )
+            }
+            throw NSError(
+                domain: "NSWin32ErrorDomain",
+                code: Int(error),
+                userInfo: [NSFilePathErrorKey: directoryPath]
+            )
+        }
+        defer { FindClose(findHandle) }
+
+        var children: [WindowsFastDirectoryChild] = []
+        children.reserveCapacity(64)
+        var hasGitMarker = false
+        var hasGitignore = false
+        var hasIgnore = false
+        var hasRgignore = false
+        repeat {
+            let name = withUnsafePointer(to: &findData.cFileName) { pointer in
+                pointer.withMemoryRebound(to: WCHAR.self, capacity: Int(MAX_PATH)) {
+                    String(decodingCString: $0, as: UTF16.self)
+                }
+            }
+            if name == "." || name == ".." {
+                continue
+            }
+            let isHidden = name.utf16.first == 0x2E
+            if collectIgnoreMarkers, isHidden {
+                switch name {
+                case ".git": hasGitMarker = true
+                case ".gitignore": hasGitignore = true
+                case ".ignore": hasIgnore = true
+                case ".rgignore": hasRgignore = true
+                default: break
+                }
+            }
+            let attributes = findData.dwFileAttributes
+            let kind: WindowsFastDirectoryChild.Kind
+            if attributes & DWORD(FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
+                kind = .symbolicLink
+            } else if attributes & DWORD(FILE_ATTRIBUTE_DIRECTORY) != 0 {
+                kind = .directory
+            } else if attributes & DWORD(FILE_ATTRIBUTE_DEVICE) != 0 {
+                kind = .other
+            } else {
+                kind = .file
+            }
+            let fileSize = kind == .file
+                ? (UInt64(findData.nFileSizeHigh) << 32) | UInt64(findData.nFileSizeLow)
+                : nil
+            children.append(WindowsFastDirectoryChild(
+                name: name,
+                isASCII: name.utf8.allSatisfy { $0 < 0x80 },
+                isHidden: isHidden,
+                kind: kind,
+                fileSize: fileSize
+            ))
+        } while FindNextFileW(findHandle, &findData)
+
+        let finalError = GetLastError()
+        guard finalError == DWORD(ERROR_NO_MORE_FILES) else {
+            throw NSError(
+                domain: "NSWin32ErrorDomain",
+                code: Int(finalError),
+                userInfo: [NSFilePathErrorKey: directoryPath]
+            )
+        }
+        return WindowsFastDirectoryContents(
+            children: children,
+            hasGitMarker: hasGitMarker,
+            hasGitignore: hasGitignore,
+            hasIgnore: hasIgnore,
+            hasRgignore: hasRgignore
+        )
+    }
+    #endif
+
+    #if !canImport(Darwin)
+    private func hasLoadableIgnoreFiles(
+        hasGitMarker: Bool,
+        hasGitignore: Bool,
+        hasIgnore: Bool,
+        hasRgignore: Bool,
+        vcsContext: Bool,
+        options: RipgrepOptions
+    ) -> Bool {
+        if !options.noIgnoreDot && (hasIgnore || hasRgignore) {
+            return true
+        }
+        let shouldLoadVCSIgnore = !options.noIgnoreVCS && (options.noRequireGit || vcsContext)
+        return shouldLoadVCSIgnore && (hasGitignore || (!options.noIgnoreExclude && hasGitMarker))
+    }
+    #endif
+
     private func walk(
         _ url: URL,
         physicalURL: URL?,
@@ -3582,6 +4100,93 @@ public struct FileWalker: @unchecked Sendable {
             hasIgnore: hasIgnore,
             hasRgignore: hasRgignore
         )
+        #elseif os(Windows)
+        var searchPath = url.path
+        if !searchPath.hasSuffix("\\") && !searchPath.hasSuffix("/") {
+            searchPath.append("\\")
+        }
+        searchPath.append("*")
+
+        var findData = WIN32_FIND_DATAW()
+        let findHandle = searchPath.withCString(encodedAs: UTF16.self) {
+            FindFirstFileW($0, &findData)
+        }
+        guard findHandle != INVALID_HANDLE_VALUE else {
+            let error = GetLastError()
+            if error == DWORD(ERROR_FILE_NOT_FOUND) {
+                return DirectoryContents(
+                    children: [],
+                    hasGitMarker: false,
+                    hasGitignore: false,
+                    hasIgnore: false,
+                    hasRgignore: false
+                )
+            }
+            throw NSError(
+                domain: "NSWin32ErrorDomain",
+                code: Int(error),
+                userInfo: [NSFilePathErrorKey: url.path]
+            )
+        }
+        defer { FindClose(findHandle) }
+
+        var children: [DirectoryChild] = []
+        var hasGitMarker = false
+        var hasGitignore = false
+        var hasIgnore = false
+        var hasRgignore = false
+        repeat {
+            let name = withUnsafePointer(to: &findData.cFileName) { pointer in
+                pointer.withMemoryRebound(to: WCHAR.self, capacity: Int(MAX_PATH)) {
+                    String(decodingCString: $0, as: UTF16.self)
+                }
+            }
+            if name == "." || name == ".." {
+                continue
+            }
+            switch name {
+            case ".git":
+                hasGitMarker = true
+            case ".gitignore":
+                hasGitignore = true
+            case ".ignore":
+                hasIgnore = true
+            case ".rgignore":
+                hasRgignore = true
+            default:
+                break
+            }
+            let attributes = findData.dwFileAttributes
+            let isDirectory = attributes & DWORD(FILE_ATTRIBUTE_DIRECTORY) != 0
+            let isSymbolicLink = attributes & DWORD(FILE_ATTRIBUTE_REPARSE_POINT) != 0
+            let fileSize = (UInt64(findData.nFileSizeHigh) << 32) | UInt64(findData.nFileSizeLow)
+            children.append(DirectoryChild(
+                url: url.appendingPathComponent(name),
+                name: name,
+                metadata: WalkMetadata(
+                    isDirectory: isDirectory,
+                    isRegularFile: !isDirectory && !isSymbolicLink,
+                    isSymbolicLink: isSymbolicLink,
+                    fileSize: isDirectory ? nil : fileSize
+                )
+            ))
+        } while FindNextFileW(findHandle, &findData)
+
+        let finalError = GetLastError()
+        if finalError != DWORD(ERROR_NO_MORE_FILES) {
+            throw NSError(
+                domain: "NSWin32ErrorDomain",
+                code: Int(finalError),
+                userInfo: [NSFilePathErrorKey: url.path]
+            )
+        }
+        return DirectoryContents(
+            children: children,
+            hasGitMarker: hasGitMarker,
+            hasGitignore: hasGitignore,
+            hasIgnore: hasIgnore,
+            hasRgignore: hasRgignore
+        )
         #else
         let urls = try fileManager.contentsOfDirectory(
             at: url,
@@ -3630,6 +4235,8 @@ public struct FileWalker: @unchecked Sendable {
         options.mode == .files
             && options.maxFileSize == nil
             && !options.followSymlinks
+        #elseif os(Windows)
+        true
         #else
         false
         #endif
@@ -3835,6 +4442,11 @@ public struct FileWalker: @unchecked Sendable {
     }
 
     private func ordered(_ haystacks: [Haystack], options: RipgrepOptions) -> [Haystack] {
+        #if os(Windows)
+        if options.threadCount == 1, options.sortMode == nil {
+            return haystacks.sorted { PathSort.compare($0.url, $1.url) == .orderedAscending }
+        }
+        #endif
         if options.mode == .files,
            options.sortMode?.reverse == true {
             return sorted(haystacks, options: options)
@@ -4329,8 +4941,8 @@ public struct FileWalker: @unchecked Sendable {
             return url.lastPathComponent
         }
 #endif
-        let path = url.standardizedFileURL.path
-        let basePath = rootBase.standardizedFileURL.path
+        let path = normalizedTraversalPath(url.standardizedFileURL.path)
+        let basePath = normalizedTraversalPath(rootBase.standardizedFileURL.path)
         let prefix = basePath.hasSuffix("/") ? basePath : "\(basePath)/"
         if path.hasPrefix(prefix) {
             return String(path.dropFirst(prefix.count))
@@ -4351,13 +4963,13 @@ public struct FileWalker: @unchecked Sendable {
             return path.hasPrefix("/") ? String(path.dropFirst()) : path
         }
 #endif
-        let path = url.standardizedFileURL.path
+        let path = normalizedTraversalPath(url.standardizedFileURL.path)
         guard !rootArgumentIsAbsolute else {
             return path.hasPrefix("/") ? String(path.dropFirst()) : path
         }
-        let cwd = URL(fileURLWithPath: fileManager.currentDirectoryPath, isDirectory: true)
+        let cwd = normalizedTraversalPath(URL(fileURLWithPath: fileManager.currentDirectoryPath, isDirectory: true)
             .standardizedFileURL
-            .path
+            .path)
         let prefix = cwd.hasSuffix("/") ? cwd : "\(cwd)/"
         if path.hasPrefix(prefix) {
             return String(path.dropFirst(prefix.count))
@@ -4366,8 +4978,8 @@ public struct FileWalker: @unchecked Sendable {
     }
 
     private func relativePathIfContained(_ url: URL, in baseURL: URL) -> String? {
-        let path = url.standardizedFileURL.path
-        let basePath = baseURL.standardizedFileURL.path
+        let path = normalizedTraversalPath(url.standardizedFileURL.path)
+        let basePath = normalizedTraversalPath(baseURL.standardizedFileURL.path)
         if path == basePath {
             return ""
         }
@@ -4376,6 +4988,21 @@ public struct FileWalker: @unchecked Sendable {
             return nil
         }
         return String(path.dropFirst(prefix.count))
+    }
+
+    private func normalizedTraversalPath(_ path: String) -> String {
+        #if os(Windows)
+        var normalized = path.replacingOccurrences(of: "\\", with: "/")
+        let bytes = Array(normalized.utf8.prefix(3))
+        if bytes.count == 3,
+           bytes[0] == UInt8(ascii: "/"),
+           bytes[2] == UInt8(ascii: ":") {
+            normalized.removeFirst()
+        }
+        return normalized
+        #else
+        return path
+        #endif
     }
 
     private func appendLoadedMatcher(
@@ -4685,7 +5312,11 @@ public struct FileWalker: @unchecked Sendable {
         let renderedPath = displayPath ?? fileURL.path
         var isDirectory: ObjCBool = false
         if fileManager.fileExists(atPath: fileURL.path, isDirectory: &isDirectory), isDirectory.boolValue {
+            #if os(Windows)
+            return "\(renderedPath): Access is denied. (os error 5)"
+            #else
             return "\(renderedPath): line 1: Is a directory (os error 21)"
+            #endif
         }
         if !fileManager.fileExists(atPath: fileURL.path) {
             return "\(renderedPath): No such file or directory (os error 2)"

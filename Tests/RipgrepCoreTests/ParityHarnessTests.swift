@@ -706,7 +706,7 @@ private func miscParityCases() -> [ParityCase] {
         ParityCase(name: "misc::file_types_negate_all", fixture: { dir in try write(SHERLOCK, to: "sherlock", in: dir); try write("Sherlock", to: "file.py", in: dir) }, arguments: ["-T", "all", "Sherlock"]),
         ParityCase(name: "misc::file_type_clear", fixture: fileTypesFixture, arguments: ["--type-clear", "rust", "-t", "rust", "Sherlock"]),
         ParityCase(name: "misc::file_type_add", fixture: { dir in try fileTypesFixture(dir); try write("Sherlock", to: "file.wat", in: dir) }, arguments: ["--type-add", "wat:*.wat", "-t", "wat", "Sherlock"]),
-        ParityCase(name: "misc::file_type_add_compose", fixture: { dir in try fileTypesFixture(dir); try write("Sherlock", to: "file.wat", in: dir) }, arguments: ["--type-add", "wat:*.wat", "--type-add", "combo:include:wat,py", "-t", "combo", "Sherlock"]),
+        ParityCase(name: "misc::file_type_add_compose", fixture: { dir in try fileTypesFixture(dir); try write("Sherlock", to: "file.wat", in: dir) }, arguments: ["--sort", "path", "--type-add", "wat:*.wat", "--type-add", "combo:include:wat,py", "-t", "combo", "Sherlock"]),
         ParityCase(name: "misc::glob", fixture: fileTypesFixture, arguments: ["-g", "*.rs", "Sherlock"]),
         ParityCase(name: "misc::glob_negate", fixture: fileTypesNoSherlockFixture, arguments: ["-g", "!*.rs", "Sherlock"]),
         ParityCase(name: "misc::glob_case_insensitive", fixture: { dir in try write(SHERLOCK, to: "sherlock", in: dir); try write("Sherlock", to: "file.HTML", in: dir) }, arguments: ["--iglob", "*.html", "Sherlock"]),
@@ -849,7 +849,7 @@ private func jsonParityCases() -> [ParityCase] {
         ParityCase(name: "json::basic", fixture: sherlockFixture, arguments: ["--json", "-B1", "Sherlock Holmes", "sherlock"], intentionallySkippedBecause: jsonElapsedDivergence),
         ParityCase(name: "json::replacement", fixture: sherlockFixture, arguments: ["--json", "-B1", "Sherlock Holmes", "-r", "John Watson", "sherlock"], intentionallySkippedBecause: jsonElapsedDivergence),
         ParityCase(name: "json::quiet_stats", fixture: sherlockFixture, arguments: ["--json", "--quiet", "--stats", "Sherlock Holmes", "sherlock"], intentionallySkippedBecause: jsonElapsedDivergence),
-        ParityCase(name: "json::notutf8", fixture: { _ in }, arguments: ["--json", #"(?-u)\xFF"#], intentionallySkippedBecause: "APFS does not support Rust's invalid UTF-8 filename fixture; JSON elapsed fields also differ byte-for-byte."),
+        ParityCase(name: "json::notutf8", fixture: { _ in }, arguments: ["--json", #"(?-u)\xFF"#], intentionallySkippedBecause: "This filesystem does not support Rust's invalid UTF-8 filename fixture; JSON elapsed fields also differ byte-for-byte."),
         ParityCase(name: "json::notutf8_file", fixture: notUTF8FileFixture, arguments: ["--json", #"(?-u)\xFF"#], intentionallySkippedBecause: jsonElapsedDivergence),
         ParityCase(name: "json::crlf", fixture: sherlockCRLFFixture, arguments: ["--json", "--crlf", #"Sherlock$"#, "sherlock"], intentionallySkippedBecause: jsonElapsedDivergence),
         ParityCase(name: "json::r1095_missing_crlf_default", fixture: { dir in try write("test\r\n", to: "foo", in: dir) }, arguments: ["--json", "test"], intentionallySkippedBecause: jsonElapsedDivergence),
@@ -951,7 +951,12 @@ private func findRustRipgrep(packageRoot: URL) throws -> URL {
        !configuredPath.isEmpty
     {
         let configuredURL = URL(fileURLWithPath: configuredPath)
-        guard FileManager.default.isExecutableFile(atPath: configuredURL.path) else {
+        #if os(Windows)
+        let configuredBinaryExists = FileManager.default.fileExists(atPath: configuredURL.path)
+        #else
+        let configuredBinaryExists = FileManager.default.isExecutableFile(atPath: configuredURL.path)
+        #endif
+        guard configuredBinaryExists else {
             XCTFail("SWIFT_RIPGREP_RUST_BINARY is not executable: \(configuredPath)")
             throw ParityHarnessError.missingRustRipgrep
         }
@@ -974,8 +979,28 @@ private func findRustRipgrep(packageRoot: URL) throws -> URL {
 }
 
 private func ensureSwiftRipgrepBinary(packageRoot: URL) throws -> URL {
-    let binary = packageRoot.appendingPathComponent(".build/debug/ripgrep")
-    if FileManager.default.isExecutableFile(atPath: binary.path) {
+    if let configuredPath = ProcessInfo.processInfo.environment["SWIFT_RIPGREP_SWIFT_BINARY"],
+       !configuredPath.isEmpty {
+        let configuredURL = URL(fileURLWithPath: configuredPath)
+        #if os(Windows)
+        let configuredBinaryExists = FileManager.default.fileExists(atPath: configuredURL.path)
+        #else
+        let configuredBinaryExists = FileManager.default.isExecutableFile(atPath: configuredURL.path)
+        #endif
+        guard configuredBinaryExists else {
+            XCTFail("SWIFT_RIPGREP_SWIFT_BINARY is not executable: \(configuredPath)")
+            throw ParityHarnessError.buildFailed
+        }
+        return configuredURL
+    }
+
+    let binary = ripgrepExecutableURL()
+    #if os(Windows)
+    let binaryExists = FileManager.default.fileExists(atPath: binary.path)
+    #else
+    let binaryExists = FileManager.default.isExecutableFile(atPath: binary.path)
+    #endif
+    if binaryExists {
         return binary
     }
 
@@ -1013,13 +1038,21 @@ private func runProcess(
     if stdin != nil {
         process.standardInput = input
     }
+    #if os(Windows)
+    let consoleInput = stdin == nil ? FileHandle(forReadingAtPath: "CONIN$") : nil
+    if let consoleInput {
+        process.standardInput = consoleInput
+    }
+    #endif
     process.standardOutput = output
     process.standardError = error
 
     try process.run()
     if let stdin {
-        try input.fileHandleForWriting.write(contentsOf: stdin)
-        try input.fileHandleForWriting.close()
+        // Commands that reject their arguments can exit before consuming
+        // stdin. A broken pipe in that case is not a harness failure.
+        try? input.fileHandleForWriting.write(contentsOf: stdin)
+        try? input.fileHandleForWriting.close()
     }
     let stdout = output.fileHandleForReading.readDataToEndOfFile()
     let stderr = error.fileHandleForReading.readDataToEndOfFile()

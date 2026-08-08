@@ -11,6 +11,7 @@ public struct PatternMatcher {
     private let byteRequiredLiteralPrefilterCache: ByteLiteralFastPath?
     private let wordWhitespaceSequenceFastPathCache: WordWhitespaceSequenceFastPath?
     private let asciiFixedClassSequenceFastPathCache: ASCIIFixedClassSequenceFastPath?
+    private let asciiAlternationZeroOrMoreSuffixFastPathCache: ByteLiteralFastPath?
     public let usesByteSemantics: Bool
 
     public init(options: RipgrepOptions) throws {
@@ -29,6 +30,10 @@ public struct PatternMatcher {
             usesByteSemantics: usesByteSemantics
         )
         let asciiFixedClassSequenceFastPath = Self.makeASCIIFixedClassSequenceFastPath(
+            patterns: patternSources,
+            options: options
+        )
+        let asciiAlternationZeroOrMoreSuffixFastPath = Self.makeASCIIAlternationZeroOrMoreSuffixFastPath(
             patterns: patternSources,
             options: options
         )
@@ -120,6 +125,13 @@ public struct PatternMatcher {
                         oneOrMore: greekScriptPattern.oneOrMore
                     )]
                 }
+                // ICU's Windows regex backend treats the LF half of CRLF as
+                // part of a single line-break token and misses a literal LF
+                // pattern there. A literal matcher preserves ripgrep's byte
+                // semantics for the bare multiline newline pattern.
+                if options.multiline, pattern == "\n" || pattern == #"\n"# {
+                    return [.literal("\n")]
+                }
                 if let literals = Self.defaultLiteralPatterns(for: pattern, options: options) {
                     return literals.map { literal in
                         .literal(usesByteSemantics ? Self.bytePattern(literal) : literal)
@@ -181,6 +193,7 @@ public struct PatternMatcher {
         )
         self.wordWhitespaceSequenceFastPathCache = wordWhitespaceSequenceFastPath
         self.asciiFixedClassSequenceFastPathCache = asciiFixedClassSequenceFastPath
+        self.asciiAlternationZeroOrMoreSuffixFastPathCache = asciiAlternationZeroOrMoreSuffixFastPath
     }
 
     private static func lineTerminatorPatternError(terminator: String) -> String {
@@ -553,6 +566,10 @@ public struct PatternMatcher {
         return asciiFixedClassSequenceFastPathCache
     }
 
+    func asciiAlternationZeroOrMoreSuffixFastPath() -> ByteLiteralFastPath? {
+        return asciiAlternationZeroOrMoreSuffixFastPathCache
+    }
+
     func greekScriptFastPath() -> GreekScriptFastPath? {
         guard patterns.count == 1,
               case .greekScript(let caseInsensitive, _) = patterns[0] else {
@@ -833,6 +850,136 @@ public struct PatternMatcher {
         }
 
         return classes.isEmpty ? nil : ASCIIFixedClassSequenceFastPath(classes: classes)
+    }
+
+    /// Recognizes regexes whose mandatory portion is an ASCII literal
+    /// alternation and whose remainder can always match the empty string, for
+    /// example `(Darwin|Windows)[A-Za-z]*`. In modes that only need to know
+    /// whether a line matched, finding one alternative is therefore sufficient.
+    private static func makeASCIIAlternationZeroOrMoreSuffixFastPath(
+        patterns: [String],
+        options: RipgrepOptions
+    ) -> ByteLiteralFastPath? {
+        guard patterns.count == 1,
+              !options.fixedStrings,
+              !options.effectiveIgnoreCase,
+              !options.multiline,
+              !options.nullData,
+              !options.wordRegexp,
+              !options.lineRegexp,
+              !options.invertMatch,
+              options.engineMode != .pcre2 else {
+            return nil
+        }
+
+        var pattern = patterns[0]
+        if pattern.hasPrefix("(?-u)") {
+            pattern.removeFirst("(?-u)".count)
+        }
+        guard pattern.first == "(" else {
+            return nil
+        }
+
+        var groupStart = pattern.index(after: pattern.startIndex)
+        if pattern[groupStart...].hasPrefix("?:") {
+            groupStart = pattern.index(groupStart, offsetBy: 2)
+        }
+
+        var escaped = false
+        var close: String.Index?
+        var index = groupStart
+        while index < pattern.endIndex {
+            let character = pattern[index]
+            if escaped {
+                escaped = false
+            } else if character == "\\" {
+                escaped = true
+            } else if character == "(" || character == "[" {
+                return nil
+            } else if character == ")" {
+                close = index
+                break
+            }
+            index = pattern.index(after: index)
+        }
+        guard let close, close > groupStart else {
+            return nil
+        }
+
+        let group = pattern[groupStart..<close]
+        var alternatives: [String] = []
+        var alternativeStart = group.startIndex
+        escaped = false
+        index = group.startIndex
+        while index < group.endIndex {
+            let character = group[index]
+            if escaped {
+                escaped = false
+            } else if character == "\\" {
+                escaped = true
+            } else if character == "|" {
+                alternatives.append(String(group[alternativeStart..<index]))
+                alternativeStart = group.index(after: index)
+            }
+            index = group.index(after: index)
+        }
+        alternatives.append(String(group[alternativeStart...]))
+        guard alternatives.count >= 2 else {
+            return nil
+        }
+
+        let literals = alternatives.compactMap {
+            RegexLiteralParser.literal(fromPlainRegexPattern: $0)
+        }
+        guard literals.count == alternatives.count,
+              literals.allSatisfy({ !$0.isEmpty && $0.utf8.allSatisfy(\.isASCII) }) else {
+            return nil
+        }
+
+        var suffixIndex = pattern.index(after: close)
+        var suffixAtoms = 0
+        while suffixIndex < pattern.endIndex {
+            guard pattern[suffixIndex] == "[" else {
+                return nil
+            }
+            suffixIndex = pattern.index(after: suffixIndex)
+            var classEscaped = false
+            var hasClassContent = false
+            var foundClassEnd = false
+            while suffixIndex < pattern.endIndex {
+                let character = pattern[suffixIndex]
+                if classEscaped {
+                    classEscaped = false
+                    hasClassContent = true
+                } else if character == "\\" {
+                    classEscaped = true
+                    hasClassContent = true
+                } else if character == "]" && hasClassContent {
+                    foundClassEnd = true
+                    suffixIndex = pattern.index(after: suffixIndex)
+                    break
+                } else {
+                    hasClassContent = true
+                }
+                suffixIndex = pattern.index(after: suffixIndex)
+            }
+            guard foundClassEnd,
+                  suffixIndex < pattern.endIndex,
+                  pattern[suffixIndex] == "*" else {
+                return nil
+            }
+            suffixIndex = pattern.index(after: suffixIndex)
+            suffixAtoms += 1
+        }
+        guard suffixAtoms > 0 else {
+            return nil
+        }
+
+        return ByteLiteralFastPath(
+            literals: literals.map { Array($0.utf8) },
+            caseInsensitiveASCII: false,
+            wordASCII: false
+        )
     }
 
     private static func makeByteRequiredLiteralPrefilter(
@@ -3610,6 +3757,15 @@ public struct PatternMatcher {
                 index = line.index(after: index)
             }
             return ranges
+        }
+        if literal == "\n" {
+            let scalars = line.unicodeScalars
+            return scalars.indices.compactMap { index in
+                guard scalars[index] == "\n" else {
+                    return nil
+                }
+                return index..<scalars.index(after: index)
+            }
         }
         if options.effectiveIgnoreCase {
             return caseInsensitiveLiteralRanges(literal, in: line)

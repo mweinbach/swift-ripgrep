@@ -116,10 +116,18 @@ struct OutputPathFormatter {
         let normalizedPath = path.utf8.allSatisfy(\.isASCII)
             ? path
             : path.precomposedStringWithCanonicalMapping
-        guard applyingPathSeparator, let pathSeparator = options.pathSeparator else {
+        #if os(Windows)
+        let pathSeparator = applyingPathSeparator ? (options.pathSeparator ?? "\\") : "\\"
+        return String(normalizedPath.map { $0 == "/" || $0 == "\\" ? pathSeparator : $0 })
+        #else
+        guard applyingPathSeparator else {
+            return normalizedPath
+        }
+        guard let pathSeparator = options.pathSeparator else {
             return normalizedPath
         }
         return String(normalizedPath.map { $0 == "/" ? pathSeparator : $0 })
+        #endif
     }
 }
 

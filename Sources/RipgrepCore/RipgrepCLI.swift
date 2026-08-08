@@ -1,5 +1,16 @@
-import Darwin
 import Foundation
+#if canImport(WinSDK)
+import WinSDK
+#endif
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#elseif canImport(Musl)
+import Musl
+#elseif canImport(CRT)
+import CRT
+#endif
 
 public enum RipgrepCLI {
     public static let version = "15.2.0"
@@ -375,20 +386,26 @@ public enum RipgrepCLI {
         guard stdoutOverride == nil else {
             return
         }
+        #if canImport(Darwin) || canImport(Glibc) || canImport(Musl) || canImport(CRT)
         switch resolvedBufferMode(options.bufferMode) {
         case .line:
-            setvbuf(Darwin.stdout, nil, _IOLBF, 0)
+            setvbuf(stdout, nil, _IOLBF, 0)
         case .block:
-            setvbuf(Darwin.stdout, nil, _IOFBF, 262_144)
+            setvbuf(stdout, nil, _IOFBF, 262_144)
         case .automatic:
             break
         }
+        #endif
     }
 
     private static func resolvedBufferMode(_ mode: BufferMode) -> BufferMode {
         switch mode {
         case .automatic:
+            #if os(Windows)
+            return _isatty(_fileno(stdout)) != 0 ? .line : .block
+            #else
             return isatty(STDOUT_FILENO) != 0 ? .line : .block
+            #endif
         case .line, .block:
             return mode
         }
@@ -410,7 +427,11 @@ public enum RipgrepCLI {
         guard let baseAddress = buffer.baseAddress else {
             return
         }
-        fwrite(baseAddress, 1, buffer.count, Darwin.stdout)
+        #if canImport(Darwin) || canImport(Glibc) || canImport(Musl) || canImport(CRT)
+        fwrite(baseAddress, 1, buffer.count, stdout)
+        #else
+        FileHandle.standardOutput.write(Data(buffer))
+        #endif
     }
 
     private static func outputEncodingMode(for options: RipgrepOptions, results: SearchResults) -> EncodingMode? {
@@ -450,11 +471,15 @@ public enum RipgrepCLI {
     }
 
     private static func realpath(_ path: String) -> String? {
+        #if canImport(Darwin) || canImport(Glibc) || canImport(Musl)
         guard let resolved = Darwin.realpath(path, nil) else {
             return nil
         }
         defer { free(resolved) }
         return String(cString: resolved)
+        #else
+        return URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL.path
+        #endif
     }
 
     private static func debugHostname() -> String? {
@@ -502,8 +527,6 @@ public enum RipgrepCLI {
             && !options.useStdin
             && !options.patternFileStdin
             && options.rootPathArguments.isEmpty
-            && options.roots.count == 1
-            && options.roots[0].path == FileManager.default.currentDirectoryPath
             && (stdinProvided || standardInputIsReadable)
     }
 
@@ -515,19 +538,34 @@ public enum RipgrepCLI {
     }
 
     private static func shouldPrintNothingSearchedWarning(results: SearchResults, options: RipgrepOptions) -> Bool {
-        guard options.rootPathArguments.isEmpty,
-              results.summary.filesSearched == 0,
-              results.messages.isEmpty,
-              results.filtered,
+        if hasExplicitIgnoreFileLoadError(options: options) {
+            return true
+        }
+        guard results.summary.filesSearched == 0,
               options.maxFileSize == nil,
               options.typeChanges.isEmpty else {
             return false
         }
-        return true
+        return options.rootPathArguments.isEmpty
+            && results.messages.isEmpty
+            && results.filtered
     }
 
     private static func shouldExitForImplicitNothingSearched(results: SearchResults, options: RipgrepOptions) -> Bool {
-        options.rootPathArguments.isEmpty && shouldPrintNothingSearchedWarning(results: results, options: options)
+        hasExplicitIgnoreFileLoadError(options: options)
+            || (options.rootPathArguments.isEmpty
+                && shouldPrintNothingSearchedWarning(results: results, options: options))
+    }
+
+    private static func hasExplicitIgnoreFileLoadError(options: RipgrepOptions) -> Bool {
+        guard !options.noIgnoreFiles else {
+            return false
+        }
+        return options.ignoreFiles.contains { fileURL in
+            var isDirectory = ObjCBool(false)
+            return !FileManager.default.fileExists(atPath: fileURL.path, isDirectory: &isDirectory)
+                || isDirectory.boolValue
+        }
     }
 
     private static func filesModePathsWithStdin(_ files: [URL], options: RipgrepOptions) -> [URL] {
@@ -594,12 +632,31 @@ public enum RipgrepCLI {
         ripgrep \(version) (rev \(revision))
 
         features:+pcre2
-        simd(compile):+NEON
-        simd(runtime):+NEON
+        \(simdVersionDetails)
 
         \(PCRE2Backend.versionDescription)
 
         """
+    }
+
+    private static var simdVersionDetails: String {
+        #if arch(arm64)
+        return "simd(compile):+NEON\nsimd(runtime):+NEON"
+        #elseif arch(x86_64)
+        #if os(Windows)
+        // x86-64 guarantees SSE2. These Windows processor-feature values are
+        // stable Win32 API constants and let the diagnostic reflect the host
+        // without enabling those instruction sets in the baseline binary.
+        let runtimeSSSE3 = IsProcessorFeaturePresent(36)
+        let runtimeAVX2 = IsProcessorFeaturePresent(40)
+        let runtime = "+SSE2,\(runtimeSSSE3 ? "+" : "-")SSSE3,\(runtimeAVX2 ? "+" : "-")AVX2"
+        #else
+        let runtime = "+SSE2,-SSSE3,-AVX2"
+        #endif
+        return "simd(compile):+SSE2,-SSSE3,-AVX2\nsimd(runtime):\(runtime)"
+        #else
+        return "simd(compile):-SIMD\nsimd(runtime):-SIMD"
+        #endif
     }
 
     private static func generate(_ mode: GenerateMode) -> String {

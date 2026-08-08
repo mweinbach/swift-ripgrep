@@ -3,6 +3,10 @@ import Foundation
 import Darwin
 #elseif canImport(Glibc)
 import Glibc
+#elseif canImport(Musl)
+import Musl
+#elseif canImport(CRT)
+import CRT
 #endif
 
 public struct GlobMatcher: Equatable {
@@ -167,7 +171,12 @@ public struct GlobMatcher: Equatable {
             self.anchored = anchored
             self.basenameOnly = basenameOnly
             self.sourcePath = sourcePath
-            let fastMatcher = GlobMatcher.compileFastMatcher(source, basenameOnly: basenameOnly, caseInsensitive: caseInsensitive)
+            // Anchored globs are matched against the entire relative path. A
+            // wildcard fast path such as `.any` or `.prefix` would otherwise
+            // cross a path separator, unlike gitignore's `*` semantics.
+            let fastMatcher = anchored && source.contains("*")
+                ? nil
+                : GlobMatcher.compileFastMatcher(source, basenameOnly: basenameOnly, caseInsensitive: caseInsensitive)
             let needsRegexFallback: Bool
             if fastMatcher != nil {
                 needsRegexFallback = false

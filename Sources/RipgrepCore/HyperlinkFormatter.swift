@@ -1,5 +1,11 @@
 import Foundation
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#elseif canImport(Musl)
+import Musl
+#endif
 
 struct HyperlinkFormatter {
     private static let escape = "\u{1B}"
@@ -24,11 +30,18 @@ struct HyperlinkFormatter {
             return nil
         }
         let process = Process()
-        if command.contains("/") {
+        if command.contains("/") || command.contains("\\") {
             process.executableURL = URL(fileURLWithPath: command)
         } else {
+            #if os(Windows)
+            guard let executable = resolveExecutable(command) else {
+                return nil
+            }
+            process.executableURL = executable
+            #else
             process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
             process.arguments = [command]
+            #endif
         }
         process.standardInput = FileHandle.nullDevice
         let output = Pipe()
@@ -49,6 +62,29 @@ struct HyperlinkFormatter {
         let hostname = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         return hostname.isEmpty ? nil : hostname
     }
+
+    #if os(Windows)
+    private static func resolveExecutable(_ program: String) -> URL? {
+        let environment = ProcessInfo.processInfo.environment
+        let path = environment.first { $0.key.caseInsensitiveCompare("PATH") == .orderedSame }?.value ?? ""
+        let extensions = (environment.first { $0.key.caseInsensitiveCompare("PATHEXT") == .orderedSame }?.value
+            ?? ".COM;.EXE;.BAT;.CMD")
+            .split(separator: ";")
+            .map(String.init)
+        let candidateNames = URL(fileURLWithPath: program).pathExtension.isEmpty
+            ? [program] + extensions.map { program + $0.lowercased() }
+            : [program]
+        for directory in path.split(separator: ";").map(String.init) {
+            for name in candidateNames {
+                let candidate = URL(fileURLWithPath: directory, isDirectory: true).appendingPathComponent(name)
+                if FileManager.default.fileExists(atPath: candidate.path) {
+                    return candidate
+                }
+            }
+        }
+        return nil
+    }
+    #endif
 
     func label(_ text: String, for url: URL, line: Int? = nil, column: Int? = nil) -> String {
         guard isEnabled,
@@ -85,19 +121,29 @@ struct HyperlinkFormatter {
             return nil
         }
         let canonical = canonicalPath(for: url)
-        guard canonical.hasPrefix("/") else {
+        #if os(Windows)
+        let hyperlinkPath = canonical.replacingOccurrences(of: "\\", with: "/")
+        let absolutePath = hyperlinkPath.hasPrefix("/") ? hyperlinkPath : "/\(hyperlinkPath)"
+        #else
+        let absolutePath = canonical
+        #endif
+        guard absolutePath.hasPrefix("/") else {
             return nil
         }
-        return percentEncode(canonical)
+        return percentEncode(absolutePath)
     }
 
     private func canonicalPath(for url: URL) -> String {
         let path = url.standardizedFileURL.path
+        #if canImport(Darwin) || canImport(Glibc) || canImport(Musl)
         guard let resolved = realpath(path, nil) else {
             return url.resolvingSymlinksInPath().standardizedFileURL.path
         }
         defer { free(resolved) }
         return String(cString: resolved)
+        #else
+        return url.resolvingSymlinksInPath().standardizedFileURL.path
+        #endif
     }
 
     private func percentEncode(_ path: String) -> String {

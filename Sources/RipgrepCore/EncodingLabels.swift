@@ -1,8 +1,12 @@
 import Foundation
+#if os(Windows)
+import WinSDK
+#endif
 
 public struct TextEncoding: Equatable, Sendable {
     fileprivate enum Decoder: Equatable, Sendable {
         case foundation(String.Encoding)
+        case windowsCodePage(UInt32)
         case windows1252
         case replacement
         case xUserDefined
@@ -27,16 +31,22 @@ public struct TextEncoding: Equatable, Sendable {
         TextEncoding(name: name, decoder: .foundation(encoding))
     }
 
+    #if !os(Windows)
     public static func coreFoundation(_ name: String, _ encoding: CFStringEncodings) -> TextEncoding {
         let raw = CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(encoding.rawValue))
         return .foundation(name, String.Encoding(rawValue: raw))
+    }
+    #endif
+
+    public static func windowsCodePage(_ name: String, _ codePage: UInt32) -> TextEncoding {
+        TextEncoding(name: name, decoder: .windowsCodePage(codePage))
     }
 
     var isUTF16: Bool {
         switch decoder {
         case .foundation(let encoding):
             return encoding == .utf16 || encoding == .utf16LittleEndian || encoding == .utf16BigEndian
-        case .windows1252, .replacement, .xUserDefined:
+        case .windowsCodePage, .windows1252, .replacement, .xUserDefined:
             return false
         }
     }
@@ -45,6 +55,8 @@ public struct TextEncoding: Equatable, Sendable {
         switch decoder {
         case .foundation(let encoding):
             return String(data: data, encoding: encoding) ?? String(decoding: data, as: UTF8.self)
+        case .windowsCodePage(let codePage):
+            return decodeWindowsCodePage(data, codePage: codePage)
         case .windows1252:
             return decodeWindows1252(data)
         case .replacement:
@@ -68,6 +80,41 @@ public struct TextEncoding: Equatable, Sendable {
 
     private static let asciiWhitespace = CharacterSet(charactersIn: "\u{0009}\u{000A}\u{000C}\u{000D}\u{0020}")
 
+    #if os(Windows)
+    private static let ibm866 = windowsCodePage("IBM866", 866)
+    private static let iso8859_2 = windowsCodePage("ISO-8859-2", 28_592)
+    private static let iso8859_3 = windowsCodePage("ISO-8859-3", 28_593)
+    private static let iso8859_4 = windowsCodePage("ISO-8859-4", 28_594)
+    private static let iso8859_5 = windowsCodePage("ISO-8859-5", 28_595)
+    private static let iso8859_6 = windowsCodePage("ISO-8859-6", 28_596)
+    private static let iso8859_7 = windowsCodePage("ISO-8859-7", 28_597)
+    private static let iso8859_8 = windowsCodePage("ISO-8859-8", 28_598)
+    private static let iso8859_10 = windowsCodePage("ISO-8859-10", 28_600)
+    private static let iso8859_13 = windowsCodePage("ISO-8859-13", 28_603)
+    private static let iso8859_14 = windowsCodePage("ISO-8859-14", 28_604)
+    private static let iso8859_15 = windowsCodePage("ISO-8859-15", 28_605)
+    private static let iso8859_16 = windowsCodePage("ISO-8859-16", 28_606)
+    private static let koi8r = windowsCodePage("KOI8-R", 20_866)
+    private static let koi8u = windowsCodePage("KOI8-U", 21_866)
+    private static let macintosh = windowsCodePage("macintosh", 10_000)
+    private static let windows874 = windowsCodePage("windows-874", 874)
+    private static let windows1250 = windowsCodePage("windows-1250", 1_250)
+    private static let windows1251 = windowsCodePage("windows-1251", 1_251)
+    private static let windows1253 = windowsCodePage("windows-1253", 1_253)
+    private static let windows1254 = windowsCodePage("windows-1254", 1_254)
+    private static let windows1255 = windowsCodePage("windows-1255", 1_255)
+    private static let windows1256 = windowsCodePage("windows-1256", 1_256)
+    private static let windows1257 = windowsCodePage("windows-1257", 1_257)
+    private static let windows1258 = windowsCodePage("windows-1258", 1_258)
+    private static let xMacCyrillic = windowsCodePage("x-mac-cyrillic", 10_007)
+    private static let gbk = windowsCodePage("GBK", 936)
+    private static let gb18030 = windowsCodePage("gb18030", 54_936)
+    private static let big5 = windowsCodePage("Big5", 950)
+    private static let eucJP = windowsCodePage("EUC-JP", 51_932)
+    private static let iso2022JP = windowsCodePage("ISO-2022-JP", 50_220)
+    private static let shiftJIS = windowsCodePage("Shift_JIS", 932)
+    private static let eucKR = windowsCodePage("EUC-KR", 51_949)
+    #else
     private static let ibm866 = coreFoundation("IBM866", .dosRussian)
     private static let iso8859_2 = coreFoundation("ISO-8859-2", .isoLatin2)
     private static let iso8859_3 = coreFoundation("ISO-8859-3", .isoLatin3)
@@ -101,6 +148,7 @@ public struct TextEncoding: Equatable, Sendable {
     private static let iso2022JP = coreFoundation("ISO-2022-JP", .ISO_2022_JP)
     private static let shiftJIS = coreFoundation("Shift_JIS", .shiftJIS)
     private static let eucKR = coreFoundation("EUC-KR", .EUC_KR)
+    #endif
 
     private static let labelTable: [String: TextEncoding] = {
         var table: [String: TextEncoding] = [:]
@@ -187,6 +235,125 @@ public struct TextEncoding: Equatable, Sendable {
         }
         return String(String.UnicodeScalarView(scalars))
     }
+
+    private func decodeWindowsCodePage(_ data: Data, codePage: UInt32) -> String {
+        #if os(Windows)
+        guard !data.isEmpty else {
+            return ""
+        }
+        let icuConverterName: String? = switch codePage {
+        case 950: "big5-hkscs"
+        case 936: "gbk"
+        case 54_936: "gb18030"
+        case 51_932: "euc-jp"
+        case 50_220: "iso-2022-jp"
+        case 932: "shift_jis"
+        case 51_949: "euc-kr"
+        default: nil
+        }
+        if let icuConverterName,
+           let decoded = decodeWithFoundationICU(data, converterName: icuConverterName) {
+            return decoded
+        }
+        let requiredCount = data.withUnsafeBytes { bytes -> Int32 in
+            guard let baseAddress = bytes.baseAddress?.assumingMemoryBound(to: CChar.self) else {
+                return 0
+            }
+            return MultiByteToWideChar(codePage, 0, baseAddress, Int32(bytes.count), nil, 0)
+        }
+        guard requiredCount > 0 else {
+            return String(decoding: data, as: UTF8.self)
+        }
+        var utf16 = [WCHAR](repeating: 0, count: Int(requiredCount))
+        let writtenCount = data.withUnsafeBytes { bytes -> Int32 in
+            guard let baseAddress = bytes.baseAddress?.assumingMemoryBound(to: CChar.self) else {
+                return 0
+            }
+            return utf16.withUnsafeMutableBufferPointer { destination in
+                MultiByteToWideChar(
+                    codePage,
+                    0,
+                    baseAddress,
+                    Int32(bytes.count),
+                    destination.baseAddress,
+                    requiredCount
+                )
+            }
+        }
+        guard writtenCount > 0 else {
+            return String(decoding: data, as: UTF8.self)
+        }
+        return String(decoding: utf16.prefix(Int(writtenCount)), as: UTF16.self)
+        #else
+        return String(decoding: data, as: UTF8.self)
+        #endif
+    }
+
+    #if os(Windows)
+    private func decodeWithFoundationICU(_ data: Data, converterName: String) -> String? {
+        typealias OpenConverter = @convention(c) (
+            UnsafePointer<CChar>?, UnsafeMutablePointer<Int32>?
+        ) -> OpaquePointer?
+        typealias CloseConverter = @convention(c) (OpaquePointer?) -> Void
+        typealias ConvertToUTF16 = @convention(c) (
+            OpaquePointer?, UnsafeMutablePointer<UInt16>?, Int32,
+            UnsafePointer<CChar>?, Int32, UnsafeMutablePointer<Int32>?
+        ) -> Int32
+
+        let libraryName = Array("_FoundationICU.dll".utf16) + [0]
+        guard let module = libraryName.withUnsafeBufferPointer({ name in
+            GetModuleHandleW(name.baseAddress) ?? LoadLibraryW(name.baseAddress)
+        }) else {
+            return nil
+        }
+        guard let openAddress = GetProcAddress(module, "swift_ucnv_open"),
+              let closeAddress = GetProcAddress(module, "swift_ucnv_close"),
+              let convertAddress = GetProcAddress(module, "swift_ucnv_toUChars") else {
+            return nil
+        }
+        let open = unsafeBitCast(openAddress, to: OpenConverter.self)
+        let close = unsafeBitCast(closeAddress, to: CloseConverter.self)
+        let convert = unsafeBitCast(convertAddress, to: ConvertToUTF16.self)
+
+        var status: Int32 = 0
+        guard let converter = converterName.withCString({ open($0, &status) }), status <= 0 else {
+            return nil
+        }
+        defer { close(converter) }
+
+        let requiredCount = data.withUnsafeBytes { bytes -> Int32 in
+            guard let source = bytes.baseAddress?.assumingMemoryBound(to: CChar.self) else {
+                return 0
+            }
+            status = 0
+            return convert(converter, nil, 0, source, Int32(bytes.count), &status)
+        }
+        guard requiredCount > 0 else {
+            return nil
+        }
+        var utf16 = [UInt16](repeating: 0, count: Int(requiredCount))
+        let writtenCount = data.withUnsafeBytes { bytes -> Int32 in
+            guard let source = bytes.baseAddress?.assumingMemoryBound(to: CChar.self) else {
+                return 0
+            }
+            status = 0
+            return utf16.withUnsafeMutableBufferPointer { destination in
+                convert(
+                    converter,
+                    destination.baseAddress,
+                    Int32(destination.count),
+                    source,
+                    Int32(bytes.count),
+                    &status
+                )
+            }
+        }
+        guard status <= 0, writtenCount > 0 else {
+            return nil
+        }
+        return String(decoding: utf16.prefix(Int(writtenCount)), as: UTF16.self)
+    }
+    #endif
 
     private func decodeXUserDefined(_ data: Data) -> String {
         let scalars = data.map { byte -> UnicodeScalar in

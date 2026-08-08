@@ -7,10 +7,23 @@ in-tree Swift compatibility engine; it does not link libpcre2.
 
 ## Status — 2026-08-07
 
-**Functional 1:1 with Rust ripgrep 15.2.0 across the covered harness,
+Windows x86-64 is now a supported build target. The Windows port uses native
+binary stdio (so output remains LF-delimited and NUL-safe), detects piped stdin
+through Win32 handles, uses Foundation mapped data for `--mmap`, normalizes
+default output paths to Windows separators, resolves helper executables with
+Windows `PATH`/`PATHEXT` rules, and decodes legacy encodings through the Windows
+API plus Swift Foundation's ICU runtime for WHATWG mappings Windows code pages
+do not provide. Recursive walking uses `FindFirstFileW` / `FindNextFileW` and
+reuses their attributes and file sizes instead of making a second Foundation
+metadata call for every entry. Non-macOS builds exclude the 20,000-line Swift Darwin preflight
+and the macOS executable preflight source in `Package.swift` instead of merely
+relying on inactive conditional-compilation blocks. The optional C performance
+shim is restricted to macOS arm64; macOS x86-64 retains the Swift fallback.
+
+**On macOS, functional 1:1 with Rust ripgrep 15.2.0 across the covered harness,
 including the streaming I/O architecture.** Verified via:
 
-- **220 Swift Testing cases** across 12 suites covering search, output formats,
+- **221 Swift Testing cases** across 12 suites covering search, output formats,
   ignore rules, file types, stdin, encodings, binary handling, parser
   diagnostics, mmap/worker pool, PCRE2, streaming haystack reads, and
   generated-asset drift.
@@ -26,6 +39,72 @@ including the streaming I/O architecture.** Verified via:
 - **Ad-hoc parity sweep:** 36/36 probes byte-identical to `rg` across PCRE2,
   encoding labels, mmap selection, threaded search, every output mode,
   glob/ignore handling, and JSON output.
+
+On Windows x86-64, the same 368-case harness executes 346 cases and skips 22
+(21 compressed-input cases because their helper programs are not installed,
+plus the invalid-UTF-8 filename fixture). All **346/346 executed cases are
+byte-for-byte identical to Rust ripgrep 15.2.0** after normalizing JSON elapsed
+timings. This includes Windows path and traversal ordering, rooted ignore
+negation, directory ignore-file diagnostics, CRLF multiline JSON, legacy
+encodings, mmap selection, binary stdin, and PCRE-style matching.
+
+The first Windows performance pass keeps the general Swift implementation but
+enables its raw-byte literal and required-literal regex scanners on Windows,
+adds a safe byte proof for literal alternations followed by zero-or-more ASCII
+classes in count/path modes, and uses native Win32 traversal metadata. On the
+repository source tree (15-run medians, Windows x86-64 release), recursive
+`--files` fell from about 61 ms to 29 ms, a recursive literal count from 99 ms
+to 31 ms, and `(Darwin|Windows)[A-Za-z]*` recursive count from 280 ms to 32 ms.
+The matching Rust 15.2.0 measurements were 14 ms, 15 ms, and 16 ms. Swift's
+roughly 19 ms process startup is now a material part of every short benchmark.
+The normal `Windows.sdk` links the Swift and Foundation runtimes dynamically,
+but Swift 6.3.3 also ships their static archives in
+`WindowsExperimental.sdk`. `scripts/build-windows-static.ps1` selects that SDK
+and passes `-static-stdlib` in an isolated scratch directory. The resulting
+binary removes the Swift/Foundation DLL startup dependency and improves the
+measured Windows cases by about 10–15% (startup 18.9 ms to 16.1 ms), at the cost
+of growing from 7.2 MB to 68.3 MB. It remains an opt-in release profile.
+
+Windows x86-64 now has a narrow executable-level counterpart to the macOS arm
+preflight for one explicit regular file. `WindowsX86LiteralPreflight.swift`
+uses Win32 file mapping, baseline-safe Swift `SIMD16<UInt8>` byte/newline
+scans, and a 256 KiB `WriteFile` output buffer. It covers plain literal output,
+line numbers, line/match counts, quiet, and files-with/without-match modes;
+regex metacharacters, configuration files, BOM/UTF-16, binary data, terminal
+color output, directories, and richer flags deliberately fall through to the
+full parser and matcher. `SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT=1` provides an
+A/B escape hatch. In 31-run static-build medians, the shortcut improved the
+covered cases by 15–32%; small and 900 KiB explicit-file probes finished at
+1.31–1.52x Rust instead of approximately 1.7–1.9x through the static full
+pipeline. Both dynamic and static binaries passed all 346 executed Windows
+Rust-parity cases with this path enabled.
+
+The recursive pipeline now shares the portable match-driven literal scanners
+on Windows instead of walking every byte looking for line boundaries before
+testing each line. Those scanners use the Swift `SIMD16<UInt8>` memmem and
+byte-count primitives while preserving the existing 12-worker Win32 traversal
+pipeline and ordered output. On a warm 132 MiB synthetic recursive corpus,
+release medians improved by about 16% for matching lines, 27% for `-c`, 15%
+for an absent literal, and 26% for `-l`. The final static build measured at
+0.94x Rust for matching lines, 1.05x for `-c`, and 1.02x for an absent literal;
+a dense `--count-matches` case measured at 0.31x Rust. A SIMD whole-file
+prefilter and a `core-avx2` compiler build were both measured and rejected
+because they were neutral or slower, so the normal Windows binary remains
+compatible with the x86-64 SSE2 baseline. On the 256-file/17 MiB corpus,
+the original Foundation-heavy walk left Swift at roughly 2x Rust despite
+equivalent scanner throughput. A subsequent Windows walker pass now enumerates
+with `FindFirstFileW`/`FindNextFileW`, carries `WIN32_FIND_DATAW` file sizes
+into each `Haystack`, avoids repeated URL standardization and metadata probes,
+and streams `--files` output in 64 KiB batches. On that corpus the final static
+build measured at 27–30 ms for search/count/miss instead of 42–49 ms before
+the walker pass; `--files` fell from about 45 ms to 21 ms. The representative
+absent-literal run was 27.15 ms versus Rust's 17.85 ms, while no-work startup
+was 17.32 ms versus 8.83 ms. Thus about 8.5 ms of the 9.3 ms remaining gap is
+fixed Swift process startup rather than traversal or file scanning.
+
+SwiftPM 6.3.3's Windows ThinLTO path was also evaluated, but its generated link
+command still names per-file `.o` inputs after the frontend emits LTO bitcode,
+so that configuration currently fails before producing an executable.
 - **PCRE long-tail stress sweep:** 36/36 probes byte-identical to the sibling
   Rust PCRE2 oracle after the 2026-05-26 named-replacement, branch-reset
   suffix, leading-`(?U)`, `(*PRUNE)`, group-state conditional and `\A`

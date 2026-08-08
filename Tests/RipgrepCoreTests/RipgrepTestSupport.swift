@@ -47,18 +47,32 @@ func runWithExitCode(_ arguments: [String], expectedExitCode: Int) -> [String] {
 
 func pathBasenames(_ lines: [String]) -> [String] {
     lines.map { line in
+        #if os(Windows)
+        let delimiter = line.dropFirst(min(2, line.count)).firstIndex(of: ":")
+        let path = delimiter.map { String(line[..<$0]) } ?? line
+        #else
         let path = line.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? line
+        #endif
         return URL(fileURLWithPath: path).lastPathComponent
     }
 }
 
 func countBasenames(_ lines: [String]) -> [String] {
     lines.map { line in
+        #if os(Windows)
+        guard let delimiter = line.lastIndex(of: ":") else {
+            return line
+        }
+        let path = String(line[..<delimiter])
+        let count = String(line[line.index(after: delimiter)...])
+        return "\(URL(fileURLWithPath: path).lastPathComponent):\(count)"
+        #else
         let pieces = line.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
         guard pieces.count == 2 else {
             return line
         }
         return "\(URL(fileURLWithPath: String(pieces[0])).lastPathComponent):\(pieces[1])"
+        #endif
     }
 }
 
@@ -85,7 +99,7 @@ func runExecutableResult(
     fixture: () throws -> Void
 ) throws -> (output: Data, error: Data, exitCode: Int32) {
     try fixture()
-    let executable = ripgrepPackageRootURL().appendingPathComponent(".build/debug/ripgrep")
+    let executable = ripgrepExecutableURL()
     let process = Process()
     process.executableURL = executable
     process.arguments = arguments
@@ -108,6 +122,26 @@ func ripgrepPackageRootURL() -> URL {
         .deletingLastPathComponent()
         .deletingLastPathComponent()
         .deletingLastPathComponent()
+}
+
+func ripgrepExecutableURL() -> URL {
+    let root = ripgrepPackageRootURL()
+    #if os(Windows)
+    let candidates = [
+        ".build/debug/ripgrep.exe",
+        ".build/x86_64-unknown-windows-msvc/debug/ripgrep.exe",
+        ".build/aarch64-unknown-windows-msvc/debug/ripgrep.exe",
+    ]
+    #else
+    let candidates = [".build/debug/ripgrep"]
+    #endif
+    for path in candidates {
+        let candidate = root.appendingPathComponent(path)
+        if FileManager.default.fileExists(atPath: candidate.path) {
+            return candidate
+        }
+    }
+    return root.appendingPathComponent(candidates[0])
 }
 
 final class TemporaryDirectory {

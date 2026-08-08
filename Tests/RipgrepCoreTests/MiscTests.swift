@@ -972,7 +972,7 @@ struct MiscTests {
         """, to: "src/miss.txt")
         let pattern = "[A-Z][a-z]{8}[0-9]{3}"
         func runExecutableStatusData(_ arguments: [String]) throws -> (stdout: Data, stderr: Data, status: Int32) {
-            let executable = ripgrepPackageRootURL().appendingPathComponent(".build/debug/ripgrep")
+            let executable = ripgrepExecutableURL()
             let process = Process()
             process.executableURL = executable
             process.arguments = arguments
@@ -2969,7 +2969,7 @@ struct MiscTests {
         #expect(noFilenameOverrideOutput == output)
 
         func runExecutableStatusData(_ arguments: [String]) throws -> (stdout: Data, stderr: Data, status: Int32) {
-            let executable = ripgrepPackageRootURL().appendingPathComponent(".build/debug/ripgrep")
+            let executable = ripgrepExecutableURL()
             let process = Process()
             process.executableURL = executable
             process.arguments = arguments
@@ -3201,7 +3201,7 @@ struct MiscTests {
             _ arguments: [String],
             environment: [String: String] = [:]
         ) throws -> (stdout: Data, stderr: Data, status: Int32) {
-            let executable = ripgrepPackageRootURL().appendingPathComponent(".build/debug/ripgrep")
+            let executable = ripgrepExecutableURL()
             let process = Process()
             process.executableURL = executable
             process.arguments = arguments
@@ -3407,7 +3407,7 @@ struct MiscTests {
         )
 
         func runExecutableResult(_ arguments: [String]) throws -> (stdout: Data, stderr: Data, status: Int32) {
-            let executable = ripgrepPackageRootURL().appendingPathComponent(".build/debug/ripgrep")
+            let executable = ripgrepExecutableURL()
             let process = Process()
             process.executableURL = executable
             process.arguments = arguments
