@@ -13429,6 +13429,7 @@ private func rgSwiftDarwinWriteLargeSimpleLiteralBytesWithTextProof(
         var start: Int
         var outputEnd: Int
         var needsFinalNewline: Bool
+        var lastLineStart: Int
     }
 
     let newline = UInt8(ascii: "\n")
@@ -13461,27 +13462,19 @@ private func rgSwiftDarwinWriteLargeSimpleLiteralBytesWithTextProof(
         if bestAnchorPairCount > 0,
            bestAnchorPairCount * 1024 <= sampleCount {
             let anchorBase = literalBase.advanced(by: bestAnchorOffset)
-            var anchorSearchOffset = bestAnchorOffset
-            while anchorSearchOffset <= haystackLength - 2 {
-                guard let found = rg_memmem_simple(
-                    base.advanced(by: anchorSearchOffset),
-                    haystackLength - anchorSearchOffset,
-                    anchorBase,
-                    2
-                ) else {
-                    break
-                }
+            let anchorFirstVector = SIMD16<UInt8>(repeating: anchorBase[0])
+            let anchorTailVector = SIMD16<UInt8>(repeating: anchorBase[1])
+            let nulVector = SIMD16<UInt8>(repeating: 0)
+            var firstBinaryOffset: Int?
 
-                let anchorStart = base.distance(to: found)
+            func recordAnchorCandidate(_ anchorStart: Int) {
                 let candidateStart = anchorStart - bestAnchorOffset
                 guard candidateStart >= 0,
                       candidateStart + literal.count <= haystackLength else {
-                    anchorSearchOffset = anchorStart + 1
-                    continue
+                    return
                 }
                 guard memcmp(base.advanced(by: candidateStart), literalBase, literal.count) == 0 else {
-                    anchorSearchOffset = anchorStart + 1
-                    continue
+                    return
                 }
 
                 var lineStart = candidateStart
@@ -13504,31 +13497,71 @@ private func rgSwiftDarwinWriteLargeSimpleLiteralBytesWithTextProof(
                     needsFinalNewline = true
                 }
 
+                if pendingRanges.last?.lastLineStart == lineStart {
+                    return
+                }
                 if let last = pendingRanges.last,
                    last.outputEnd == lineStart,
                    !last.needsFinalNewline {
                     pendingRanges[pendingRanges.count - 1].outputEnd = outputEnd
                     pendingRanges[pendingRanges.count - 1].needsFinalNewline = needsFinalNewline
+                    pendingRanges[pendingRanges.count - 1].lastLineStart = lineStart
                 } else {
                     pendingRanges.append(PendingRange(
                         start: lineStart,
                         outputEnd: outputEnd,
-                        needsFinalNewline: needsFinalNewline
+                        needsFinalNewline: needsFinalNewline,
+                        lastLineStart: lineStart
                     ))
                 }
                 matchedLineCount += 1
-                anchorSearchOffset = outputEnd + bestAnchorOffset
+            }
+
+            var cursor = 0
+            let vectorLimit = haystackLength >= 17 ? haystackLength - 16 : 0
+            while cursor < vectorLimit {
+                let firstBytes = UnsafeRawPointer(base.advanced(by: cursor))
+                    .loadUnaligned(as: SIMD16<UInt8>.self)
+                let tailBytes = UnsafeRawPointer(base.advanced(by: cursor + 1))
+                    .loadUnaligned(as: SIMD16<UInt8>.self)
+                let pairMatches = (firstBytes .== anchorFirstVector) .& (tailBytes .== anchorTailVector)
+                let candidateStorage = (pairMatches .| (firstBytes .== nulVector))._storage
+                if candidateStorage.min() < 0 {
+                    for lane in 0..<16 where candidateStorage[lane] != 0 {
+                        let offset = cursor + lane
+                        if base[offset] == 0 {
+                            if firstBinaryOffset == nil {
+                                firstBinaryOffset = offset
+                            }
+                        } else {
+                            recordAnchorCandidate(offset)
+                        }
+                    }
+                }
+                cursor += 16
+            }
+
+            while cursor < haystackLength {
+                if base[cursor] == 0 {
+                    if firstBinaryOffset == nil {
+                        firstBinaryOffset = cursor
+                    }
+                } else if cursor + 1 < haystackLength,
+                          base[cursor] == anchorBase[0],
+                          base[cursor + 1] == anchorBase[1] {
+                    recordAnchorCandidate(cursor)
+                }
+                cursor += 1
             }
 
             guard !pendingRanges.isEmpty else {
-                return memchr(base, 0, haystackLength) == nil ? LiteralLineWriteStats(
+                return firstBinaryOffset == nil ? LiteralLineWriteStats(
                     matchedLines: 0,
                     bytesPrinted: 0,
                     bytesSearched: haystackLength
                 ) : nil
             }
-            if let binaryPointer = memchr(base, 0, haystackLength) {
-                let binaryOffset = base.distance(to: binaryPointer.assumingMemoryBound(to: UInt8.self))
+            if let binaryOffset = firstBinaryOffset {
                 guard var output = rgSwiftStdoutBuffer(capacity: 1024 * 1024) else {
                     return nil
                 }
@@ -13643,11 +13676,13 @@ private func rgSwiftDarwinWriteLargeSimpleLiteralBytesWithTextProof(
            !last.needsFinalNewline {
             pendingRanges[pendingRanges.count - 1].outputEnd = outputEnd
             pendingRanges[pendingRanges.count - 1].needsFinalNewline = needsFinalNewline
+            pendingRanges[pendingRanges.count - 1].lastLineStart = lineStart
         } else {
             pendingRanges.append(PendingRange(
                 start: lineStart,
                 outputEnd: outputEnd,
-                needsFinalNewline: needsFinalNewline
+                needsFinalNewline: needsFinalNewline,
+                lastLineStart: lineStart
             ))
         }
         matchedLineCount += 1

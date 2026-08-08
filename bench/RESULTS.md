@@ -8,6 +8,41 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Large literal scan fuses matching with binary proof - 2026-08-08
+
+The Darwin large simple-literal writer now searches for its sampled rare
+two-byte anchor and NUL bytes in one continuous SIMD16 pass. Previously it
+found matching lines with repeated two-byte searches and then traversed the
+entire 1.6 GB subtitle mapping again with `memchr` to prove that the file was
+text. The fused scan retains full-literal `memcmp` verification, binary-offset
+reporting, adjacent-range coalescing, and one-output-per-matching-line
+semantics. Duplicate-line state lives in the existing pending-range record;
+keeping it as a separate closure capture erased the optimization in a rejected
+intermediate build.
+
+The retained release binary matched Rust stdout for default, explicit
+`--no-mmap`, and line-numbered searches of the 55-million-line English
+subtitle sample. It also matched the saved `47465b3b` baseline on 270 MiB
+fixtures with early, late, and leading NUL bytes. A 10-run same-order A/B of
+explicit `--no-mmap 'Sherlock Holmes'` measured 172.34 ms optimized versus
+188.99 ms baseline, an 8.8% runtime reduction; Rust 15.2.0 measured 162.06 ms.
+
+The final 14-row upstream-derived matrix used one warm-up and three timed runs
+per contestant. Swift won 12 rows and had a 0.5424 Swift/Rust geometric-mean
+runtime ratio. The affected `subtitles_en_literal / rg (no mmap)` row measured
+176.98 ms Swift versus 161.26 ms Rust, or 1.0975x. The two remaining losses
+were the plain subtitle literal rows at 1.0266x and 1.0975x; every other row
+was between 0.2054x and 0.9383x Rust runtime.
+
+Rejected probes included 2 MiB cache-window interleaving (about 200.2 ms
+versus 187.3 ms baseline), a four-way SIMD loop unroll (182.2 ms versus
+176.7 ms for the continuous loop), and a separately captured last-line value
+(208.63 ms versus 188.42 ms baseline). Raw artifacts:
+`/tmp/swift-rg-bench/results-20260808-final`,
+`/tmp/swift-rg-bench/final-no-mmap-ab-range-state.json`,
+`/tmp/swift-rg-bench/continuous-pair-nul-probe`, and
+`/tmp/swift-rg-bench/unrolled-pair-nul-probe`.
+
 ## Rejected file-list and plain literal micro-probes - 2026-06-06
 
 Three small Swift-only probes targeted the current live gaps where Swift was
