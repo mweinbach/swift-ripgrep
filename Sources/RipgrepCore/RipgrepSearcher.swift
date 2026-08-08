@@ -12237,15 +12237,12 @@ public struct RipgrepSearcher: @unchecked Sendable {
         fastPath: ByteLiteralFastPath,
         options: RipgrepOptions
     ) -> SearchFileResult? {
-        #if !canImport(Darwin) && !os(Windows)
-        return nil
-        #else
         let filesWithMatchesMode = options.printMode == .filesWithMatches
         let filesWithoutMatchMode = options.printMode == .filesWithoutMatch
         let pathMode = filesWithMatchesMode || filesWithoutMatchMode
         let pathOnlyOutput = !options.json && !options.stats && pathMode
         let pathStatsOutput = !options.json && options.stats && pathMode
-        #if os(Windows)
+        #if os(Windows) || canImport(Glibc) || canImport(Musl)
         let countOutput = !options.json
             && !options.stats
             && (options.printMode == .count || options.printMode == .countMatches)
@@ -12430,7 +12427,6 @@ public struct RipgrepSearcher: @unchecked Sendable {
             supplementalMatchedLines: matchedLines,
             supplementalMatches: totalMatches
         )
-        #endif
     }
 
     private func searchPlainLiteralLinesSIMD(
@@ -12442,7 +12438,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         maxCount: Int,
         requiresWordBoundary: Bool
     ) -> SearchFileResult? {
-        #if canImport(Darwin) || os(Windows)
+        #if canImport(Darwin) || os(Windows) || canImport(Glibc) || canImport(Musl)
         let dataCount = data.count
         var matches: [SearchMatch] = []
         var searchOffset = 0
@@ -12555,7 +12551,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         literal: [UInt8],
         maxCount: Int
     ) -> SearchFileResult? {
-        #if canImport(Darwin) || os(Windows)
+        #if canImport(Darwin) || os(Windows) || canImport(Glibc) || canImport(Musl)
         let dataCount = data.count
         var lineStarts = Set<Int>()
         var matchStarts: [Int] = []
@@ -12663,7 +12659,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         baseAddress: UnsafePointer<UInt8>,
         fastPath: ByteLiteralFastPath
     ) -> SearchFileResult? {
-        #if canImport(Darwin) || os(Windows)
+        #if canImport(Darwin) || os(Windows) || canImport(Glibc) || canImport(Musl)
         guard fastPath.caseInsensitiveASCII,
               !fastPath.wordASCII,
               fastPath.literals.count > 1,
