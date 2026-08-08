@@ -1741,6 +1741,25 @@ struct MiscTests {
         #expect(output == ["3"])
     }
 
+    @Test("multi-literal count counts each matching line once")
+    func multiLiteralCountCountsEachMatchingLineOnce() throws {
+        let root = try TemporaryDirectory()
+        try root.write("""
+        alpha beta alpha
+        alpha
+        beta
+        neither
+        alphabet
+        """, to: "multi-literal-count.txt")
+
+        let output = try run([
+            "-c",
+            "alpha|beta",
+            root.path("multi-literal-count.txt"),
+        ])
+        #expect(output == ["4"])
+    }
+
     @Test("word regexp line numbers survive rejected same-line candidate")
     func wordRegexpLineNumbersSurviveRejectedSameLineCandidate() throws {
         let root = try TemporaryDirectory()

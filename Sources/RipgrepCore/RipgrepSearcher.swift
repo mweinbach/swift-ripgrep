@@ -12279,6 +12279,53 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
 
         if fastPath.literals.count > 1 {
+            if countOutput,
+               options.printMode == .count,
+               !fastPath.caseInsensitiveASCII {
+                var matchedLineStarts = Set<Int>()
+                for literal in fastPath.literals {
+                    literal.withUnsafeBufferPointer { needle in
+                        guard let literalBaseAddress = needle.baseAddress else {
+                            return
+                        }
+                        var searchOffset = 0
+                        while searchOffset < data.count {
+                            guard let found = rg_memmem_simple(
+                                baseAddress.advanced(by: searchOffset),
+                                data.count - searchOffset,
+                                literalBaseAddress,
+                                literal.count
+                            ) else {
+                                break
+                            }
+                            let matchStart = baseAddress.distance(to: found)
+                            var lineStart = matchStart
+                            while lineStart > 0,
+                                  baseAddress[lineStart - 1] != UInt8(ascii: "\n") {
+                                lineStart -= 1
+                            }
+                            matchedLineStarts.insert(lineStart)
+
+                            let newlinePointer = memchr(
+                                baseAddress.advanced(by: matchStart),
+                                Int32(UInt8(ascii: "\n")),
+                                data.count - matchStart
+                            )
+                            searchOffset = newlinePointer.map {
+                                baseAddress.distance(to: $0.assumingMemoryBound(to: UInt8.self)) + 1
+                            } ?? data.count
+                        }
+                    }
+                }
+                return SearchFileResult(
+                    fileURL: fileURL,
+                    matches: [],
+                    bytesSearched: data.count,
+                    searched: true,
+                    supplementalMatchedLines: matchedLineStarts.count,
+                    supplementalMatches: matchedLineStarts.count
+                )
+            }
             guard fastPath.caseInsensitiveASCII,
                   quietOutput else {
                 return nil
