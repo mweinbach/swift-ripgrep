@@ -72,7 +72,7 @@ jobs:
         shell: pwsh
         run: >-
           swift test --filter
-          'EncodingLabelTests|WorkerPoolTests|HaystackReaderTests|GeneratedAssetDriftTests|multiLiteralCountCountsEachMatchingLineOnce|wordCountFastPathHonorsASCIIAndUnicodeBoundaries|requiredLiteralRegexCountCountsMatchingLinesOnce'
+          'EncodingLabelTests|WorkerPoolTests|HaystackReaderTests|GeneratedAssetDriftTests|multiLiteralCountCountsEachMatchingLineOnce|wordCountFastPathHonorsASCIIAndUnicodeBoundaries|requiredLiteralRegexCountCountsMatchingLinesOnce|executableLiteralFastPathPreservesGlobalScanModes'
 
       - name: Run full Rust parity matrix
         if: runner.os != 'Windows'

@@ -12064,6 +12064,78 @@ struct MiscTests {
         #endif
     }
 
+    @Test("executable literal fast path preserves global scan modes")
+    func executableLiteralFastPathPreservesGlobalScanModes() throws {
+        let root = try TemporaryDirectory()
+        let path = root.path("global-literal.txt")
+        try root.write("alpha alpha\nnone\nalpha", to: "global-literal.txt")
+
+        let lines = try runExecutableResult([
+            "--no-config",
+            "--color", "never",
+            "alpha",
+            path,
+        ]) {}
+        #expect(lines.exitCode == 0)
+        #expect(lines.error.isEmpty)
+        #expect(lines.output == Data("alpha alpha\nalpha\n".utf8))
+
+        let lineCount = try runExecutableResult([
+            "--no-config",
+            "--color=never",
+            "--count",
+            "alpha",
+            path,
+        ]) {}
+        #expect(lineCount.exitCode == 0)
+        #expect(lineCount.error.isEmpty)
+        #expect(lineCount.output == Data("2\n".utf8))
+
+        let matchCount = try runExecutableResult([
+            "--no-config",
+            "--color=never",
+            "--count-matches",
+            "alpha",
+            path,
+        ]) {}
+        #expect(matchCount.exitCode == 0)
+        #expect(matchCount.error.isEmpty)
+        #expect(matchCount.output == Data("3\n".utf8))
+
+        let quiet = try runExecutableResult([
+            "--no-config",
+            "--color=never",
+            "--quiet",
+            "alpha",
+            path,
+        ]) {}
+        #expect(quiet.exitCode == 0)
+        #expect(quiet.error.isEmpty)
+        #expect(quiet.output.isEmpty)
+
+        let missingCount = try runExecutableResult([
+            "--no-config",
+            "--color=never",
+            "--count",
+            "absent",
+            path,
+        ]) {}
+        #expect(missingCount.exitCode == 1)
+        #expect(missingCount.error.isEmpty)
+        #expect(missingCount.output == Data("0\n".utf8))
+
+        let withoutMatch = try runExecutableResult([
+            "--no-config",
+            "--color=never",
+            "--files-without-match",
+            "absent",
+            path,
+        ]) {}
+        #expect(withoutMatch.exitCode == 0)
+        #expect(withoutMatch.error.isEmpty)
+        #expect(withoutMatch.output == Data("\(path)\n".utf8))
+    }
+
     @Test("Darwin executable ASCII run suffix quiet preflight returns status")
     func darwinExecutableASCIIRunSuffixQuietPreflightStatus() throws {
         #if canImport(Darwin)

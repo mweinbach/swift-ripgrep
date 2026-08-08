@@ -92,6 +92,22 @@ public enum WindowsX86LiteralPreflight {
     }
 
     private static func parse(_ arguments: [String]) -> (mode: Mode, pattern: String, path: String)? {
+        var argumentIndex = 0
+        leadingFlags: while argumentIndex < arguments.count {
+            switch arguments[argumentIndex] {
+            case "--no-config", "--color=never":
+                argumentIndex += 1
+            case "--color":
+                guard argumentIndex + 1 < arguments.count,
+                      arguments[argumentIndex + 1] == "never" else {
+                    return nil
+                }
+                argumentIndex += 2
+            default:
+                break leadingFlags
+            }
+        }
+        let arguments = Array(arguments.dropFirst(argumentIndex))
         let mode: Mode
         let pattern: String
         let path: String
@@ -155,6 +171,15 @@ public enum WindowsX86LiteralPreflight {
         path: String,
         mode: Mode
     ) -> Int32? {
+        if mode != .lineNumbered {
+            return scanGlobalLiteral(
+                bytes: bytes,
+                count: count,
+                literal: literal,
+                path: path,
+                mode: mode
+            )
+        }
         var writer: Win32OutputBuffer?
         if mode == .matchingLines || mode == .lineNumbered {
             writer = Win32OutputBuffer(capacity: 256 * 1024)
@@ -242,6 +267,104 @@ public enum WindowsX86LiteralPreflight {
             return 1
         case .quiet, .filesWithMatches, .countLines, .countMatches:
             return hasMatch ? 0 : 1
+        }
+    }
+
+    private static func scanGlobalLiteral(
+        bytes: UnsafePointer<UInt8>,
+        count: Int,
+        literal: [UInt8],
+        path: String,
+        mode: Mode
+    ) -> Int32? {
+        var writer: Win32OutputBuffer?
+        if mode == .matchingLines {
+            writer = Win32OutputBuffer(capacity: 256 * 1024)
+            guard writer != nil else { return nil }
+        }
+        defer { writer?.deallocate() }
+
+        var matchedLines = 0
+        var totalMatches = 0
+        var searchOffset = 0
+        var lastMatchedLineStart = -1
+        while searchOffset <= count - literal.count,
+              let matchStart = findLiteral(
+                bytes: bytes,
+                range: searchOffset..<count,
+                literal: literal
+              ) {
+            var lineStart = matchStart
+            while lineStart > 0, bytes[lineStart - 1] != UInt8(ascii: "\n") {
+                lineStart -= 1
+            }
+            let newline = findByte(
+                bytes.advanced(by: matchStart),
+                count: count - matchStart,
+                byte: UInt8(ascii: "\n")
+            ).map { matchStart + $0 }
+            let lineEnd = newline ?? count
+            let outputEnd = newline.map { $0 + 1 } ?? count
+
+            guard matchStart + literal.count <= lineEnd else {
+                searchOffset = matchStart + 1
+                continue
+            }
+
+            if lineStart != lastMatchedLineStart {
+                matchedLines += 1
+                lastMatchedLineStart = lineStart
+                switch mode {
+                case .quiet:
+                    return 0
+                case .filesWithMatches:
+                    guard writePath(path) else { return 2 }
+                    return 0
+                case .matchingLines:
+                    guard writer?.write(bytes.advanced(by: lineStart), count: outputEnd - lineStart) == true else {
+                        return 2
+                    }
+                    if newline == nil,
+                       !(writer?.writeByte(UInt8(ascii: "\n")) ?? false) {
+                        return 2
+                    }
+                case .countLines, .countMatches, .filesWithoutMatch:
+                    break
+                case .lineNumbered:
+                    return nil
+                }
+            }
+
+            totalMatches += 1
+            searchOffset = mode == .countMatches
+                ? matchStart + literal.count
+                : outputEnd
+        }
+
+        if mode == .matchingLines,
+           !(writer?.flush() ?? false) {
+            return 2
+        }
+        let hasMatch = matchedLines > 0
+        switch mode {
+        case .matchingLines:
+            return hasMatch ? 0 : 1
+        case .countLines:
+            guard writeDecimalLine(matchedLines) else { return 2 }
+            return hasMatch ? 0 : 1
+        case .countMatches:
+            guard writeDecimalLine(totalMatches) else { return 2 }
+            return hasMatch ? 0 : 1
+        case .filesWithoutMatch:
+            if !hasMatch {
+                guard writePath(path) else { return 2 }
+                return 0
+            }
+            return 1
+        case .quiet, .filesWithMatches:
+            return 1
+        case .lineNumbered:
+            return nil
         }
     }
 
