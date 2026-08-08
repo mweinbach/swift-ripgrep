@@ -1760,6 +1760,27 @@ struct MiscTests {
         #expect(output == ["4"])
     }
 
+    @Test("word count fast path honors ASCII and Unicode boundaries")
+    func wordCountFastPathHonorsASCIIAndUnicodeBoundaries() throws {
+        let root = try TemporaryDirectory()
+        try root.write("""
+        Watson Watson
+        Watsonian
+        _Watson
+        (Watson)
+        éWatson
+        Watsoné
+        """, to: "word-count.txt")
+
+        let output = try run([
+            "-w",
+            "-c",
+            "Watson",
+            root.path("word-count.txt"),
+        ])
+        #expect(output == ["2"])
+    }
+
     @Test("word regexp line numbers survive rejected same-line candidate")
     func wordRegexpLineNumbersSurviveRejectedSameLineCandidate() throws {
         let root = try TemporaryDirectory()

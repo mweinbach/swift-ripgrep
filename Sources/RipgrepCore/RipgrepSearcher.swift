@@ -12260,11 +12260,16 @@ public struct RipgrepSearcher: @unchecked Sendable {
         let jsonQuietSummaryOutput = options.json
             && options.quiet
             && options.printMode == .matchingLines
+        let wordCountOutput = countOutput
+            && options.printMode == .count
+            && fastPath.wordASCII
+            && !fastPath.caseInsensitiveASCII
+            && fastPath.literals.count == 1
         guard !options.invertMatch,
               !options.onlyMatching,
               !options.passthru,
               options.replacement == nil,
-              !fastPath.wordASCII,
+              (!fastPath.wordASCII || wordCountOutput),
               !fastPath.literals.isEmpty,
               fastPath.literals.allSatisfy({ literal in
                 !literal.isEmpty && (!fastPath.caseInsensitiveASCII || literal.allSatisfy({ $0 < 0x80 }))
@@ -12438,6 +12443,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
         var matchedLines = 0
         var totalMatches = 0
         var currentMatchedLineEnd = -1
+        var needsDecodedFallback = false
+        let bytes = UnsafeBufferPointer(start: baseAddress, count: data.count)
         literalStorage.withUnsafeBufferPointer { needle in
             guard let literalBaseAddress = needle.baseAddress else {
                 return
@@ -12450,6 +12457,24 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     break
                 }
                 let matchStart = baseAddress.distance(to: rawFoundPointer)
+                if fastPath.wordASCII {
+                    switch asciiWordBoundaryState(
+                        bytes: bytes,
+                        lineStart: 0,
+                        lineEnd: data.count,
+                        matchStart: matchStart,
+                        matchEnd: matchStart + literalStorage.count
+                    ) {
+                    case .bounded:
+                        break
+                    case .notBounded:
+                        searchOffset = matchStart + literalStorage.count
+                        continue
+                    case .needsDecodedFallback:
+                        needsDecodedFallback = true
+                        return
+                    }
+                }
                 totalMatches += 1
                 if matchStart >= currentMatchedLineEnd {
                     matchedLines += 1
@@ -12464,6 +12489,9 @@ public struct RipgrepSearcher: @unchecked Sendable {
                 }
                 searchOffset = matchStart + literalStorage.count
             }
+        }
+        if needsDecodedFallback {
+            return nil
         }
 
         return SearchFileResult(
