@@ -135,6 +135,18 @@ struct HaystackReader {
         if let data = try readBufferedRegularFile(fileURL: fileURL, maxBufferBytes: maxBufferBytes) {
             return data
         }
+        #elseif os(Windows)
+        let values = try fileURL.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
+        if values.isRegularFile == true {
+            if let fileSize = values.fileSize, fileSize > maxBufferBytes {
+                throw ReaderError.bufferLimitExceeded(size: fileSize, limit: maxBufferBytes)
+            }
+            let data = try Data(contentsOf: fileURL)
+            guard data.count <= maxBufferBytes else {
+                throw ReaderError.bufferLimitExceeded(size: data.count, limit: maxBufferBytes)
+            }
+            return data
+        }
         #endif
         let handle = try FileHandle(forReadingFrom: fileURL)
         return try readChunks(from: handle, closeWhenDone: true, maxBufferBytes: maxBufferBytes)

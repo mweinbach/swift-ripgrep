@@ -1,6 +1,8 @@
 .DS_Store
 /.build
+/.ci-tools
 /Packages
+__pycache__/
 xcuserdata/
 DerivedData/
 .swiftpm/configuration/registries.json
