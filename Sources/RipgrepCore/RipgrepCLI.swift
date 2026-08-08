@@ -386,7 +386,16 @@ public enum RipgrepCLI {
         guard stdoutOverride == nil else {
             return
         }
-        #if canImport(Darwin) || canImport(Glibc) || canImport(Musl) || canImport(CRT)
+        #if canImport(Darwin)
+        switch resolvedBufferMode(options.bufferMode) {
+        case .line:
+            setvbuf(Darwin.stdout, nil, _IOLBF, 0)
+        case .block:
+            setvbuf(Darwin.stdout, nil, _IOFBF, 262_144)
+        case .automatic:
+            break
+        }
+        #elseif canImport(CRT)
         switch resolvedBufferMode(options.bufferMode) {
         case .line:
             setvbuf(stdout, nil, _IOLBF, 0)
@@ -427,7 +436,9 @@ public enum RipgrepCLI {
         guard let baseAddress = buffer.baseAddress else {
             return
         }
-        #if canImport(Darwin) || canImport(Glibc) || canImport(Musl) || canImport(CRT)
+        #if canImport(Darwin)
+        fwrite(baseAddress, 1, buffer.count, Darwin.stdout)
+        #elseif canImport(CRT)
         fwrite(baseAddress, 1, buffer.count, stdout)
         #else
         FileHandle.standardOutput.write(Data(buffer))
@@ -471,14 +482,24 @@ public enum RipgrepCLI {
     }
 
     private static func realpath(_ path: String) -> String? {
-        #if canImport(Darwin) || canImport(Glibc) || canImport(Musl)
+        #if canImport(Darwin)
         guard let resolved = Darwin.realpath(path, nil) else {
             return nil
         }
-        defer { free(resolved) }
-        return String(cString: resolved)
+        #elseif canImport(Glibc)
+        guard let resolved = Glibc.realpath(path, nil) else {
+            return nil
+        }
+        #elseif canImport(Musl)
+        guard let resolved = Musl.realpath(path, nil) else {
+            return nil
+        }
         #else
         return URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL.path
+        #endif
+        #if canImport(Darwin) || canImport(Glibc) || canImport(Musl)
+        defer { free(resolved) }
+        return String(cString: resolved)
         #endif
     }
 

@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(CoreFoundation)
+import CoreFoundation
+#endif
 #if os(Windows)
 import WinSDK
 #endif
