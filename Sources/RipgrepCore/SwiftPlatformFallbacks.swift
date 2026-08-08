@@ -11,16 +11,6 @@ import Musl
 import CRT
 #endif
 
-#if canImport(Glibc) || canImport(Musl)
-@_silgen_name("memmem")
-private func rgLibcMemmem(
-    _ haystack: UnsafeRawPointer?,
-    _ haystackLength: Int,
-    _ needle: UnsafeRawPointer?,
-    _ needleLength: Int
-) -> UnsafeMutableRawPointer?
-#endif
-
 #if os(macOS)
 struct rg_darwin_literal_file_result {
     var status: Int32
@@ -2610,16 +2600,12 @@ func rg_memmem_simple(
     if needleLength == 1 {
         return rgConstBytePointer(memchr(haystack, Int32(needle[0]), haystackLength))
     }
-    #if canImport(Glibc) || canImport(Musl)
-    return rgConstBytePointer(rgLibcMemmem(haystack, haystackLength, needle, needleLength))
-    #else
     return rgMemmemSIMD16(
         haystack: haystack,
         haystackLength: haystackLength,
         needle: needle,
         needleLength: needleLength
     )
-    #endif
 }
 
 func rg_memcasemem_ascii(
