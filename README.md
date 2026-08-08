@@ -1,5 +1,7 @@
 # ripgrep
 
+[![CI](https://github.com/mweinbach/swift-ripgrep/actions/workflows/ci.yml/badge.svg)](https://github.com/mweinbach/swift-ripgrep/actions/workflows/ci.yml)
+
 A Swift executable package for a ripgrep-style command-line search tool.
 
 The normal macOS arm64 and Windows x86-64 builds have no package-manager
@@ -58,6 +60,13 @@ measured searches.
 swift test
 ./scripts/check-no-external-deps.sh
 ```
+
+GitHub Actions runs builds, platform tests, Rust parity checks, and
+generated-corpus Swift-vs-Rust benchmarks on Linux x86-64, macOS arm64, and
+Windows x86-64. The full parity harness runs on Linux and macOS; Windows runs
+its stable platform suites and byte-checks every timed benchmark case.
+Each run publishes the benchmark JSON and Markdown tables as workflow artifacts;
+see [bench/README.md](bench/README.md) for local and full-corpus commands.
 
 ## Optional C-Shim Comparison Build
 

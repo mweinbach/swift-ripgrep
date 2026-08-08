@@ -1,5 +1,33 @@
 # Performance benchmarks vs Rust ripgrep
 
+## CI benchmark matrix
+
+`ci_benchmark.py` is the portable, generated-corpus suite used by GitHub
+Actions on Linux x86-64, macOS arm64, and Windows x86-64. It checks exact
+stdout, stderr, and exit-status parity before timing twelve representative
+single-file and recursive search shapes. Timed contestants are interleaved to
+reduce ordering bias, and both raw samples and median ratios are written as
+JSON plus a Markdown table.
+
+```sh
+python bench/install_rust_rg.py --version 15.2.0 --destination .ci-tools
+swift build -c release
+python bench/ci_benchmark.py \
+    --rg .ci-tools/rg \
+    --swift-rg "$(swift build -c release --show-bin-path)/ripgrep" \
+    --out /tmp/swift-rg-ci-results
+```
+
+Use `--fail-above RATIO` when a stable, dedicated benchmark host is available.
+The public hosted-runner workflow deliberately records and uploads exact
+ratios without making noisy shared-host timing a correctness gate. Tests,
+builds, generated-asset drift, and the Rust parity checks remain blocking. The
+full upstream parity harness runs on Linux and macOS; Windows runs the
+platform-stable unit suites plus the exact-output checks built into this
+benchmark while the remaining Windows-only parity gaps are tracked.
+
+## Upstream full-corpus suite
+
 This folder runs the upstream Rust `ripgrep` benchsuite scenarios with two
 contestants: the installed Rust `rg` and the Swift port at
 `.build/release/ripgrep`. The result is a direct, 1:1 comparison using
