@@ -9,6 +9,10 @@ import Musl
 import CRT
 #endif
 
+#if os(Windows)
+import WinSDK
+#endif
+
 struct HaystackReader {
     enum ReadPath: Equatable {
         case buffered
@@ -141,6 +145,12 @@ struct HaystackReader {
             if let fileSize = values.fileSize, fileSize > maxBufferBytes {
                 throw ReaderError.bufferLimitExceeded(size: fileSize, limit: maxBufferBytes)
             }
+            if let data = try readBufferedRegularFileWindows(
+                fileURL: fileURL,
+                maxBufferBytes: maxBufferBytes
+            ) {
+                return data
+            }
             let data = try Data(contentsOf: fileURL)
             guard data.count <= maxBufferBytes else {
                 throw ReaderError.bufferLimitExceeded(size: data.count, limit: maxBufferBytes)
@@ -151,6 +161,68 @@ struct HaystackReader {
         let handle = try FileHandle(forReadingFrom: fileURL)
         return try readChunks(from: handle, closeWhenDone: true, maxBufferBytes: maxBufferBytes)
     }
+
+    #if os(Windows)
+    private static func readBufferedRegularFileWindows(
+        fileURL: URL,
+        maxBufferBytes: Int
+    ) throws -> Data? {
+        try fileURL.path.withCString(encodedAs: UTF16.self) { path in
+            guard let file = CreateFileW(
+                path,
+                DWORD(GENERIC_READ),
+                DWORD(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE),
+                nil,
+                DWORD(OPEN_EXISTING),
+                DWORD(FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN),
+                nil
+            ), file != INVALID_HANDLE_VALUE else {
+                return nil
+            }
+            defer { CloseHandle(file) }
+
+            var sizeHigh: DWORD = 0
+            SetLastError(DWORD(NO_ERROR))
+            let sizeLow = GetFileSize(file, &sizeHigh)
+            guard sizeLow != DWORD(INVALID_FILE_SIZE) || GetLastError() == DWORD(NO_ERROR) else {
+                return nil
+            }
+            let size64 = (UInt64(sizeHigh) << 32) | UInt64(sizeLow)
+            guard size64 <= UInt64(Int.max) else {
+                throw ReaderError.tooLarge(path: fileURL.path, size: size64)
+            }
+            let length = Int(size64)
+            guard length <= maxBufferBytes else {
+                throw ReaderError.bufferLimitExceeded(size: length, limit: maxBufferBytes)
+            }
+            guard length > 0 else {
+                return Data()
+            }
+
+            let buffer = UnsafeMutableRawPointer.allocate(
+                byteCount: length,
+                alignment: MemoryLayout<UInt8>.alignment
+            )
+            var bytesRead = 0
+            while bytesRead < length {
+                let chunk = min(length - bytesRead, Int(DWORD.max))
+                var count: DWORD = 0
+                guard ReadFile(file, buffer.advanced(by: bytesRead), DWORD(chunk), &count, nil) else {
+                    buffer.deallocate()
+                    return nil
+                }
+                guard count > 0 else {
+                    break
+                }
+                bytesRead += Int(count)
+            }
+
+            return Data(bytesNoCopy: buffer, count: bytesRead, deallocator: .custom { pointer, _ in
+                pointer.deallocate()
+            })
+        }
+    }
+    #endif
 
     #if canImport(Darwin)
     private static func readBufferedRegularFile(fileURL: URL, maxBufferBytes: Int) throws -> Data? {
