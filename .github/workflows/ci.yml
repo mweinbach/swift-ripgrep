@@ -68,11 +68,17 @@ jobs:
           "SWIFT_RIPGREP_SWIFT_BINARY=$binary" >> $env:GITHUB_ENV
           "SWIFT_RIPGREP_RUST_BINARY=$rustBinary" >> $env:GITHUB_ENV
 
-      - name: Run platform tests
+      - name: Run full unit test suite
+        if: runner.os != 'Windows'
+        shell: pwsh
+        run: swift test
+
+      - name: Run Windows platform tests
+        if: runner.os == 'Windows'
         shell: pwsh
         run: >-
           swift test --filter
-          'EncodingLabelTests|WorkerPoolTests|HaystackReaderTests|GeneratedAssetDriftTests'
+          'EncodingLabelTests|WorkerPoolTests|HaystackReaderTests|GeneratedAssetDriftTests|multiLiteralCountCountsEachMatchingLineOnce|wordCountFastPathHonorsASCIIAndUnicodeBoundaries|requiredLiteralRegexCountCountsMatchingLinesOnce'
 
       - name: Run full Rust parity matrix
         if: runner.os != 'Windows'
