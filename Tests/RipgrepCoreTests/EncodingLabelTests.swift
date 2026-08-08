@@ -22,7 +22,7 @@ struct EncodingLabelTests {
         try assertMatch(label: "koi8-r", text: "Привет", codePage: 20_866)
         try assertMatch(label: "windows-1251", text: "Привет", codePage: 1_251)
         try assertMatch(label: "iso-8859-7", text: "αβγ", codePage: 28_597)
-        #else
+        #elseif os(macOS)
         try assertMatch(label: "gbk", text: "中文", encoding: .GBK_95)
         try assertMatch(label: "gb2312", text: "中文", encoding: .GBK_95)
         try assertMatch(label: "big5", text: "中文", encoding: .big5)
@@ -32,6 +32,20 @@ struct EncodingLabelTests {
         try assertMatch(label: "koi8-r", text: "Привет", encoding: .KOI8_R)
         try assertMatch(label: "windows-1251", text: "Привет", encoding: .windowsCyrillic)
         try assertMatch(label: "iso-8859-7", text: "αβγ", encoding: .isoLatinGreek)
+        #else
+        try assertMatch(label: "gbk", text: "中文", encodedText: [0xD6, 0xD0, 0xCE, 0xC4])
+        try assertMatch(label: "gb2312", text: "中文", encodedText: [0xD6, 0xD0, 0xCE, 0xC4])
+        try assertMatch(label: "big5", text: "中文", encodedText: [0xA4, 0xA4, 0xA4, 0xE5])
+        try assertMatch(label: "gb18030", text: "𠀋", encodedText: [0x95, 0x32, 0x83, 0x37])
+        try assertMatch(
+            label: "shift-jis",
+            text: "こんにちは",
+            encodedText: [0x82, 0xB1, 0x82, 0xF1, 0x82, 0xC9, 0x82, 0xBF, 0x82, 0xCD]
+        )
+        try assertMatch(label: "euc-kr", text: "한국", encodedText: [0xC7, 0xD1, 0xB1, 0xB9])
+        try assertMatch(label: "koi8-r", text: "Привет", encodedText: [0xF0, 0xD2, 0xC9, 0xD7, 0xC5, 0xD4])
+        try assertMatch(label: "windows-1251", text: "Привет", encodedText: [0xCF, 0xF0, 0xE8, 0xE2, 0xE5, 0xF2])
+        try assertMatch(label: "iso-8859-7", text: "αβγ", encodedText: [0xE1, 0xE2, 0xE3])
         #endif
     }
 
@@ -69,7 +83,7 @@ struct EncodingLabelTests {
         let lines = try run(["--encoding", label, text, root.path("encoded.txt")])
         #expect(lines == ["prefix \(text) suffix"], sourceLocation: sourceLocation)
     }
-    #else
+    #elseif os(macOS)
     private func assertMatch(
         label: String,
         text: String,
@@ -81,6 +95,21 @@ struct EncodingLabelTests {
 
         let lines = try run(["--encoding", label, text, root.path("encoded.txt")])
         #expect(lines == ["prefix \(text) suffix"], sourceLocation: sourceLocation)
+    }
+    #else
+    private func assertMatch(
+        label: String,
+        text: String,
+        encodedText: [UInt8],
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) throws {
+        let bytes = Data(Array("prefix ".utf8) + encodedText + Array(" suffix\n".utf8))
+        try assertBytesMatch(
+            label: label,
+            text: "prefix \(text) suffix",
+            bytes: bytes,
+            sourceLocation: sourceLocation
+        )
     }
     #endif
 
@@ -97,7 +126,7 @@ struct EncodingLabelTests {
         #expect(lines == [text], sourceLocation: sourceLocation)
     }
 
-    #if !os(Windows)
+    #if os(macOS)
     private func encoded(_ text: String, as encoding: CFStringEncodings) throws -> Data {
         let raw = CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(encoding.rawValue))
         let stringEncoding = String.Encoding(rawValue: raw)
