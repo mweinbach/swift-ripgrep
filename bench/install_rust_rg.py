@@ -75,7 +75,9 @@ def main() -> None:
         download(f"{base}/{asset}", archive)
         download(f"{base}/{asset}.sha256", checksum_file)
         checksum_text = checksum_file.read_text(encoding="utf-8")
-        checksum_match = re.search(r"(?im)^[0-9a-f]{64}$", checksum_text)
+        # Unix assets use "<hash>  <filename>" while the Windows checksum
+        # file is CertUtil output with the hash on its own line.
+        checksum_match = re.search(r"(?i)\b[0-9a-f]{64}\b", checksum_text)
         if checksum_match is None:
             raise SystemExit(f"could not parse SHA-256 file for {asset}")
         expected = checksum_match.group(0).lower()
