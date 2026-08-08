@@ -13435,6 +13435,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             lines: displayLines,
             binaryByteOffset: binaryByteOffset,
             hasBinaryMatch: hasBinaryMatch,
+            shouldPrintMatchesBeforeBinary: !displayMatches.isEmpty,
             bytesSearched: suppressedBinaryBytesSearched(
                 dataCount: data.count,
                 binaryByteOffset: binaryByteOffset,
