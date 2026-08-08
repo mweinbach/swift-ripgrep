@@ -12080,6 +12080,17 @@ struct MiscTests {
         #expect(lines.error.isEmpty)
         #expect(lines.output == Data("alpha alpha\nalpha\n".utf8))
 
+        let bufferedLines = try runExecutableResult([
+            "--no-config",
+            "--color", "never",
+            "--no-mmap",
+            "alpha",
+            path,
+        ]) {}
+        #expect(bufferedLines.exitCode == 0)
+        #expect(bufferedLines.error.isEmpty)
+        #expect(bufferedLines.output == lines.output)
+
         let lineCount = try runExecutableResult([
             "--no-config",
             "--color=never",
@@ -12122,7 +12133,7 @@ struct MiscTests {
         ]) {}
         #expect(missingCount.exitCode == 1)
         #expect(missingCount.error.isEmpty)
-        #expect(missingCount.output == Data("0\n".utf8))
+        #expect(missingCount.output.isEmpty)
 
         let withoutMatch = try runExecutableResult([
             "--no-config",

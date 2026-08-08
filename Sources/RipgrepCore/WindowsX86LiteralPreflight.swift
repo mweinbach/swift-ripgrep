@@ -7,6 +7,8 @@ import WinSDK
 /// A narrow executable-level fast path for one plain literal and one explicit
 /// regular file. Unsupported shapes return `nil` and use the full engine.
 public enum WindowsX86LiteralPreflight {
+    private static let maximumBufferedBytes = 512 * 1024 * 1024
+
     private enum Mode {
         case matchingLines
         case lineNumbered
@@ -60,6 +62,44 @@ public enum WindowsX86LiteralPreflight {
                 )
             }
 
+            if parsed.buffered {
+                guard size <= maximumBufferedBytes else { return nil }
+                let buffer = UnsafeMutableRawPointer.allocate(
+                    byteCount: size,
+                    alignment: MemoryLayout<UInt8>.alignment
+                )
+                defer { buffer.deallocate() }
+
+                var bytesRead = 0
+                while bytesRead < size {
+                    let chunk = min(size - bytesRead, Int(DWORD.max))
+                    var count: DWORD = 0
+                    guard ReadFile(file, buffer.advanced(by: bytesRead), DWORD(chunk), &count, nil) else {
+                        return nil
+                    }
+                    guard count > 0 else { break }
+                    bytesRead += Int(count)
+                }
+                if bytesRead == 0 {
+                    return finish(
+                        mode: parsed.mode,
+                        path: parsed.path,
+                        matchedLines: 0,
+                        totalMatches: 0
+                    )
+                }
+
+                let bytes = UnsafePointer(buffer.assumingMemoryBound(to: UInt8.self))
+                guard canUseBytes(bytes, count: bytesRead) else { return nil }
+                return scan(
+                    bytes: bytes,
+                    count: bytesRead,
+                    literal: literal,
+                    path: parsed.path,
+                    mode: parsed.mode
+                )
+            }
+
             guard let mapping = CreateFileMappingW(file, nil, DWORD(PAGE_READONLY), 0, 0, nil) else {
                 return nil
             }
@@ -70,7 +110,7 @@ public enum WindowsX86LiteralPreflight {
             defer { UnmapViewOfFile(view) }
 
             let bytes = view.assumingMemoryBound(to: UInt8.self)
-            guard canUseMappedBytes(bytes, count: size) else {
+            guard canUseBytes(bytes, count: size) else {
                 return nil
             }
             return scan(
@@ -91,11 +131,17 @@ public enum WindowsX86LiteralPreflight {
         return length > 0 || GetLastError() != DWORD(ERROR_ENVVAR_NOT_FOUND)
     }
 
-    private static func parse(_ arguments: [String]) -> (mode: Mode, pattern: String, path: String)? {
+    private static func parse(
+        _ arguments: [String]
+    ) -> (mode: Mode, pattern: String, path: String, buffered: Bool)? {
         var argumentIndex = 0
+        var buffered = false
         leadingFlags: while argumentIndex < arguments.count {
             switch arguments[argumentIndex] {
             case "--no-config", "--color=never":
+                argumentIndex += 1
+            case "--no-mmap":
+                buffered = true
                 argumentIndex += 1
             case "--color":
                 guard argumentIndex + 1 < arguments.count,
@@ -133,7 +179,7 @@ public enum WindowsX86LiteralPreflight {
         guard !pattern.hasPrefix("-"), path != "-", !path.isEmpty else {
             return nil
         }
-        return (mode, pattern, path)
+        return (mode, pattern, path, buffered)
     }
 
     private static func plainLiteralBytes(_ pattern: String) -> [UInt8]? {
@@ -151,7 +197,7 @@ public enum WindowsX86LiteralPreflight {
         return bytes.isEmpty ? nil : bytes
     }
 
-    private static func canUseMappedBytes(_ bytes: UnsafePointer<UInt8>, count: Int) -> Bool {
+    private static func canUseBytes(_ bytes: UnsafePointer<UInt8>, count: Int) -> Bool {
         if count >= 3,
            bytes[0] == 0xEF, bytes[1] == 0xBB, bytes[2] == 0xBF {
             return false
@@ -345,27 +391,12 @@ public enum WindowsX86LiteralPreflight {
            !(writer?.flush() ?? false) {
             return 2
         }
-        let hasMatch = matchedLines > 0
-        switch mode {
-        case .matchingLines:
-            return hasMatch ? 0 : 1
-        case .countLines:
-            guard writeDecimalLine(matchedLines) else { return 2 }
-            return hasMatch ? 0 : 1
-        case .countMatches:
-            guard writeDecimalLine(totalMatches) else { return 2 }
-            return hasMatch ? 0 : 1
-        case .filesWithoutMatch:
-            if !hasMatch {
-                guard writePath(path) else { return 2 }
-                return 0
-            }
-            return 1
-        case .quiet, .filesWithMatches:
-            return 1
-        case .lineNumbered:
-            return nil
-        }
+        return finish(
+            mode: mode,
+            path: path,
+            matchedLines: matchedLines,
+            totalMatches: totalMatches
+        )
     }
 
     private static func writeDecimalLine(_ value: Int) -> Bool {
