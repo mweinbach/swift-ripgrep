@@ -68,13 +68,7 @@ jobs:
           "SWIFT_RIPGREP_SWIFT_BINARY=$binary" >> $env:GITHUB_ENV
           "SWIFT_RIPGREP_RUST_BINARY=$rustBinary" >> $env:GITHUB_ENV
 
-      - name: Run full unit test suite
-        if: runner.os != 'Windows'
-        shell: pwsh
-        run: swift test
-
-      - name: Run Windows platform tests
-        if: runner.os == 'Windows'
+      - name: Run platform tests
         shell: pwsh
         run: >-
           swift test --filter
