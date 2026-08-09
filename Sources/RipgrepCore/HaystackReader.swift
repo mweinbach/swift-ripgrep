@@ -20,6 +20,10 @@ struct HaystackReader {
     }
 
     static let bufferedChunkSize = 64 * 1024
+    // Rust's `std::io::Stdin` uses an 8 KiB internal buffer before ripgrep's
+    // line buffer sees the input. Binary suppression therefore happens at
+    // these read boundaries, not at the 64 KiB regular-file buffer boundary.
+    static let standardInputChunkSize = 8 * 1024
     #if canImport(Darwin)
     static let automaticMmapThreshold = UInt64(1)
     #else
@@ -31,6 +35,11 @@ struct HaystackReader {
         let data: Data
         let terminator: Data
         let absoluteOffset: Int
+    }
+
+    struct StandardInputRead {
+        let data: Data
+        let binaryChunkStart: Int?
     }
 
     static func read(
@@ -66,7 +75,21 @@ struct HaystackReader {
     }
 
     static func readStandardInput(maxBufferBytes: Int = defaultMaxBufferBytes) throws -> Data {
-        try readChunks(from: .standardInput, closeWhenDone: false, maxBufferBytes: maxBufferBytes)
+        try readStandardInputWithMetadata(maxBufferBytes: maxBufferBytes).data
+    }
+
+    static func readStandardInputWithMetadata(
+        maxBufferBytes: Int = defaultMaxBufferBytes
+    ) throws -> StandardInputRead {
+        try readStandardInputChunks(from: .standardInput, maxBufferBytes: maxBufferBytes)
+    }
+
+    static func modeledStandardInput(_ data: Data) -> StandardInputRead {
+        let binaryChunkStart = data.firstIndex(of: 0).map { index in
+            let offset = data.distance(from: data.startIndex, to: index)
+            return offset - offset % standardInputChunkSize
+        }
+        return StandardInputRead(data: data, binaryChunkStart: binaryChunkStart)
     }
 
     static func streamLines(
@@ -295,6 +318,24 @@ struct HaystackReader {
             try append(chunk, to: &data, maxBufferBytes: maxBufferBytes)
         }
         return data
+    }
+
+    private static func readStandardInputChunks(
+        from handle: FileHandle,
+        maxBufferBytes: Int
+    ) throws -> StandardInputRead {
+        var data = Data()
+        var binaryChunkStart: Int?
+        while true {
+            guard let chunk = try handle.read(upToCount: standardInputChunkSize), !chunk.isEmpty else {
+                break
+            }
+            if binaryChunkStart == nil, chunk.contains(0) {
+                binaryChunkStart = data.count
+            }
+            try append(chunk, to: &data, maxBufferBytes: maxBufferBytes)
+        }
+        return StandardInputRead(data: data, binaryChunkStart: binaryChunkStart)
     }
 
     private static func streamLines(

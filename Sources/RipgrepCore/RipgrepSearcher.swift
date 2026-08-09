@@ -340,11 +340,14 @@ public struct RipgrepSearcher: @unchecked Sendable {
         var files = searchedHaystacks.map(\.result)
 
         if options.useStdin {
-            let stdinData = stdin.map { Data($0.utf8) } ?? ((try? HaystackReader.readStandardInput()) ?? Data())
+            let stdinRead = stdin.map { HaystackReader.modeledStandardInput(Data($0.utf8)) }
+                ?? ((try? HaystackReader.readStandardInputWithMetadata())
+                    ?? HaystackReader.modeledStandardInput(Data()))
             let stdinResults = stdinSearchResults(
-                stdinData,
+                stdinRead.data,
                 matcher: matcher,
-                options: options
+                options: options,
+                binaryBufferCutoff: stdinRead.binaryChunkStart
             )
             if preservesExplicitStdinPosition(options: options) {
                 var ordered: [SearchFileResult] = []
@@ -6949,11 +6952,17 @@ public struct RipgrepSearcher: @unchecked Sendable {
     private func stdinSearchResults(
         _ data: Data,
         matcher: PatternMatcher,
-        options: RipgrepOptions
+        options: RipgrepOptions,
+        binaryBufferCutoff: Int?
     ) -> [SearchFileResult] {
         let count = max(1, options.rootPathArguments.filter { $0 == "-" }.count)
         return (0..<count).map { index in
-            searchStdin(index == 0 ? data : Data(), matcher: matcher, options: options)
+            searchStdin(
+                index == 0 ? data : Data(),
+                matcher: matcher,
+                options: options,
+                binaryBufferCutoff: index == 0 ? binaryBufferCutoff : nil
+            )
         }
     }
 
@@ -13456,7 +13465,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
     private func searchStdin(
         _ data: Data,
         matcher: PatternMatcher,
-        options: RipgrepOptions
+        options: RipgrepOptions,
+        binaryBufferCutoff: Int?
     ) -> SearchFileResult {
         let fileURL = URL(fileURLWithPath: "<stdin>")
         let contents = decode(data, options: options)
@@ -13478,7 +13488,8 @@ public struct RipgrepSearcher: @unchecked Sendable {
             result.matches,
             binaryByteOffset: binaryByteOffset,
             options: options,
-            isExplicit: true
+            isExplicit: true,
+            bufferCutoff: binaryBufferCutoff
         )
         let emittedMatches = shouldEmitSuppressedBinaryMatches(options, isExplicit: true)
             ? result.matches
@@ -13577,15 +13588,29 @@ public struct RipgrepSearcher: @unchecked Sendable {
     }
 
     private func binaryVisibleMatches(
-        _ matches: [SearchMatch],
+        _ candidateMatches: [SearchMatch],
         binaryByteOffset: Int,
         options: RipgrepOptions,
         isExplicit: Bool,
+        bufferCutoff: Int? = nil,
         usesBufferCutoff: Bool = true
     ) -> [SearchMatch] {
-        let matches = usesBufferCutoff
-            ? matchesBeforeBinary(matches, binaryByteOffset: binaryByteOffset, options: options)
-            : matchesBeforeBinaryByte(matches, binaryByteOffset: binaryByteOffset, options: options)
+        let matches: [SearchMatch]
+        if let bufferCutoff {
+            matches = matchesBeforeBinary(candidateMatches, cutoff: bufferCutoff, options: options)
+        } else if usesBufferCutoff {
+            matches = matchesBeforeBinary(
+                candidateMatches,
+                binaryByteOffset: binaryByteOffset,
+                options: options
+            )
+        } else {
+            matches = matchesBeforeBinaryByte(
+                candidateMatches,
+                binaryByteOffset: binaryByteOffset,
+                options: options
+            )
+        }
         guard options.printMode == .matchingLines,
               !options.json,
               !(options.quiet && options.stats),

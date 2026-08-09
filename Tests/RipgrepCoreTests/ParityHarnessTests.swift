@@ -878,19 +878,14 @@ private func multilineParityCases() -> [ParityCase] {
 }
 
 private func binaryHaystack() throws -> Data {
-    let upstream = URL(fileURLWithPath: "/Users/mweinbach/Projects/swift-harness/ripgrep/tests/data/sherlock-nul.txt")
-    if FileManager.default.fileExists(atPath: upstream.path) {
-        return try Data(contentsOf: upstream)
-    }
-
-    var fallback = Data()
-    fallback.append(contentsOf: "The Project Gutenberg EBook of A Study In Scarlet, by Arthur Conan Doyle\n".utf8)
+    var data = Data()
+    data.append(contentsOf: "The Project Gutenberg EBook of A Study In Scarlet, by Arthur Conan Doyle\n".utf8)
     for index in 0..<1_500 {
-        fallback.append(contentsOf: "padding line \(index)\n".utf8)
+        data.append(contentsOf: "padding line \(index)\n".utf8)
     }
-    fallback.append(0)
-    fallback.append(contentsOf: "abcdef\n\"No. Heaven knows what the objects of his studies are. But here we\n\"And yet you say he is not a medical student?\"\n".utf8)
-    return fallback
+    data.append(0)
+    data.append(contentsOf: "abcdef\n\"No. Heaven knows what the objects of his studies are. But here we\n\"And yet you say he is not a medical student?\"\n".utf8)
+    return data
 }
 
 private func matchingFilesInconsistentFixture(in dir: URL) throws {
