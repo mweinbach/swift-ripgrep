@@ -45,6 +45,15 @@ plain output, `-n`, `-c`, `--count-matches`, `-q`, `-l`, and
 file shapes fall back to the full search engine. Set
 `SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT=1` to disable it for A/B measurements.
 
+Linux x86-64 builds use a similarly conservative executable preflight for a
+plain literal searched in one explicit regular file and for count-only plain,
+literal-alternation, and required-literal regex searches. It uses POSIX `mmap`
+for normal reads, a bounded sequential buffer for `--no-mmap`, libc byte
+searches, and direct standard-output writes. Binary, encoded, configured,
+console, non-regular, or unsupported argument shapes fall back to the full
+engine. Set `SWIFT_RIPGREP_NO_LINUX_X86_PREFLIGHT=1` to disable it for A/B
+measurements.
+
 Recursive Windows searches use a low-allocation Win32 walker that carries
 `WIN32_FIND_DATAW` file sizes directly into the parallel search pipeline,
 avoiding per-entry Foundation metadata and path-normalization calls. Plain and
