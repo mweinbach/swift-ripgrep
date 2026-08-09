@@ -15,22 +15,14 @@ const uint8_t *rg_linux_find_either_byte(
     int *matched_second
 );
 
-/// Returns non-zero when every byte is non-NUL ASCII.
-int rg_linux_bytes_are_ascii_text(const uint8_t *bytes, size_t count);
-
-/// Returns the first ASCII byte equal to `folded` ignoring ASCII case.
-const uint8_t *rg_linux_find_ascii_case_byte(
-    const uint8_t *bytes,
-    size_t count,
-    uint8_t folded
-);
-
-/// Finds a folded ASCII literal using a Boyer-Moore-Horspool skip table.
-const uint8_t *rg_linux_memcasemem_ascii(
+/// Counts lines containing a folded ASCII literal while validating ASCII text.
+/// Returns non-zero for valid non-NUL ASCII and writes the line count.
+int rg_linux_count_ascii_case_lines(
     const uint8_t *bytes,
     size_t count,
     const uint8_t *folded_needle,
-    size_t needle_count
+    size_t needle_count,
+    size_t *matched_lines
 );
 
 #endif

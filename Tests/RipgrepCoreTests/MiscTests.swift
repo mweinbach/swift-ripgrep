@@ -12117,6 +12117,40 @@ struct MiscTests {
         #expect(lineCount.error.isEmpty)
         #expect(lineCount.output == Data("2\n".utf8))
 
+        let ignoreCaseLineCountArguments = [
+            "--no-config",
+            "--color=never",
+            "--ignore-case",
+            "--count",
+            "ALPHA",
+            path,
+        ]
+        let ignoreCaseLineCount = try runExecutableResult(ignoreCaseLineCountArguments) {}
+        let genericIgnoreCaseLineCount = try runExecutableResult(
+            ignoreCaseLineCountArguments,
+            environment: ["SWIFT_RIPGREP_NO_LINUX_X86_PREFLIGHT": "1"]
+        ) {}
+        #expect(ignoreCaseLineCount.exitCode == 0)
+        #expect(ignoreCaseLineCount.error.isEmpty)
+        #expect(ignoreCaseLineCount.output == Data("2\n".utf8))
+        #expect(ignoreCaseLineCount.exitCode == genericIgnoreCaseLineCount.exitCode)
+        #expect(ignoreCaseLineCount.error == genericIgnoreCaseLineCount.error)
+        #expect(ignoreCaseLineCount.output == genericIgnoreCaseLineCount.output)
+
+        let unicodePath = root.path("global-literal-unicode.txt")
+        try root.write("alpha\ncafé\nALPHA\n", to: "global-literal-unicode.txt")
+        let unicodeIgnoreCaseArguments = [
+            "--no-config", "--color=never", "-i", "-c", "alpha", unicodePath,
+        ]
+        let unicodeIgnoreCaseCount = try runExecutableResult(unicodeIgnoreCaseArguments) {}
+        let genericUnicodeIgnoreCaseCount = try runExecutableResult(
+            unicodeIgnoreCaseArguments,
+            environment: ["SWIFT_RIPGREP_NO_LINUX_X86_PREFLIGHT": "1"]
+        ) {}
+        #expect(unicodeIgnoreCaseCount.exitCode == genericUnicodeIgnoreCaseCount.exitCode)
+        #expect(unicodeIgnoreCaseCount.error == genericUnicodeIgnoreCaseCount.error)
+        #expect(unicodeIgnoreCaseCount.output == genericUnicodeIgnoreCaseCount.output)
+
         let alternationCountArguments = [
             "--no-config",
             "--color=never",

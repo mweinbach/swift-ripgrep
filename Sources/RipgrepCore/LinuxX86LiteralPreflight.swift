@@ -664,7 +664,6 @@ public enum LinuxX86LiteralPreflight {
             if case .literal(let literal) = pattern {
                 matchedLines = scanLiteral(bytes: bytes, count: count, literal: literal)
             } else if case .asciiCaseInsensitiveLiteral(let literal) = pattern {
-                guard rg_linux_bytes_are_ascii_text(bytes, count) != 0 else { return nil }
                 matchedLines = scanASCIICaseInsensitiveLiteral(
                     bytes: bytes,
                     count: count,
@@ -943,34 +942,18 @@ public enum LinuxX86LiteralPreflight {
         bytes: UnsafePointer<UInt8>,
         count: Int,
         foldedLiteral: [UInt8]
-    ) -> Int {
+    ) -> Int? {
         var matchedLines = 0
-        var searchOffset = 0
-        while searchOffset <= count - foldedLiteral.count {
-            let found = foldedLiteral.withUnsafeBufferPointer { literalBuffer in
-                rg_linux_memcasemem_ascii(
-                    bytes.advanced(by: searchOffset),
-                    count - searchOffset,
-                    literalBuffer.baseAddress,
-                    literalBuffer.count
-                )
-            }
-            guard let found else { break }
-            let matchStart = bytes.distance(to: found)
-            let newline = findByte(
-                bytes.advanced(by: matchStart),
-                count: count - matchStart,
-                byte: UInt8(ascii: "\n")
-            ).map { matchStart + $0 }
-            let lineEnd = newline ?? count
-            guard matchStart + foldedLiteral.count <= lineEnd else {
-                searchOffset = matchStart + 1
-                continue
-            }
-            matchedLines += 1
-            searchOffset = newline.map { $0 + 1 } ?? count
+        let valid = foldedLiteral.withUnsafeBufferPointer { literalBuffer in
+            rg_linux_count_ascii_case_lines(
+                bytes,
+                count,
+                literalBuffer.baseAddress,
+                literalBuffer.count,
+                &matchedLines
+            )
         }
-        return matchedLines
+        return valid != 0 ? matchedLines : nil
     }
 
     @inline(__always)
