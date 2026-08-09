@@ -51,10 +51,18 @@ jobs:
         run: python bench/install_rust_rg.py --version 15.2.0 --destination .ci-tools
 
       - name: Build release executable
-        if: runner.os != 'Windows'
+        if: runner.os == 'macOS'
         run: swift build -c release
 
-      - name: Build self-contained release executable
+      - name: Build self-contained Linux release executable
+        if: runner.os == 'Linux'
+        run: >-
+          swift build
+          --scratch-path .build/ci-linux-static
+          -c release
+          -Xswiftc -static-stdlib
+
+      - name: Build self-contained Windows release executable
         if: runner.os == 'Windows'
         shell: pwsh
         run: >-
@@ -68,6 +76,9 @@ jobs:
         run: |
           if ('${{ runner.os }}' -eq 'Windows') {
             $binary = Join-Path $PWD '.build/ci-windows-static/x86_64-unknown-windows-msvc/release/${{ matrix.executable }}'
+          } elseif ('${{ runner.os }}' -eq 'Linux') {
+            $binPath = swift build --scratch-path .build/ci-linux-static -c release -Xswiftc -static-stdlib --show-bin-path
+            $binary = Join-Path $binPath '${{ matrix.executable }}'
           } else {
             $binPath = swift build -c release --show-bin-path
             $binary = Join-Path $binPath '${{ matrix.executable }}'
