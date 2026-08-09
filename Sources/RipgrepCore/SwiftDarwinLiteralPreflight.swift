@@ -12178,50 +12178,74 @@ public enum SwiftDarwinLiteralPreflight {
     ) -> (matchedLines: Int, spans: [(start: Int, end: Int, needsNewline: Bool)])? {
         guard !literal.isEmpty else { return nil }
         guard count > 0 else { return (0, []) }
-        guard let bytes = optionalBytes,
-              memchr(bytes, 0, count) == nil else {
-            return nil
-        }
-        if count < literal.count { return (0, []) }
+        guard let bytes = optionalBytes else { return nil }
 
-        return literal.withUnsafeBufferPointer { needle in
-            guard let needleBase = needle.baseAddress else { return nil }
-            var matchedLines = 0
-            var spans: [(start: Int, end: Int, needsNewline: Bool)] = []
-            var searchOffset = 0
-            while searchOffset <= count - literal.count {
-                guard let found = rg_memmem_simple(
-                    bytes.advanced(by: searchOffset),
-                    count - searchOffset,
-                    needleBase,
-                    literal.count
-                ) else {
-                    break
-                }
-                let matchStart = bytes.distance(to: found)
-                matchedLines += 1
-                if stopAfterFirst { break }
-
-                let rawNewline = memchr(
-                    bytes.advanced(by: matchStart + literal.count),
-                    Int32(UInt8(ascii: "\n")),
-                    count - matchStart - literal.count
-                )
-                let newline = rawNewline.map {
-                    bytes.distance(to: $0.assumingMemoryBound(to: UInt8.self))
-                }
-                let outputEnd = newline.map { $0 + 1 } ?? count
-                if collectSpans {
-                    var lineStart = matchStart
-                    while lineStart > 0,
-                          bytes[lineStart - 1] != UInt8(ascii: "\n") {
-                        lineStart -= 1
+        return withUnsafeTemporaryAllocation(of: UInt8.self, capacity: 2) { markers in
+            guard let markerBase = markers.baseAddress else { return nil }
+            markerBase[1] = 0
+            return literal.withUnsafeBufferPointer { needle in
+                guard let needleBase = needle.baseAddress else { return nil }
+                var matchedLines = 0
+                var spans: [(start: Int, end: Int, needsNewline: Bool)] = []
+                var searchOffset = 0
+                while searchOffset < count {
+                    markerBase[0] = literal[0]
+                    guard let rawEvent = rg_memchr_any_bytes(
+                        bytes.advanced(by: searchOffset),
+                        count - searchOffset,
+                        UnsafePointer(markerBase),
+                        2
+                    ) else {
+                        break
                     }
-                    spans.append((lineStart, outputEnd, newline == nil))
+                    let event = rawEvent
+                    let candidate = bytes.distance(to: event)
+                    guard event.pointee != 0 else { return nil }
+                    guard literal.count <= count,
+                          candidate <= count - literal.count,
+                          memcmp(event, needleBase, literal.count) == 0 else {
+                        searchOffset = candidate + 1
+                        continue
+                    }
+
+                    matchedLines += 1
+                    let suffixStart = candidate + literal.count
+                    if stopAfterFirst {
+                        guard memchr(
+                            bytes.advanced(by: suffixStart),
+                            0,
+                            count - suffixStart
+                        ) == nil else {
+                            return nil
+                        }
+                        return (matchedLines, spans)
+                    }
+
+                    markerBase[0] = UInt8(ascii: "\n")
+                    let rawTerminator = rg_memchr_any_bytes(
+                        bytes.advanced(by: suffixStart),
+                        count - suffixStart,
+                        UnsafePointer(markerBase),
+                        2
+                    )
+                    if let rawTerminator,
+                       rawTerminator.pointee == 0 {
+                        return nil
+                    }
+                    let newline = rawTerminator.map { bytes.distance(to: $0) }
+                    let outputEnd = newline.map { $0 + 1 } ?? count
+                    if collectSpans {
+                        var lineStart = candidate
+                        while lineStart > 0,
+                              bytes[lineStart - 1] != UInt8(ascii: "\n") {
+                            lineStart -= 1
+                        }
+                        spans.append((lineStart, outputEnd, newline == nil))
+                    }
+                    searchOffset = outputEnd
                 }
-                searchOffset = outputEnd
+                return (matchedLines, spans)
             }
-            return (matchedLines, spans)
         }
     }
 
