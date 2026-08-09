@@ -12079,6 +12079,21 @@ struct MiscTests {
         #expect(lines.exitCode == 0)
         #expect(lines.error.isEmpty)
         #expect(lines.output == Data("alpha alpha\nalpha\n".utf8))
+        let genericLines = try runExecutableResult(
+            [
+                "--no-config",
+                "--color", "never",
+                "alpha",
+                path,
+            ],
+            environment: [
+                "SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT": "1",
+                "SWIFT_RIPGREP_NO_LINUX_X86_PREFLIGHT": "1",
+            ]
+        ) {}
+        #expect(lines.exitCode == genericLines.exitCode)
+        #expect(lines.error == genericLines.error)
+        #expect(lines.output == genericLines.output)
 
         let bufferedLines = try runExecutableResult([
             "--no-config",
@@ -12156,6 +12171,27 @@ struct MiscTests {
         #expect(missingCount.exitCode == 1)
         #expect(missingCount.error.isEmpty)
         #expect(missingCount.output.isEmpty)
+
+        let missingLinesArguments = [
+            "--no-config",
+            "--color=never",
+            "absent",
+            path,
+        ]
+        let missingLines = try runExecutableResult(missingLinesArguments) {}
+        let genericMissingLines = try runExecutableResult(
+            missingLinesArguments,
+            environment: [
+                "SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT": "1",
+                "SWIFT_RIPGREP_NO_LINUX_X86_PREFLIGHT": "1",
+            ]
+        ) {}
+        #expect(missingLines.exitCode == 1)
+        #expect(missingLines.error.isEmpty)
+        #expect(missingLines.output.isEmpty)
+        #expect(missingLines.exitCode == genericMissingLines.exitCode)
+        #expect(missingLines.error == genericMissingLines.error)
+        #expect(missingLines.output == genericMissingLines.output)
 
         let withoutMatch = try runExecutableResult([
             "--no-config",

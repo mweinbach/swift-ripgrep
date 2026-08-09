@@ -8,6 +8,11 @@ import Musl
 /// A conservative executable-level fast path for count-only searches of one
 /// explicit regular file. Unsupported shapes fall back to the full engine.
 public enum LinuxX86LiteralPreflight {
+    private enum Mode {
+        case matchingLines
+        case countLines
+    }
+
     private enum PreflightPattern {
         case literal([UInt8])
         case literalAlternation([[UInt8]])
@@ -19,7 +24,7 @@ public enum LinuxX86LiteralPreflight {
               !environmentVariableExists("RIPGREP_CONFIG_PATH"),
               isatty(STDOUT_FILENO) == 0,
               let parsed = parse(arguments),
-              let pattern = preflightPattern(parsed.pattern) else {
+              let pattern = preflightPattern(parsed.pattern, mode: parsed.mode) else {
             return nil
         }
 
@@ -45,22 +50,30 @@ public enum LinuxX86LiteralPreflight {
 
         let bytes = UnsafeRawPointer(mapping).assumingMemoryBound(to: UInt8.self)
         guard canUseBytes(bytes, count: size) else { return nil }
-        guard let matchedLines = scan(
-            bytes: bytes,
-            count: size,
-            pattern: pattern
-        ) else {
-            return nil
+        switch parsed.mode {
+        case .matchingLines:
+            guard case .literal(let literal) = pattern else { return nil }
+            return scanLiteralLines(bytes: bytes, count: size, literal: literal)
+        case .countLines:
+            guard let matchedLines = scanCount(
+                bytes: bytes,
+                count: size,
+                pattern: pattern
+            ) else {
+                return nil
+            }
+            guard matchedLines > 0 else { return 1 }
+            return writeDecimalLine(matchedLines) ? 0 : nil
         }
-        guard matchedLines > 0 else { return 1 }
-        return writeDecimalLine(matchedLines) ? 0 : nil
     }
 
     private static func environmentVariableExists(_ name: String) -> Bool {
         name.withCString { getenv($0) != nil }
     }
 
-    private static func parse(_ arguments: [String]) -> (pattern: String, path: String)? {
+    private static func parse(
+        _ arguments: [String]
+    ) -> (mode: Mode, pattern: String, path: String)? {
         var argumentIndex = 0
         leadingFlags: while argumentIndex < arguments.count {
             switch arguments[argumentIndex] {
@@ -77,19 +90,28 @@ public enum LinuxX86LiteralPreflight {
             }
         }
         let remaining = arguments.dropFirst(argumentIndex)
-        guard remaining.count == 3,
-              remaining[remaining.startIndex] == "-c"
-                || remaining[remaining.startIndex] == "--count" else {
+        let mode: Mode
+        let pattern: String
+        let path: String
+        if remaining.count == 2 {
+            mode = .matchingLines
+            pattern = remaining[remaining.startIndex]
+            path = remaining[remaining.index(after: remaining.startIndex)]
+        } else if remaining.count == 3,
+                  remaining[remaining.startIndex] == "-c"
+                    || remaining[remaining.startIndex] == "--count" {
+            mode = .countLines
+            let patternIndex = remaining.index(after: remaining.startIndex)
+            let pathIndex = remaining.index(after: patternIndex)
+            pattern = remaining[patternIndex]
+            path = remaining[pathIndex]
+        } else {
             return nil
         }
-        let patternIndex = remaining.index(after: remaining.startIndex)
-        let pathIndex = remaining.index(after: patternIndex)
-        let pattern = remaining[patternIndex]
-        let path = remaining[pathIndex]
         guard !pattern.hasPrefix("-"), path != "-", !path.isEmpty else {
             return nil
         }
-        return (pattern, path)
+        return (mode, pattern, path)
     }
 
     private static func plainLiteralBytes(_ pattern: String) -> [UInt8]? {
@@ -107,10 +129,11 @@ public enum LinuxX86LiteralPreflight {
         return bytes.isEmpty ? nil : bytes
     }
 
-    private static func preflightPattern(_ pattern: String) -> PreflightPattern? {
+    private static func preflightPattern(_ pattern: String, mode: Mode) -> PreflightPattern? {
         if let literal = plainLiteralBytes(pattern) {
             return .literal(literal)
         }
+        guard mode == .countLines else { return nil }
         let branches = pattern.split(separator: "|", omittingEmptySubsequences: false)
         if branches.count >= 2, branches.count <= 8 {
             let literals = branches.compactMap { plainLiteralBytes(String($0)) }
@@ -142,7 +165,7 @@ public enum LinuxX86LiteralPreflight {
         return memchr(bytes, 0, count) == nil
     }
 
-    private static func scan(
+    private static func scanCount(
         bytes: UnsafePointer<UInt8>,
         count: Int,
         pattern: PreflightPattern
@@ -159,6 +182,51 @@ public enum LinuxX86LiteralPreflight {
                 suffix: suffix
             )
         }
+    }
+
+    private static func scanLiteralLines(
+        bytes: UnsafePointer<UInt8>,
+        count: Int,
+        literal: [UInt8]
+    ) -> Int32? {
+        var foundMatch = false
+        var searchOffset = 0
+        while searchOffset <= count - literal.count,
+              let matchStart = findLiteral(
+                bytes: bytes,
+                range: searchOffset..<count,
+                literal: literal
+              ) {
+            var lineStart = matchStart
+            while lineStart > 0, bytes[lineStart - 1] != UInt8(ascii: "\n") {
+                lineStart -= 1
+            }
+            let newline = findByte(
+                bytes.advanced(by: matchStart),
+                count: count - matchStart,
+                byte: UInt8(ascii: "\n")
+            ).map { matchStart + $0 }
+            let lineEnd = newline ?? count
+            let outputEnd = newline.map { $0 + 1 } ?? count
+            guard matchStart + literal.count <= lineEnd else {
+                searchOffset = matchStart + 1
+                continue
+            }
+            guard writeAll(bytes.advanced(by: lineStart), count: outputEnd - lineStart) else {
+                return nil
+            }
+            if newline == nil {
+                var newlineByte = UInt8(ascii: "\n")
+                guard withUnsafePointer(to: &newlineByte, {
+                    writeAll($0, count: 1)
+                }) else {
+                    return nil
+                }
+            }
+            foundMatch = true
+            searchOffset = outputEnd
+        }
+        return foundMatch ? 0 : 1
     }
 
     private static func scanLiteral(
