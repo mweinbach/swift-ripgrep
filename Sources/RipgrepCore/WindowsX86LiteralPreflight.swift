@@ -4,11 +4,12 @@ import Foundation
 import CRT
 import WinSDK
 
-/// A narrow executable-level fast path for one searchable pattern and one
-/// explicit regular file. Unsupported shapes return `nil` and use the full
-/// engine.
+/// Narrow executable-level fast paths for explicit-file literals and sorted
+/// directory literals/listing. Unsupported shapes return `nil` and use the
+/// full engine.
 public enum WindowsX86LiteralPreflight {
     private static let maximumBufferedBytes = 512 * 1024 * 1024
+    private static let streamingChunkBytes = 1024 * 1024
 
     private enum Mode {
         case matchingLines
@@ -26,11 +27,62 @@ public enum WindowsX86LiteralPreflight {
         case capitalizedWordWhitespaceSuffix([UInt8])
     }
 
+    private enum SortedDirectoryMode {
+        case files
+        case matchingLines
+        case countLines
+        case filesWithMatches
+    }
+
+    private struct SortedDirectoryInvocation {
+        let mode: SortedDirectoryMode
+        let literal: [UInt8]?
+        let rootPath: String
+    }
+
+    private struct SortedDirectoryFile {
+        let path: String
+        let components: [String]
+    }
+
+    private struct ReusableFileBuffer {
+        private(set) var storage: UnsafeMutablePointer<UInt8>?
+        private(set) var capacity = 0
+
+        mutating func reserveCapacity(_ requestedCapacity: Int, preserving preservedCount: Int = 0) -> Bool {
+            guard requestedCapacity > capacity else { return true }
+            guard preservedCount >= 0, preservedCount <= capacity else { return false }
+            let newCapacity = max(requestedCapacity, max(256 * 1024, capacity * 2))
+            let replacement = UnsafeMutablePointer<UInt8>.allocate(capacity: newCapacity)
+            if let storage, preservedCount > 0 {
+                replacement.update(from: storage, count: preservedCount)
+            }
+            storage?.deallocate()
+            storage = replacement
+            capacity = newCapacity
+            return true
+        }
+
+        mutating func deallocate() {
+            storage?.deallocate()
+            storage = nil
+            capacity = 0
+        }
+    }
+
     public static func run(arguments: [String]) -> Int32? {
         guard !environmentVariableExists("SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT"),
               !environmentVariableExists("RIPGREP_CONFIG_PATH"),
-              _isatty(_fileno(stdout)) == 0,
-              let parsed = parse(arguments),
+              _isatty(_fileno(stdout)) == 0 else {
+            return nil
+        }
+
+        if let invocation = parseSortedDirectory(arguments),
+           let result = runSortedDirectory(invocation) {
+            return result
+        }
+
+        guard let parsed = parse(arguments),
               let pattern = preflightPattern(parsed.pattern, mode: parsed.mode) else {
             return nil
         }
@@ -71,6 +123,14 @@ public enum WindowsX86LiteralPreflight {
 
             if parsed.buffered {
                 guard size <= maximumBufferedBytes else { return nil }
+                if parsed.mode == .matchingLines,
+                   case .literal(let literal) = pattern {
+                    return scanBufferedLiteralLines(
+                        file: file,
+                        estimatedSize: size,
+                        literal: literal
+                    )
+                }
                 let buffer = UnsafeMutableRawPointer.allocate(
                     byteCount: size,
                     alignment: MemoryLayout<UInt8>.alignment
@@ -128,6 +188,518 @@ public enum WindowsX86LiteralPreflight {
                 mode: parsed.mode
             )
         }
+    }
+
+    private static func scanBufferedLiteralLines(
+        file: HANDLE,
+        estimatedSize: Int,
+        literal: [UInt8]
+    ) -> Int32? {
+        var streamBuffer = ReusableFileBuffer()
+        defer { streamBuffer.deallocate() }
+        guard streamBuffer.reserveCapacity(streamingChunkBytes) else { return nil }
+
+        var matchedOutput = Data()
+        matchedOutput.reserveCapacity(min(estimatedSize, streamingChunkBytes))
+        var carried = 0
+        var isFirstRead = true
+        while true {
+            if carried == streamBuffer.capacity {
+                guard streamBuffer.capacity < maximumBufferedBytes,
+                      streamBuffer.reserveCapacity(
+                        min(maximumBufferedBytes, streamBuffer.capacity * 2),
+                        preserving: carried
+                      ) else {
+                    return nil
+                }
+            }
+            guard let storage = streamBuffer.storage else { return nil }
+            let available = streamBuffer.capacity - carried
+            let requested = min(streamingChunkBytes, available)
+            var count: DWORD = 0
+            guard ReadFile(file, storage.advanced(by: carried), DWORD(requested), &count, nil) else {
+                return nil
+            }
+            let bytesRead = Int(count)
+            if bytesRead == 0 { break }
+            if isFirstRead {
+                let total = carried + bytesRead
+                if total >= 3,
+                   storage[0] == 0xEF, storage[1] == 0xBB, storage[2] == 0xBF {
+                    return nil
+                }
+                if total >= 2,
+                   ((storage[0] == 0xFF && storage[1] == 0xFE)
+                    || (storage[0] == 0xFE && storage[1] == 0xFF)) {
+                    return nil
+                }
+                isFirstRead = false
+            }
+            if memchr(storage.advanced(by: carried), 0, bytesRead) != nil {
+                return nil
+            }
+
+            let total = carried + bytesRead
+            var completeEnd = total
+            while completeEnd > 0, storage[completeEnd - 1] != UInt8(ascii: "\n") {
+                completeEnd -= 1
+            }
+            if completeEnd > 0 {
+                guard appendBufferedMatchingLines(
+                    bytes: UnsafePointer(storage),
+                    count: completeEnd,
+                    literal: literal,
+                    output: &matchedOutput
+                ) else {
+                    return nil
+                }
+                carried = total - completeEnd
+                if carried > 0 {
+                    memmove(storage, storage.advanced(by: completeEnd), carried)
+                }
+            } else {
+                carried = total
+            }
+        }
+
+        if carried > 0, let storage = streamBuffer.storage,
+           findLiteral(bytes: UnsafePointer(storage), range: 0..<carried, literal: literal) != nil {
+            guard matchedOutput.count <= maximumBufferedBytes - carried - 1 else { return nil }
+            matchedOutput.append(storage, count: carried)
+            matchedOutput.append(UInt8(ascii: "\n"))
+        }
+
+        guard !matchedOutput.isEmpty else { return 1 }
+        guard var output = Win32OutputBuffer(capacity: 64 * 1024) else { return nil }
+        defer { output.deallocate() }
+        let wrote = matchedOutput.withUnsafeBytes { bytes -> Bool in
+            guard let baseAddress = bytes.baseAddress else { return true }
+            return output.write(
+                baseAddress.assumingMemoryBound(to: UInt8.self),
+                count: bytes.count
+            )
+        }
+        return wrote && output.flush() ? 0 : 2
+    }
+
+    private static func appendBufferedMatchingLines(
+        bytes: UnsafePointer<UInt8>,
+        count: Int,
+        literal: [UInt8],
+        output: inout Data
+    ) -> Bool {
+        var searchOffset = 0
+        while searchOffset <= count - literal.count,
+              let matchStart = findLiteral(
+                bytes: bytes,
+                range: searchOffset..<count,
+                literal: literal
+              ) {
+            var lineStart = matchStart
+            while lineStart > 0, bytes[lineStart - 1] != UInt8(ascii: "\n") {
+                lineStart -= 1
+            }
+            guard let newlineOffset = findByte(
+                bytes.advanced(by: matchStart + literal.count),
+                count: count - matchStart - literal.count,
+                byte: UInt8(ascii: "\n")
+            ) else {
+                return false
+            }
+            let outputEnd = matchStart + literal.count + newlineOffset + 1
+            let outputCount = outputEnd - lineStart
+            guard outputCount <= maximumBufferedBytes - output.count else { return false }
+            output.append(bytes.advanced(by: lineStart), count: outputCount)
+            searchOffset = outputEnd
+        }
+        return true
+    }
+
+    private static func parseSortedDirectory(_ arguments: [String]) -> SortedDirectoryInvocation? {
+        var argumentIndex = 0
+        var sawPathSort = false
+        leadingFlags: while argumentIndex < arguments.count {
+            switch arguments[argumentIndex] {
+            case "--no-config", "--color=never":
+                argumentIndex += 1
+            case "--color":
+                guard argumentIndex + 1 < arguments.count,
+                      arguments[argumentIndex + 1] == "never" else {
+                    return nil
+                }
+                argumentIndex += 2
+            case "--sort":
+                guard !sawPathSort,
+                      argumentIndex + 1 < arguments.count,
+                      arguments[argumentIndex + 1] == "path" else {
+                    return nil
+                }
+                sawPathSort = true
+                argumentIndex += 2
+            case "--sort=path":
+                guard !sawPathSort else { return nil }
+                sawPathSort = true
+                argumentIndex += 1
+            default:
+                break leadingFlags
+            }
+        }
+        guard sawPathSort else { return nil }
+
+        let remaining = Array(arguments.dropFirst(argumentIndex))
+        let mode: SortedDirectoryMode
+        let literal: [UInt8]?
+        let rootPath: String
+        if remaining.count == 2, remaining[0] == "--files" {
+            mode = .files
+            literal = nil
+            rootPath = remaining[1]
+        } else if remaining.count == 2 {
+            mode = .matchingLines
+            guard let parsedLiteral = plainLiteralBytes(remaining[0]) else { return nil }
+            literal = parsedLiteral
+            rootPath = remaining[1]
+        } else if remaining.count == 3,
+                  remaining[0] == "-c" || remaining[0] == "--count" {
+            mode = .countLines
+            guard let parsedLiteral = plainLiteralBytes(remaining[1]) else { return nil }
+            literal = parsedLiteral
+            rootPath = remaining[2]
+        } else if remaining.count == 3,
+                  remaining[0] == "-l" || remaining[0] == "--files-with-matches" {
+            mode = .filesWithMatches
+            guard let parsedLiteral = plainLiteralBytes(remaining[1]) else { return nil }
+            literal = parsedLiteral
+            rootPath = remaining[2]
+        } else {
+            return nil
+        }
+
+        guard !rootPath.isEmpty,
+              rootPath != "-",
+              (rootPath as NSString).isAbsolutePath,
+              rootPath.utf8.allSatisfy({ $0 < 0x80 }) else {
+            return nil
+        }
+        return SortedDirectoryInvocation(mode: mode, literal: literal, rootPath: rootPath)
+    }
+
+    private static func runSortedDirectory(_ invocation: SortedDirectoryInvocation) -> Int32? {
+        let rootPath = trimTrailingWindowsSeparators(invocation.rootPath)
+        let attributes = rootPath.withCString(encodedAs: UTF16.self) { GetFileAttributesW($0) }
+        guard attributes != DWORD(INVALID_FILE_ATTRIBUTES),
+              attributes & DWORD(FILE_ATTRIBUTE_DIRECTORY) != 0,
+              attributes & DWORD(FILE_ATTRIBUTE_REPARSE_POINT) == 0,
+              !ancestorContainsIgnoreMetadata(rootPath) else {
+            return nil
+        }
+
+        var files: [SortedDirectoryFile] = []
+        files.reserveCapacity(256)
+        guard collectSortedDirectoryFiles(
+            physicalDirectory: rootPath,
+            outputDirectory: rootPath,
+            components: [],
+            files: &files
+        ) else {
+            return nil
+        }
+        files.sort { pathComponentsPrecede($0.components, $1.components) }
+
+        guard var output = Win32OutputBuffer(capacity: 64 * 1024) else { return nil }
+        defer { output.deallocate() }
+        if invocation.mode == .files {
+            for file in files {
+                guard output.writeString(file.path),
+                      output.writeByte(UInt8(ascii: "\n")) else {
+                    return 2
+                }
+            }
+            guard output.flush() else { return 2 }
+            return files.isEmpty ? 1 : 0
+        }
+
+        guard let literal = invocation.literal else { return nil }
+        var buffer = ReusableFileBuffer()
+        defer { buffer.deallocate() }
+        var matches: [(file: SortedDirectoryFile, count: Int)] = []
+        matches.reserveCapacity(files.count)
+        for file in files {
+            guard let count = readLiteralMatchedLineCount(
+                path: file.path,
+                literal: literal,
+                stopAfterFirst: invocation.mode == .filesWithMatches,
+                buffer: &buffer
+            ) else {
+                return nil
+            }
+            if count > 0 {
+                matches.append((file, count))
+            }
+        }
+
+        for match in matches {
+            if invocation.mode == .matchingLines {
+                guard let wroteLines = withFileBytes(path: match.file.path, buffer: &buffer, { bytes, count in
+                    writeRecursiveLiteralMatchingLines(
+                        path: match.file.path,
+                        bytes: bytes,
+                        count: count,
+                        literal: literal,
+                        output: &output
+                    )
+                }), wroteLines else {
+                    return 2
+                }
+            } else if invocation.mode == .countLines {
+                guard output.writeString(match.file.path) else { return 2 }
+                guard output.writeByte(UInt8(ascii: ":")),
+                      output.writeDecimal(match.count, terminator: UInt8(ascii: "\n")) else {
+                    return 2
+                }
+            } else {
+                guard output.writeString(match.file.path),
+                      output.writeByte(UInt8(ascii: "\n")) else {
+                    return 2
+                }
+            }
+        }
+        guard output.flush() else { return 2 }
+        return matches.isEmpty ? 1 : 0
+    }
+
+    private static func trimTrailingWindowsSeparators(_ path: String) -> String {
+        var result = String(path.map { $0 == "/" ? "\\" : $0 })
+        while result.utf16.count > 3, result.hasSuffix("\\") || result.hasSuffix("/") {
+            result.removeLast()
+        }
+        return result
+    }
+
+    private static func ancestorContainsIgnoreMetadata(_ rootPath: String) -> Bool {
+        let markerNames = [".git", ".gitignore", ".ignore", ".rgignore"]
+        var directory = (rootPath as NSString).deletingLastPathComponent
+        while !directory.isEmpty {
+            for marker in markerNames {
+                let markerPath = (directory as NSString).appendingPathComponent(marker)
+                let attributes = markerPath.withCString(encodedAs: UTF16.self) { GetFileAttributesW($0) }
+                if attributes != DWORD(INVALID_FILE_ATTRIBUTES) {
+                    return true
+                }
+                let error = GetLastError()
+                if error != DWORD(ERROR_FILE_NOT_FOUND) && error != DWORD(ERROR_PATH_NOT_FOUND) {
+                    return true
+                }
+            }
+            let parent = (directory as NSString).deletingLastPathComponent
+            if parent == directory { break }
+            directory = parent
+        }
+        return false
+    }
+
+    private static func collectSortedDirectoryFiles(
+        physicalDirectory: String,
+        outputDirectory: String,
+        components: [String],
+        files: inout [SortedDirectoryFile]
+    ) -> Bool {
+        var searchPath = physicalDirectory
+        if !searchPath.hasSuffix("\\") && !searchPath.hasSuffix("/") {
+            searchPath.append("\\")
+        }
+        searchPath.append("*")
+
+        var findData = WIN32_FIND_DATAW()
+        let findHandle = searchPath.withCString(encodedAs: UTF16.self) {
+            FindFirstFileW($0, &findData)
+        }
+        guard findHandle != INVALID_HANDLE_VALUE else {
+            return GetLastError() == DWORD(ERROR_FILE_NOT_FOUND)
+        }
+        defer { FindClose(findHandle) }
+
+        repeat {
+            let name = withUnsafePointer(to: &findData.cFileName) { pointer in
+                pointer.withMemoryRebound(to: WCHAR.self, capacity: Int(MAX_PATH)) {
+                    String(decodingCString: $0, as: UTF16.self)
+                }
+            }
+            if name == "." || name == ".." {
+                continue
+            }
+            guard name.utf8.allSatisfy({ $0 < 0x80 }) else { return false }
+            if name == ".git" || name == ".gitignore" || name == ".ignore" || name == ".rgignore" {
+                return false
+            }
+            if name.hasPrefix(".") {
+                continue
+            }
+
+            let attributes = findData.dwFileAttributes
+            if attributes & DWORD(FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
+                continue
+            }
+            if attributes & DWORD(FILE_ATTRIBUTE_HIDDEN) != 0 {
+                return false
+            }
+            let physicalPath = physicalDirectory + "\\" + name
+            let outputPath = outputDirectory + "\\" + name
+            let childComponents = components + [name]
+            if attributes & DWORD(FILE_ATTRIBUTE_DIRECTORY) != 0 {
+                guard collectSortedDirectoryFiles(
+                    physicalDirectory: physicalPath,
+                    outputDirectory: outputPath,
+                    components: childComponents,
+                    files: &files
+                ) else {
+                    return false
+                }
+            } else if attributes & DWORD(FILE_ATTRIBUTE_DEVICE) == 0 {
+                let size = (UInt64(findData.nFileSizeHigh) << 32) | UInt64(findData.nFileSizeLow)
+                guard size <= UInt64(maximumBufferedBytes) else { return false }
+                files.append(SortedDirectoryFile(path: outputPath, components: childComponents))
+            }
+        } while FindNextFileW(findHandle, &findData)
+
+        return GetLastError() == DWORD(ERROR_NO_MORE_FILES)
+    }
+
+    private static func pathComponentsPrecede(_ lhs: [String], _ rhs: [String]) -> Bool {
+        for (left, right) in zip(lhs, rhs) {
+            if left != right { return left < right }
+        }
+        return lhs.count < rhs.count
+    }
+
+    private static func readLiteralMatchedLineCount(
+        path: String,
+        literal: [UInt8],
+        stopAfterFirst: Bool,
+        buffer: inout ReusableFileBuffer
+    ) -> Int? {
+        withFileBytes(path: path, buffer: &buffer) { bytes, count in
+            matchedLineCount(
+                bytes: bytes,
+                count: count,
+                literal: literal,
+                stopAfterFirst: stopAfterFirst
+            )
+        }
+    }
+
+    private static func withFileBytes<Result>(
+        path: String,
+        buffer: inout ReusableFileBuffer,
+        _ body: (UnsafePointer<UInt8>, Int) -> Result
+    ) -> Result? {
+        path.withCString(encodedAs: UTF16.self) { pathPointer -> Result? in
+            guard let file = CreateFileW(
+                pathPointer,
+                DWORD(GENERIC_READ),
+                DWORD(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE),
+                nil,
+                DWORD(OPEN_EXISTING),
+                DWORD(FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN),
+                nil
+            ), file != INVALID_HANDLE_VALUE else {
+                return nil
+            }
+            defer { CloseHandle(file) }
+
+            var sizeHigh: DWORD = 0
+            SetLastError(DWORD(NO_ERROR))
+            let sizeLow = GetFileSize(file, &sizeHigh)
+            guard sizeLow != DWORD(INVALID_FILE_SIZE) || GetLastError() == DWORD(NO_ERROR) else {
+                return nil
+            }
+            let size64 = (UInt64(sizeHigh) << 32) | UInt64(sizeLow)
+            guard size64 <= UInt64(maximumBufferedBytes) else { return nil }
+            let size = Int(size64)
+            guard size > 0 else {
+                return withUnsafeTemporaryAllocation(of: UInt8.self, capacity: 1) {
+                    body(UnsafePointer($0.baseAddress!), 0)
+                }
+            }
+            guard buffer.reserveCapacity(size), let bytes = buffer.storage else { return nil }
+
+            var bytesRead = 0
+            while bytesRead < size {
+                let chunk = min(size - bytesRead, Int(DWORD.max))
+                var count: DWORD = 0
+                guard ReadFile(file, bytes.advanced(by: bytesRead), DWORD(chunk), &count, nil),
+                      count > 0 else {
+                    return nil
+                }
+                bytesRead += Int(count)
+            }
+            guard canUseBytes(UnsafePointer(bytes), count: bytesRead) else { return nil }
+            return body(UnsafePointer(bytes), bytesRead)
+        }
+    }
+
+    private static func writeRecursiveLiteralMatchingLines(
+        path: String,
+        bytes: UnsafePointer<UInt8>,
+        count: Int,
+        literal: [UInt8],
+        output: inout Win32OutputBuffer
+    ) -> Bool {
+        var searchOffset = 0
+        while searchOffset <= count - literal.count,
+              let matchStart = findLiteral(
+                bytes: bytes,
+                range: searchOffset..<count,
+                literal: literal
+              ) {
+            var lineStart = matchStart
+            while lineStart > 0, bytes[lineStart - 1] != UInt8(ascii: "\n") {
+                lineStart -= 1
+            }
+            let newline = findByte(
+                bytes.advanced(by: matchStart + literal.count),
+                count: count - matchStart - literal.count,
+                byte: UInt8(ascii: "\n")
+            ).map { matchStart + literal.count + $0 }
+            let outputEnd = newline.map { $0 + 1 } ?? count
+
+            guard output.writeString(path),
+                  output.writeByte(UInt8(ascii: ":")),
+                  output.write(bytes.advanced(by: lineStart), count: outputEnd - lineStart) else {
+                return false
+            }
+            if newline == nil, !output.writeByte(UInt8(ascii: "\n")) {
+                return false
+            }
+            searchOffset = outputEnd
+        }
+        return true
+    }
+
+    private static func matchedLineCount(
+        bytes: UnsafePointer<UInt8>,
+        count: Int,
+        literal: [UInt8],
+        stopAfterFirst: Bool
+    ) -> Int {
+        var matchedLines = 0
+        var searchOffset = 0
+        while searchOffset <= count - literal.count,
+              let matchStart = findLiteral(
+                bytes: bytes,
+                range: searchOffset..<count,
+                literal: literal
+              ) {
+            matchedLines += 1
+            if stopAfterFirst { return 1 }
+            let newline = findByte(
+                bytes.advanced(by: matchStart + literal.count),
+                count: count - matchStart - literal.count,
+                byte: UInt8(ascii: "\n")
+            ).map { matchStart + literal.count + $0 }
+            searchOffset = newline.map { $0 + 1 } ?? count
+        }
+        return matchedLines
     }
 
     private static func environmentVariableExists(_ name: String) -> Bool {
@@ -735,6 +1307,14 @@ public enum WindowsX86LiteralPreflight {
             storage.advanced(by: length).update(from: bytes, count: count)
             length += count
             return true
+        }
+
+        mutating func writeString(_ string: String) -> Bool {
+            var string = string
+            return string.withUTF8 { bytes in
+                guard let baseAddress = bytes.baseAddress else { return true }
+                return write(baseAddress, count: bytes.count)
+            }
         }
 
         mutating func writeByte(_ byte: UInt8) -> Bool {

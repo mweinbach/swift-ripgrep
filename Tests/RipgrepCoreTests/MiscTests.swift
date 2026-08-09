@@ -12205,6 +12205,96 @@ struct MiscTests {
         #expect(withoutMatch.output == Data("\(path)\n".utf8))
     }
 
+    @Test("Windows sorted directory preflight preserves recursive output")
+    func executableSortedDirectoryPreflightPreservesRecursiveOutput() throws {
+        #if os(Windows) && arch(x86_64)
+        let root = try TemporaryDirectory()
+        try root.createDirectory("tree/group-b")
+        try root.createDirectory("tree/group-a")
+        try root.write("miss\nSherlock Holmes second\n", to: "tree/group-b/b.txt")
+        try root.write("Sherlock Holmes first\nSherlock Holmes again", to: "tree/group-a/a.txt")
+        try root.write("miss\n", to: "tree/group-a/z.txt")
+        try root.write("Sherlock Holmes hidden\n", to: "tree/.hidden.txt")
+        let treePath = root.path("tree")
+        let prefix = ["--no-config", "--color", "never", "--sort", "path"]
+        let cases = [
+            prefix + ["--files", treePath],
+            prefix + ["-c", "Sherlock Holmes", treePath],
+            prefix + ["-l", "Sherlock Holmes", treePath],
+            prefix + ["Sherlock Holmes", treePath],
+            prefix + ["ZEBRA_NEVER_PRESENT_8675309", treePath],
+        ]
+        for arguments in cases {
+            let fast = try runExecutableResult(arguments) {}
+            let generic = try runExecutableResult(
+                arguments,
+                environment: ["SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT": "1"]
+            ) {}
+            #expect(fast.exitCode == generic.exitCode)
+            #expect(fast.output == generic.output)
+            #expect(fast.error == generic.error)
+        }
+
+        var boundary = Data(repeating: UInt8(ascii: "q"), count: 1024 * 1024 - 4)
+        boundary.append(UInt8(ascii: "\n"))
+        boundary.append(contentsOf: "Sher".utf8)
+        boundary.append(contentsOf: "lock Holmes across chunk\nquiet\n".utf8)
+        try root.write(boundary, to: "stream-boundary.txt")
+        let boundaryArguments = [
+            "--no-config", "--color=never", "--no-mmap",
+            "Sherlock Holmes", root.path("stream-boundary.txt"),
+        ]
+        let boundaryFast = try runExecutableResult(boundaryArguments) {}
+        let boundaryGeneric = try runExecutableResult(
+            boundaryArguments,
+            environment: ["SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT": "1"]
+        ) {}
+        #expect(boundaryFast.exitCode == boundaryGeneric.exitCode)
+        #expect(boundaryFast.output == boundaryGeneric.output)
+        #expect(boundaryFast.error == boundaryGeneric.error)
+
+        var binaryAfterOutput = Data("Sherlock Holmes before binary\n".utf8)
+        binaryAfterOutput.append(Data(repeating: UInt8(ascii: "q"), count: 1024 * 1024))
+        binaryAfterOutput.append(0)
+        binaryAfterOutput.append(contentsOf: "Sherlock Holmes after binary\n".utf8)
+        try root.write(binaryAfterOutput, to: "stream-binary.txt")
+        let streamBinaryArguments = [
+            "--no-config", "--color=never", "--no-mmap",
+            "Sherlock Holmes", root.path("stream-binary.txt"),
+        ]
+        let streamBinaryFast = try runExecutableResult(streamBinaryArguments) {}
+        let streamBinaryGeneric = try runExecutableResult(
+            streamBinaryArguments,
+            environment: ["SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT": "1"]
+        ) {}
+        #expect(streamBinaryFast.exitCode == streamBinaryGeneric.exitCode)
+        #expect(streamBinaryFast.output == streamBinaryGeneric.output)
+        #expect(streamBinaryFast.error == streamBinaryGeneric.error)
+
+        try root.write(Data([0x53, 0x68, 0x65, 0x72, 0x6C, 0x6F, 0x63, 0x6B, 0]), to: "tree/binary.bin")
+        let binaryArguments = prefix + ["-l", "Sherlock", treePath]
+        let binaryFallback = try runExecutableResult(binaryArguments) {}
+        let binaryGeneric = try runExecutableResult(
+            binaryArguments,
+            environment: ["SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT": "1"]
+        ) {}
+        #expect(binaryFallback.exitCode == binaryGeneric.exitCode)
+        #expect(binaryFallback.output == binaryGeneric.output)
+        #expect(binaryFallback.error == binaryGeneric.error)
+
+        try root.write("group-b/\n", to: "tree/.ignore")
+        let ignoreArguments = prefix + ["--files", treePath]
+        let ignoreFallback = try runExecutableResult(ignoreArguments) {}
+        let ignoreGeneric = try runExecutableResult(
+            ignoreArguments,
+            environment: ["SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT": "1"]
+        ) {}
+        #expect(ignoreFallback.exitCode == ignoreGeneric.exitCode)
+        #expect(ignoreFallback.output == ignoreGeneric.output)
+        #expect(ignoreFallback.error == ignoreGeneric.error)
+        #endif
+    }
+
     @Test("executable capitalized word whitespace suffix fast path preserves counts")
     func executableCapitalizedWordWhitespaceSuffixFastPathPreservesCounts() throws {
         let root = try TemporaryDirectory()
