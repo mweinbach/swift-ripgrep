@@ -7194,6 +7194,7 @@ struct RipgrepCommand {
         var fixedStrings = false
         var includeZero = false
         var countMatches = false
+        var json = false
         var noUnicode = false
         var unrestrictedCount = 0
         let pattern = arguments[arguments.count - 2]
@@ -7220,6 +7221,7 @@ struct RipgrepCommand {
             switch argument {
             case "-c", "--count":
                 countStyleOutput = true
+                countMatches = false
             case "--count-matches":
                 countStyleOutput = true
                 countMatches = true
@@ -7229,9 +7231,10 @@ struct RipgrepCommand {
                 includeZero = true
             case "--no-include-zero":
                 includeZero = false
-            case "--json",
-                 "--no-json":
-                break
+            case "--json":
+                json = true
+            case "--no-json":
+                json = false
             case "--no-config",
                  "--line-buffered",
                  "--block-buffered",
@@ -7273,6 +7276,26 @@ struct RipgrepCommand {
         guard !literal.isEmpty,
               !literal.contains(UInt8(ascii: "\n")) else {
             return nil
+        }
+        // A prefix hit lets this simple shape run the complete count directly,
+        // avoiding both a no-match proof and the general parser pass.
+        if !json,
+           SwiftDarwinLiteralPreflight.literalMatchesTextPrefix(
+            path: path,
+            literal: literal
+           ) == true {
+            if countMatches {
+                return SwiftDarwinLiteralPreflight.countMatchesExitCode(
+                    path: path,
+                    literal: literal,
+                    includeZero: includeZero
+                )
+            }
+            return SwiftDarwinLiteralPreflight.countLineExitCode(
+                path: path,
+                literal: literal,
+                includeZero: includeZero
+            )
         }
         if includeZero {
             return SwiftDarwinLiteralPreflight.noMatchCountOutputExitCode(

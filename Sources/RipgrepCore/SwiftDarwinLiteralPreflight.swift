@@ -447,6 +447,17 @@ public enum SwiftDarwinLiteralPreflight {
         return 1
     }
 
+    public static func literalMatchesTextPrefix(
+        path: String,
+        literal: [UInt8]
+    ) -> Bool? {
+        guard !literal.isEmpty,
+              !literal.contains(UInt8(ascii: "\n")) else {
+            return nil
+        }
+        return textPrefixContainsAnyLiteral(path: path, literals: [literal], limit: 4 * 1024)
+    }
+
     public static func rareAnchorLiteralNoMatchExitCode(
         path: String,
         literal: [UInt8]
@@ -7713,8 +7724,12 @@ public enum SwiftDarwinLiteralPreflight {
         return false
     }
 
-    private static func textPrefixContainsAnyLiteral(path: String, literals: [[UInt8]]) -> Bool? {
-        guard (2...8).contains(literals.count),
+    private static func textPrefixContainsAnyLiteral(
+        path: String,
+        literals: [[UInt8]],
+        limit: Int = 64 * 1024
+    ) -> Bool? {
+        guard (1...8).contains(literals.count),
               literals.allSatisfy({
                 !$0.isEmpty && !$0.contains(UInt8(ascii: "\n"))
               }) else {
@@ -7743,7 +7758,7 @@ public enum SwiftDarwinLiteralPreflight {
             return nil
         }
 
-        let readLength = min(Int(fileStat.st_size), 64 * 1024)
+        let readLength = min(Int(fileStat.st_size), limit)
         return withUnsafeTemporaryAllocation(of: UInt8.self, capacity: readLength) { buffer in
             guard let base = buffer.baseAddress else {
                 return nil

@@ -305,6 +305,39 @@ struct BinaryTests {
             #"binary file matches (found "\0" byte around offset 7)"#,
         ])
 
+        var bufferedStdin = "needle before binary\n"
+        while bufferedStdin.utf8.count < HaystackReader.standardInputChunkSize {
+            bufferedStdin += "padding\n"
+        }
+        let bufferedBinaryOffset = bufferedStdin.utf8.count
+        bufferedStdin += "\0tail\n"
+        stdinOutput = []
+        stdinExitCode = RipgrepCLI.run(
+            arguments: ["-n", "needle", "-"],
+            stdout: { stdinOutput.append($0) },
+            stdin: bufferedStdin
+        )
+        #expect(stdinExitCode == 0)
+        #expect(stdinOutput == [
+            "1:needle before binary",
+            #"binary file matches (found "\0" byte around offset \#(bufferedBinaryOffset))"#,
+        ])
+
+        var sameChunkStdin = String(repeating: "x", count: HaystackReader.standardInputChunkSize - 1)
+        sameChunkStdin += "\nneedle beside binary\n"
+        let sameChunkBinaryOffset = sameChunkStdin.utf8.count
+        sameChunkStdin += "\0tail\n"
+        stdinOutput = []
+        stdinExitCode = RipgrepCLI.run(
+            arguments: ["-n", "needle", "-"],
+            stdout: { stdinOutput.append($0) },
+            stdin: sameChunkStdin
+        )
+        #expect(stdinExitCode == 0)
+        #expect(stdinOutput == [
+            #"binary file matches (found "\0" byte around offset \#(sameChunkBinaryOffset))"#,
+        ])
+
         stdinOutput = []
         stdinExitCode = RipgrepCLI.run(
             arguments: ["-n", "tail", "-"],

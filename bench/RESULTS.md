@@ -8,6 +8,92 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Early literal count matches skip the no-match proof - 2026-08-09
+
+Time Profiler showed that the simple case-sensitive `-c` path first scanned the
+input to prove the literal absent, then fell through and scanned it again to
+produce the count when a match existed. Normal literal output did not pay this
+duplicate preflight. The retained change checks only the first 4 KiB; a match
+there dispatches directly to the complete line- or match-count implementation,
+while an absent prefix preserves the existing fast whole-file no-match proof.
+JSON output remains on the general parser path.
+
+A 30-run release-build A/B after five warm-ups measured the generated-corpus
+literal-count row at 15.97 ms patched versus 19.03 ms baseline, or 0.839x
+runtime. The neighboring literal and no-match rows were unchanged at 1.000x
+and 1.002x baseline runtime. A separate true no-match `-c` control measured
+16.2 ms patched versus 16.3 ms baseline.
+
+The final 12-row CI matrix used three warm-ups and 20 timed runs per contestant.
+Swift's literal count measured 14.48 ms versus 16.76 ms for Rust, or 0.864x
+Rust runtime, and the full-matrix Swift/Rust geometric mean was 0.916x. Exact
+stdout, stderr, and status parity was checked before timing every row.
+
+Two broader alternatives were rejected. Removing the no-match proof entirely
+regressed an absent `-c` from 16.0 ms to 18.1 ms, while using the rare two-byte
+anchor counter for matching lines regressed the target to 1.063x baseline
+runtime. Raw artifacts:
+`/tmp/swift-rg-count-profile.GAzP2T/direct-prefix-count-v-baseline`,
+`/tmp/swift-rg-count-profile.GAzP2T/direct-prefix-count-no-match-ab.json`, and
+`/tmp/swift-rg-count-profile.GAzP2T/committed-full-v-rust`.
+
+## Uppercase long-literal proof bytes - 2026-08-09
+
+The generated benchmark's `Sherlock Holmes` literal was slower than Rust even
+after batching the generic SIMD scanner. Profiling and controlled probes ruled
+out mmap, output, and count handling: an absent literal scanned at Rust parity,
+while all three successful-match variants paid the same penalty. The
+long-literal rarity heuristic treated uppercase ASCII as a generic byte, so it
+missed the sparse uppercase `S` and scanned every candidate block instead of
+using the existing exact `memchr` proof path.
+
+The retained change classifies case-sensitive uppercase ASCII bytes as rare
+proof bytes. Full-literal verification is unchanged. A 20-run release-build A/B
+after three warm-ups measured:
+
+| Case | Patched | Baseline | Ratio |
+| --- | ---: | ---: | ---: |
+| Plain literal | 17.04 ms | 19.00 ms | 0.897x |
+| `--no-mmap` literal | 17.08 ms | 19.27 ms | 0.887x |
+| Literal count | 17.13 ms | 19.13 ms | 0.895x |
+| Full-matrix geometric mean | - | - | 0.971x |
+
+The same 20-run matrix against the Rust oracle measured a 0.927x overall
+Swift/Rust geometric-mean runtime ratio. The three literal rows were 1.008x,
+1.015x, and 1.024x Rust runtime. Raw summaries:
+`/tmp/swift-rg-literal-profile.qMpEG1/full-matrix-v-baseline/summary.md` and
+`/tmp/swift-rg-literal-profile.qMpEG1/full-matrix-v-rust/summary.md`.
+
+## Batched Swift SIMD literal scan - 2026-08-09
+
+An exact release-build A/B against parent commit `fc0efd71` ruled out a
+regression from the intervening stdin parity fix: across the upstream-derived
+matrix, current/parent geometric-mean runtime was 0.999x (20 timed runs after
+three warm-ups). A time profile instead identified the active pure-Swift
+`rgMemmemSIMD16` loop as the remaining hotspot for longer literals on the
+Apple M3 Ultra.
+
+The retained implementation evaluates four SIMD16 candidate blocks before a
+single horizontal reduction. Exact candidate verification and the existing
+tail behavior remain unchanged. On macOS 27.0 beta with Swift 6.4, an isolated
+20-run patched/baseline A/B measured:
+
+| Case | Patched | Baseline | Ratio |
+| --- | ---: | ---: | ---: |
+| Plain literal | 18.60 ms | 21.05 ms | 0.892x |
+| `--no-mmap` literal | 18.62 ms | 21.06 ms | 0.883x |
+| Literal count | 19.03 ms | 21.48 ms | 0.886x |
+| Full-matrix geometric mean | - | - | 0.970x |
+
+A separate 20-run comparison of the patched release build against the Rust
+oracle produced a 1.005x Swift/Rust geometric-mean runtime ratio, effectively
+overall parity for this matrix. On the 1.5 GiB subtitle corpus, a 10-run count
+benchmark measured 159.5 ms patched versus 188.5 ms baseline, making the
+optimized scanner 1.18x faster. Raw summaries:
+`/tmp/swift-rg-ab-head-vs-parent/summary.md`,
+`/tmp/swift-rg-ab-swift-simd64-vs-head/summary.md`, and
+`/tmp/swift-rg-ci-results-20260809-swift-simd64/summary.md`.
+
 ## Large literal mappings request read-ahead - 2026-08-08
 
 The two remaining slower-than-Rust subtitle rows were dominated by first-touch

@@ -739,6 +739,40 @@ struct MiscTests {
         #expect(String(decoding: filesWithoutMatchOutput, as: UTF8.self) == "\(root.path("miss.txt"))\n")
     }
 
+    @Test("uppercase proof-byte long literal candidates remain exact")
+    func uppercaseProofByteLongLiteralCandidatesRemainExact() throws {
+        let root = try TemporaryDirectory()
+        let literal = "Sherlock Holmes"
+        let miss = "Sherlock Xolmes"
+        #expect(literal.utf8.count == 15)
+        #expect(miss.utf8.count == literal.utf8.count)
+
+        let repeatedMisses = String(repeating: "\(miss) ", count: 8)
+        try root.write("\(repeatedMisses)\n", to: "miss.txt")
+        try root.write("\(repeatedMisses)\n\(literal) exact\n", to: "hit.txt")
+
+        let missLineOutput = try runExecutableData([
+            "-n",
+            literal,
+            root.path("miss.txt"),
+        ], fixture: {})
+        #expect(missLineOutput.isEmpty)
+
+        let hitLineOutput = try runExecutableData([
+            "-n",
+            literal,
+            root.path("hit.txt"),
+        ], fixture: {})
+        #expect(String(decoding: hitLineOutput, as: UTF8.self) == "2:\(literal) exact\n")
+
+        let filesWithoutMatchOutput = try runExecutableData([
+            "--files-without-match",
+            literal,
+            root.url.path,
+        ], fixture: {})
+        #expect(String(decoding: filesWithoutMatchOutput, as: UTF8.self) == "\(root.path("miss.txt"))\n")
+    }
+
     @Test("case-insensitive alternation preserves recursive line output")
     func caseInsensitiveAlternationPreservesRecursiveLineOutput() throws {
         let root = try TemporaryDirectory()
@@ -3257,7 +3291,7 @@ struct MiscTests {
     func darwinExecutableLiteralPreflightPreservesSimpleCountNoMatchOutput() throws {
         #if canImport(Darwin)
         let root = try TemporaryDirectory()
-        try root.write("needle one\nquiet\nneedle two\n", to: "simple.txt")
+        try root.write("needle needle one\nquiet\nneedle two\n", to: "simple.txt")
         func runExecutableStatusData(
             _ arguments: [String],
             environment: [String: String] = [:]
@@ -3359,6 +3393,22 @@ struct MiscTests {
             root.path("simple.txt"),
         ], fixture: {})
         #expect(matchedCount == Data("2\n".utf8))
+
+        let matchedCountMatches = try runExecutableData([
+            "--count-matches",
+            "needle",
+            root.path("simple.txt"),
+        ], fixture: {})
+        #expect(matchedCountMatches == Data("3\n".utf8))
+
+        let matchedNoJSONCount = try runExecutableData([
+            "--json",
+            "--no-json",
+            "-c",
+            "needle",
+            root.path("simple.txt"),
+        ], fixture: {})
+        #expect(matchedNoJSONCount == Data("2\n".utf8))
 
         try root.write("--line-number\n", to: "ripgreprc")
         let noConfigEnvironmentCount = try runExecutableStatusData([
