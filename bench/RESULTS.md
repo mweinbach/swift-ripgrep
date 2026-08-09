@@ -25,8 +25,8 @@ and 1.002x baseline runtime. A separate true no-match `-c` control measured
 16.2 ms patched versus 16.3 ms baseline.
 
 The final 12-row CI matrix used three warm-ups and 20 timed runs per contestant.
-Swift's literal count measured 15.26 ms versus 17.58 ms for Rust, or 0.868x
-Rust runtime, and the full-matrix Swift/Rust geometric mean was 0.922x. Exact
+Swift's literal count measured 14.48 ms versus 16.76 ms for Rust, or 0.864x
+Rust runtime, and the full-matrix Swift/Rust geometric mean was 0.916x. Exact
 stdout, stderr, and status parity was checked before timing every row.
 
 Two broader alternatives were rejected. Removing the no-match proof entirely
@@ -35,7 +35,7 @@ anchor counter for matching lines regressed the target to 1.063x baseline
 runtime. Raw artifacts:
 `/tmp/swift-rg-count-profile.GAzP2T/direct-prefix-count-v-baseline`,
 `/tmp/swift-rg-count-profile.GAzP2T/direct-prefix-count-no-match-ab.json`, and
-`/tmp/swift-rg-count-profile.GAzP2T/final-full-v-rust`.
+`/tmp/swift-rg-count-profile.GAzP2T/committed-full-v-rust`.
 
 ## Uppercase long-literal proof bytes - 2026-08-09
 
