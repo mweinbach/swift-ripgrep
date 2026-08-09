@@ -12284,6 +12284,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
         }
 
         if fastPath.literals.count > 1 {
+            #if os(Windows) || canImport(Glibc) || canImport(Musl)
             if countOutput,
                options.printMode == .count,
                !fastPath.caseInsensitiveASCII {
@@ -12331,6 +12332,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
                     supplementalMatches: matchedLineStarts.count
                 )
             }
+            #endif
             guard fastPath.caseInsensitiveASCII,
                   quietOutput else {
                 return nil
@@ -13476,8 +13478,7 @@ public struct RipgrepSearcher: @unchecked Sendable {
             result.matches,
             binaryByteOffset: binaryByteOffset,
             options: options,
-            isExplicit: true,
-            usesBufferCutoff: false
+            isExplicit: true
         )
         let emittedMatches = shouldEmitSuppressedBinaryMatches(options, isExplicit: true)
             ? result.matches
