@@ -8,6 +8,33 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Uppercase long-literal proof bytes - 2026-08-09
+
+The generated benchmark's `Sherlock Holmes` literal was slower than Rust even
+after batching the generic SIMD scanner. Profiling and controlled probes ruled
+out mmap, output, and count handling: an absent literal scanned at Rust parity,
+while all three successful-match variants paid the same penalty. The
+long-literal rarity heuristic treated uppercase ASCII as a generic byte, so it
+missed the sparse uppercase `S` and scanned every candidate block instead of
+using the existing exact `memchr` proof path.
+
+The retained change classifies case-sensitive uppercase ASCII bytes as rare
+proof bytes. Full-literal verification is unchanged. A 20-run release-build A/B
+after three warm-ups measured:
+
+| Case | Patched | Baseline | Ratio |
+| --- | ---: | ---: | ---: |
+| Plain literal | 17.04 ms | 19.00 ms | 0.897x |
+| `--no-mmap` literal | 17.08 ms | 19.27 ms | 0.887x |
+| Literal count | 17.13 ms | 19.13 ms | 0.895x |
+| Full-matrix geometric mean | - | - | 0.971x |
+
+The same 20-run matrix against the Rust oracle measured a 0.927x overall
+Swift/Rust geometric-mean runtime ratio. The three literal rows were 1.008x,
+1.015x, and 1.024x Rust runtime. Raw summaries:
+`/tmp/swift-rg-literal-profile.qMpEG1/full-matrix-v-baseline/summary.md` and
+`/tmp/swift-rg-literal-profile.qMpEG1/full-matrix-v-rust/summary.md`.
+
 ## Batched Swift SIMD literal scan - 2026-08-09
 
 An exact release-build A/B against parent commit `fc0efd71` ruled out a

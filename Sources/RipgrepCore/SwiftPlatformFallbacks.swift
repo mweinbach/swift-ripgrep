@@ -840,6 +840,8 @@ private func rgMemmem12SIMD16(
 
 private func rgMemmemProofScore(_ byte: UInt8) -> Int {
     switch byte {
+    case 65...90: // A-Z
+        return 0
     case 113, 122, 120, 106: // q z x j
         return 0
     case 107, 118, 98, 112: // k v b p
@@ -888,6 +890,8 @@ private func rgMemmemProofTieBreakRank(_ byte: UInt8) -> Int {
 
 private func rgMemmemRarestProofTieBreakRank(_ byte: UInt8) -> Int? {
     switch byte {
+    case 65...90: // A-Z
+        return 0
     case 113, 120, 106: // q x j
         return 0
     case 122: // z
