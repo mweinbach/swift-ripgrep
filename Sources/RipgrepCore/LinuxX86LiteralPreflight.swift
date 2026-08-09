@@ -376,7 +376,6 @@ public enum LinuxX86LiteralPreflight {
             physicalDirectory: rootPath,
             outputDirectory: rootPath,
             components: [],
-            requiresFileMetadata: invocation.mode != .files,
             files: &files
         ) else {
             return nil
@@ -397,16 +396,13 @@ public enum LinuxX86LiteralPreflight {
         }
 
         guard let literal = invocation.literal else { return nil }
-        var buffer = ReusableFileBuffer()
-        defer { buffer.deallocate() }
         var matches: [(file: SortedDirectoryFile, count: Int)] = []
         matches.reserveCapacity(files.count)
         for file in files {
             guard let count = readLiteralMatchedLineCount(
                 path: file.path,
                 literal: literal,
-                stopAfterFirst: invocation.mode == .filesWithMatches,
-                buffer: &buffer
+                stopAfterFirst: invocation.mode == .filesWithMatches
             ) else {
                 return nil
             }
@@ -417,7 +413,7 @@ public enum LinuxX86LiteralPreflight {
 
         for match in matches {
             if invocation.mode == .matchingLines {
-                guard let wroteLines = withFileBytes(path: match.file.path, buffer: &buffer, { bytes, count in
+                guard let wroteLines = withMappedFileBytes(path: match.file.path, { bytes, count in
                     writeRecursiveLiteralMatchingLines(
                         pathBytes: match.file.pathBytes,
                         bytes: bytes,
@@ -483,7 +479,6 @@ public enum LinuxX86LiteralPreflight {
         physicalDirectory: String,
         outputDirectory: String,
         components: [String],
-        requiresFileMetadata: Bool,
         files: inout [SortedDirectoryFile]
     ) -> Bool {
         guard let directory = physicalDirectory.withCString({ opendir($0) }) else {
@@ -520,21 +515,11 @@ public enum LinuxX86LiteralPreflight {
                     physicalDirectory: physicalPath,
                     outputDirectory: outputPath,
                     components: childComponents,
-                    requiresFileMetadata: requiresFileMetadata,
                     files: &files
                 ) else {
                     return false
                 }
             } else if directoryEntryType == UInt8(DT_REG) {
-                if requiresFileMetadata {
-                    var metadata = stat()
-                    guard physicalPath.withCString({ lstat($0, &metadata) }) == 0,
-                          (metadata.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG),
-                          metadata.st_size >= 0,
-                          UInt64(metadata.st_size) <= UInt64(maximumBufferedBytes) else {
-                        return false
-                    }
-                }
                 files.append(SortedDirectoryFile(
                     path: outputPath,
                     pathBytes: Array(outputPath.utf8),
@@ -554,15 +539,11 @@ public enum LinuxX86LiteralPreflight {
                         physicalDirectory: physicalPath,
                         outputDirectory: outputPath,
                         components: childComponents,
-                        requiresFileMetadata: requiresFileMetadata,
                         files: &files
                     ) else {
                         return false
                     }
-                } else if fileType == mode_t(S_IFREG),
-                          (!requiresFileMetadata
-                           || (metadata.st_size >= 0
-                               && UInt64(metadata.st_size) <= UInt64(maximumBufferedBytes))) {
+                } else if fileType == mode_t(S_IFREG) {
                     files.append(SortedDirectoryFile(
                         path: outputPath,
                         pathBytes: Array(outputPath.utf8),
@@ -587,10 +568,9 @@ public enum LinuxX86LiteralPreflight {
     private static func readLiteralMatchedLineCount(
         path: String,
         literal: [UInt8],
-        stopAfterFirst: Bool,
-        buffer: inout ReusableFileBuffer
+        stopAfterFirst: Bool
     ) -> Int? {
-        guard let result = withFileBytes(path: path, buffer: &buffer, { bytes, count in
+        guard let result = withMappedFileBytes(path: path, { bytes, count in
             if let count = scanLiteral(
                 bytes: bytes,
                 count: count,
@@ -606,9 +586,8 @@ public enum LinuxX86LiteralPreflight {
         return result.count
     }
 
-    private static func withFileBytes<Result>(
+    private static func withMappedFileBytes<Result>(
         path: String,
-        buffer: inout ReusableFileBuffer,
         _ body: (UnsafePointer<UInt8>, Int) -> Result
     ) -> Result? {
         let descriptor = path.withCString { open($0, O_RDONLY) }
@@ -628,16 +607,14 @@ public enum LinuxX86LiteralPreflight {
                 body(UnsafePointer($0.baseAddress!), 0)
             }
         }
-        guard buffer.reserveCapacity(size), let bytes = buffer.storage else { return nil }
-
-        var bytesRead = 0
-        while bytesRead < size {
-            let result = read(descriptor, bytes.advanced(by: bytesRead), size - bytesRead)
-            guard result > 0 else { return nil }
-            bytesRead += result
+        guard let mapping = mmap(nil, size, PROT_READ, MAP_PRIVATE, descriptor, 0),
+              mapping != MAP_FAILED else {
+            return nil
         }
-        guard hasSupportedByteOrderMark(UnsafePointer(bytes), count: bytesRead) else { return nil }
-        return body(UnsafePointer(bytes), bytesRead)
+        defer { _ = munmap(mapping, size) }
+        let bytes = mapping.assumingMemoryBound(to: UInt8.self)
+        guard hasSupportedByteOrderMark(UnsafePointer(bytes), count: size) else { return nil }
+        return body(UnsafePointer(bytes), size)
     }
 
     private static func writeRecursiveLiteralMatchingLines(
