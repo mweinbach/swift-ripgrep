@@ -99,6 +99,14 @@ jobs:
           swift test --filter
           'EncodingLabelTests|WorkerPoolTests|HaystackReaderTests|GeneratedAssetDriftTests|multiLiteralCountCountsEachMatchingLineOnce|wordCountFastPathHonorsASCIIAndUnicodeBoundaries|requiredLiteralRegexCountCountsMatchingLinesOnce|executableLiteralFastPathPreservesGlobalScanModes|executableSortedDirectoryPreflightPreservesRecursiveOutput|executableCapitalizedWordWhitespaceSuffixFastPathPreservesCounts'
 
+      - name: Verify external SwiftPM library consumer
+        if: runner.os == 'Linux'
+        shell: bash
+        run: >-
+          swift run
+          --package-path Tests/Fixtures/SwiftPMConsumer
+          --scratch-path .build/ci-swiftpm-consumer
+
       - name: Run full Rust parity matrix
         if: runner.os != 'Windows'
         shell: pwsh

@@ -2,7 +2,8 @@
 
 [![CI](https://github.com/mweinbach/swift-ripgrep/actions/workflows/ci.yml/badge.svg)](https://github.com/mweinbach/swift-ripgrep/actions/workflows/ci.yml)
 
-A Swift executable package for a ripgrep-style command-line search tool.
+A Swift package for embedding ripgrep-compatible search through `RipgrepCore`
+or building the `ripgrep` command-line executable.
 
 See [Performance](PERFORMANCE.md) for the latest local Swift-vs-Rust summary,
 test-system specifications, methodology, and reproduction commands.
@@ -16,6 +17,50 @@ fallback. Windows excludes both Darwin preflight sources at the package-target
 level. Its self-contained build places a small native launcher in front of the
 Swift engine so common literal searches do not pay Foundation's fixed loader
 cost; unsupported shapes delegate to the complete Swift implementation.
+
+## Use as a Swift package
+
+Add the public repository and `RipgrepCore` library product to your package.
+The package requires macOS 13 or newer when used on Apple platforms.
+
+```swift
+dependencies: [
+    .package(
+        url: "https://github.com/mweinbach/swift-ripgrep.git",
+        branch: "main"
+    ),
+],
+targets: [
+    .target(
+        name: "YourTarget",
+        dependencies: [
+            .product(name: "RipgrepCore", package: "swift-ripgrep"),
+        ]
+    ),
+]
+```
+
+Then import the module and use the high-level searcher:
+
+```swift
+import Foundation
+import RipgrepCore
+
+let matches = try RipgrepSearcher().search(
+    pattern: "needle",
+    roots: [URL(fileURLWithPath: "Sources")]
+)
+
+for match in matches {
+    print("\(match.fileURL.path):\(match.lineNumber):\(match.line)")
+}
+```
+
+For the complete option surface, configure `RipgrepOptions` and call
+`RipgrepSearcher.search(options:)`. `RipgrepCLI.run(arguments:stdout:stderr:)`
+is also public when an embedded caller wants ripgrep-compatible CLI parsing and
+formatted output. Pin an exact revision instead of `main` when reproducible
+dependency resolution is required.
 
 ## Run
 

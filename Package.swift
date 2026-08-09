@@ -70,6 +70,7 @@ let package = Package(
         .macOS(.v13),
     ],
     products: [
+        .library(name: "RipgrepCore", targets: ["RipgrepCore"]),
         .executable(name: "ripgrep", targets: ["ripgrep"]),
     ],
     targets: targets
