@@ -3291,7 +3291,7 @@ struct MiscTests {
     func darwinExecutableLiteralPreflightPreservesSimpleCountNoMatchOutput() throws {
         #if canImport(Darwin)
         let root = try TemporaryDirectory()
-        try root.write("needle one\nquiet\nneedle two\n", to: "simple.txt")
+        try root.write("needle needle one\nquiet\nneedle two\n", to: "simple.txt")
         func runExecutableStatusData(
             _ arguments: [String],
             environment: [String: String] = [:]
@@ -3393,6 +3393,22 @@ struct MiscTests {
             root.path("simple.txt"),
         ], fixture: {})
         #expect(matchedCount == Data("2\n".utf8))
+
+        let matchedCountMatches = try runExecutableData([
+            "--count-matches",
+            "needle",
+            root.path("simple.txt"),
+        ], fixture: {})
+        #expect(matchedCountMatches == Data("3\n".utf8))
+
+        let matchedNoJSONCount = try runExecutableData([
+            "--json",
+            "--no-json",
+            "-c",
+            "needle",
+            root.path("simple.txt"),
+        ], fixture: {})
+        #expect(matchedNoJSONCount == Data("2\n".utf8))
 
         try root.write("--line-number\n", to: "ripgreprc")
         let noConfigEnvironmentCount = try runExecutableStatusData([

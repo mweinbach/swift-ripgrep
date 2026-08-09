@@ -8,6 +8,35 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Early literal count matches skip the no-match proof - 2026-08-09
+
+Time Profiler showed that the simple case-sensitive `-c` path first scanned the
+input to prove the literal absent, then fell through and scanned it again to
+produce the count when a match existed. Normal literal output did not pay this
+duplicate preflight. The retained change checks only the first 4 KiB; a match
+there dispatches directly to the complete line- or match-count implementation,
+while an absent prefix preserves the existing fast whole-file no-match proof.
+JSON output remains on the general parser path.
+
+A 30-run release-build A/B after five warm-ups measured the generated-corpus
+literal-count row at 15.97 ms patched versus 19.03 ms baseline, or 0.839x
+runtime. The neighboring literal and no-match rows were unchanged at 1.000x
+and 1.002x baseline runtime. A separate true no-match `-c` control measured
+16.2 ms patched versus 16.3 ms baseline.
+
+The final 12-row CI matrix used three warm-ups and 20 timed runs per contestant.
+Swift's literal count measured 15.26 ms versus 17.58 ms for Rust, or 0.868x
+Rust runtime, and the full-matrix Swift/Rust geometric mean was 0.922x. Exact
+stdout, stderr, and status parity was checked before timing every row.
+
+Two broader alternatives were rejected. Removing the no-match proof entirely
+regressed an absent `-c` from 16.0 ms to 18.1 ms, while using the rare two-byte
+anchor counter for matching lines regressed the target to 1.063x baseline
+runtime. Raw artifacts:
+`/tmp/swift-rg-count-profile.GAzP2T/direct-prefix-count-v-baseline`,
+`/tmp/swift-rg-count-profile.GAzP2T/direct-prefix-count-no-match-ab.json`, and
+`/tmp/swift-rg-count-profile.GAzP2T/final-full-v-rust`.
+
 ## Uppercase long-literal proof bytes - 2026-08-09
 
 The generated benchmark's `Sherlock Holmes` literal was slower than Rust even
