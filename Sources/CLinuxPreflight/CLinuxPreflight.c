@@ -210,6 +210,85 @@ const uint8_t *rg_linux_find_ascii_case_byte(
     return rg_linux_find_ascii_case_sse2(bytes, count, folded);
 }
 
+__attribute__((target("avx2")))
+static const uint8_t *rg_linux_memcasemem_ascii_avx2(
+    const uint8_t *bytes,
+    size_t count,
+    const uint8_t *folded_needle,
+    size_t needle_count
+) {
+    size_t anchor_index = needle_count - 1;
+    while (anchor_index > 0 && folded_needle[anchor_index] == folded_needle[0]) {
+        anchor_index--;
+    }
+    if (anchor_index == 0) {
+        anchor_index = needle_count - 1;
+    }
+
+    const uint8_t first = folded_needle[0];
+    const uint8_t first_upper = first >= 'a' && first <= 'z'
+        ? (uint8_t)(first - ('a' - 'A'))
+        : first;
+    const uint8_t anchor = folded_needle[anchor_index];
+    const uint8_t anchor_upper = anchor >= 'a' && anchor <= 'z'
+        ? (uint8_t)(anchor - ('a' - 'A'))
+        : anchor;
+    const __m256i first_lower_vector = _mm256_set1_epi8((char)first);
+    const __m256i first_upper_vector = _mm256_set1_epi8((char)first_upper);
+    const __m256i anchor_lower_vector = _mm256_set1_epi8((char)anchor);
+    const __m256i anchor_upper_vector = _mm256_set1_epi8((char)anchor_upper);
+
+    const size_t last_start = count - needle_count;
+    size_t cursor = 0;
+    while (cursor + 31 <= last_start) {
+        const __m256i first_bytes = _mm256_loadu_si256((const __m256i *)(bytes + cursor));
+        const __m256i anchor_bytes = _mm256_loadu_si256(
+            (const __m256i *)(bytes + cursor + anchor_index)
+        );
+        const __m256i first_matches = _mm256_or_si256(
+            _mm256_cmpeq_epi8(first_bytes, first_lower_vector),
+            _mm256_cmpeq_epi8(first_bytes, first_upper_vector)
+        );
+        const __m256i anchor_matches = _mm256_or_si256(
+            _mm256_cmpeq_epi8(anchor_bytes, anchor_lower_vector),
+            _mm256_cmpeq_epi8(anchor_bytes, anchor_upper_vector)
+        );
+        unsigned mask = (unsigned)_mm256_movemask_epi8(
+            _mm256_and_si256(first_matches, anchor_matches)
+        );
+        while (mask != 0) {
+            const size_t lane = (size_t)__builtin_ctz(mask);
+            const size_t candidate = cursor + lane;
+            size_t offset = 0;
+            while (offset < needle_count
+                   && rg_linux_ascii_lower(bytes[candidate + offset]) == folded_needle[offset]) {
+                offset++;
+            }
+            if (offset == needle_count) {
+                return bytes + candidate;
+            }
+            mask &= mask - 1;
+        }
+        cursor += 32;
+    }
+
+    while (cursor <= last_start) {
+        if (rg_linux_ascii_lower(bytes[cursor]) == first
+            && rg_linux_ascii_lower(bytes[cursor + anchor_index]) == anchor) {
+            size_t offset = 0;
+            while (offset < needle_count
+                   && rg_linux_ascii_lower(bytes[cursor + offset]) == folded_needle[offset]) {
+                offset++;
+            }
+            if (offset == needle_count) {
+                return bytes + cursor;
+            }
+        }
+        cursor++;
+    }
+    return NULL;
+}
+
 const uint8_t *rg_linux_memcasemem_ascii(
     const uint8_t *bytes,
     size_t count,
@@ -224,6 +303,9 @@ const uint8_t *rg_linux_memcasemem_ascii(
     }
     if (needle_count == 1) {
         return rg_linux_find_ascii_case_byte(bytes, count, folded_needle[0]);
+    }
+    if (__builtin_cpu_supports("avx2")) {
+        return rg_linux_memcasemem_ascii_avx2(bytes, count, folded_needle, needle_count);
     }
 
     size_t shifts[256];
