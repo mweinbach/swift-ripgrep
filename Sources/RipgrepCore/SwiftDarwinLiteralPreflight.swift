@@ -11889,9 +11889,28 @@ public enum SwiftDarwinLiteralPreflight {
         let components: [String]
     }
 
-    private struct SortedDirectoryMatch {
+    private final class SortedMappedFile {
         let file: SortedDirectoryFile
-        let data: Data
+        let mapping: UnsafeMutableRawPointer?
+        let count: Int
+
+        init(file: SortedDirectoryFile, mapping: UnsafeMutableRawPointer?, count: Int) {
+            self.file = file
+            self.mapping = mapping
+            self.count = count
+        }
+
+        deinit {
+            if let mapping { _ = Darwin.munmap(mapping, count) }
+        }
+
+        var bytes: UnsafePointer<UInt8>? {
+            mapping.map { UnsafeRawPointer($0).assumingMemoryBound(to: UInt8.self) }
+        }
+    }
+
+    private struct SortedDirectoryMatch {
+        let mappedFile: SortedMappedFile
         let matchedLines: Int
         let spans: [(start: Int, end: Int, needsNewline: Bool)]
     }
@@ -12037,11 +12056,11 @@ public enum SwiftDarwinLiteralPreflight {
         matches.reserveCapacity(files.count)
         var mappedBytes = 0
         for file in files {
-            guard let data = mappedPreflightData(path: file.path),
-                  data.count <= 512 * 1024 * 1024 - mappedBytes else {
+            guard let mappedFile = mapSortedDirectoryFile(file),
+                  mappedFile.count <= 512 * 1024 * 1024 - mappedBytes else {
                 return nil
             }
-            mappedBytes += data.count
+            mappedBytes += mappedFile.count
             let collectSpans: Bool
             let stopAfterFirst: Bool
             switch invocation.mode {
@@ -12057,8 +12076,9 @@ public enum SwiftDarwinLiteralPreflight {
             case .files:
                 return nil
             }
-            guard let scan = scanSortedDirectoryData(
-                data,
+            guard let scan = scanSortedDirectoryBytes(
+                mappedFile.bytes,
+                count: mappedFile.count,
                 literal: literal,
                 collectSpans: collectSpans,
                 stopAfterFirst: stopAfterFirst
@@ -12067,8 +12087,7 @@ public enum SwiftDarwinLiteralPreflight {
             }
             if scan.matchedLines > 0 {
                 matches.append(SortedDirectoryMatch(
-                    file: file,
-                    data: data,
+                    mappedFile: mappedFile,
                     matchedLines: scan.matchedLines,
                     spans: scan.spans
                 ))
@@ -12078,28 +12097,23 @@ public enum SwiftDarwinLiteralPreflight {
         for match in matches {
             switch invocation.mode {
             case .matchingLines:
-                let wrote = match.data.withUnsafeBytes { rawData -> Bool in
-                    guard let rawBase = rawData.baseAddress else { return true }
-                    let bytes = rawBase.assumingMemoryBound(to: UInt8.self)
-                    for span in match.spans {
-                        guard output.writeBytes(match.file.pathBytes),
-                              output.writeByte(UInt8(ascii: ":")),
-                              output.write(
-                                bytes.advanced(by: span.start),
-                                count: span.end - span.start
-                              ) else {
-                            return false
-                        }
-                        if span.needsNewline,
-                           !output.writeByte(UInt8(ascii: "\n")) {
-                            return false
-                        }
+                guard let bytes = match.mappedFile.bytes else { return 2 }
+                for span in match.spans {
+                    guard output.writeBytes(match.mappedFile.file.pathBytes),
+                          output.writeByte(UInt8(ascii: ":")),
+                          output.write(
+                            bytes.advanced(by: span.start),
+                            count: span.end - span.start
+                          ) else {
+                        return 2
                     }
-                    return true
+                    if span.needsNewline,
+                       !output.writeByte(UInt8(ascii: "\n")) {
+                        return 2
+                    }
                 }
-                guard wrote else { return 2 }
             case .countLines:
-                guard output.writeBytes(match.file.pathBytes),
+                guard output.writeBytes(match.mappedFile.file.pathBytes),
                       output.writeByte(UInt8(ascii: ":")),
                       output.writeLineNumberPrefix(
                         match.matchedLines,
@@ -12108,7 +12122,7 @@ public enum SwiftDarwinLiteralPreflight {
                     return 2
                 }
             case .filesWithMatches:
-                guard output.writeBytes(match.file.pathBytes),
+                guard output.writeBytes(match.mappedFile.file.pathBytes),
                       output.writeByte(UInt8(ascii: "\n")) else {
                     return 2
                 }
@@ -12120,59 +12134,94 @@ public enum SwiftDarwinLiteralPreflight {
         return matches.isEmpty ? 1 : 0
     }
 
-    private static func scanSortedDirectoryData(
-        _ data: Data,
+    private static func mapSortedDirectoryFile(
+        _ file: SortedDirectoryFile
+    ) -> SortedMappedFile? {
+        let descriptor = file.path.withCString { Darwin.open($0, O_RDONLY) }
+        guard descriptor >= 0 else { return nil }
+        defer { _ = Darwin.close(descriptor) }
+
+        var metadata = stat()
+        guard Darwin.fstat(descriptor, &metadata) == 0,
+              (metadata.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG),
+              metadata.st_size >= 0,
+              UInt64(metadata.st_size) <= UInt64(Int.max) else {
+            return nil
+        }
+        let count = Int(metadata.st_size)
+        if count == 0 { return SortedMappedFile(file: file, mapping: nil, count: 0) }
+        guard let mapping = Darwin.mmap(nil, count, PROT_READ, MAP_PRIVATE, descriptor, 0),
+              mapping != MAP_FAILED else {
+            return nil
+        }
+        let bytes = UnsafeRawPointer(mapping).assumingMemoryBound(to: UInt8.self)
+        if count >= 3,
+           bytes[0] == 0xEF, bytes[1] == 0xBB, bytes[2] == 0xBF {
+            _ = Darwin.munmap(mapping, count)
+            return nil
+        }
+        if count >= 2,
+           ((bytes[0] == 0xFF && bytes[1] == 0xFE)
+            || (bytes[0] == 0xFE && bytes[1] == 0xFF)) {
+            _ = Darwin.munmap(mapping, count)
+            return nil
+        }
+        return SortedMappedFile(file: file, mapping: mapping, count: count)
+    }
+
+    private static func scanSortedDirectoryBytes(
+        _ optionalBytes: UnsafePointer<UInt8>?,
+        count: Int,
         literal: [UInt8],
         collectSpans: Bool,
         stopAfterFirst: Bool
     ) -> (matchedLines: Int, spans: [(start: Int, end: Int, needsNewline: Bool)])? {
         guard !literal.isEmpty else { return nil }
-        if data.isEmpty { return (0, []) }
-        return data.withUnsafeBytes { rawData in
-            guard let rawBase = rawData.baseAddress else { return (0, []) }
-            let bytes = rawBase.assumingMemoryBound(to: UInt8.self)
-            guard memchr(bytes, 0, data.count) == nil else { return nil }
-            if data.count < literal.count { return (0, []) }
+        guard count > 0 else { return (0, []) }
+        guard let bytes = optionalBytes,
+              memchr(bytes, 0, count) == nil else {
+            return nil
+        }
+        if count < literal.count { return (0, []) }
 
-            return literal.withUnsafeBufferPointer { needle in
-                guard let needleBase = needle.baseAddress else { return nil }
-                var matchedLines = 0
-                var spans: [(start: Int, end: Int, needsNewline: Bool)] = []
-                var searchOffset = 0
-                while searchOffset <= data.count - literal.count {
-                    guard let found = rg_memmem_simple(
-                        bytes.advanced(by: searchOffset),
-                        data.count - searchOffset,
-                        needleBase,
-                        literal.count
-                    ) else {
-                        break
-                    }
-                    let matchStart = bytes.distance(to: found)
-                    matchedLines += 1
-                    if stopAfterFirst { break }
-
-                    let rawNewline = memchr(
-                        bytes.advanced(by: matchStart + literal.count),
-                        Int32(UInt8(ascii: "\n")),
-                        data.count - matchStart - literal.count
-                    )
-                    let newline = rawNewline.map {
-                        bytes.distance(to: $0.assumingMemoryBound(to: UInt8.self))
-                    }
-                    let outputEnd = newline.map { $0 + 1 } ?? data.count
-                    if collectSpans {
-                        var lineStart = matchStart
-                        while lineStart > 0,
-                              bytes[lineStart - 1] != UInt8(ascii: "\n") {
-                            lineStart -= 1
-                        }
-                        spans.append((lineStart, outputEnd, newline == nil))
-                    }
-                    searchOffset = outputEnd
+        return literal.withUnsafeBufferPointer { needle in
+            guard let needleBase = needle.baseAddress else { return nil }
+            var matchedLines = 0
+            var spans: [(start: Int, end: Int, needsNewline: Bool)] = []
+            var searchOffset = 0
+            while searchOffset <= count - literal.count {
+                guard let found = rg_memmem_simple(
+                    bytes.advanced(by: searchOffset),
+                    count - searchOffset,
+                    needleBase,
+                    literal.count
+                ) else {
+                    break
                 }
-                return (matchedLines, spans)
+                let matchStart = bytes.distance(to: found)
+                matchedLines += 1
+                if stopAfterFirst { break }
+
+                let rawNewline = memchr(
+                    bytes.advanced(by: matchStart + literal.count),
+                    Int32(UInt8(ascii: "\n")),
+                    count - matchStart - literal.count
+                )
+                let newline = rawNewline.map {
+                    bytes.distance(to: $0.assumingMemoryBound(to: UInt8.self))
+                }
+                let outputEnd = newline.map { $0 + 1 } ?? count
+                if collectSpans {
+                    var lineStart = matchStart
+                    while lineStart > 0,
+                          bytes[lineStart - 1] != UInt8(ascii: "\n") {
+                        lineStart -= 1
+                    }
+                    spans.append((lineStart, outputEnd, newline == nil))
+                }
+                searchOffset = outputEnd
             }
+            return (matchedLines, spans)
         }
     }
 
