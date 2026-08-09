@@ -31,7 +31,9 @@ tail behavior remain unchanged. On macOS 27.0 beta with Swift 6.4, an isolated
 
 A separate 20-run comparison of the patched release build against the Rust
 oracle produced a 1.005x Swift/Rust geometric-mean runtime ratio, effectively
-overall parity for this matrix. Raw summaries:
+overall parity for this matrix. On the 1.5 GiB subtitle corpus, a 10-run count
+benchmark measured 159.5 ms patched versus 188.5 ms baseline, making the
+optimized scanner 1.18x faster. Raw summaries:
 `/tmp/swift-rg-ab-head-vs-parent/summary.md`,
 `/tmp/swift-rg-ab-swift-simd64-vs-head/summary.md`, and
 `/tmp/swift-rg-ci-results-20260809-swift-simd64/summary.md`.
