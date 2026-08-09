@@ -12147,6 +12147,88 @@ struct MiscTests {
         #expect(withoutMatch.output == Data("\(path)\n".utf8))
     }
 
+    @Test("executable capitalized word whitespace suffix fast path preserves counts")
+    func executableCapitalizedWordWhitespaceSuffixFastPathPreservesCounts() throws {
+        let root = try TemporaryDirectory()
+        let asciiPath = root.path("capitalized-word-ascii.txt")
+        try root.write([
+            "Sherlock Holmes",
+            "xSherlock Holmes",
+            "sherlock Holmes",
+            "SHerlock Holmes",
+            "A Holmes",
+            "Ab\tHolmes",
+            "Ab\u{000B}Holmes",
+            "Ab   Holmes",
+            "Ab Holmes and Baker Holmes",
+            "Final Holmes",
+        ].joined(separator: "\n"), to: "capitalized-word-ascii.txt")
+
+        let pattern = #"[A-Z][a-z]+\s+Holmes"#
+        let arguments = [
+            "--no-config",
+            "--color", "never",
+            "--count",
+            pattern,
+            asciiPath,
+        ]
+        let fast = try runExecutableResult(arguments) {}
+        let generic = try runExecutableResult(
+            arguments,
+            environment: ["SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT": "1"]
+        ) {}
+        #expect(fast.exitCode == 0)
+        #expect(fast.error.isEmpty)
+        #expect(fast.output == Data("8\n".utf8))
+        #expect(fast.exitCode == generic.exitCode)
+        #expect(fast.error == generic.error)
+        #expect(fast.output == generic.output)
+
+        let buffered = try runExecutableResult([
+            "--no-config",
+            "--color=never",
+            "--no-mmap",
+            "--count",
+            pattern,
+            asciiPath,
+        ]) {}
+        #expect(buffered.exitCode == fast.exitCode)
+        #expect(buffered.error == fast.error)
+        #expect(buffered.output == fast.output)
+
+        let miss = try runExecutableResult([
+            "--no-config",
+            "--color=never",
+            "--count",
+            #"[A-Z][a-z]+\s+Zebra"#,
+            asciiPath,
+        ]) {}
+        #expect(miss.exitCode == 1)
+        #expect(miss.error.isEmpty)
+        #expect(miss.output.isEmpty)
+
+        let unicodePath = root.path("capitalized-word-unicode.txt")
+        try root.write("Ab\u{00A0}Holmes\nAb\u{2003}Holmes\n", to: "capitalized-word-unicode.txt")
+        let unicodeArguments = [
+            "--no-config",
+            "--color=never",
+            "--count",
+            pattern,
+            unicodePath,
+        ]
+        let unicodeFallback = try runExecutableResult(unicodeArguments) {}
+        let unicodeGeneric = try runExecutableResult(
+            unicodeArguments,
+            environment: ["SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT": "1"]
+        ) {}
+        #expect(unicodeFallback.exitCode == 0)
+        #expect(unicodeFallback.error.isEmpty)
+        #expect(unicodeFallback.output == Data("2\n".utf8))
+        #expect(unicodeFallback.exitCode == unicodeGeneric.exitCode)
+        #expect(unicodeFallback.error == unicodeGeneric.error)
+        #expect(unicodeFallback.output == unicodeGeneric.output)
+    }
+
     @Test("Darwin executable ASCII run suffix quiet preflight returns status")
     func darwinExecutableASCIIRunSuffixQuietPreflightStatus() throws {
         #if canImport(Darwin)

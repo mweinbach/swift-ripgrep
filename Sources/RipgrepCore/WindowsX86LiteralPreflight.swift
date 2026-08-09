@@ -4,8 +4,9 @@ import Foundation
 import CRT
 import WinSDK
 
-/// A narrow executable-level fast path for one plain literal and one explicit
-/// regular file. Unsupported shapes return `nil` and use the full engine.
+/// A narrow executable-level fast path for one searchable pattern and one
+/// explicit regular file. Unsupported shapes return `nil` and use the full
+/// engine.
 public enum WindowsX86LiteralPreflight {
     private static let maximumBufferedBytes = 512 * 1024 * 1024
 
@@ -19,12 +20,17 @@ public enum WindowsX86LiteralPreflight {
         case filesWithoutMatch
     }
 
+    private enum PreflightPattern {
+        case literal([UInt8])
+        case capitalizedWordWhitespaceSuffix([UInt8])
+    }
+
     public static func run(arguments: [String]) -> Int32? {
         guard !environmentVariableExists("SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT"),
               !environmentVariableExists("RIPGREP_CONFIG_PATH"),
               _isatty(_fileno(stdout)) == 0,
               let parsed = parse(arguments),
-              let literal = plainLiteralBytes(parsed.pattern) else {
+              let pattern = preflightPattern(parsed.pattern, mode: parsed.mode) else {
             return nil
         }
 
@@ -94,7 +100,7 @@ public enum WindowsX86LiteralPreflight {
                 return scan(
                     bytes: bytes,
                     count: bytesRead,
-                    literal: literal,
+                    pattern: pattern,
                     path: parsed.path,
                     mode: parsed.mode
                 )
@@ -116,7 +122,7 @@ public enum WindowsX86LiteralPreflight {
             return scan(
                 bytes: bytes,
                 count: size,
-                literal: literal,
+                pattern: pattern,
                 path: parsed.path,
                 mode: parsed.mode
             )
@@ -197,6 +203,23 @@ public enum WindowsX86LiteralPreflight {
         return bytes.isEmpty ? nil : bytes
     }
 
+    private static func preflightPattern(_ pattern: String, mode: Mode) -> PreflightPattern? {
+        if let literal = plainLiteralBytes(pattern) {
+            return .literal(literal)
+        }
+        let prefix = #"[A-Z][a-z]+\s+"#
+        guard mode == .countLines,
+              pattern.hasPrefix(prefix) else {
+            return nil
+        }
+        let suffix = String(pattern.dropFirst(prefix.count))
+        guard let literal = plainLiteralBytes(suffix),
+              literal.allSatisfy({ $0 < 0x80 }) else {
+            return nil
+        }
+        return .capitalizedWordWhitespaceSuffix(literal)
+    }
+
     private static func canUseBytes(_ bytes: UnsafePointer<UInt8>, count: Int) -> Bool {
         if count >= 3,
            bytes[0] == 0xEF, bytes[1] == 0xBB, bytes[2] == 0xBF {
@@ -211,6 +234,33 @@ public enum WindowsX86LiteralPreflight {
     }
 
     private static func scan(
+        bytes: UnsafePointer<UInt8>,
+        count: Int,
+        pattern: PreflightPattern,
+        path: String,
+        mode: Mode
+    ) -> Int32? {
+        switch pattern {
+        case .literal(let literal):
+            return scanLiteral(
+                bytes: bytes,
+                count: count,
+                literal: literal,
+                path: path,
+                mode: mode
+            )
+        case .capitalizedWordWhitespaceSuffix(let suffix):
+            return scanCapitalizedWordWhitespaceSuffix(
+                bytes: bytes,
+                count: count,
+                suffix: suffix,
+                path: path,
+                mode: mode
+            )
+        }
+    }
+
+    private static func scanLiteral(
         bytes: UnsafePointer<UInt8>,
         count: Int,
         literal: [UInt8],
@@ -291,6 +341,99 @@ public enum WindowsX86LiteralPreflight {
             matchedLines: matchedLines,
             totalMatches: totalMatches
         )
+    }
+
+    private static func scanCapitalizedWordWhitespaceSuffix(
+        bytes: UnsafePointer<UInt8>,
+        count: Int,
+        suffix: [UInt8],
+        path: String,
+        mode: Mode
+    ) -> Int32? {
+        guard mode == .countLines else { return nil }
+
+        var matchedLines = 0
+        var searchOffset = 0
+        while searchOffset <= count - suffix.count,
+              let suffixStart = findLiteral(
+                bytes: bytes,
+                range: searchOffset..<count,
+                literal: suffix
+              ) {
+            var lineStart = suffixStart
+            while lineStart > 0, bytes[lineStart - 1] != UInt8(ascii: "\n") {
+                lineStart -= 1
+            }
+            let newline = findByte(
+                bytes.advanced(by: suffixStart),
+                count: count - suffixStart,
+                byte: UInt8(ascii: "\n")
+            ).map { suffixStart + $0 }
+            let lineEnd = newline ?? count
+            let outputEnd = newline.map { $0 + 1 } ?? count
+
+            guard suffixStart + suffix.count <= lineEnd else {
+                searchOffset = suffixStart + 1
+                continue
+            }
+            guard let matches = matchesCapitalizedWordWhitespacePrefix(
+                bytes: bytes,
+                lineStart: lineStart,
+                suffixStart: suffixStart
+            ) else {
+                return nil
+            }
+            if matches {
+                matchedLines += 1
+                searchOffset = outputEnd
+            } else {
+                searchOffset = suffixStart + 1
+            }
+        }
+
+        return finish(
+            mode: mode,
+            path: path,
+            matchedLines: matchedLines,
+            totalMatches: matchedLines
+        )
+    }
+
+    @inline(__always)
+    private static func matchesCapitalizedWordWhitespacePrefix(
+        bytes: UnsafePointer<UInt8>,
+        lineStart: Int,
+        suffixStart: Int
+    ) -> Bool? {
+        var cursor = suffixStart
+        var foundWhitespace = false
+        while cursor > lineStart {
+            let byte = bytes[cursor - 1]
+            if byte >= 0x80 {
+                return nil
+            }
+            guard isASCIIWhitespace(byte) else { break }
+            foundWhitespace = true
+            cursor -= 1
+        }
+        guard foundWhitespace else { return false }
+
+        let lowercaseEnd = cursor
+        while cursor > lineStart {
+            let byte = bytes[cursor - 1]
+            guard byte >= UInt8(ascii: "a"), byte <= UInt8(ascii: "z") else {
+                break
+            }
+            cursor -= 1
+        }
+        guard cursor < lowercaseEnd, cursor > lineStart else { return false }
+        let uppercase = bytes[cursor - 1]
+        return uppercase >= UInt8(ascii: "A") && uppercase <= UInt8(ascii: "Z")
+    }
+
+    @inline(__always)
+    private static func isASCIIWhitespace(_ byte: UInt8) -> Bool {
+        byte == UInt8(ascii: " ") || (byte >= 0x09 && byte <= 0x0D)
     }
 
     private static func finish(
