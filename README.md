@@ -4,6 +4,9 @@
 
 A Swift executable package for a ripgrep-style command-line search tool.
 
+See [Performance](PERFORMANCE.md) for the latest local Swift-vs-Rust summary,
+test-system specifications, methodology, and reproduction commands.
+
 The Linux x86-64, macOS arm64, and Windows x86-64 builds have no
 package-manager dependencies. PCRE2-style `-P` searches are handled by the
 in-tree Swift compatibility layer. macOS uses a Swift-only Darwin mmap
