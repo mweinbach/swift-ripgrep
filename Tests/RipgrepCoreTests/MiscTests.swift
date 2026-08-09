@@ -12241,9 +12241,11 @@ struct MiscTests {
 
     @Test("sorted directory preflight preserves recursive output")
     func executableSortedDirectoryPreflightPreservesRecursiveOutput() throws {
-        #if (os(Windows) || os(Linux)) && arch(x86_64)
+        #if ((os(Windows) || os(Linux)) && arch(x86_64)) || (os(macOS) && arch(arm64))
         #if os(Windows)
         let preflightDisableVariable = "SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT"
+        #elseif os(macOS)
+        let preflightDisableVariable = "SWIFT_RIPGREP_NO_DARWIN_SORTED_PREFLIGHT"
         #else
         let preflightDisableVariable = "SWIFT_RIPGREP_NO_LINUX_X86_PREFLIGHT"
         #endif

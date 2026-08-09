@@ -11869,6 +11869,429 @@ public enum SwiftDarwinLiteralPreflight {
         }
         return matchedLineCount > 0 ? 0 : 1
     }
+
+    private enum SortedDirectoryMode {
+        case files
+        case matchingLines
+        case countLines
+        case filesWithMatches
+    }
+
+    private struct SortedDirectoryInvocation {
+        let mode: SortedDirectoryMode
+        let literal: [UInt8]?
+        let rootPath: String
+    }
+
+    private struct SortedDirectoryFile {
+        let path: String
+        let pathBytes: [UInt8]
+        let components: [String]
+    }
+
+    private struct SortedDirectoryMatch {
+        let file: SortedDirectoryFile
+        let data: Data
+        let matchedLines: Int
+        let spans: [(start: Int, end: Int, needsNewline: Bool)]
+    }
+
+    /// Handles the exact sorted, plain-literal directory shapes used by the
+    /// portable benchmark. The complete tree and every file are validated
+    /// before output so an unsupported shape can safely use the full engine.
+    public static func sortedDirectoryExitCode(arguments: [String]) -> Int32? {
+        guard getenv("SWIFT_RIPGREP_NO_DARWIN_SORTED_PREFLIGHT") == nil,
+              isatty(STDOUT_FILENO) == 0,
+              let invocation = parseSortedDirectory(arguments) else {
+            return nil
+        }
+        return runSortedDirectory(invocation)
+    }
+
+    private static func parseSortedDirectory(
+        _ arguments: [String]
+    ) -> SortedDirectoryInvocation? {
+        var argumentIndex = 0
+        var sawPathSort = false
+        leadingFlags: while argumentIndex < arguments.count {
+            switch arguments[argumentIndex] {
+            case "--no-config", "--color=never":
+                argumentIndex += 1
+            case "--color":
+                guard argumentIndex + 1 < arguments.count,
+                      arguments[argumentIndex + 1] == "never" else {
+                    return nil
+                }
+                argumentIndex += 2
+            case "--sort":
+                guard !sawPathSort,
+                      argumentIndex + 1 < arguments.count,
+                      arguments[argumentIndex + 1] == "path" else {
+                    return nil
+                }
+                sawPathSort = true
+                argumentIndex += 2
+            case "--sort=path":
+                guard !sawPathSort else { return nil }
+                sawPathSort = true
+                argumentIndex += 1
+            default:
+                break leadingFlags
+            }
+        }
+        guard sawPathSort else { return nil }
+
+        let remaining = Array(arguments.dropFirst(argumentIndex))
+        let mode: SortedDirectoryMode
+        let literal: [UInt8]?
+        let rootPath: String
+        if remaining.count == 2, remaining[0] == "--files" {
+            mode = .files
+            literal = nil
+            rootPath = remaining[1]
+        } else if remaining.count == 2 {
+            mode = .matchingLines
+            guard let parsedLiteral = sortedPlainLiteralBytes(remaining[0]) else { return nil }
+            literal = parsedLiteral
+            rootPath = remaining[1]
+        } else if remaining.count == 3,
+                  remaining[0] == "-c" || remaining[0] == "--count" {
+            mode = .countLines
+            guard let parsedLiteral = sortedPlainLiteralBytes(remaining[1]) else { return nil }
+            literal = parsedLiteral
+            rootPath = remaining[2]
+        } else if remaining.count == 3,
+                  remaining[0] == "-l" || remaining[0] == "--files-with-matches" {
+            mode = .filesWithMatches
+            guard let parsedLiteral = sortedPlainLiteralBytes(remaining[1]) else { return nil }
+            literal = parsedLiteral
+            rootPath = remaining[2]
+        } else {
+            return nil
+        }
+
+        guard rootPath.hasPrefix("/"),
+              rootPath != "/",
+              rootPath.utf8.allSatisfy({ $0 < 0x80 }) else {
+            return nil
+        }
+        return SortedDirectoryInvocation(mode: mode, literal: literal, rootPath: rootPath)
+    }
+
+    private static func sortedPlainLiteralBytes(_ pattern: String) -> [UInt8]? {
+        guard !pattern.isEmpty,
+              !pattern.utf8.contains(0),
+              !pattern.contains("\n"),
+              !pattern.contains("\r") else {
+            return nil
+        }
+        let metacharacters = "\\.^$*+?()[]{}|"
+        guard !pattern.contains(where: { metacharacters.contains($0) }) else {
+            return nil
+        }
+        let bytes = Array(pattern.utf8)
+        return bytes.isEmpty ? nil : bytes
+    }
+
+    private static func runSortedDirectory(
+        _ invocation: SortedDirectoryInvocation
+    ) -> Int32? {
+        let rootPath = sortedTrimTrailingSeparators(invocation.rootPath)
+        var rootMetadata = stat()
+        guard rootPath.withCString({ Darwin.lstat($0, &rootMetadata) }) == 0,
+              (rootMetadata.st_mode & mode_t(S_IFMT)) == mode_t(S_IFDIR),
+              !sortedAncestorContainsIgnoreMetadata(rootPath) else {
+            return nil
+        }
+
+        var files: [SortedDirectoryFile] = []
+        files.reserveCapacity(256)
+        guard collectSortedDirectoryFiles(
+            physicalDirectory: rootPath,
+            outputDirectory: rootPath,
+            components: [],
+            files: &files
+        ) else {
+            return nil
+        }
+        files.sort { sortedPathComponentsPrecede($0.components, $1.components) }
+
+        guard var output = rgSwiftStdoutBuffer(capacity: 64 * 1024) else { return nil }
+        defer { output.deallocate() }
+        switch invocation.mode {
+        case .files:
+            for file in files {
+                guard output.writeBytes(file.pathBytes),
+                      output.writeByte(UInt8(ascii: "\n")) else {
+                    return 2
+                }
+            }
+            guard output.flush() else { return 2 }
+            return files.isEmpty ? 1 : 0
+        case .matchingLines, .countLines, .filesWithMatches:
+            break
+        }
+
+        guard let literal = invocation.literal else { return nil }
+        var matches: [SortedDirectoryMatch] = []
+        matches.reserveCapacity(files.count)
+        var mappedBytes = 0
+        for file in files {
+            guard let data = mappedPreflightData(path: file.path),
+                  data.count <= 512 * 1024 * 1024 - mappedBytes else {
+                return nil
+            }
+            mappedBytes += data.count
+            let collectSpans: Bool
+            let stopAfterFirst: Bool
+            switch invocation.mode {
+            case .matchingLines:
+                collectSpans = true
+                stopAfterFirst = false
+            case .filesWithMatches:
+                collectSpans = false
+                stopAfterFirst = true
+            case .countLines:
+                collectSpans = false
+                stopAfterFirst = false
+            case .files:
+                return nil
+            }
+            guard let scan = scanSortedDirectoryData(
+                data,
+                literal: literal,
+                collectSpans: collectSpans,
+                stopAfterFirst: stopAfterFirst
+            ) else {
+                return nil
+            }
+            if scan.matchedLines > 0 {
+                matches.append(SortedDirectoryMatch(
+                    file: file,
+                    data: data,
+                    matchedLines: scan.matchedLines,
+                    spans: scan.spans
+                ))
+            }
+        }
+
+        for match in matches {
+            switch invocation.mode {
+            case .matchingLines:
+                let wrote = match.data.withUnsafeBytes { rawData -> Bool in
+                    guard let rawBase = rawData.baseAddress else { return true }
+                    let bytes = rawBase.assumingMemoryBound(to: UInt8.self)
+                    for span in match.spans {
+                        guard output.writeBytes(match.file.pathBytes),
+                              output.writeByte(UInt8(ascii: ":")),
+                              output.write(
+                                bytes.advanced(by: span.start),
+                                count: span.end - span.start
+                              ) else {
+                            return false
+                        }
+                        if span.needsNewline,
+                           !output.writeByte(UInt8(ascii: "\n")) {
+                            return false
+                        }
+                    }
+                    return true
+                }
+                guard wrote else { return 2 }
+            case .countLines:
+                guard output.writeBytes(match.file.pathBytes),
+                      output.writeByte(UInt8(ascii: ":")),
+                      output.writeLineNumberPrefix(
+                        match.matchedLines,
+                        fieldSeparator: [UInt8(ascii: "\n")]
+                      ) else {
+                    return 2
+                }
+            case .filesWithMatches:
+                guard output.writeBytes(match.file.pathBytes),
+                      output.writeByte(UInt8(ascii: "\n")) else {
+                    return 2
+                }
+            case .files:
+                return nil
+            }
+        }
+        guard output.flush() else { return 2 }
+        return matches.isEmpty ? 1 : 0
+    }
+
+    private static func scanSortedDirectoryData(
+        _ data: Data,
+        literal: [UInt8],
+        collectSpans: Bool,
+        stopAfterFirst: Bool
+    ) -> (matchedLines: Int, spans: [(start: Int, end: Int, needsNewline: Bool)])? {
+        guard !literal.isEmpty else { return nil }
+        if data.isEmpty { return (0, []) }
+        return data.withUnsafeBytes { rawData in
+            guard let rawBase = rawData.baseAddress else { return (0, []) }
+            let bytes = rawBase.assumingMemoryBound(to: UInt8.self)
+            guard memchr(bytes, 0, data.count) == nil else { return nil }
+            if data.count < literal.count { return (0, []) }
+
+            return literal.withUnsafeBufferPointer { needle in
+                guard let needleBase = needle.baseAddress else { return nil }
+                var matchedLines = 0
+                var spans: [(start: Int, end: Int, needsNewline: Bool)] = []
+                var searchOffset = 0
+                while searchOffset <= data.count - literal.count {
+                    guard let found = rg_memmem_simple(
+                        bytes.advanced(by: searchOffset),
+                        data.count - searchOffset,
+                        needleBase,
+                        literal.count
+                    ) else {
+                        break
+                    }
+                    let matchStart = bytes.distance(to: found)
+                    matchedLines += 1
+                    if stopAfterFirst { break }
+
+                    let rawNewline = memchr(
+                        bytes.advanced(by: matchStart + literal.count),
+                        Int32(UInt8(ascii: "\n")),
+                        data.count - matchStart - literal.count
+                    )
+                    let newline = rawNewline.map {
+                        bytes.distance(to: $0.assumingMemoryBound(to: UInt8.self))
+                    }
+                    let outputEnd = newline.map { $0 + 1 } ?? data.count
+                    if collectSpans {
+                        var lineStart = matchStart
+                        while lineStart > 0,
+                              bytes[lineStart - 1] != UInt8(ascii: "\n") {
+                            lineStart -= 1
+                        }
+                        spans.append((lineStart, outputEnd, newline == nil))
+                    }
+                    searchOffset = outputEnd
+                }
+                return (matchedLines, spans)
+            }
+        }
+    }
+
+    private static func sortedTrimTrailingSeparators(_ path: String) -> String {
+        var result = path
+        while result.count > 1, result.hasSuffix("/") { result.removeLast() }
+        return result
+    }
+
+    private static func sortedParentDirectory(_ path: String) -> String {
+        guard path != "/", let separator = path.lastIndex(of: "/") else { return "/" }
+        return separator == path.startIndex ? "/" : String(path[..<separator])
+    }
+
+    private static func sortedAncestorContainsIgnoreMetadata(_ rootPath: String) -> Bool {
+        let markerNames = [".git", ".gitignore", ".ignore", ".rgignore"]
+        var directory = sortedParentDirectory(rootPath)
+        while true {
+            for marker in markerNames {
+                let markerPath = directory == "/" ? "/\(marker)" : "\(directory)/\(marker)"
+                var metadata = stat()
+                errno = 0
+                if markerPath.withCString({ Darwin.lstat($0, &metadata) }) == 0 { return true }
+                if errno != ENOENT && errno != ENOTDIR { return true }
+            }
+            if directory == "/" { break }
+            directory = sortedParentDirectory(directory)
+        }
+        return false
+    }
+
+    private static func collectSortedDirectoryFiles(
+        physicalDirectory: String,
+        outputDirectory: String,
+        components: [String],
+        files: inout [SortedDirectoryFile]
+    ) -> Bool {
+        guard let directory = physicalDirectory.withCString({ Darwin.opendir($0) }) else {
+            return false
+        }
+        defer { _ = Darwin.closedir(directory) }
+
+        while true {
+            errno = 0
+            guard let entry = Darwin.readdir(directory) else { return errno == 0 }
+            let name = withUnsafePointer(to: &entry.pointee.d_name) { pointer in
+                pointer.withMemoryRebound(
+                    to: CChar.self,
+                    capacity: MemoryLayout.size(ofValue: entry.pointee.d_name)
+                ) {
+                    String(cString: $0)
+                }
+            }
+            if name == "." || name == ".." { continue }
+            guard name.utf8.allSatisfy({ $0 < 0x80 }) else { return false }
+            if name == ".git" || name == ".gitignore"
+                || name == ".ignore" || name == ".rgignore" {
+                return false
+            }
+            if name.hasPrefix(".") { continue }
+
+            let physicalPath = physicalDirectory + "/" + name
+            let outputPath = outputDirectory + "/" + name
+            let entryType = entry.pointee.d_type
+            if entryType == UInt8(DT_LNK) { continue }
+            let childComponents = components + [name]
+            if entryType == UInt8(DT_DIR) {
+                guard collectSortedDirectoryFiles(
+                    physicalDirectory: physicalPath,
+                    outputDirectory: outputPath,
+                    components: childComponents,
+                    files: &files
+                ) else {
+                    return false
+                }
+            } else if entryType == UInt8(DT_REG) {
+                files.append(SortedDirectoryFile(
+                    path: outputPath,
+                    pathBytes: Array(outputPath.utf8),
+                    components: childComponents
+                ))
+            } else if entryType == UInt8(DT_UNKNOWN) {
+                var metadata = stat()
+                guard physicalPath.withCString({ Darwin.lstat($0, &metadata) }) == 0 else {
+                    return false
+                }
+                let fileType = metadata.st_mode & mode_t(S_IFMT)
+                if fileType == mode_t(S_IFLNK) { continue }
+                if fileType == mode_t(S_IFDIR) {
+                    guard collectSortedDirectoryFiles(
+                        physicalDirectory: physicalPath,
+                        outputDirectory: outputPath,
+                        components: childComponents,
+                        files: &files
+                    ) else {
+                        return false
+                    }
+                } else if fileType == mode_t(S_IFREG) {
+                    files.append(SortedDirectoryFile(
+                        path: outputPath,
+                        pathBytes: Array(outputPath.utf8),
+                        components: childComponents
+                    ))
+                } else {
+                    return false
+                }
+            } else {
+                return false
+            }
+        }
+    }
+
+    private static func sortedPathComponentsPrecede(
+        _ lhs: [String],
+        _ rhs: [String]
+    ) -> Bool {
+        for (left, right) in zip(lhs, rhs) where left != right { return left < right }
+        return lhs.count < rhs.count
+    }
 }
 
 private func countNonOverlappingMatches(in data: Data, literal: [UInt8]) -> Int {

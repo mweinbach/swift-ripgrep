@@ -551,6 +551,11 @@ struct RipgrepCommand {
         guard !treatsBinaryDataAsText else {
             return nil
         }
+        if let exitCode = SwiftDarwinLiteralPreflight.sortedDirectoryExitCode(
+            arguments: arguments
+        ) {
+            return exitCode
+        }
         if let exitCode = runSimpleSwiftDarwinASCIIRunSuffixQuietPreflight(
             arguments: arguments,
             allowPCREQuotedLiterals: preflightArguments.allowPCREQuotedLiterals
