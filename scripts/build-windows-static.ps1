@@ -10,10 +10,41 @@ $ErrorActionPreference = "Stop"
 if ($env:SDKROOT -and $env:SDKROOT.EndsWith("WindowsExperimental.sdk")) {
     $experimentalSDK = $env:SDKROOT
 } else {
-    $platformsRoot = Join-Path $env:LOCALAPPDATA "Programs/Swift/Platforms"
-    $experimentalSDK = Get-ChildItem -LiteralPath $platformsRoot -Directory -Recurse -Filter "WindowsExperimental.sdk" |
-        Sort-Object FullName -Descending |
-        Select-Object -First 1 -ExpandProperty FullName
+    $experimentalSDK = $null
+    if ($env:SDKROOT) {
+        $sdkDirectory = Split-Path -Parent $env:SDKROOT
+        $siblingSDK = Join-Path $sdkDirectory "WindowsExperimental.sdk"
+        if (Test-Path -LiteralPath $siblingSDK -PathType Container) {
+            $experimentalSDK = $siblingSDK
+        }
+    }
+
+    if (-not $experimentalSDK) {
+        $swiftPath = (Get-Command swift -ErrorAction Stop).Source
+        $swiftInstallRoot = Split-Path -Parent (
+            Split-Path -Parent (
+                Split-Path -Parent (
+                    Split-Path -Parent $swiftPath
+                )
+            )
+        )
+        $platformRoots = @(
+            (Join-Path $env:LOCALAPPDATA "Programs/Swift/Platforms"),
+            (Join-Path $swiftInstallRoot "Platforms"),
+            (Join-Path $env:SystemDrive "Library/Developer/Platforms")
+        ) | Select-Object -Unique
+        foreach ($platformsRoot in $platformRoots) {
+            if (-not (Test-Path -LiteralPath $platformsRoot -PathType Container)) {
+                continue
+            }
+            $experimentalSDK = Get-ChildItem -LiteralPath $platformsRoot -Directory -Recurse -Filter "WindowsExperimental.sdk" |
+                Sort-Object FullName -Descending |
+                Select-Object -First 1 -ExpandProperty FullName
+            if ($experimentalSDK) {
+                break
+            }
+        }
+    }
 }
 
 if (-not $experimentalSDK -or -not (Test-Path -LiteralPath $experimentalSDK -PathType Container)) {
