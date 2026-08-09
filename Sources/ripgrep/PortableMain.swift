@@ -30,6 +30,11 @@ struct PortableRipgrepCommand {
             exit(exitCode)
         }
         #endif
+        #if os(Linux) && arch(x86_64)
+        if let exitCode = LinuxX86LiteralPreflight.run(arguments: arguments) {
+            exit(exitCode)
+        }
+        #endif
         if arguments.first.map(mayUseUtilityFastPath) == true,
            let exitCode = RipgrepCLI.runUtilityFastPath(arguments: arguments) {
             exit(exitCode)

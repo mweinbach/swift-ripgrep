@@ -12112,7 +12112,10 @@ struct MiscTests {
         let alternationCount = try runExecutableResult(alternationCountArguments) {}
         let genericAlternationCount = try runExecutableResult(
             alternationCountArguments,
-            environment: ["SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT": "1"]
+            environment: [
+                "SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT": "1",
+                "SWIFT_RIPGREP_NO_LINUX_X86_PREFLIGHT": "1",
+            ]
         ) {}
         #expect(alternationCount.exitCode == 0)
         #expect(alternationCount.error.isEmpty)
@@ -12194,7 +12197,10 @@ struct MiscTests {
         let fast = try runExecutableResult(arguments) {}
         let generic = try runExecutableResult(
             arguments,
-            environment: ["SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT": "1"]
+            environment: [
+                "SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT": "1",
+                "SWIFT_RIPGREP_NO_LINUX_X86_PREFLIGHT": "1",
+            ]
         ) {}
         #expect(fast.exitCode == 0)
         #expect(fast.error.isEmpty)
@@ -12238,7 +12244,10 @@ struct MiscTests {
         let unicodeFallback = try runExecutableResult(unicodeArguments) {}
         let unicodeGeneric = try runExecutableResult(
             unicodeArguments,
-            environment: ["SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT": "1"]
+            environment: [
+                "SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT": "1",
+                "SWIFT_RIPGREP_NO_LINUX_X86_PREFLIGHT": "1",
+            ]
         ) {}
         #expect(unicodeFallback.exitCode == 0)
         #expect(unicodeFallback.error.isEmpty)
