@@ -2,6 +2,12 @@
 
 #include <immintrin.h>
 
+static inline uint8_t rg_linux_ascii_lower(uint8_t byte) {
+    return byte >= 'A' && byte <= 'Z'
+        ? (uint8_t)(byte + ('a' - 'A'))
+        : byte;
+}
+
 static const uint8_t *rg_linux_find_either_sse2(
     const uint8_t *bytes,
     size_t count,
@@ -202,4 +208,47 @@ const uint8_t *rg_linux_find_ascii_case_byte(
         return rg_linux_find_ascii_case_avx2(bytes, count, folded);
     }
     return rg_linux_find_ascii_case_sse2(bytes, count, folded);
+}
+
+const uint8_t *rg_linux_memcasemem_ascii(
+    const uint8_t *bytes,
+    size_t count,
+    const uint8_t *folded_needle,
+    size_t needle_count
+) {
+    if (bytes == NULL || folded_needle == NULL || needle_count == 0) {
+        return needle_count == 0 ? bytes : NULL;
+    }
+    if (count < needle_count) {
+        return NULL;
+    }
+    if (needle_count == 1) {
+        return rg_linux_find_ascii_case_byte(bytes, count, folded_needle[0]);
+    }
+
+    size_t shifts[256];
+    for (size_t index = 0; index < 256; ++index) {
+        shifts[index] = needle_count;
+    }
+    for (size_t index = 0; index + 1 < needle_count; ++index) {
+        shifts[folded_needle[index]] = needle_count - 1 - index;
+    }
+
+    size_t cursor = 0;
+    while (cursor + needle_count <= count) {
+        const uint8_t tail = rg_linux_ascii_lower(bytes[cursor + needle_count - 1]);
+        if (tail == folded_needle[needle_count - 1]) {
+            size_t offset = 0;
+            while (offset < needle_count
+                   && rg_linux_ascii_lower(bytes[cursor + offset]) == folded_needle[offset]) {
+                offset++;
+            }
+            if (offset == needle_count) {
+                return bytes + cursor;
+            }
+        }
+        const size_t shift = shifts[tail];
+        cursor += shift == 0 ? 1 : shift;
+    }
+    return NULL;
 }

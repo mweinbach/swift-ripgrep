@@ -25,4 +25,12 @@ const uint8_t *rg_linux_find_ascii_case_byte(
     uint8_t folded
 );
 
+/// Finds a folded ASCII literal using a Boyer-Moore-Horspool skip table.
+const uint8_t *rg_linux_memcasemem_ascii(
+    const uint8_t *bytes,
+    size_t count,
+    const uint8_t *folded_needle,
+    size_t needle_count
+);
+
 #endif

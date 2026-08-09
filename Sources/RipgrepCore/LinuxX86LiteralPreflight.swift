@@ -817,25 +817,19 @@ public enum LinuxX86LiteralPreflight {
         count: Int,
         foldedLiteral: [UInt8]
     ) -> Int {
-        guard let first = foldedLiteral.first else { return 0 }
         var matchedLines = 0
         var searchOffset = 0
-        while searchOffset <= count - foldedLiteral.count,
-              let found = rg_linux_find_ascii_case_byte(
-                bytes.advanced(by: searchOffset),
-                count - searchOffset,
-                first
-              ) {
-            let matchStart = bytes.distance(to: found)
-            guard matchStart <= count - foldedLiteral.count else { break }
-            guard asciiCaseInsensitiveLiteralMatches(
-                bytes: bytes,
-                at: matchStart,
-                foldedLiteral: foldedLiteral
-            ) else {
-                searchOffset = matchStart + 1
-                continue
+        while searchOffset <= count - foldedLiteral.count {
+            let found = foldedLiteral.withUnsafeBufferPointer { literalBuffer in
+                rg_linux_memcasemem_ascii(
+                    bytes.advanced(by: searchOffset),
+                    count - searchOffset,
+                    literalBuffer.baseAddress,
+                    literalBuffer.count
+                )
             }
+            guard let found else { break }
+            let matchStart = bytes.distance(to: found)
             let newline = findByte(
                 bytes.advanced(by: matchStart),
                 count: count - matchStart,
@@ -850,19 +844,6 @@ public enum LinuxX86LiteralPreflight {
             searchOffset = newline.map { $0 + 1 } ?? count
         }
         return matchedLines
-    }
-
-    @inline(__always)
-    private static func asciiCaseInsensitiveLiteralMatches(
-        bytes: UnsafePointer<UInt8>,
-        at offset: Int,
-        foldedLiteral: [UInt8]
-    ) -> Bool {
-        for index in foldedLiteral.indices
-        where asciiLowercased(bytes[offset + index]) != foldedLiteral[index] {
-            return false
-        }
-        return true
     }
 
     @inline(__always)
