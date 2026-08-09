@@ -11,6 +11,7 @@ import CLinuxPreflight
 public enum LinuxX86LiteralPreflight {
     private static let maximumBufferedBytes = 512 * 1024 * 1024
     private static let maximumBufferedLineSpans = 256 * 1024
+    private static let streamingChunkBytes = 1024 * 1024
 
     private enum Mode {
         case matchingLines
@@ -52,10 +53,17 @@ public enum LinuxX86LiteralPreflight {
         private(set) var storage: UnsafeMutablePointer<UInt8>?
         private(set) var capacity = 0
 
-        mutating func reserveCapacity(_ requestedCapacity: Int) -> Bool {
+        mutating func reserveCapacity(
+            _ requestedCapacity: Int,
+            preserving preservedCount: Int = 0
+        ) -> Bool {
             guard requestedCapacity > capacity else { return true }
+            guard preservedCount >= 0, preservedCount <= capacity else { return false }
             let newCapacity = max(requestedCapacity, max(256 * 1024, capacity * 2))
             let replacement = UnsafeMutablePointer<UInt8>.allocate(capacity: newCapacity)
+            if let storage, preservedCount > 0 {
+                replacement.update(from: storage, count: preservedCount)
+            }
             storage?.deallocate()
             storage = replacement
             capacity = newCapacity
@@ -106,6 +114,14 @@ public enum LinuxX86LiteralPreflight {
 
         if parsed.buffered {
             guard size <= maximumBufferedBytes else { return nil }
+            if parsed.mode == .matchingLines,
+               case .literal(let literal) = pattern {
+                return scanBufferedLiteralLines(
+                    descriptor: descriptor,
+                    estimatedSize: size,
+                    literal: literal
+                )
+            }
             let storage = UnsafeMutableRawPointer.allocate(
                 byteCount: size,
                 alignment: MemoryLayout<UInt8>.alignment
@@ -140,6 +156,140 @@ public enum LinuxX86LiteralPreflight {
 
         let bytes = UnsafeRawPointer(mapping).assumingMemoryBound(to: UInt8.self)
         return runScan(bytes: bytes, count: size, mode: parsed.mode, pattern: pattern)
+    }
+
+    private static func scanBufferedLiteralLines(
+        descriptor: Int32,
+        estimatedSize: Int,
+        literal: [UInt8]
+    ) -> Int32? {
+        var streamBuffer = ReusableFileBuffer()
+        defer { streamBuffer.deallocate() }
+        guard streamBuffer.reserveCapacity(streamingChunkBytes) else { return nil }
+
+        var matchedOutput: [UInt8] = []
+        matchedOutput.reserveCapacity(min(estimatedSize, streamingChunkBytes))
+        var carried = 0
+        var isFirstRead = true
+        while true {
+            if carried == streamBuffer.capacity {
+                guard streamBuffer.capacity < maximumBufferedBytes,
+                      streamBuffer.reserveCapacity(
+                        min(maximumBufferedBytes, streamBuffer.capacity * 2),
+                        preserving: carried
+                      ) else {
+                    return nil
+                }
+            }
+            guard let storage = streamBuffer.storage else { return nil }
+            let available = streamBuffer.capacity - carried
+            let requested = min(streamingChunkBytes, available)
+            let result = read(descriptor, storage.advanced(by: carried), requested)
+            guard result >= 0 else { return nil }
+            if result == 0 { break }
+            let bytesRead = result
+            if isFirstRead {
+                let total = carried + bytesRead
+                guard hasSupportedByteOrderMark(UnsafePointer(storage), count: total) else {
+                    return nil
+                }
+                isFirstRead = false
+            }
+
+            let total = carried + bytesRead
+            var completeEnd = total
+            while completeEnd > 0, storage[completeEnd - 1] != UInt8(ascii: "\n") {
+                completeEnd -= 1
+            }
+            if completeEnd > 0 {
+                guard appendBufferedMatchingLines(
+                    bytes: UnsafePointer(storage),
+                    count: completeEnd,
+                    literal: literal,
+                    appendNewlineForFinalLine: false,
+                    output: &matchedOutput
+                ) else {
+                    return nil
+                }
+                carried = total - completeEnd
+                if carried > 0 {
+                    memmove(storage, storage.advanced(by: completeEnd), carried)
+                }
+            } else {
+                carried = total
+            }
+        }
+
+        if carried > 0, let storage = streamBuffer.storage {
+            guard appendBufferedMatchingLines(
+                bytes: UnsafePointer(storage),
+                count: carried,
+                literal: literal,
+                appendNewlineForFinalLine: true,
+                output: &matchedOutput
+            ) else {
+                return nil
+            }
+        }
+        guard !matchedOutput.isEmpty else { return 1 }
+        return matchedOutput.withUnsafeBufferPointer { output in
+            guard let baseAddress = output.baseAddress else { return 1 }
+            return writeAll(baseAddress, count: output.count) ? 0 : nil
+        }
+    }
+
+    private static func appendBufferedMatchingLines(
+        bytes: UnsafePointer<UInt8>,
+        count: Int,
+        literal: [UInt8],
+        appendNewlineForFinalLine: Bool,
+        output: inout [UInt8]
+    ) -> Bool {
+        var spans: [(start: Int, end: Int, needsNewline: Bool)] = []
+        var searchOffset = 0
+        while searchOffset < count {
+            guard let event = findLiteralOrBinary(
+                bytes: bytes,
+                range: searchOffset..<count,
+                literal: literal
+            ) else {
+                break
+            }
+            guard case .literal(let matchStart) = event else { return false }
+            var lineStart = matchStart
+            while lineStart > 0, bytes[lineStart - 1] != UInt8(ascii: "\n") {
+                lineStart -= 1
+            }
+            let newline = findByte(
+                bytes.advanced(by: matchStart + literal.count),
+                count: count - matchStart - literal.count,
+                byte: UInt8(ascii: "\n")
+            ).map { matchStart + literal.count + $0 }
+            let outputEnd = newline.map { $0 + 1 } ?? count
+            if outputEnd > matchStart + 1,
+               memchr(bytes.advanced(by: matchStart + 1), 0, outputEnd - matchStart - 1) != nil {
+                return false
+            }
+            guard spans.count < maximumBufferedLineSpans else { return false }
+            spans.append((lineStart, outputEnd, newline == nil && appendNewlineForFinalLine))
+            searchOffset = outputEnd
+        }
+
+        for span in spans {
+            let spanCount = span.end - span.start
+            let extraByte = span.needsNewline ? 1 : 0
+            guard spanCount + extraByte <= maximumBufferedBytes - output.count else {
+                return false
+            }
+            output.append(contentsOf: UnsafeBufferPointer(
+                start: bytes.advanced(by: span.start),
+                count: spanCount
+            ))
+            if span.needsNewline {
+                output.append(UInt8(ascii: "\n"))
+            }
+        }
+        return true
     }
 
     private static func parseSortedDirectory(_ arguments: [String]) -> SortedDirectoryInvocation? {
