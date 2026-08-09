@@ -4,12 +4,13 @@
 
 A Swift executable package for a ripgrep-style command-line search tool.
 
-The normal macOS arm64 and Windows x86-64 builds have no package-manager
-dependencies. PCRE2-style `-P` searches are handled by the in-tree Swift
-compatibility layer, and the default byte-search hot paths are implemented in
-Swift with SIMD fallbacks. macOS additionally uses a Swift-only Darwin mmap
-preflight; its optional C shim is restricted to macOS arm64. Windows excludes
-both Darwin preflight sources at the package-target level and uses
+The Linux x86-64, macOS arm64, and Windows x86-64 builds have no
+package-manager dependencies. PCRE2-style `-P` searches are handled by the
+in-tree Swift compatibility layer. macOS uses a Swift-only Darwin mmap
+preflight; its optional comparison C shim is restricted to macOS arm64. Linux
+uses a small in-tree C SIMD helper with AVX2 runtime dispatch and an SSE2
+fallback. Windows excludes both Darwin preflight sources at the package-target
+level and uses
 Foundation-backed mapped reads, Win32 directory enumeration, native Windows
 encoding conversion, and portable raw-byte literal/regex count paths.
 
@@ -38,6 +39,16 @@ the benchmark machine, but is approximately 69 MB instead of 8 MB, so the
 normal `swift build` command remains dynamic. CI builds, executable-tests, and
 benchmarks the self-contained static Windows artifact.
 
+On Linux, the equivalent self-contained Swift-runtime build is:
+
+```sh
+swift build --scratch-path .build/linux-static -c release -Xswiftc -static-stdlib
+```
+
+CI tests and benchmarks this exact Linux artifact rather than a dynamically
+linked development build, and verifies that the selected Linux and Windows
+executables do not retain Swift runtime library dependencies.
+
 Windows x86-64 builds also use an executable-level fast path for a plain
 literal searched in one explicit regular file. It maps the file with Win32,
 uses Swift `SIMD16<UInt8>` scans, and batches output through `WriteFile` for
@@ -52,9 +63,12 @@ validation succeeds.
 Linux x86-64 builds use a similarly conservative executable preflight for a
 plain literal searched in one explicit regular file and for count-only plain,
 literal-alternation, and required-literal regex searches. It uses POSIX `mmap`
-for normal reads, a bounded sequential buffer for `--no-mmap`, libc byte
-searches, and direct standard-output writes. Binary, encoded, configured,
-console, non-regular, or unsupported argument shapes fall back to the full
+for normal reads, a 1 MiB streaming reader for `--no-mmap`, vector-filtered
+literal and ASCII case-insensitive scans, and buffered direct output. Sorted
+plain-literal directory searches for `--files`, matching lines, `-c`, and `-l`
+use direct POSIX enumeration, one path-component sort, and read-only file
+mappings. Binary, encoded, configured, console, non-ASCII-path, ignore-aware,
+symlinked, non-regular, or unsupported argument shapes fall back to the full
 engine. Set `SWIFT_RIPGREP_NO_LINUX_X86_PREFLIGHT=1` to disable it for A/B
 measurements.
 
@@ -80,8 +94,10 @@ swift test
 
 GitHub Actions runs builds, platform tests, Rust parity checks, and
 generated-corpus Swift-vs-Rust benchmarks on Linux x86-64, macOS arm64, and
-Windows x86-64. The full parity harness runs on Linux and macOS; Windows runs
-its stable platform suites and byte-checks every timed benchmark case.
+Windows x86-64. Linux and Windows use their self-contained release artifacts;
+macOS uses the normal release build. The full parity harness runs on Linux and
+macOS; Windows runs its stable platform suites and byte-checks every timed
+benchmark case.
 Each run publishes the benchmark JSON and Markdown tables as workflow artifacts;
 see [bench/README.md](bench/README.md) for local and full-corpus commands.
 

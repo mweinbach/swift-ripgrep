@@ -18,6 +18,18 @@ python bench/ci_benchmark.py \
     --out /tmp/swift-rg-ci-results
 ```
 
+The workflow substitutes a self-contained release artifact on Linux and
+Windows. To reproduce the Linux build selection locally:
+
+```sh
+swift build --scratch-path .build/linux-static -c release -Xswiftc -static-stdlib
+python bench/ci_benchmark.py \
+    --rg .ci-tools/rg \
+    --swift-rg "$(swift build --scratch-path .build/linux-static -c release \
+        -Xswiftc -static-stdlib --show-bin-path)/ripgrep" \
+    --out /tmp/swift-rg-ci-results
+```
+
 Use `--fail-above RATIO` when a stable, dedicated benchmark host is available.
 The public hosted-runner workflow deliberately records and uploads exact
 ratios without making noisy shared-host timing a correctness gate. Tests,
