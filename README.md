@@ -27,7 +27,7 @@ The package requires macOS 13 or newer when used on Apple platforms.
 dependencies: [
     .package(
         url: "https://github.com/mweinbach/swift-ripgrep.git",
-        branch: "main"
+        from: "15.2.0"
     ),
 ],
 targets: [
@@ -59,8 +59,12 @@ for match in matches {
 For the complete option surface, configure `RipgrepOptions` and call
 `RipgrepSearcher.search(options:)`. `RipgrepCLI.run(arguments:stdout:stderr:)`
 is also public when an embedded caller wants ripgrep-compatible CLI parsing and
-formatted output. Pin an exact revision instead of `main` when reproducible
-dependency resolution is required.
+formatted output.
+
+SwiftPM release tags match the tracked Rust ripgrep release. Package version
+`15.2.0` corresponds to Rust ripgrep 15.2.0 at upstream revision `e89fff89ac`.
+Use `.package(url:exact:)` when dependency resolution must stay on one exact
+release.
 
 ## Run
 
