@@ -8,6 +8,34 @@ with `hyperfine 1.20.0`, 1 warm-up iteration + 2 timed iterations per case.
 - `swift-rg`: `ripgrep 15.1.0 (rev 4519153e5e)` (release build,
   `.build/release/ripgrep` produced by `swift build -c release`)
 
+## Batched Swift SIMD literal scan - 2026-08-09
+
+An exact release-build A/B against parent commit `fc0efd71` ruled out a
+regression from the intervening stdin parity fix: across the upstream-derived
+matrix, current/parent geometric-mean runtime was 0.999x (20 timed runs after
+three warm-ups). A time profile instead identified the active pure-Swift
+`rgMemmemSIMD16` loop as the remaining hotspot for longer literals on the
+Apple M3 Ultra.
+
+The retained implementation evaluates four SIMD16 candidate blocks before a
+single horizontal reduction. Exact candidate verification and the existing
+tail behavior remain unchanged. On macOS 27.0 beta with Swift 6.4, an isolated
+20-run patched/baseline A/B measured:
+
+| Case | Patched | Baseline | Ratio |
+| --- | ---: | ---: | ---: |
+| Plain literal | 18.60 ms | 21.05 ms | 0.892x |
+| `--no-mmap` literal | 18.62 ms | 21.06 ms | 0.883x |
+| Literal count | 19.03 ms | 21.48 ms | 0.886x |
+| Full-matrix geometric mean | - | - | 0.970x |
+
+A separate 20-run comparison of the patched release build against the Rust
+oracle produced a 1.005x Swift/Rust geometric-mean runtime ratio, effectively
+overall parity for this matrix. Raw summaries:
+`/tmp/swift-rg-ab-head-vs-parent/summary.md`,
+`/tmp/swift-rg-ab-swift-simd64-vs-head/summary.md`, and
+`/tmp/swift-rg-ci-results-20260809-swift-simd64/summary.md`.
+
 ## Large literal mappings request read-ahead - 2026-08-08
 
 The two remaining slower-than-Rust subtitle rows were dominated by first-touch

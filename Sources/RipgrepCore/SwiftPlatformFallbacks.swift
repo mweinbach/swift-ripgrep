@@ -1128,6 +1128,27 @@ private func rgMemmemRareProofByteMemchr(
     return nil
 }
 
+@inline(__always)
+private func rgMemmemExactCandidate(
+    haystack: UnsafePointer<UInt8>,
+    needle: UnsafePointer<UInt8>,
+    needleLength: Int,
+    cursor: Int,
+    candidateStorage: SIMD16<Int8>
+) -> UnsafePointer<UInt8>? {
+    guard candidateStorage.min() < 0 else {
+        return nil
+    }
+    for lane in 0..<16 where candidateStorage[lane] != 0 {
+        let candidate = haystack.advanced(by: cursor + lane)
+        if needleLength <= 3
+            || memcmp(candidate.advanced(by: 1), needle.advanced(by: 1), needleLength - 2) == 0 {
+            return candidate
+        }
+    }
+    return nil
+}
+
 private func rgMemmemSIMD16(
     haystack: UnsafePointer<UInt8>,
     haystackLength: Int,
@@ -1198,10 +1219,85 @@ private func rgMemmemSIMD16(
     let middleVector = SIMD16<UInt8>(repeating: middle)
 
     var cursor = 0
-    let vectorLimit = haystackLength >= needleLength + 15
-        ? haystackLength - needleLength - 15 + 1
-        : 0
-    while cursor < vectorLimit {
+    let maxStart = haystackLength - needleLength + 1
+    while cursor + 64 <= maxStart {
+        let firstBytes0 = UnsafeRawPointer(haystack.advanced(by: cursor))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let firstBytes1 = UnsafeRawPointer(haystack.advanced(by: cursor + 16))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let firstBytes2 = UnsafeRawPointer(haystack.advanced(by: cursor + 32))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let firstBytes3 = UnsafeRawPointer(haystack.advanced(by: cursor + 48))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let tailOffset = needleLength - 1
+        let tailBytes0 = UnsafeRawPointer(haystack.advanced(by: cursor + tailOffset))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let tailBytes1 = UnsafeRawPointer(haystack.advanced(by: cursor + 16 + tailOffset))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let tailBytes2 = UnsafeRawPointer(haystack.advanced(by: cursor + 32 + tailOffset))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        let tailBytes3 = UnsafeRawPointer(haystack.advanced(by: cursor + 48 + tailOffset))
+            .loadUnaligned(as: SIMD16<UInt8>.self)
+        var mask0 = (firstBytes0 .== firstVector) .& (tailBytes0 .== tailVector)
+        var mask1 = (firstBytes1 .== firstVector) .& (tailBytes1 .== tailVector)
+        var mask2 = (firstBytes2 .== firstVector) .& (tailBytes2 .== tailVector)
+        var mask3 = (firstBytes3 .== firstVector) .& (tailBytes3 .== tailVector)
+        if useMiddle {
+            let middleBytes0 = UnsafeRawPointer(haystack.advanced(by: cursor + middleIndex))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let middleBytes1 = UnsafeRawPointer(haystack.advanced(by: cursor + 16 + middleIndex))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let middleBytes2 = UnsafeRawPointer(haystack.advanced(by: cursor + 32 + middleIndex))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            let middleBytes3 = UnsafeRawPointer(haystack.advanced(by: cursor + 48 + middleIndex))
+                .loadUnaligned(as: SIMD16<UInt8>.self)
+            mask0 = mask0 .& (middleBytes0 .== middleVector)
+            mask1 = mask1 .& (middleBytes1 .== middleVector)
+            mask2 = mask2 .& (middleBytes2 .== middleVector)
+            mask3 = mask3 .& (middleBytes3 .== middleVector)
+        }
+        let combined = mask0 .| mask1 .| mask2 .| mask3
+        if combined._storage.min() < 0 {
+            if let candidate = rgMemmemExactCandidate(
+                haystack: haystack,
+                needle: needle,
+                needleLength: needleLength,
+                cursor: cursor,
+                candidateStorage: mask0._storage
+            ) {
+                return candidate
+            }
+            if let candidate = rgMemmemExactCandidate(
+                haystack: haystack,
+                needle: needle,
+                needleLength: needleLength,
+                cursor: cursor + 16,
+                candidateStorage: mask1._storage
+            ) {
+                return candidate
+            }
+            if let candidate = rgMemmemExactCandidate(
+                haystack: haystack,
+                needle: needle,
+                needleLength: needleLength,
+                cursor: cursor + 32,
+                candidateStorage: mask2._storage
+            ) {
+                return candidate
+            }
+            if let candidate = rgMemmemExactCandidate(
+                haystack: haystack,
+                needle: needle,
+                needleLength: needleLength,
+                cursor: cursor + 48,
+                candidateStorage: mask3._storage
+            ) {
+                return candidate
+            }
+        }
+        cursor += 64
+    }
+    while cursor + 16 <= maxStart {
         let firstBytes = UnsafeRawPointer(haystack.advanced(by: cursor))
             .loadUnaligned(as: SIMD16<UInt8>.self)
         let tailBytes = UnsafeRawPointer(haystack.advanced(by: cursor + needleLength - 1))
@@ -1212,20 +1308,18 @@ private func rgMemmemSIMD16(
                 .loadUnaligned(as: SIMD16<UInt8>.self)
             candidateMask = candidateMask .& (middleBytes .== middleVector)
         }
-        let candidateStorage = candidateMask._storage
-        if candidateStorage.min() < 0 {
-            for lane in 0..<16 where candidateStorage[lane] != 0 {
-                let candidate = haystack.advanced(by: cursor + lane)
-                if needleLength <= 3
-                    || memcmp(candidate.advanced(by: 1), needle.advanced(by: 1), needleLength - 2) == 0 {
-                    return candidate
-                }
-            }
+        if let candidate = rgMemmemExactCandidate(
+            haystack: haystack,
+            needle: needle,
+            needleLength: needleLength,
+            cursor: cursor,
+            candidateStorage: candidateMask._storage
+        ) {
+            return candidate
         }
         cursor += 16
     }
 
-    let maxStart = haystackLength - needleLength + 1
     while cursor < maxStart {
         if haystack[cursor] == first,
            haystack[cursor + needleLength - 1] == tail,
