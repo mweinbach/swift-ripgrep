@@ -22,6 +22,7 @@ public enum WindowsX86LiteralPreflight {
 
     private enum PreflightPattern {
         case literal([UInt8])
+        case literalAlternation([[UInt8]])
         case capitalizedWordWhitespaceSuffix([UInt8])
     }
 
@@ -207,6 +208,15 @@ public enum WindowsX86LiteralPreflight {
         if let literal = plainLiteralBytes(pattern) {
             return .literal(literal)
         }
+        if mode == .countLines {
+            let branches = pattern.split(separator: "|", omittingEmptySubsequences: false)
+            if branches.count >= 2, branches.count <= 8 {
+                let literals = branches.compactMap { plainLiteralBytes(String($0)) }
+                if literals.count == branches.count {
+                    return .literalAlternation(literals)
+                }
+            }
+        }
         let prefix = #"[A-Z][a-z]+\s+"#
         guard mode == .countLines,
               pattern.hasPrefix(prefix) else {
@@ -246,6 +256,14 @@ public enum WindowsX86LiteralPreflight {
                 bytes: bytes,
                 count: count,
                 literal: literal,
+                path: path,
+                mode: mode
+            )
+        case .literalAlternation(let literals):
+            return scanLiteralAlternation(
+                bytes: bytes,
+                count: count,
+                literals: literals,
                 path: path,
                 mode: mode
             )
@@ -341,6 +359,62 @@ public enum WindowsX86LiteralPreflight {
             matchedLines: matchedLines,
             totalMatches: totalMatches
         )
+    }
+
+    private static func scanLiteralAlternation(
+        bytes: UnsafePointer<UInt8>,
+        count: Int,
+        literals: [[UInt8]],
+        path: String,
+        mode: Mode
+    ) -> Int32? {
+        guard mode == .countLines else { return nil }
+
+        var matchedLines = 0
+        var searchOffset = 0
+        while searchOffset < count,
+              let match = earliestLiteralMatch(
+                bytes: bytes,
+                range: searchOffset..<count,
+                literals: literals
+              ) {
+            let newline = findByte(
+                bytes.advanced(by: match.start),
+                count: count - match.start,
+                byte: UInt8(ascii: "\n")
+            ).map { match.start + $0 }
+            let lineEnd = newline ?? count
+            guard match.start + match.length <= lineEnd else {
+                searchOffset = match.start + 1
+                continue
+            }
+            matchedLines += 1
+            searchOffset = newline.map { $0 + 1 } ?? count
+        }
+
+        return finish(
+            mode: mode,
+            path: path,
+            matchedLines: matchedLines,
+            totalMatches: matchedLines
+        )
+    }
+
+    private static func earliestLiteralMatch(
+        bytes: UnsafePointer<UInt8>,
+        range: Range<Int>,
+        literals: [[UInt8]]
+    ) -> (start: Int, length: Int)? {
+        var earliest: (start: Int, length: Int)?
+        for literal in literals {
+            guard let start = findLiteral(bytes: bytes, range: range, literal: literal) else {
+                continue
+            }
+            if earliest == nil || start < earliest!.start {
+                earliest = (start, literal.count)
+            }
+        }
+        return earliest
     }
 
     private static func scanCapitalizedWordWhitespaceSuffix(

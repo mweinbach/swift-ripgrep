@@ -12102,6 +12102,25 @@ struct MiscTests {
         #expect(lineCount.error.isEmpty)
         #expect(lineCount.output == Data("2\n".utf8))
 
+        let alternationCountArguments = [
+            "--no-config",
+            "--color=never",
+            "--count",
+            "alpha|none",
+            path,
+        ]
+        let alternationCount = try runExecutableResult(alternationCountArguments) {}
+        let genericAlternationCount = try runExecutableResult(
+            alternationCountArguments,
+            environment: ["SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT": "1"]
+        ) {}
+        #expect(alternationCount.exitCode == 0)
+        #expect(alternationCount.error.isEmpty)
+        #expect(alternationCount.output == Data("3\n".utf8))
+        #expect(alternationCount.exitCode == genericAlternationCount.exitCode)
+        #expect(alternationCount.error == genericAlternationCount.error)
+        #expect(alternationCount.output == genericAlternationCount.output)
+
         let matchCount = try runExecutableResult([
             "--no-config",
             "--color=never",
