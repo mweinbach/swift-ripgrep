@@ -7193,6 +7193,7 @@ struct RipgrepCommand {
         var countStyleOutput = false
         var fixedStrings = false
         var includeZero = false
+        var countMatches = false
         var noUnicode = false
         var unrestrictedCount = 0
         let pattern = arguments[arguments.count - 2]
@@ -7217,8 +7218,11 @@ struct RipgrepCommand {
                 continue
             }
             switch argument {
-            case "-c", "--count", "--count-matches":
+            case "-c", "--count":
                 countStyleOutput = true
+            case "--count-matches":
+                countStyleOutput = true
+                countMatches = true
             case "--no-heading":
                 break
             case "--include-zero":
@@ -7242,6 +7246,20 @@ struct RipgrepCommand {
               !pattern.hasPrefix("-"),
               path != "-" else {
             return nil
+        }
+        if getenv("SWIFT_RIPGREP_NO_DARWIN_CAPITALIZED_COUNT_PREFLIGHT") == nil,
+           !fixedStrings,
+           !countMatches,
+           let suffix = simpleSwiftDarwinCapitalizedWordWhitespaceSuffix(
+            pattern,
+            allowPCREQuotedLiterals: allowPCREQuotedLiterals
+           ),
+           let exitCode = SwiftDarwinLiteralPreflight.capitalizedWordWhitespaceSuffixCountExitCode(
+            path: path,
+            suffix: suffix,
+            includeZero: includeZero
+           ) {
+            return exitCode
         }
         let literalPattern = simpleSwiftDarwinLiteralPattern(
             pattern,
@@ -7273,6 +7291,26 @@ struct RipgrepCommand {
             asciiCaseInsensitive: false,
             wordRegexp: false
         )
+    }
+
+    private static func simpleSwiftDarwinCapitalizedWordWhitespaceSuffix(
+        _ pattern: String,
+        allowPCREQuotedLiterals: Bool
+    ) -> [UInt8]? {
+        let prefix = #"[A-Z][a-z]+\s+"#
+        guard pattern.hasPrefix(prefix),
+              let suffix = RegexLiteralParser.literal(
+                fromPlainRegexPattern: String(pattern.dropFirst(prefix.count)),
+                allowPCREQuotedLiterals: allowPCREQuotedLiterals
+              ) else {
+            return nil
+        }
+        let bytes = Array(suffix.utf8)
+        guard !bytes.isEmpty,
+              bytes.allSatisfy({ $0 < 0x80 && $0 != UInt8(ascii: "\n") }) else {
+            return nil
+        }
+        return bytes
     }
 
     private static func runSimpleSwiftDarwinLiteralSummaryPreflight(

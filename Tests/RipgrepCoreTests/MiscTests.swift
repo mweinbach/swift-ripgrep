@@ -12367,6 +12367,7 @@ struct MiscTests {
             environment: [
                 "SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT": "1",
                 "SWIFT_RIPGREP_NO_LINUX_X86_PREFLIGHT": "1",
+                "SWIFT_RIPGREP_NO_DARWIN_CAPITALIZED_COUNT_PREFLIGHT": "1",
             ]
         ) {}
         #expect(fast.exitCode == 0)
@@ -12414,6 +12415,7 @@ struct MiscTests {
             environment: [
                 "SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT": "1",
                 "SWIFT_RIPGREP_NO_LINUX_X86_PREFLIGHT": "1",
+                "SWIFT_RIPGREP_NO_DARWIN_CAPITALIZED_COUNT_PREFLIGHT": "1",
             ]
         ) {}
         #expect(unicodeFallback.exitCode == 0)

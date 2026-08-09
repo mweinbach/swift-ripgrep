@@ -12249,6 +12249,138 @@ public enum SwiftDarwinLiteralPreflight {
         }
     }
 
+    public static func capitalizedWordWhitespaceSuffixCountExitCode(
+        path: String,
+        suffix: [UInt8],
+        includeZero: Bool
+    ) -> Int32? {
+        guard !suffix.isEmpty,
+              suffix.allSatisfy({ $0 < 0x80 && $0 != UInt8(ascii: "\n") }) else {
+            return nil
+        }
+        let file = SortedDirectoryFile(
+            path: path,
+            pathBytes: Array(path.utf8),
+            components: []
+        )
+        guard let mappedFile = mapSortedDirectoryFile(file),
+              let matchedLines = scanCapitalizedWordWhitespaceSuffix(
+                mappedFile.bytes,
+                count: mappedFile.count,
+                suffix: suffix
+              ) else {
+            return nil
+        }
+        if matchedLines > 0 || includeZero {
+            guard writeCountOutput(
+                matchedLines,
+                countPrefix: [],
+                crlfTerminated: false
+            ) else {
+                return nil
+            }
+        }
+        return matchedLines > 0 ? 0 : 1
+    }
+
+    private static func scanCapitalizedWordWhitespaceSuffix(
+        _ optionalBytes: UnsafePointer<UInt8>?,
+        count: Int,
+        suffix: [UInt8]
+    ) -> Int? {
+        guard count > 0 else { return 0 }
+        guard let bytes = optionalBytes else { return nil }
+
+        return withUnsafeTemporaryAllocation(of: UInt8.self, capacity: 2) { markers in
+            guard let markerBase = markers.baseAddress else { return nil }
+            markerBase[1] = 0
+            return suffix.withUnsafeBufferPointer { suffixBuffer in
+                guard let suffixBase = suffixBuffer.baseAddress else { return nil }
+                var matchedLines = 0
+                var searchOffset = 0
+                while searchOffset < count {
+                    markerBase[0] = suffix[0]
+                    guard let event = rg_memchr_any_bytes(
+                        bytes.advanced(by: searchOffset),
+                        count - searchOffset,
+                        UnsafePointer(markerBase),
+                        2
+                    ) else {
+                        break
+                    }
+                    let suffixStart = bytes.distance(to: event)
+                    guard event.pointee != 0 else { return nil }
+                    guard suffix.count <= count,
+                          suffixStart <= count - suffix.count,
+                          memcmp(event, suffixBase, suffix.count) == 0 else {
+                        searchOffset = suffixStart + 1
+                        continue
+                    }
+
+                    var lineStart = suffixStart
+                    while lineStart > 0,
+                          bytes[lineStart - 1] != UInt8(ascii: "\n") {
+                        lineStart -= 1
+                    }
+                    guard let prefixMatches = capitalizedWordWhitespacePrefixMatches(
+                        bytes: bytes,
+                        lineStart: lineStart,
+                        suffixStart: suffixStart
+                    ) else {
+                        return nil
+                    }
+                    if !prefixMatches {
+                        searchOffset = suffixStart + 1
+                        continue
+                    }
+
+                    let suffixEnd = suffixStart + suffix.count
+                    markerBase[0] = UInt8(ascii: "\n")
+                    let terminator = rg_memchr_any_bytes(
+                        bytes.advanced(by: suffixEnd),
+                        count - suffixEnd,
+                        UnsafePointer(markerBase),
+                        2
+                    )
+                    if let terminator, terminator.pointee == 0 { return nil }
+                    matchedLines += 1
+                    searchOffset = terminator.map { bytes.distance(to: $0) + 1 } ?? count
+                }
+                return matchedLines
+            }
+        }
+    }
+
+    @inline(__always)
+    private static func capitalizedWordWhitespacePrefixMatches(
+        bytes: UnsafePointer<UInt8>,
+        lineStart: Int,
+        suffixStart: Int
+    ) -> Bool? {
+        var cursor = suffixStart
+        var foundWhitespace = false
+        while cursor > lineStart {
+            let byte = bytes[cursor - 1]
+            if byte >= 0x80 { return nil }
+            guard byte == UInt8(ascii: " ") || (byte >= 0x09 && byte <= 0x0D) else {
+                break
+            }
+            foundWhitespace = true
+            cursor -= 1
+        }
+        guard foundWhitespace else { return false }
+
+        let lowercaseEnd = cursor
+        while cursor > lineStart {
+            let byte = bytes[cursor - 1]
+            guard byte >= UInt8(ascii: "a"), byte <= UInt8(ascii: "z") else { break }
+            cursor -= 1
+        }
+        guard cursor < lowercaseEnd, cursor > lineStart else { return false }
+        let uppercase = bytes[cursor - 1]
+        return uppercase >= UInt8(ascii: "A") && uppercase <= UInt8(ascii: "Z")
+    }
+
     private static func sortedTrimTrailingSeparators(_ path: String) -> String {
         var result = path
         while result.count > 1, result.hasSuffix("/") { result.removeLast() }
