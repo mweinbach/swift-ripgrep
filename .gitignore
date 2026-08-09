@@ -12,3 +12,4 @@ DerivedData/
 # Local benchmark results live outside the repo (default /tmp/swift-rg-bench/results).
 # This entry guards against accidental in-repo results.
 bench/results/
+/benchmark-results-local/
