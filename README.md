@@ -34,8 +34,9 @@ This requires a Swift toolchain containing `WindowsExperimental.sdk` and
 produces
 `.build\windows-static\x86_64-unknown-windows-msvc\release\ripgrep.exe`.
 The static executable starts and runs short searches about 10–15% faster on
-the benchmark machine, but is approximately 68 MB instead of 7.2 MB, so the
-normal dynamic build remains the default.
+the benchmark machine, but is approximately 69 MB instead of 8 MB, so the
+normal `swift build` command remains dynamic. CI builds, executable-tests, and
+benchmarks the self-contained static Windows artifact.
 
 Windows x86-64 builds also use an executable-level fast path for a plain
 literal searched in one explicit regular file. It maps the file with Win32,
@@ -44,6 +45,9 @@ plain output, `-n`, `-c`, `--count-matches`, `-q`, `-l`, and
 `--files-without-match`. Unsupported argument, encoding, binary, console, or
 file shapes fall back to the full search engine. Set
 `SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT=1` to disable it for A/B measurements.
+Plain redirected `--no-mmap` output uses a bounded one-pass Win32 reader that
+keeps incomplete lines across chunks and buffers matches until binary and BOM
+validation succeeds.
 
 Linux x86-64 builds use a similarly conservative executable preflight for a
 plain literal searched in one explicit regular file and for count-only plain,
@@ -54,8 +58,12 @@ console, non-regular, or unsupported argument shapes fall back to the full
 engine. Set `SWIFT_RIPGREP_NO_LINUX_X86_PREFLIGHT=1` to disable it for A/B
 measurements.
 
-Recursive Windows searches use a low-allocation Win32 walker that carries
-`WIN32_FIND_DATAW` file sizes directly into the parallel search pipeline,
+Sorted plain-literal Windows directory searches have a conservative executable
+preflight for `--files`, matching lines, `-c`, and `-l`. It batches Win32
+directory enumeration and file reads, sorts once by path components, and falls
+back before output when ignore metadata or an unsupported filesystem/file shape
+is present. Other recursive Windows searches use a low-allocation Win32 walker
+that carries `WIN32_FIND_DATAW` file sizes directly into the parallel search pipeline,
 avoiding per-entry Foundation metadata and path-normalization calls. Plain and
 ASCII case-insensitive literals then use the same match-driven Swift SIMD
 scanners as the optimized Darwin path. `--files` uses the walker with batched

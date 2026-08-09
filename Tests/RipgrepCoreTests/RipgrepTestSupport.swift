@@ -125,6 +125,11 @@ func ripgrepPackageRootURL() -> URL {
 }
 
 func ripgrepExecutableURL() -> URL {
+    if let configuredPath = ProcessInfo.processInfo.environment["SWIFT_RIPGREP_SWIFT_BINARY"],
+       !configuredPath.isEmpty,
+       FileManager.default.fileExists(atPath: configuredPath) {
+        return URL(fileURLWithPath: configuredPath)
+    }
     let root = ripgrepPackageRootURL()
     #if os(Windows)
     let candidates = [

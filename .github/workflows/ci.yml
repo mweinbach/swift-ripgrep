@@ -51,17 +51,31 @@ jobs:
         run: python bench/install_rust_rg.py --version 15.2.0 --destination .ci-tools
 
       - name: Build release executable
+        if: runner.os != 'Windows'
         run: swift build -c release
+
+      - name: Build self-contained release executable
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: >-
+          ./scripts/build-windows-static.ps1
+          -Configuration release
+          -ScratchPath .build/ci-windows-static
 
       - name: Locate release executable
         id: binary
         shell: pwsh
         run: |
-          $binPath = swift build -c release --show-bin-path
-          $binary = Join-Path $binPath '${{ matrix.executable }}'
+          if ('${{ runner.os }}' -eq 'Windows') {
+            $binary = Join-Path $PWD '.build/ci-windows-static/x86_64-unknown-windows-msvc/release/${{ matrix.executable }}'
+          } else {
+            $binPath = swift build -c release --show-bin-path
+            $binary = Join-Path $binPath '${{ matrix.executable }}'
+          }
           if (-not (Test-Path -LiteralPath $binary)) {
             throw "Release executable not found at $binary"
           }
+          $binary = Resolve-Path -LiteralPath $binary
           $rustBinary = Resolve-Path -LiteralPath (Join-Path '.ci-tools' '${{ runner.os == 'Windows' && 'rg.exe' || 'rg' }}')
           "SWIFT_RG=$binary" >> $env:GITHUB_ENV
           "RUST_RG=$rustBinary" >> $env:GITHUB_ENV
@@ -72,7 +86,7 @@ jobs:
         shell: pwsh
         run: >-
           swift test --filter
-          'EncodingLabelTests|WorkerPoolTests|HaystackReaderTests|GeneratedAssetDriftTests|multiLiteralCountCountsEachMatchingLineOnce|wordCountFastPathHonorsASCIIAndUnicodeBoundaries|requiredLiteralRegexCountCountsMatchingLinesOnce|executableLiteralFastPathPreservesGlobalScanModes|executableCapitalizedWordWhitespaceSuffixFastPathPreservesCounts'
+          'EncodingLabelTests|WorkerPoolTests|HaystackReaderTests|GeneratedAssetDriftTests|multiLiteralCountCountsEachMatchingLineOnce|wordCountFastPathHonorsASCIIAndUnicodeBoundaries|requiredLiteralRegexCountCountsMatchingLinesOnce|executableLiteralFastPathPreservesGlobalScanModes|executableSortedDirectoryPreflightPreservesRecursiveOutput|executableCapitalizedWordWhitespaceSuffixFastPathPreservesCounts'
 
       - name: Run full Rust parity matrix
         if: runner.os != 'Windows'
