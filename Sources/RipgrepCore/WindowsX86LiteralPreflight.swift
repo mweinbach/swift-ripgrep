@@ -240,7 +240,7 @@ public enum WindowsX86LiteralPreflight {
             || (bytes[0] == 0xFE && bytes[1] == 0xFF)) {
             return false
         }
-        return findByte(bytes, count: count, byte: 0) == nil
+        return memchr(bytes, 0, count) == nil
     }
 
     private static func scan(
