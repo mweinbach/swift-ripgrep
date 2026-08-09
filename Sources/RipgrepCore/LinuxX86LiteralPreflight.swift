@@ -8,6 +8,8 @@ import Musl
 /// A conservative executable-level fast path for count-only searches of one
 /// explicit regular file. Unsupported shapes fall back to the full engine.
 public enum LinuxX86LiteralPreflight {
+    private static let maximumBufferedBytes = 512 * 1024 * 1024
+
     private enum Mode {
         case matchingLines
         case countLines
@@ -42,6 +44,34 @@ public enum LinuxX86LiteralPreflight {
         let size = Int(metadata.st_size)
         guard size > 0 else { return 1 }
 
+        if parsed.buffered {
+            guard size <= maximumBufferedBytes else { return nil }
+            let storage = UnsafeMutableRawPointer.allocate(
+                byteCount: size,
+                alignment: MemoryLayout<UInt8>.alignment
+            )
+            defer { storage.deallocate() }
+            var bytesRead = 0
+            while bytesRead < size {
+                let result = read(
+                    descriptor,
+                    storage.advanced(by: bytesRead),
+                    size - bytesRead
+                )
+                guard result >= 0 else { return nil }
+                guard result > 0 else { break }
+                bytesRead += result
+            }
+            guard bytesRead > 0 else { return 1 }
+            let bytes = UnsafePointer(storage.assumingMemoryBound(to: UInt8.self))
+            return runScan(
+                bytes: bytes,
+                count: bytesRead,
+                mode: parsed.mode,
+                pattern: pattern
+            )
+        }
+
         guard let mapping = mmap(nil, size, PROT_READ, MAP_PRIVATE, descriptor, 0),
               mapping != MAP_FAILED else {
             return nil
@@ -49,15 +79,24 @@ public enum LinuxX86LiteralPreflight {
         defer { _ = munmap(mapping, size) }
 
         let bytes = UnsafeRawPointer(mapping).assumingMemoryBound(to: UInt8.self)
-        guard canUseBytes(bytes, count: size) else { return nil }
-        switch parsed.mode {
+        return runScan(bytes: bytes, count: size, mode: parsed.mode, pattern: pattern)
+    }
+
+    private static func runScan(
+        bytes: UnsafePointer<UInt8>,
+        count: Int,
+        mode: Mode,
+        pattern: PreflightPattern
+    ) -> Int32? {
+        guard canUseBytes(bytes, count: count) else { return nil }
+        switch mode {
         case .matchingLines:
             guard case .literal(let literal) = pattern else { return nil }
-            return scanLiteralLines(bytes: bytes, count: size, literal: literal)
+            return scanLiteralLines(bytes: bytes, count: count, literal: literal)
         case .countLines:
             guard let matchedLines = scanCount(
                 bytes: bytes,
-                count: size,
+                count: count,
                 pattern: pattern
             ) else {
                 return nil
@@ -73,11 +112,15 @@ public enum LinuxX86LiteralPreflight {
 
     private static func parse(
         _ arguments: [String]
-    ) -> (mode: Mode, pattern: String, path: String)? {
+    ) -> (mode: Mode, pattern: String, path: String, buffered: Bool)? {
         var argumentIndex = 0
+        var buffered = false
         leadingFlags: while argumentIndex < arguments.count {
             switch arguments[argumentIndex] {
             case "--no-config", "--color=never":
+                argumentIndex += 1
+            case "--no-mmap":
+                buffered = true
                 argumentIndex += 1
             case "--color":
                 guard argumentIndex + 1 < arguments.count,
@@ -111,7 +154,7 @@ public enum LinuxX86LiteralPreflight {
         guard !pattern.hasPrefix("-"), path != "-", !path.isEmpty else {
             return nil
         }
-        return (mode, pattern, path)
+        return (mode, pattern, path, buffered)
     }
 
     private static func plainLiteralBytes(_ pattern: String) -> [UInt8]? {
