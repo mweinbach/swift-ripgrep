@@ -170,6 +170,12 @@ def main() -> None:
     parser.add_argument("--corpus-mib", type=int, default=128)
     parser.add_argument("--tree-mib", type=int, default=32)
     parser.add_argument("--fail-above", type=float)
+    parser.add_argument(
+        "--case",
+        action="append",
+        dest="selected_cases",
+        help="run only this benchmark case (repeatable)",
+    )
     args = parser.parse_args()
 
     rg = args.rg.resolve()
@@ -181,6 +187,13 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="swift-rg-ci-bench-") as temp_name:
         single, tree = generate_corpus(Path(temp_name), args.corpus_mib, args.tree_mib)
         benchmark_cases = cases(single, tree)
+        if args.selected_cases:
+            known_cases = {str(case["name"]) for case in benchmark_cases}
+            unknown_cases = sorted(set(args.selected_cases) - known_cases)
+            if unknown_cases:
+                raise SystemExit(f"unknown benchmark case(s): {', '.join(unknown_cases)}")
+            selected = set(args.selected_cases)
+            benchmark_cases = [case for case in benchmark_cases if str(case["name"]) in selected]
         print("Checking byte-for-byte benchmark parity...", flush=True)
         ensure_parity(rg, swift_rg, benchmark_cases)
         results = []

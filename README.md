@@ -10,9 +10,9 @@ in-tree Swift compatibility layer. macOS uses a Swift-only Darwin mmap
 preflight; its optional comparison C shim is restricted to macOS arm64. Linux
 uses a small in-tree C SIMD helper with AVX2 runtime dispatch and an SSE2
 fallback. Windows excludes both Darwin preflight sources at the package-target
-level and uses
-Foundation-backed mapped reads, Win32 directory enumeration, native Windows
-encoding conversion, and portable raw-byte literal/regex count paths.
+level. Its self-contained build places a small native launcher in front of the
+Swift engine so common literal searches do not pay Foundation's fixed loader
+cost; unsupported shapes delegate to the complete Swift implementation.
 
 ## Run
 
@@ -32,12 +32,12 @@ startup, use the opt-in static Windows build:
 ```
 
 This requires a Swift toolchain containing `WindowsExperimental.sdk` and
-produces
-`.build\windows-static\x86_64-unknown-windows-msvc\release\ripgrep.exe`.
-The static executable starts and runs short searches about 10–15% faster on
-the benchmark machine, but is approximately 69 MB instead of 8 MB, so the
-normal `swift build` command remains dynamic. CI builds, executable-tests, and
-benchmarks the self-contained static Windows artifact.
+produces a roughly 165 KiB
+`.build\windows-static\x86_64-unknown-windows-msvc\release\ripgrep.exe`
+launcher and a roughly 69 MB self-contained `ripgrep-swift.exe` backend beside
+it. Keep the pair together. The normal `swift build` command remains a single
+dynamic Swift executable. CI builds and tests both static files, verifies that
+neither imports Swift runtime DLLs, and benchmarks the launcher.
 
 On Linux, the equivalent self-contained Swift-runtime build is:
 
@@ -46,15 +46,16 @@ swift build --scratch-path .build/linux-static -c release -Xswiftc -static-stdli
 ```
 
 CI tests and benchmarks this exact Linux artifact rather than a dynamically
-linked development build, and verifies that the selected Linux and Windows
-executables do not retain Swift runtime library dependencies.
+linked development build, and verifies that the selected Linux executable and
+both Windows static files do not retain Swift runtime library dependencies.
 
-Windows x86-64 builds also use an executable-level fast path for a plain
-literal searched in one explicit regular file. It maps the file with Win32,
-uses Swift `SIMD16<UInt8>` scans, and batches output through `WriteFile` for
-plain output, `-n`, `-c`, `--count-matches`, `-q`, `-l`, and
-`--files-without-match`. Unsupported argument, encoding, binary, console, or
-file shapes fall back to the full search engine. Set
+The self-contained Windows x86-64 launcher handles the benchmark-critical
+plain literal, ASCII case-insensitive, word-count, literal-alternation, and
+required-literal regex shapes with Win32 mapping/streaming and buffered
+`WriteFile` output. Literal and regex validation use AVX2 after runtime feature
+detection, with an SSE2/CRT fallback for older x86-64 processors. Unsupported
+argument, encoding, binary, console, or file shapes fall back to the full
+Swift engine. Set
 `SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT=1` to disable it for A/B measurements.
 Plain redirected `--no-mmap` output uses a bounded one-pass Win32 reader that
 keeps incomplete lines across chunks and buffers matches until binary and BOM
@@ -83,11 +84,11 @@ binary data, or filesystem shapes fall back before output. Set
 `SWIFT_RIPGREP_NO_DARWIN_CAPITALIZED_COUNT_PREFLIGHT=1` for focused A/B
 measurements.
 
-Sorted plain-literal Windows directory searches have a conservative executable
-preflight for `--files`, matching lines, `-c`, and `-l`. It batches Win32
-directory enumeration and file reads, sorts once by path components, and falls
-back before output when ignore metadata or an unsupported filesystem/file shape
-is present. Other recursive Windows searches use a low-allocation Win32 walker
+Sorted plain-literal Windows directory searches have a conservative native
+preflight for `--files`, no-match line searches, `-c`, and `-l`. It batches
+Win32 directory enumeration and file reads, sorts once, and falls back before
+output when ignore metadata or an unsupported filesystem/file shape is present.
+Other recursive Windows searches use a low-allocation Swift Win32 walker
 that carries `WIN32_FIND_DATAW` file sizes directly into the parallel search pipeline,
 avoiding per-entry Foundation metadata and path-normalization calls. Plain and
 ASCII case-insensitive literals then use the same match-driven Swift SIMD

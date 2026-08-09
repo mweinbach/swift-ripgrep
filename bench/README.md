@@ -18,8 +18,9 @@ python bench/ci_benchmark.py \
     --out /tmp/swift-rg-ci-results
 ```
 
-The workflow substitutes a self-contained release artifact on Linux and
-Windows. To reproduce the Linux build selection locally:
+The workflow substitutes a self-contained release artifact on Linux and the
+native-launcher/static-backend pair on Windows. To reproduce the Linux build
+selection locally:
 
 ```sh
 swift build --scratch-path .build/linux-static -c release -Xswiftc -static-stdlib
@@ -31,6 +32,8 @@ python bench/ci_benchmark.py \
 ```
 
 Use `--fail-above RATIO` when a stable, dedicated benchmark host is available.
+For focused local iteration, repeat `--case NAME`; omitting it retains all
+twelve cases used by CI.
 The public hosted-runner workflow deliberately records and uploads exact
 ratios without making noisy shared-host timing a correctness gate. Tests,
 builds, generated-asset drift, and the Rust parity checks remain blocking. The

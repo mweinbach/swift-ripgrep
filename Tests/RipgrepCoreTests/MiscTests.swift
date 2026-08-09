@@ -12255,6 +12255,8 @@ struct MiscTests {
         try root.write("miss\nSherlock Holmes second\n", to: "tree/group-b/b.txt")
         try root.write("Sherlock Holmes first\nSherlock Holmes again", to: "tree/group-a/a.txt")
         try root.write("miss\n", to: "tree/group-a/z.txt")
+        try root.write("miss\n", to: "tree/a/child.txt")
+        try root.write("miss\n", to: "tree/a.txt")
         try root.write("Sherlock Holmes hidden\n", to: "tree/.hidden.txt")
         let treePath = root.path("tree")
         let prefix = ["--no-config", "--color", "never", "--sort", "path"]
