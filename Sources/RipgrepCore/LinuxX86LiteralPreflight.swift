@@ -46,7 +46,6 @@ public enum LinuxX86LiteralPreflight {
     private struct SortedDirectoryFile {
         let path: String
         let pathBytes: [UInt8]
-        let components: [String]
     }
 
     private struct ReusableFileBuffer {
@@ -375,12 +374,11 @@ public enum LinuxX86LiteralPreflight {
         guard collectSortedDirectoryFiles(
             physicalDirectory: rootPath,
             outputDirectory: rootPath,
-            components: [],
             files: &files
         ) else {
             return nil
         }
-        files.sort { pathComponentsPrecede($0.components, $1.components) }
+        files.sort { pathBytesPrecedeByComponents($0.pathBytes, $1.pathBytes) }
 
         var output = POSIXOutputBuffer(capacity: 64 * 1024)
         defer { output.deallocate() }
@@ -478,7 +476,6 @@ public enum LinuxX86LiteralPreflight {
     private static func collectSortedDirectoryFiles(
         physicalDirectory: String,
         outputDirectory: String,
-        components: [String],
         files: inout [SortedDirectoryFile]
     ) -> Bool {
         guard let directory = physicalDirectory.withCString({ opendir($0) }) else {
@@ -509,12 +506,10 @@ public enum LinuxX86LiteralPreflight {
             if directoryEntryType == UInt8(DT_LNK) {
                 continue
             }
-            let childComponents = components + [name]
             if directoryEntryType == UInt8(DT_DIR) {
                 guard collectSortedDirectoryFiles(
                     physicalDirectory: physicalPath,
                     outputDirectory: outputPath,
-                    components: childComponents,
                     files: &files
                 ) else {
                     return false
@@ -522,8 +517,7 @@ public enum LinuxX86LiteralPreflight {
             } else if directoryEntryType == UInt8(DT_REG) {
                 files.append(SortedDirectoryFile(
                     path: outputPath,
-                    pathBytes: Array(outputPath.utf8),
-                    components: childComponents
+                    pathBytes: Array(outputPath.utf8)
                 ))
             } else if directoryEntryType == UInt8(DT_UNKNOWN) {
                 var metadata = stat()
@@ -538,7 +532,6 @@ public enum LinuxX86LiteralPreflight {
                     guard collectSortedDirectoryFiles(
                         physicalDirectory: physicalPath,
                         outputDirectory: outputPath,
-                        components: childComponents,
                         files: &files
                     ) else {
                         return false
@@ -546,8 +539,7 @@ public enum LinuxX86LiteralPreflight {
                 } else if fileType == mode_t(S_IFREG) {
                     files.append(SortedDirectoryFile(
                         path: outputPath,
-                        pathBytes: Array(outputPath.utf8),
-                        components: childComponents
+                        pathBytes: Array(outputPath.utf8)
                     ))
                 } else {
                     return false
@@ -558,11 +550,32 @@ public enum LinuxX86LiteralPreflight {
         }
     }
 
-    private static func pathComponentsPrecede(_ lhs: [String], _ rhs: [String]) -> Bool {
-        for (left, right) in zip(lhs, rhs) {
-            if left != right { return left < right }
+    private static func pathBytesPrecedeByComponents(
+        _ lhs: [UInt8],
+        _ rhs: [UInt8]
+    ) -> Bool {
+        var leftStart = 0
+        var rightStart = 0
+        while true {
+            var leftEnd = leftStart
+            while leftEnd < lhs.count, lhs[leftEnd] != UInt8(ascii: "/") { leftEnd += 1 }
+            var rightEnd = rightStart
+            while rightEnd < rhs.count, rhs[rightEnd] != UInt8(ascii: "/") { rightEnd += 1 }
+
+            let leftCount = leftEnd - leftStart
+            let rightCount = rightEnd - rightStart
+            let commonCount = min(leftCount, rightCount)
+            for offset in 0..<commonCount where lhs[leftStart + offset] != rhs[rightStart + offset] {
+                return lhs[leftStart + offset] < rhs[rightStart + offset]
+            }
+            if leftCount != rightCount { return leftCount < rightCount }
+
+            let leftFinished = leftEnd == lhs.count
+            let rightFinished = rightEnd == rhs.count
+            if leftFinished || rightFinished { return leftFinished && !rightFinished }
+            leftStart = leftEnd + 1
+            rightStart = rightEnd + 1
         }
-        return lhs.count < rhs.count
     }
 
     private static func readLiteralMatchedLineCount(

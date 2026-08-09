@@ -11886,7 +11886,6 @@ public enum SwiftDarwinLiteralPreflight {
     private struct SortedDirectoryFile {
         let path: String
         let pathBytes: [UInt8]
-        let components: [String]
     }
 
     private final class SortedMappedFile {
@@ -12028,12 +12027,11 @@ public enum SwiftDarwinLiteralPreflight {
         guard collectSortedDirectoryFiles(
             physicalDirectory: rootPath,
             outputDirectory: rootPath,
-            components: [],
             files: &files
         ) else {
             return nil
         }
-        files.sort { sortedPathComponentsPrecede($0.components, $1.components) }
+        files.sort { sortedPathBytesPrecedeByComponents($0.pathBytes, $1.pathBytes) }
 
         guard var output = rgSwiftStdoutBuffer(capacity: 64 * 1024) else { return nil }
         defer { output.deallocate() }
@@ -12260,8 +12258,7 @@ public enum SwiftDarwinLiteralPreflight {
         }
         let file = SortedDirectoryFile(
             path: path,
-            pathBytes: Array(path.utf8),
-            components: []
+            pathBytes: Array(path.utf8)
         )
         guard let mappedFile = mapSortedDirectoryFile(file),
               let matchedLines = scanCapitalizedWordWhitespaceSuffix(
@@ -12412,7 +12409,6 @@ public enum SwiftDarwinLiteralPreflight {
     private static func collectSortedDirectoryFiles(
         physicalDirectory: String,
         outputDirectory: String,
-        components: [String],
         files: inout [SortedDirectoryFile]
     ) -> Bool {
         guard let directory = physicalDirectory.withCString({ Darwin.opendir($0) }) else {
@@ -12443,12 +12439,10 @@ public enum SwiftDarwinLiteralPreflight {
             let outputPath = outputDirectory + "/" + name
             let entryType = entry.pointee.d_type
             if entryType == UInt8(DT_LNK) { continue }
-            let childComponents = components + [name]
             if entryType == UInt8(DT_DIR) {
                 guard collectSortedDirectoryFiles(
                     physicalDirectory: physicalPath,
                     outputDirectory: outputPath,
-                    components: childComponents,
                     files: &files
                 ) else {
                     return false
@@ -12456,8 +12450,7 @@ public enum SwiftDarwinLiteralPreflight {
             } else if entryType == UInt8(DT_REG) {
                 files.append(SortedDirectoryFile(
                     path: outputPath,
-                    pathBytes: Array(outputPath.utf8),
-                    components: childComponents
+                    pathBytes: Array(outputPath.utf8)
                 ))
             } else if entryType == UInt8(DT_UNKNOWN) {
                 var metadata = stat()
@@ -12470,7 +12463,6 @@ public enum SwiftDarwinLiteralPreflight {
                     guard collectSortedDirectoryFiles(
                         physicalDirectory: physicalPath,
                         outputDirectory: outputPath,
-                        components: childComponents,
                         files: &files
                     ) else {
                         return false
@@ -12478,8 +12470,7 @@ public enum SwiftDarwinLiteralPreflight {
                 } else if fileType == mode_t(S_IFREG) {
                     files.append(SortedDirectoryFile(
                         path: outputPath,
-                        pathBytes: Array(outputPath.utf8),
-                        components: childComponents
+                        pathBytes: Array(outputPath.utf8)
                     ))
                 } else {
                     return false
@@ -12490,12 +12481,32 @@ public enum SwiftDarwinLiteralPreflight {
         }
     }
 
-    private static func sortedPathComponentsPrecede(
-        _ lhs: [String],
-        _ rhs: [String]
+    private static func sortedPathBytesPrecedeByComponents(
+        _ lhs: [UInt8],
+        _ rhs: [UInt8]
     ) -> Bool {
-        for (left, right) in zip(lhs, rhs) where left != right { return left < right }
-        return lhs.count < rhs.count
+        var leftStart = 0
+        var rightStart = 0
+        while true {
+            var leftEnd = leftStart
+            while leftEnd < lhs.count, lhs[leftEnd] != UInt8(ascii: "/") { leftEnd += 1 }
+            var rightEnd = rightStart
+            while rightEnd < rhs.count, rhs[rightEnd] != UInt8(ascii: "/") { rightEnd += 1 }
+
+            let leftCount = leftEnd - leftStart
+            let rightCount = rightEnd - rightStart
+            let commonCount = min(leftCount, rightCount)
+            for offset in 0..<commonCount where lhs[leftStart + offset] != rhs[rightStart + offset] {
+                return lhs[leftStart + offset] < rhs[rightStart + offset]
+            }
+            if leftCount != rightCount { return leftCount < rightCount }
+
+            let leftFinished = leftEnd == lhs.count
+            let rightFinished = rightEnd == rhs.count
+            if leftFinished || rightFinished { return leftFinished && !rightFinished }
+            leftStart = leftEnd + 1
+            rightStart = rightEnd + 1
+        }
     }
 }
 
