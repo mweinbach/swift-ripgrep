@@ -12205,9 +12205,14 @@ struct MiscTests {
         #expect(withoutMatch.output == Data("\(path)\n".utf8))
     }
 
-    @Test("Windows sorted directory preflight preserves recursive output")
+    @Test("sorted directory preflight preserves recursive output")
     func executableSortedDirectoryPreflightPreservesRecursiveOutput() throws {
-        #if os(Windows) && arch(x86_64)
+        #if (os(Windows) || os(Linux)) && arch(x86_64)
+        #if os(Windows)
+        let preflightDisableVariable = "SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT"
+        #else
+        let preflightDisableVariable = "SWIFT_RIPGREP_NO_LINUX_X86_PREFLIGHT"
+        #endif
         let root = try TemporaryDirectory()
         try root.createDirectory("tree/group-b")
         try root.createDirectory("tree/group-a")
@@ -12228,7 +12233,7 @@ struct MiscTests {
             let fast = try runExecutableResult(arguments) {}
             let generic = try runExecutableResult(
                 arguments,
-                environment: ["SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT": "1"]
+                environment: [preflightDisableVariable: "1"]
             ) {}
             #expect(fast.exitCode == generic.exitCode)
             #expect(fast.output == generic.output)
@@ -12247,7 +12252,7 @@ struct MiscTests {
         let boundaryFast = try runExecutableResult(boundaryArguments) {}
         let boundaryGeneric = try runExecutableResult(
             boundaryArguments,
-            environment: ["SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT": "1"]
+            environment: [preflightDisableVariable: "1"]
         ) {}
         #expect(boundaryFast.exitCode == boundaryGeneric.exitCode)
         #expect(boundaryFast.output == boundaryGeneric.output)
@@ -12265,7 +12270,7 @@ struct MiscTests {
         let streamBinaryFast = try runExecutableResult(streamBinaryArguments) {}
         let streamBinaryGeneric = try runExecutableResult(
             streamBinaryArguments,
-            environment: ["SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT": "1"]
+            environment: [preflightDisableVariable: "1"]
         ) {}
         #expect(streamBinaryFast.exitCode == streamBinaryGeneric.exitCode)
         #expect(streamBinaryFast.output == streamBinaryGeneric.output)
@@ -12276,7 +12281,7 @@ struct MiscTests {
         let binaryFallback = try runExecutableResult(binaryArguments) {}
         let binaryGeneric = try runExecutableResult(
             binaryArguments,
-            environment: ["SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT": "1"]
+            environment: [preflightDisableVariable: "1"]
         ) {}
         #expect(binaryFallback.exitCode == binaryGeneric.exitCode)
         #expect(binaryFallback.output == binaryGeneric.output)
@@ -12287,7 +12292,7 @@ struct MiscTests {
         let ignoreFallback = try runExecutableResult(ignoreArguments) {}
         let ignoreGeneric = try runExecutableResult(
             ignoreArguments,
-            environment: ["SWIFT_RIPGREP_NO_WINDOWS_X86_PREFLIGHT": "1"]
+            environment: [preflightDisableVariable: "1"]
         ) {}
         #expect(ignoreFallback.exitCode == ignoreGeneric.exitCode)
         #expect(ignoreFallback.output == ignoreGeneric.output)
