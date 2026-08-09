@@ -6,6 +6,7 @@
 # Usage:
 #     scripts/check-no-external-deps.sh
 #     scripts/check-no-external-deps.sh --skip-build
+#     scripts/check-no-external-deps.sh --skip-build --binary /path/to/ripgrep
 #
 # The command is intentionally conservative about hard dependency signals while
 # allowing user-facing PCRE2 compatibility flag names and generated ripgrep
@@ -17,6 +18,7 @@ repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$repo_root"
 
 skip_build=0
+binary=""
 
 usage() {
     sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
@@ -41,6 +43,13 @@ while [ "$#" -gt 0 ]; do
     case "$1" in
         --skip-build)
             skip_build=1
+            ;;
+        --binary)
+            shift
+            if [ "$#" -eq 0 ]; then
+                fail "--binary requires a path"
+            fi
+            binary="$1"
             ;;
         -h|--help)
             usage
@@ -102,7 +111,9 @@ if [ -n "$vendored_libraries" ]; then
     fail "repository contains vendored binary libraries"
 fi
 
-binary="$repo_root/.build/release/ripgrep"
+if [ -z "$binary" ]; then
+    binary="$repo_root/.build/release/ripgrep"
+fi
 if [ "$skip_build" -eq 0 ]; then
     echo "[deps] building release binary..."
     swift build -c release >/dev/null

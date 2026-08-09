@@ -109,7 +109,7 @@ jobs:
       - name: Check package has no external dependencies
         if: runner.os != 'Windows'
         shell: bash
-        run: ./scripts/check-no-external-deps.sh --skip-build
+        run: ./scripts/check-no-external-deps.sh --skip-build --binary "$SWIFT_RG"
 
       - name: Benchmark against Rust ripgrep 15.2.0
         run: >-
