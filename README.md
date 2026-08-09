@@ -72,6 +72,17 @@ symlinked, non-regular, or unsupported argument shapes fall back to the full
 engine. Set `SWIFT_RIPGREP_NO_LINUX_X86_PREFLIGHT=1` to disable it for A/B
 measurements.
 
+macOS arm64 sorted plain-literal directory searches use a conservative Darwin
+preflight for `--files`, matching lines, `-c`, and `-l`. It enumerates and
+sorts the complete tree before output, keeps read-only POSIX mappings only for
+matched files, and fuses literal, newline, and binary detection into one scan.
+The same preflight layer handles count-only `[A-Z][a-z]+\s+LITERAL` searches
+with a required-literal scan. Unsupported paths, ignore metadata, encodings,
+binary data, or filesystem shapes fall back before output. Set
+`SWIFT_RIPGREP_NO_DARWIN_SORTED_PREFLIGHT=1` or
+`SWIFT_RIPGREP_NO_DARWIN_CAPITALIZED_COUNT_PREFLIGHT=1` for focused A/B
+measurements.
+
 Sorted plain-literal Windows directory searches have a conservative executable
 preflight for `--files`, matching lines, `-c`, and `-l`. It batches Win32
 directory enumeration and file reads, sorts once by path components, and falls
