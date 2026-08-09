@@ -4,11 +4,13 @@ import Glibc
 #elseif canImport(Musl)
 import Musl
 #endif
+import CLinuxPreflight
 
-/// A conservative executable-level fast path for count-only searches of one
-/// explicit regular file. Unsupported shapes fall back to the full engine.
+/// Conservative executable-level fast paths for explicit regular files and
+/// sorted directory trees. Unsupported shapes fall back to the full engine.
 public enum LinuxX86LiteralPreflight {
     private static let maximumBufferedBytes = 512 * 1024 * 1024
+    private static let maximumBufferedLineSpans = 256 * 1024
 
     private enum Mode {
         case matchingLines
@@ -19,6 +21,11 @@ public enum LinuxX86LiteralPreflight {
         case literal([UInt8])
         case literalAlternation([[UInt8]])
         case capitalizedWordWhitespaceSuffix([UInt8])
+    }
+
+    private enum LiteralSearchEvent {
+        case literal(Int)
+        case binary
     }
 
     private enum SortedDirectoryMode {
@@ -491,19 +498,20 @@ public enum LinuxX86LiteralPreflight {
         mode: Mode,
         pattern: PreflightPattern
     ) -> Int32? {
-        guard canUseBytes(bytes, count: count) else { return nil }
+        guard hasSupportedByteOrderMark(bytes, count: count) else { return nil }
         switch mode {
         case .matchingLines:
             guard case .literal(let literal) = pattern else { return nil }
             return scanLiteralLines(bytes: bytes, count: count, literal: literal)
         case .countLines:
-            guard let matchedLines = scanCount(
-                bytes: bytes,
-                count: count,
-                pattern: pattern
-            ) else {
-                return nil
+            let matchedLines: Int?
+            if case .literal(let literal) = pattern {
+                matchedLines = scanLiteral(bytes: bytes, count: count, literal: literal)
+            } else {
+                guard canUseBytes(bytes, count: count) else { return nil }
+                matchedLines = scanCount(bytes: bytes, count: count, pattern: pattern)
             }
+            guard let matchedLines else { return nil }
             guard matchedLines > 0 else { return 1 }
             return writeDecimalLine(matchedLines) ? 0 : nil
         }
@@ -598,7 +606,10 @@ public enum LinuxX86LiteralPreflight {
         return .capitalizedWordWhitespaceSuffix(literal)
     }
 
-    private static func canUseBytes(_ bytes: UnsafePointer<UInt8>, count: Int) -> Bool {
+    private static func hasSupportedByteOrderMark(
+        _ bytes: UnsafePointer<UInt8>,
+        count: Int
+    ) -> Bool {
         if count >= 3,
            bytes[0] == 0xEF, bytes[1] == 0xBB, bytes[2] == 0xBF {
             return false
@@ -608,7 +619,11 @@ public enum LinuxX86LiteralPreflight {
             || (bytes[0] == 0xFE && bytes[1] == 0xFF)) {
             return false
         }
-        return memchr(bytes, 0, count) == nil
+        return true
+    }
+
+    private static func canUseBytes(_ bytes: UnsafePointer<UInt8>, count: Int) -> Bool {
+        hasSupportedByteOrderMark(bytes, count: count) && memchr(bytes, 0, count) == nil
     }
 
     private static func scanCount(
@@ -635,14 +650,17 @@ public enum LinuxX86LiteralPreflight {
         count: Int,
         literal: [UInt8]
     ) -> Int32? {
-        var foundMatch = false
+        var lines: [(start: Int, end: Int, needsNewline: Bool)] = []
         var searchOffset = 0
-        while searchOffset <= count - literal.count,
-              let matchStart = findLiteral(
+        while searchOffset < count {
+            guard let event = findLiteralOrBinary(
                 bytes: bytes,
                 range: searchOffset..<count,
                 literal: literal
-              ) {
+            ) else {
+                break
+            }
+            guard case .literal(let matchStart) = event else { return nil }
             var lineStart = matchStart
             while lineStart > 0, bytes[lineStart - 1] != UInt8(ascii: "\n") {
                 lineStart -= 1
@@ -658,36 +676,45 @@ public enum LinuxX86LiteralPreflight {
                 searchOffset = matchStart + 1
                 continue
             }
-            guard writeAll(bytes.advanced(by: lineStart), count: outputEnd - lineStart) else {
+            if outputEnd > matchStart + 1,
+               memchr(bytes.advanced(by: matchStart + 1), 0, outputEnd - matchStart - 1) != nil {
                 return nil
             }
-            if newline == nil {
+            guard lines.count < maximumBufferedLineSpans else { return nil }
+            lines.append((lineStart, outputEnd, newline == nil))
+            searchOffset = outputEnd
+        }
+        guard !lines.isEmpty else { return 1 }
+        for line in lines {
+            guard writeAll(bytes.advanced(by: line.start), count: line.end - line.start) else {
+                return nil
+            }
+            if line.needsNewline {
                 var newlineByte = UInt8(ascii: "\n")
-                guard withUnsafePointer(to: &newlineByte, {
-                    writeAll($0, count: 1)
-                }) else {
+                guard withUnsafePointer(to: &newlineByte, { writeAll($0, count: 1) }) else {
                     return nil
                 }
             }
-            foundMatch = true
-            searchOffset = outputEnd
         }
-        return foundMatch ? 0 : 1
+        return 0
     }
 
     private static func scanLiteral(
         bytes: UnsafePointer<UInt8>,
         count: Int,
         literal: [UInt8]
-    ) -> Int {
+    ) -> Int? {
         var matchedLines = 0
         var searchOffset = 0
-        while searchOffset <= count - literal.count,
-              let matchStart = findLiteral(
+        while searchOffset < count {
+            guard let event = findLiteralOrBinary(
                 bytes: bytes,
                 range: searchOffset..<count,
                 literal: literal
-              ) {
+            ) else {
+                break
+            }
+            guard case .literal(let matchStart) = event else { return nil }
             let newline = findByte(
                 bytes.advanced(by: matchStart),
                 count: count - matchStart,
@@ -698,10 +725,45 @@ public enum LinuxX86LiteralPreflight {
                 searchOffset = matchStart + 1
                 continue
             }
+            let outputEnd = newline.map { $0 + 1 } ?? count
+            if outputEnd > matchStart + 1,
+               memchr(bytes.advanced(by: matchStart + 1), 0, outputEnd - matchStart - 1) != nil {
+                return nil
+            }
             matchedLines += 1
-            searchOffset = newline.map { $0 + 1 } ?? count
+            searchOffset = outputEnd
         }
         return matchedLines
+    }
+
+    @inline(__always)
+    private static func findLiteralOrBinary(
+        bytes: UnsafePointer<UInt8>,
+        range: Range<Int>,
+        literal: [UInt8]
+    ) -> LiteralSearchEvent? {
+        guard let first = literal.first else { return nil }
+        var searchOffset = range.lowerBound
+        while searchOffset < range.upperBound {
+            var matchedBinary: Int32 = 0
+            guard let found = rg_linux_find_either_byte(
+                bytes.advanced(by: searchOffset),
+                range.upperBound - searchOffset,
+                first,
+                0,
+                &matchedBinary
+            ) else {
+                return nil
+            }
+            let candidate = bytes.distance(to: found)
+            if matchedBinary != 0 { return .binary }
+            if candidate <= range.upperBound - literal.count,
+               literalMatches(bytes: bytes, at: candidate, literal: literal) {
+                return .literal(candidate)
+            }
+            searchOffset = candidate + 1
+        }
+        return nil
     }
 
     private static func scanLiteralAlternation(
@@ -982,7 +1044,11 @@ public enum LinuxX86LiteralPreflight {
         private func writeDirect(_ bytes: UnsafePointer<UInt8>, count: Int) -> Bool {
             var offset = 0
             while offset < count {
+                #if canImport(Glibc)
                 let written = Glibc.write(STDOUT_FILENO, bytes.advanced(by: offset), count - offset)
+                #else
+                let written = Musl.write(STDOUT_FILENO, bytes.advanced(by: offset), count - offset)
+                #endif
                 guard written > 0 else { return false }
                 offset += written
             }

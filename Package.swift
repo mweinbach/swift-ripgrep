@@ -12,6 +12,12 @@ let useCShim = environment["SWIFT_RIPGREP_USE_C_SHIM"] == "1"
 let useCShim = false
 #endif
 
+#if os(Linux) && arch(x86_64)
+let useLinuxPreflightShim = true
+#else
+let useLinuxPreflightShim = false
+#endif
+
 #if os(macOS)
 let coreExcludes: [String] = []
 let executableExcludes = ["PortableMain.swift"]
@@ -24,10 +30,20 @@ var targets: [Target] = []
 if useCShim {
     targets.append(.target(name: "CRipgrepPlatform"))
 }
+if useLinuxPreflightShim {
+    targets.append(.target(name: "CLinuxPreflight"))
+}
+var coreDependencies: [Target.Dependency] = []
+if useCShim {
+    coreDependencies.append("CRipgrepPlatform")
+}
+if useLinuxPreflightShim {
+    coreDependencies.append("CLinuxPreflight")
+}
 targets.append(
     .target(
         name: "RipgrepCore",
-        dependencies: useCShim ? ["CRipgrepPlatform"] : [],
+        dependencies: coreDependencies,
         exclude: coreExcludes,
         resources: [
             .process("Resources"),
