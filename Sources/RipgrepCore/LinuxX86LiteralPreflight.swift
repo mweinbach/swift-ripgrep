@@ -19,6 +19,7 @@ public enum LinuxX86LiteralPreflight {
 
     private enum PreflightPattern {
         case literal([UInt8])
+        case asciiCaseInsensitiveLiteral([UInt8])
         case literalAlternation([[UInt8]])
         case capitalizedWordWhitespaceSuffix([UInt8])
     }
@@ -81,7 +82,11 @@ public enum LinuxX86LiteralPreflight {
         }
 
         guard let parsed = parse(arguments),
-              let pattern = preflightPattern(parsed.pattern, mode: parsed.mode) else {
+              let pattern = preflightPattern(
+                parsed.pattern,
+                mode: parsed.mode,
+                asciiCaseInsensitive: parsed.asciiCaseInsensitive
+              ) else {
             return nil
         }
 
@@ -531,6 +536,19 @@ public enum LinuxX86LiteralPreflight {
             let matchedLines: Int?
             if case .literal(let literal) = pattern {
                 matchedLines = scanLiteral(bytes: bytes, count: count, literal: literal)
+            } else if case .asciiCaseInsensitiveLiteral(let literal) = pattern {
+                guard rg_linux_bytes_are_ascii_text(bytes, count) != 0 else { return nil }
+                matchedLines = scanASCIICaseInsensitiveLiteral(
+                    bytes: bytes,
+                    count: count,
+                    foldedLiteral: literal
+                )
+            } else if case .capitalizedWordWhitespaceSuffix(let suffix) = pattern {
+                matchedLines = scanCapitalizedWordWhitespaceSuffix(
+                    bytes: bytes,
+                    count: count,
+                    suffix: suffix
+                )
             } else {
                 guard canUseBytes(bytes, count: count) else { return nil }
                 matchedLines = scanCount(bytes: bytes, count: count, pattern: pattern)
@@ -547,15 +565,26 @@ public enum LinuxX86LiteralPreflight {
 
     private static func parse(
         _ arguments: [String]
-    ) -> (mode: Mode, pattern: String, path: String, buffered: Bool)? {
+    ) -> (
+        mode: Mode,
+        pattern: String,
+        path: String,
+        buffered: Bool,
+        asciiCaseInsensitive: Bool
+    )? {
         var argumentIndex = 0
         var buffered = false
+        var asciiCaseInsensitive = false
         leadingFlags: while argumentIndex < arguments.count {
             switch arguments[argumentIndex] {
             case "--no-config", "--color=never":
                 argumentIndex += 1
             case "--no-mmap":
                 buffered = true
+                argumentIndex += 1
+            case "-i", "--ignore-case":
+                guard !asciiCaseInsensitive else { return nil }
+                asciiCaseInsensitive = true
                 argumentIndex += 1
             case "--color":
                 guard argumentIndex + 1 < arguments.count,
@@ -589,7 +618,8 @@ public enum LinuxX86LiteralPreflight {
         guard !pattern.hasPrefix("-"), path != "-", !path.isEmpty else {
             return nil
         }
-        return (mode, pattern, path, buffered)
+        guard !asciiCaseInsensitive || mode == .countLines else { return nil }
+        return (mode, pattern, path, buffered, asciiCaseInsensitive)
     }
 
     private static func plainLiteralBytes(_ pattern: String) -> [UInt8]? {
@@ -607,10 +637,22 @@ public enum LinuxX86LiteralPreflight {
         return bytes.isEmpty ? nil : bytes
     }
 
-    private static func preflightPattern(_ pattern: String, mode: Mode) -> PreflightPattern? {
+    private static func preflightPattern(
+        _ pattern: String,
+        mode: Mode,
+        asciiCaseInsensitive: Bool
+    ) -> PreflightPattern? {
         if let literal = plainLiteralBytes(pattern) {
+            if asciiCaseInsensitive {
+                guard mode == .countLines,
+                      literal.allSatisfy({ $0 < 0x80 }) else {
+                    return nil
+                }
+                return .asciiCaseInsensitiveLiteral(literal.map { asciiLowercased($0) })
+            }
             return .literal(literal)
         }
+        guard !asciiCaseInsensitive else { return nil }
         guard mode == .countLines else { return nil }
         let branches = pattern.split(separator: "|", omittingEmptySubsequences: false)
         if branches.count >= 2, branches.count <= 8 {
@@ -658,6 +700,8 @@ public enum LinuxX86LiteralPreflight {
         switch pattern {
         case .literal(let literal):
             return scanLiteral(bytes: bytes, count: count, literal: literal)
+        case .asciiCaseInsensitiveLiteral:
+            return nil
         case .literalAlternation(let literals):
             return scanLiteralAlternation(bytes: bytes, count: count, literals: literals)
         case .capitalizedWordWhitespaceSuffix(let suffix):
@@ -768,6 +812,66 @@ public enum LinuxX86LiteralPreflight {
         return matchedLines
     }
 
+    private static func scanASCIICaseInsensitiveLiteral(
+        bytes: UnsafePointer<UInt8>,
+        count: Int,
+        foldedLiteral: [UInt8]
+    ) -> Int {
+        guard let first = foldedLiteral.first else { return 0 }
+        var matchedLines = 0
+        var searchOffset = 0
+        while searchOffset <= count - foldedLiteral.count,
+              let found = rg_linux_find_ascii_case_byte(
+                bytes.advanced(by: searchOffset),
+                count - searchOffset,
+                first
+              ) {
+            let matchStart = bytes.distance(to: found)
+            guard matchStart <= count - foldedLiteral.count else { break }
+            guard asciiCaseInsensitiveLiteralMatches(
+                bytes: bytes,
+                at: matchStart,
+                foldedLiteral: foldedLiteral
+            ) else {
+                searchOffset = matchStart + 1
+                continue
+            }
+            let newline = findByte(
+                bytes.advanced(by: matchStart),
+                count: count - matchStart,
+                byte: UInt8(ascii: "\n")
+            ).map { matchStart + $0 }
+            let lineEnd = newline ?? count
+            guard matchStart + foldedLiteral.count <= lineEnd else {
+                searchOffset = matchStart + 1
+                continue
+            }
+            matchedLines += 1
+            searchOffset = newline.map { $0 + 1 } ?? count
+        }
+        return matchedLines
+    }
+
+    @inline(__always)
+    private static func asciiCaseInsensitiveLiteralMatches(
+        bytes: UnsafePointer<UInt8>,
+        at offset: Int,
+        foldedLiteral: [UInt8]
+    ) -> Bool {
+        for index in foldedLiteral.indices
+        where asciiLowercased(bytes[offset + index]) != foldedLiteral[index] {
+            return false
+        }
+        return true
+    }
+
+    @inline(__always)
+    private static func asciiLowercased(_ byte: UInt8) -> UInt8 {
+        byte >= UInt8(ascii: "A") && byte <= UInt8(ascii: "Z")
+            ? byte + (UInt8(ascii: "a") - UInt8(ascii: "A"))
+            : byte
+    }
+
     @inline(__always)
     private static func findLiteralOrBinary(
         bytes: UnsafePointer<UInt8>,
@@ -851,12 +955,15 @@ public enum LinuxX86LiteralPreflight {
     ) -> Int? {
         var matchedLines = 0
         var searchOffset = 0
-        while searchOffset <= count - suffix.count,
-              let suffixStart = findLiteral(
+        while searchOffset < count {
+            guard let event = findLiteralOrBinary(
                 bytes: bytes,
                 range: searchOffset..<count,
                 literal: suffix
-              ) {
+            ) else {
+                break
+            }
+            guard case .literal(let suffixStart) = event else { return nil }
             var lineStart = suffixStart
             while lineStart > 0, bytes[lineStart - 1] != UInt8(ascii: "\n") {
                 lineStart -= 1
@@ -871,6 +978,10 @@ public enum LinuxX86LiteralPreflight {
             guard suffixStart + suffix.count <= lineEnd else {
                 searchOffset = suffixStart + 1
                 continue
+            }
+            if outputEnd > suffixStart + 1,
+               memchr(bytes.advanced(by: suffixStart + 1), 0, outputEnd - suffixStart - 1) != nil {
+                return nil
             }
             guard let matches = matchesCapitalizedWordWhitespacePrefix(
                 bytes: bytes,

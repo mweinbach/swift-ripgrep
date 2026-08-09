@@ -15,4 +15,14 @@ const uint8_t *rg_linux_find_either_byte(
     int *matched_second
 );
 
+/// Returns non-zero when every byte is non-NUL ASCII.
+int rg_linux_bytes_are_ascii_text(const uint8_t *bytes, size_t count);
+
+/// Returns the first ASCII byte equal to `folded` ignoring ASCII case.
+const uint8_t *rg_linux_find_ascii_case_byte(
+    const uint8_t *bytes,
+    size_t count,
+    uint8_t folded
+);
+
 #endif

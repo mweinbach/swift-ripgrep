@@ -87,3 +87,119 @@ const uint8_t *rg_linux_find_either_byte(
     }
     return rg_linux_find_either_sse2(bytes, count, first, second, matched_second);
 }
+
+static int rg_linux_bytes_are_ascii_text_sse2(const uint8_t *bytes, size_t count) {
+    const __m128i zero = _mm_setzero_si128();
+    size_t offset = 0;
+    while (offset + 16 <= count) {
+        const __m128i block = _mm_loadu_si128((const __m128i *)(bytes + offset));
+        if (_mm_movemask_epi8(block) != 0
+            || _mm_movemask_epi8(_mm_cmpeq_epi8(block, zero)) != 0) {
+            return 0;
+        }
+        offset += 16;
+    }
+    while (offset < count) {
+        if (bytes[offset] == 0 || bytes[offset] >= 0x80) {
+            return 0;
+        }
+        offset++;
+    }
+    return 1;
+}
+
+__attribute__((target("avx2")))
+static int rg_linux_bytes_are_ascii_text_avx2(const uint8_t *bytes, size_t count) {
+    const __m256i zero = _mm256_setzero_si256();
+    size_t offset = 0;
+    while (offset + 32 <= count) {
+        const __m256i block = _mm256_loadu_si256((const __m256i *)(bytes + offset));
+        if (_mm256_movemask_epi8(block) != 0
+            || _mm256_movemask_epi8(_mm256_cmpeq_epi8(block, zero)) != 0) {
+            return 0;
+        }
+        offset += 32;
+    }
+    return rg_linux_bytes_are_ascii_text_sse2(bytes + offset, count - offset);
+}
+
+int rg_linux_bytes_are_ascii_text(const uint8_t *bytes, size_t count) {
+    if (bytes == NULL) {
+        return count == 0;
+    }
+    if (__builtin_cpu_supports("avx2")) {
+        return rg_linux_bytes_are_ascii_text_avx2(bytes, count);
+    }
+    return rg_linux_bytes_are_ascii_text_sse2(bytes, count);
+}
+
+static const uint8_t *rg_linux_find_ascii_case_sse2(
+    const uint8_t *bytes,
+    size_t count,
+    uint8_t folded
+) {
+    const uint8_t upper = folded >= 'a' && folded <= 'z'
+        ? (uint8_t)(folded - ('a' - 'A'))
+        : folded;
+    const __m128i lower_vector = _mm_set1_epi8((char)folded);
+    const __m128i upper_vector = _mm_set1_epi8((char)upper);
+    size_t offset = 0;
+    while (offset + 16 <= count) {
+        const __m128i block = _mm_loadu_si128((const __m128i *)(bytes + offset));
+        const unsigned mask = (unsigned)_mm_movemask_epi8(_mm_or_si128(
+            _mm_cmpeq_epi8(block, lower_vector),
+            _mm_cmpeq_epi8(block, upper_vector)
+        ));
+        if (mask != 0) {
+            return bytes + offset + (size_t)__builtin_ctz(mask);
+        }
+        offset += 16;
+    }
+    while (offset < count) {
+        if (bytes[offset] == folded || bytes[offset] == upper) {
+            return bytes + offset;
+        }
+        offset++;
+    }
+    return NULL;
+}
+
+__attribute__((target("avx2")))
+static const uint8_t *rg_linux_find_ascii_case_avx2(
+    const uint8_t *bytes,
+    size_t count,
+    uint8_t folded
+) {
+    const uint8_t upper = folded >= 'a' && folded <= 'z'
+        ? (uint8_t)(folded - ('a' - 'A'))
+        : folded;
+    const __m256i lower_vector = _mm256_set1_epi8((char)folded);
+    const __m256i upper_vector = _mm256_set1_epi8((char)upper);
+    size_t offset = 0;
+    while (offset + 32 <= count) {
+        const __m256i block = _mm256_loadu_si256((const __m256i *)(bytes + offset));
+        const unsigned mask = (unsigned)_mm256_movemask_epi8(_mm256_or_si256(
+            _mm256_cmpeq_epi8(block, lower_vector),
+            _mm256_cmpeq_epi8(block, upper_vector)
+        ));
+        if (mask != 0) {
+            return bytes + offset + (size_t)__builtin_ctz(mask);
+        }
+        offset += 32;
+    }
+    return rg_linux_find_ascii_case_sse2(bytes + offset, count - offset, folded);
+}
+
+const uint8_t *rg_linux_find_ascii_case_byte(
+    const uint8_t *bytes,
+    size_t count,
+    uint8_t folded
+) {
+    if (bytes == NULL || count == 0) {
+        return NULL;
+    }
+    if (__builtin_cpu_supports("avx2")) {
+        return rg_linux_find_ascii_case_avx2(bytes, count, folded);
+    }
+    return rg_linux_find_ascii_case_sse2(bytes, count, folded);
+}
